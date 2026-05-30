@@ -1,0 +1,102 @@
+name: 注入接近通关的 stats，应触发 GOOD ending
+description: |
+  跳过 90 天的资源积累 + 所有触发剧本，直接把 stats 注入到 good ending
+  阈值之上（4 data ≥50 / eng ≥50 / bond ≥5），推一次 hub 让 end_condition
+  命中 end_good。firedTriggers 把所有剧情触发器都标记为已触发，避免插队。
+  注意：故意不完成 evt_kaguya_truth / evt_x_handoff，否则会被 TRUE 优先级抢走。
+state:
+  baseline:
+    scripts:
+      001_intro:           { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_first:   { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_asahi_first:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_goal_hint:       { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_doge_morning:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_chart_notice:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_x_first_seen:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_suspect: { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_yachiyo_test:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_ashihana_glimpse: { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_body_almost:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+    completionOrder:
+      - 001_intro
+      - evt_friends_first
+      - evt_asahi_first
+      - evt_goal_hint
+      - evt_doge_morning
+      - evt_chart_notice
+      - evt_x_first_seen
+      - evt_friends_suspect
+      - evt_yachiyo_test
+      - evt_ashihana_glimpse
+      - evt_body_almost
+  runtime:
+    firedTriggers:
+      - friends_first
+      - asahi_first
+      - goal_hint
+      - doge_morning
+      - chart_notice
+      - x_first_seen
+      - friends_suspect
+      - yachiyo_test
+      - kaguya_truth
+      - ashihana_glimpse
+      - body_almost_ready
+      - x_handoff
+      # 新增的奖励事件触发器：fixture 测的是 ending 命中，不测这些剧本，
+      # 全部标为已触发以避免它们在测试期间插队。
+      - coffee_first
+      - coffee_doubt
+      - coffee_planning
+      - coffee_winter
+      - asahi_money
+      - asahi_endgame
+      - iroha_burnout
+      - friends_join
+      - team_meeting
+  training:
+    day: 60
+    slot: 0
+    stats:
+      engineering:  60
+      neuroscience: 40
+      funds:        10
+      stamina:       5
+      data_neural:  70
+      data_motor:   70
+      data_voice:   70
+      data_memory:  70
+      bond:          7
+      x_intel:      40
+      heat:         60
+    statMax:
+      engineering: 100
+      neuroscience: 100
+      funds: 100
+      stamina: 10
+      data_neural: 100
+      data_motor: 100
+      data_voice: 100
+      data_memory: 100
+      bond: 10
+      x_intel: 100
+      heat: 100
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.end_good.completed
+    eq: true
+  - kind: output
+    type: gameEnd
+    present: true

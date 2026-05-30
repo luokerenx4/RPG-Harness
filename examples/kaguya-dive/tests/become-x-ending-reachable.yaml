@@ -1,0 +1,103 @@
+name: 三年到了 + heat 崩盘应触发 end_become_x
+description: |
+  注意力虹吸路径：day=91（90 天版三年结束）+ heat ≤25。
+  fixture 注入彻底失守的 stats（数据有但 heat 已彻底跌穿），
+  验证 endCondition 命中 end_become_x 而不是兜底 end_bad。
+state:
+  baseline:
+    scripts:
+      001_intro:            { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_first:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_asahi_first:      { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_goal_hint:        { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_doge_morning:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_chart_notice:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_x_first_seen:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_suspect:  { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+    completionOrder:
+      - 001_intro
+      - evt_friends_first
+      - evt_asahi_first
+      - evt_goal_hint
+      - evt_doge_morning
+      - evt_chart_notice
+      - evt_x_first_seen
+      - evt_friends_suspect
+  runtime:
+    firedTriggers:
+      - friends_first
+      - asahi_first
+      - goal_hint
+      - doge_morning
+      - chart_notice
+      - x_first_seen
+      - friends_suspect
+      - yachiyo_test
+      - kaguya_truth
+      - ashihana_glimpse
+      - body_almost_ready
+      - x_handoff
+      - coffee_first
+      - coffee_doubt
+      - coffee_planning
+      - coffee_winter
+      - asahi_money
+      - asahi_endgame
+      - iroha_burnout
+      - friends_join
+      - team_meeting
+  training:
+    day: 91
+    slot: 0
+    stats:
+      engineering:  20
+      neuroscience: 10
+      funds:        5
+      stamina:      3
+      data_neural:  15
+      data_motor:   12
+      data_voice:    8
+      data_memory:  10
+      bond:          3
+      x_intel:      30
+      heat:         15
+    statMax:
+      engineering: 100
+      neuroscience: 100
+      funds: 100
+      stamina: 10
+      data_neural: 100
+      data_motor: 100
+      data_voice: 100
+      data_memory: 100
+      bond: 10
+      x_intel: 100
+      heat: 100
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.end_become_x.completed
+    eq: true
+  - kind: output
+    type: gameEnd
+    present: true

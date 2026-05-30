@@ -1,0 +1,89 @@
+name: evt_friends_first 完成 + day ≥ 7 应触发 evt_coffee_first
+description: |
+  验证 coffee 奖励事件链的第一环：evt_friends_first 跑完之后，
+  到 day 7 就该 queueScript 出 evt_coffee_first。
+state:
+  baseline:
+    scripts:
+      001_intro:          { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_first:  { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+    completionOrder:
+      - 001_intro
+      - evt_friends_first
+    currentMapId: town
+  runtime:
+    firedTriggers:
+      # friends_first 已经触发过；其它三个第一年 trigger 也避开，以便单测 coffee_first
+      - friends_first
+      - asahi_first
+      - goal_hint
+      - doge_morning
+  training:
+    day: 7
+    slot: 0
+    stats:
+      engineering:  5
+      neuroscience: 0
+      funds:        10
+      stamina:      7
+      data_neural:  0
+      data_motor:   0
+      data_voice:   0
+      data_memory:  0
+      bond:         3
+      x_intel:      0
+      heat:         50
+    statMax:
+      engineering: 100
+      neuroscience: 100
+      funds: 100
+      stamina: 12
+      data_neural: 100
+      data_motor: 100
+      data_voice: 100
+      data_memory: 100
+      bond: 10
+      x_intel: 100
+      heat: 100
+inputs:
+  # 第一次 next 让 trigger 系统先识别条件，把 evt_coffee_first 推到 currentScriptId；
+  # 然后大量 next 把整段剧本 drain 完（~25 行 = ~25 beats，多塞几个保险）。
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.evt_coffee_first.completed
+    eq: true

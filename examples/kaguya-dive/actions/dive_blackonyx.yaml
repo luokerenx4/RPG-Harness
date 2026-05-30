@@ -1,0 +1,10 @@
+id: dive_blackonyx
+title: 潜行 · Black onyX 战队服务器
+description: "[需要：哥哥默许 — 先有一次电话] 哥哥默许你用的电竞战队后端。手部 + 反应速度的运动数据天花板。（产出随机）"
+category: dive
+slot: any
+cost: 1
+whenIn: [cyber]
+kind: dive
+requires:
+  affection: { character: asahi, min: 6 }

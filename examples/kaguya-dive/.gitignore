@@ -1,0 +1,6 @@
+# Player saves — local only
+.rpg-harness/
+
+node_modules
+.DS_Store
+*.log

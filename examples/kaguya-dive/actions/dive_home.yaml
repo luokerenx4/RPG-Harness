@@ -1,0 +1,8 @@
+id: dive_home
+title: 潜行 · 自家智能家电
+description: 冰箱、空调、扫地机器人。安全无虞，量少而杂。（产出随机）
+category: dive
+slot: any
+cost: 1
+whenIn: [cyber]
+kind: dive

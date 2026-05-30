@@ -1,0 +1,12 @@
+id: dive_core
+title: 潜行 · 月读核心（见辉夜）
+description: 八千代默许你访问的最深一层。记忆碎片唯一来源。每去一次她会更模糊一点。（产出随机）
+category: dive
+slot: any
+cost: 1
+whenIn: [cyber]
+kind: dive
+requires:
+  all:
+    - stat: { name: stamina, min: 2 }
+    - stat: { name: funds, min: 3 }

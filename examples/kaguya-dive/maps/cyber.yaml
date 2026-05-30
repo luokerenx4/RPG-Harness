@@ -1,0 +1,8 @@
+id: cyber
+name: 月読 · 潜行端
+description: 房间里的 jack-in 椅。视野收缩成一条光带，然后你"在线"了。
+# 这里是所有 dive_* action 的舞台。每个 dive 是一次进出，会消耗 1 心力，
+# 由 moon-dive module 的 `dive` handler 按 action.id 分派到节点掉落表。
+# 撤回到 town（"上线"）等同于"下线 / 回到房间"。
+connections:
+  - { dir: 下线, target: town }

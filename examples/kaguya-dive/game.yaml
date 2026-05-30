@@ -1,0 +1,102 @@
+title: 辉夜潜行 / Kaguya Dive
+# 《超时空辉夜姬！》(2026) 后日谈 · 那个空白的十年。
+# 彩叶 18 岁，刚进大学。八千代 = 8000 年后的辉夜，已与彩叶相认（但只有她俩知道）。
+# 彩叶要 3 年（约 90 天的玩家时间）造一具能承载八千代的身体，
+# 同时和月読上突然崛起的迷之主播 X 打一场只有她一个人看得见的热度战。
+preset: training
+modules:
+  - ./modules/moon-dive.ts
+switches:
+  # Never set to true. Used as a "hide from hub menu" gate for scripts
+  # launched only by triggers (evt_*). The training preset's hub builder
+  # filters scripts by their `requires`; an unsatisfiable requires hides
+  # them while still letting a trigger force-launch via currentScriptId.
+  __trigger_only: false
+  # 由 moon-dive.ts 的 onActionComplete 在 stream_collab 累计到 5 次时
+  # 翻成 true。iroha_burnout trigger 用它作为"扛不动"的硬条件之一。
+  burnout_eligible: false
+training:
+  # 90 天（约对应彩叶进大学的前三年压缩后的玩家叙事时间）。
+  # slotsPerDay: 1 → 每天 = 一个决策窗口 + 一段叙事。
+  # 故意取消"必须在 X 回合内最优解"的紧绷感 —— 这游戏是生活模拟，不是优化谜题。
+  # 第 91 天到了，按当时 stats 判一个"三年过去了"的柔性结局，不再有"你失败了"的兜底。
+  slotsPerDay: 1
+  startDay: 1
+  maxDay: 90
+  decayPerDay: 0
+  decayStatId: ""
+  sleepActionId: ""
+  huntActionId: ""
+  stats:
+    # —— 学术与生活 ——
+    - { id: engineering, name: 工学,   min: 0, max: 100, start: 5 }
+    - { id: neuroscience, name: 神经科学, min: 0, max: 100, start: 0 }
+    - { id: funds,       name: 资金,   min: 0, max: 100, start: 10 }
+    - { id: stamina,     name: 心力,   min: 0, max: 12,  start: 7 }
+    # —— 八千代身体数据 4 类 —— 阈值 50（90 天版本）
+    - { id: data_neural, name: 神经映射, min: 0, max: 100, start: 0 }
+    - { id: data_motor,  name: 运动模型, min: 0, max: 100, start: 0 }
+    - { id: data_voice,  name: 声纹,    min: 0, max: 100, start: 0 }
+    - { id: data_memory, name: 记忆碎片, min: 0, max: 100, start: 0 }
+    # —— 关系与未知 ——
+    - { id: bond,        name: 心连,    min: 0, max: 10,  start: 3 }
+    - { id: x_intel,     name: X 线索,  min: 0, max: 100, start: 0 }
+    # —— 月读热度战（隐性主线）——
+    # 八千代在月読顶流榜的领先值。注意力 = 数据完整性的胶水。
+    # ≥ 40: 稳。 < 40: 注意力虹吸 — 每次 action 随机一项 data_* -1。
+    # 每个 cost ≥ 1 的 action 后衰减 1（90 天版：原 12-slot 版是 -2/slot）。
+    # 这条线只彩叶一个人知道。
+    - { id: heat,        name: 直播热度, min: 0, max: 100, start: 50 }
+  endConditions:
+    # 优先级从上到下。
+    # TRUE 最高（需走完 X 移交线）。
+    # SECRET / GOOD / NEUTRAL 在新框架下含义已迁移（见 README）：
+    #   - GOOD 现在是"八千代得偿所愿，但你失去了 8000 年的她"（苦涩）
+    #   - SECRET 是"你接住了她的鬼魂"（温柔退让）
+    #   - NEUTRAL 是 GOOD 不撒谎的版本
+    # BAD-X（注意力虹吸）放在自然结束（第 91 天）之上 —— 只有当热度战
+    # 彻底失守才会到这条。
+    # 第 91 天的兜底是"三年过去了" —— 不是失败，是故事自然闭合。
+    - reason: 真相 · 你看见了所有人都没看见的 · TRUE
+      when:
+        scriptCompleted: evt_x_handoff
+      goto: end_true
+    - reason: 灵魂之约 · 辉夜以幽灵态留在月读，但她笑了 · SECRET
+      when:
+        all:
+          - stat: { name: data_memory, min: 50 }
+          - stat: { name: bond, min: 7 }
+          - any:
+              - stat: { name: data_neural, max: 49 }
+              - stat: { name: data_motor,  max: 49 }
+              - stat: { name: data_voice,  max: 49 }
+      goto: end_secret
+    - reason: 通电那一刻她睁开了眼 · GOOD
+      when:
+        all:
+          - stat: { name: data_neural, min: 50 }
+          - stat: { name: data_motor,  min: 50 }
+          - stat: { name: data_voice,  min: 50 }
+          - stat: { name: data_memory, min: 50 }
+          - stat: { name: engineering, min: 50 }
+          - stat: { name: bond,        min: 5 }
+      goto: end_good
+    - reason: 身体造出来了，但她不再是原来的她 · NEUTRAL
+      when:
+        all:
+          - stat: { name: data_neural, min: 50 }
+          - stat: { name: data_motor,  min: 50 }
+          - stat: { name: data_voice,  min: 50 }
+          - stat: { name: data_memory, min: 50 }
+          - stat: { name: engineering, min: 50 }
+      goto: end_neutral
+    - reason: 注意力虹吸 · 你看着自己未来的样子走出实验室 · BAD-X
+      when:
+        all:
+          - day: { min: 91 }
+          - stat: { name: heat, max: 25 }
+      goto: end_become_x
+    - reason: 三年过去了 · 你合上设计本，街上风很大 · BAD
+      when:
+        day: { min: 91 }
+      goto: end_bad

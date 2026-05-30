@@ -1,0 +1,10 @@
+id: dive_konbini
+title: 潜行 · 便利店收银网
+description: 7-11 的 POS 网。低风险，主要捞运动模型碎片。（产出随机）
+category: dive
+slot: any
+cost: 1
+whenIn: [cyber]
+kind: dive
+requires:
+  stat: { name: stamina, min: 1 }

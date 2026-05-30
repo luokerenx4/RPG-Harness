@@ -1,0 +1,5 @@
+id: lab
+name: 校园·实验室
+description: 工学部地下二层。义体研究专用室，门牌还印着辉夜的名字。
+connections:
+  - { dir: 出校园, target: town }

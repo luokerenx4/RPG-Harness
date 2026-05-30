@@ -1,0 +1,249 @@
+name: burnout 三段链应连续触发
+description: |
+  验证「撑不住 → 求助闺蜜 → 三人组队」弧线：
+  burnout_eligible switch 已翻 + stamina/heat 低位 →
+  evt_iroha_burnout → evt_friends_join → evt_team_meeting 连续完成。
+  这是新增的友情线收束点。
+state:
+  baseline:
+    scripts:
+      001_intro:           { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_first:   { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_asahi_first:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_goal_hint:       { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_doge_morning:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_suspect: { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+    completionOrder:
+      - 001_intro
+      - evt_friends_first
+      - evt_asahi_first
+      - evt_goal_hint
+      - evt_doge_morning
+      - evt_friends_suspect
+    switches:
+      __trigger_only: false
+      # 模拟 stream_collab 已经做满 5 次时翻好的 switch
+      burnout_eligible: true
+    currentMapId: town
+  runtime:
+    firedTriggers:
+      - friends_first
+      - asahi_first
+      - goal_hint
+      - doge_morning
+      - friends_suspect
+      # 这些 trigger 与 burnout 弧并行的，避开让它们插戏
+      - chart_notice
+      - x_first_seen
+      - yachiyo_test
+      - kaguya_truth
+      - ashihana_glimpse
+      - coffee_first
+      - coffee_doubt
+      - asahi_money
+  moon-dive:
+    visits: { konbini: 0, hospital: 0, idol: 0, home: 0, core: 0, blackonyx: 0 }
+    metX: false
+    yachiyoTested: false
+    streamCollabCount: 5
+    pendingScripts: []
+  training:
+    day: 30
+    slot: 0
+    stats:
+      engineering:  10
+      neuroscience: 5
+      funds:        15
+      stamina:      2
+      data_neural:  5
+      data_motor:   10
+      data_voice:   8
+      data_memory:  6
+      bond:         5
+      x_intel:      5
+      heat:         42
+    statMax:
+      engineering: 100
+      neuroscience: 100
+      funds: 100
+      stamina: 12
+      data_neural: 100
+      data_motor: 100
+      data_voice: 100
+      data_memory: 100
+      bond: 10
+      x_intel: 100
+      heat: 100
+# 输入结构（精确）：
+#   - 78 next: drain iroha_burnout (29) + friends_join 到 choice (49)
+#   - 1 choose, index:0: 走 pick_full 分支（完整坦白）
+#   - 60 next: 给 friends_join.pick_full (10) + team_meeting (41) 留出 slack
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.evt_iroha_burnout.completed
+    eq: true
+  - kind: state
+    path: baseline.scripts.evt_friends_join.completed
+    eq: true
+  - kind: state
+    path: baseline.scripts.evt_team_meeting.completed
+    eq: true

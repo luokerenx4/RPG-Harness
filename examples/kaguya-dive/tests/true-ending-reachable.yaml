@@ -1,0 +1,115 @@
+name: evt_x_handoff 完成应触发 end_true
+description: |
+  TRUE 路径需要：4 类数据 ≥30、bond ≥7、heat ≥50、撞破 kaguya_truth、
+  跑完 evt_x_handoff。这里直接把 evt_x_handoff 标记为已完成，验证
+  endCondition `scriptCompleted: evt_x_handoff` 兜底命中 end_true。
+  evt_x_handoff 本身的剧情正确性由人工 playthrough 验证，不在此 fixture 范围。
+state:
+  baseline:
+    scripts:
+      001_intro:            { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_first:    { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_asahi_first:      { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_goal_hint:        { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_doge_morning:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_chart_notice:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_x_first_seen:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_friends_suspect:  { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_yachiyo_test:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_kaguya_truth:     { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_ashihana_glimpse: { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_body_almost:      { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+      evt_x_handoff:        { completed: true, selfSwitches: { A: false, B: false, C: false, D: false } }
+    completionOrder:
+      - 001_intro
+      - evt_friends_first
+      - evt_asahi_first
+      - evt_goal_hint
+      - evt_doge_morning
+      - evt_chart_notice
+      - evt_x_first_seen
+      - evt_friends_suspect
+      - evt_yachiyo_test
+      - evt_kaguya_truth
+      - evt_ashihana_glimpse
+      - evt_body_almost
+      - evt_x_handoff
+  runtime:
+    firedTriggers:
+      - friends_first
+      - asahi_first
+      - goal_hint
+      - doge_morning
+      - chart_notice
+      - x_first_seen
+      - friends_suspect
+      - yachiyo_test
+      - kaguya_truth
+      - ashihana_glimpse
+      - body_almost_ready
+      - x_handoff
+      - coffee_first
+      - coffee_doubt
+      - coffee_planning
+      - coffee_winter
+      - asahi_money
+      - asahi_endgame
+      - iroha_burnout
+      - friends_join
+      - team_meeting
+  training:
+    day: 80
+    slot: 0
+    stats:
+      engineering:  60
+      neuroscience: 40
+      funds:        10
+      stamina:       5
+      data_neural:  70
+      data_motor:   70
+      data_voice:   70
+      data_memory:  70
+      bond:          8
+      x_intel:      40
+      heat:         60
+    statMax:
+      engineering: 100
+      neuroscience: 100
+      funds: 100
+      stamina: 10
+      data_neural: 100
+      data_motor: 100
+      data_voice: 100
+      data_memory: 100
+      bond: 10
+      x_intel: 100
+      heat: 100
+inputs:
+  # Just drain end_true's beats.
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.end_true.completed
+    eq: true
+  - kind: output
+    type: gameEnd
+    present: true

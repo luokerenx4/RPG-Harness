@@ -1,0 +1,8 @@
+id: town
+name: 街
+description: 涩谷·西早稲田。咖啡店、便利店、回出租屋的车站都在这一带。
+# town 是日常的出发点。在这里能社交、打工、休息；也能去校园（lab）和
+# 自己的房间（cyber，跳进月读）。end_year 在三张图都可见（ambient）。
+connections:
+  - { dir: 校园, target: lab }
+  - { dir: 回家, target: cyber }

@@ -1,0 +1,10 @@
+id: dive_idol
+title: 潜行 · 偶像直播间后台
+description: 月读上歌姬节点的后端。声纹素材主要来源。偶尔撞见熟面孔。（产出随机）
+category: dive
+slot: any
+cost: 1
+whenIn: [cyber]
+kind: dive
+requires:
+  stat: { name: stamina, min: 1 }
