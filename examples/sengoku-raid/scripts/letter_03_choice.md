@@ -14,6 +14,8 @@ requires:
 
 @narrator お主の前に三つの文箱が並んだ。
 
+:cg assets/cgs/letter-03-choice
+
 @narrator 「松本家——お主の見立ては結審した。」
 
 @narrator 「澪殿の報告では、お主は未だ堕ちぬ。されど、累積する妖力は——歴代の妖刀使いの何れより速い。」
@@ -31,6 +33,8 @@ requires:
 @narrator 側用人の声が低く落ちる。
 
 @narrator 「選ばぬ、という選び方はない。今夜中に決めよ。」
+
+:hide-cg
 
 ```yaml
 type: choice

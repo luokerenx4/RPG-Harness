@@ -1,0 +1,24 @@
+kind: portrait
+description: |
+  澪（みお）の半身像。朝廷から差し向けられた若い監察役。
+  深い藍の打掛に家伝の脇差を帯び、冷静な目でこちらを見る。
+  怒りではなく、測るための静けさを持っている。
+prompt: |
+  Anime-style half-body portrait of Mio, a young shogunate inspector and
+  cursed-blade user from the early Edo period. Deep indigo uchikake,
+  family wakizashi at her waist, composed posture, cold calm eyes looking
+  toward the viewer. Her expression is professional and restrained, not
+  angry. Include a subtle small mirror motif near the sash. Muted painterly
+  palette, clean silhouette, neutral dark background.
+placeholder: "[澪・冷静] 深い藍の打掛の若き監察役、静かな目でこちらを見る"
+refs:
+  characters: [mio]
+  emotion: calm
+size_hint:
+  tui: { cols: 28, rows: 16 }
+  web: { aspect: "3:4" }
+tags: [main-cast]
+tui_render:
+  symbols: half
+  colors: "16"
+  dither: ordered

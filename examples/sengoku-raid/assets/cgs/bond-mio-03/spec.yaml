@@ -1,0 +1,26 @@
+kind: cg
+description: |
+  澪の第三絆CG。夕暮れの隅田河で、澪と主人公が水面を覗く。
+  澪が指で水を乱し、主人公の黒く滲む影だけが散る。
+prompt: |
+  Cinematic anime visual novel CG, simplified colors, bold cel shading,
+  high contrast, symbolic reflection composition for chafa/TUI conversion.
+  At the Sumida riverbank at dusk, Mio in deep indigo kneels beside the
+  unseen protagonist. Both look into the water. Mio's reflected silhouette
+  is calm and strangely younger; the protagonist's reflection is half
+  stained with black, but Mio's fingertip disturbs the water and breaks the
+  dark stain into ripples. Include a small mirror or wakizashi motif near
+  Mio. Deep indigo, river gray, sunset gold, black ripple shapes, 16:9.
+placeholder: "[CG] 隅田河の水鏡で、澪が黒く滲むお主の影を散らす"
+refs:
+  characters: [mio, player]
+  location: sumida-river
+  time: 夕暮れ
+size_hint:
+  tui: { cols: 80, rows: 30 }
+  web: { aspect: "16:9" }
+tags: [bond, mio, key-moment]
+tui_render:
+  symbols: half
+  colors: "16"
+  dither: diffusion

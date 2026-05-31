@@ -1,0 +1,27 @@
+kind: cg
+description: |
+  鬼神解放後の怪異CG。火口の夜、家伝の刀身と口伝書が並び、
+  刀の銘と二十七人目の名が一字違いで呼応する。
+prompt: |
+  Cinematic anime visual novel CG, simplified colors, extreme high contrast,
+  symbolic close-up for chafa/TUI conversion. Night after the volcanic
+  hell-gate encounter. An ancestral cursed katana is drawn halfway from its
+  scabbard beside an old oral-tradition book. On the blade spine, lacquer
+  ornament and a name mark glow faintly; on the book page, a list of
+  twenty-seven names is suggested as abstract brush columns, with the final
+  name visually echoing the sword mark. The protagonist's hand hovers over
+  the blade but does not touch it. Black lacquer, bone white paper, dim red
+  ember light, muted gold, 16:9. No readable text.
+placeholder: "[CG] 家伝の刀身と口伝書に、二十七人目の名が一字違いで浮かぶ"
+refs:
+  characters: [player]
+  location: hell-gate
+  time: 夜
+size_hint:
+  tui: { cols: 80, rows: 30 }
+  web: { aspect: "16:9" }
+tags: [lore, kijin, revelation]
+tui_render:
+  symbols: half
+  colors: "16"
+  dither: ordered

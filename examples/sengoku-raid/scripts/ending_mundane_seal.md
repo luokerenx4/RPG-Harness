@@ -12,6 +12,8 @@ requires:
 
 @narrator 神主が一人、お主を見送る。お主の名は記録には残らない。
 
+:cg assets/cgs/ending-mundane-seal
+
 @narrator 「お主は、お主の代でこの刀を止めた。」
 
 @narrator 「次の代に渡さなかった、ということだ。」

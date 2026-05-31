@@ -18,6 +18,8 @@ requires:
 
 @narrator 中の鬼神は、お主と同じ顔をしていた。
 
+:cg assets/cgs/ending-oni-self
+
 @narrator 何百年前の、お主の家の先祖——名を変え、銘を改めて、忘れ去られた者。
 
 @narrator 「お主が来た。」

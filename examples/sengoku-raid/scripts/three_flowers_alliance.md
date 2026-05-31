@@ -14,9 +14,13 @@ characters: [kagari, kasumi, mio]
 
 @narrator お主は三人の前に立つ。手には何も持っていない。
 
+:cg assets/cgs/three-flowers-alliance
+
 @narrator 「三度、お主たちと出帰った。生きて戻った。」
 
 @narrator 「鬼を狩る生き方が、いつ終わるか、私には見えない。だが、終わるその日まで——」
+
+:hide-cg
 
 ? それでも、口にしたかった。
   - 「三人とも、隣にいてくれ」 +kagari +kasumi +mio

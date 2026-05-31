@@ -10,6 +10,8 @@ characters: [kagari]
 
 @narrator 女はお主の妖刀をひと目見て、口の端を上げた。
 
+:cg assets/cgs/encounter-kagari-first
+
 @kagari あんた、松本家の。
 
 @kagari 噂は聞いてた。家伝の刀を抱えて山野を渡り歩く奴がいる、って。
@@ -17,6 +19,8 @@ characters: [kagari]
 @kagari 同業ってわけだ。よろしく頼むよ。
 
 @kagari あたしは篝。生まれた家は教えない決まりだ。あんたも詮索はしないでくれ。
+
+:hide-cg
 
 ? どう応える？
 - 同業ということは、お主も…… -> +2kagari | goto same_curse

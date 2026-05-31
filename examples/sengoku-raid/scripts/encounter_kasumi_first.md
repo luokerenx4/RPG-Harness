@@ -14,6 +14,8 @@ characters: [kasumi]
 
 @narrator 矢は——背後の戦鬼の眉間を抜き、鬼は声もなく崩れた。
 
+:cg assets/cgs/encounter-kasumi-first
+
 @narrator 樹の上から、若い女が音もなく下りてくる。
 
 @kasumi はい、一人前。あんた、運がよかったね。
@@ -21,6 +23,8 @@ characters: [kasumi]
 @kasumi あたしは霞。猟師だ。最近、鬼が獲物を奪うから、鬼の方を狩ってる。割がいい。
 
 @kasumi あんた、妖刀使か？　奉行所が雇った口か。
+
+:hide-cg
 
 ? どう答える？
 - 「将軍家から命を受けている」 -> +kasumi

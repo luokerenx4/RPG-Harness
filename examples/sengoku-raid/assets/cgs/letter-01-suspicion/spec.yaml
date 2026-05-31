@@ -1,0 +1,27 @@
+kind: cg
+description: |
+  疑念の文のCG。大名府の門前に朝廷の鉄漆塗りの文箱が置かれ、
+  菊紋の封蝋と、見知らぬ家紋の印が不穏に光る。
+prompt: |
+  Cinematic anime visual novel CG, simplified colors, bold cel shading,
+  high contrast, large readable shapes for chafa/TUI conversion. Outside a
+  daimyo residence gate at dusk in late Sengoku Japan. A black lacquered
+  imperial document box rests on the ground, sealed with a chrysanthemum
+  crest in pale wax; beside it, an unfamiliar family crest stamp marks the
+  opened letter. A mounted courier kneels in silhouette with both hands
+  down. The unseen protagonist's cursed katana hilt appears at the lower
+  edge. Limited palette of black lacquer, parchment tan, vermilion cord,
+  cold dusk blue, and candle gold, 16:9. No readable text.
+placeholder: "[CG] 朝廷の黒い文箱と見知らぬ家紋が、大名府の門前に置かれる"
+refs:
+  characters: [player]
+  location: edo-castle
+  time: 夕刻
+size_hint:
+  tui: { cols: 80, rows: 30 }
+  web: { aspect: "16:9" }
+tags: [chapter-1, letter, suspicion]
+tui_render:
+  symbols: half
+  colors: "16"
+  dither: ordered

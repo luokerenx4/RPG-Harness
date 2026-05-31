@@ -1,0 +1,26 @@
+kind: cg
+description: |
+  霞の第三絆CG。朝の山道で、鹿の蹄の跡が鬼の足跡を避ける。
+  霞が弓を背負い、主人公に「鹿の道」を指し示す。
+prompt: |
+  Cinematic anime visual novel CG, simplified colors, bold cel shading,
+  high contrast, clean silhouettes for chafa/TUI conversion. Early morning
+  mountain path at the forest edge. Kasumi, a bright-eyed young hunter with
+  a bow on her back, crouches and points at the ground. Three delicate deer
+  hoofprints curve around a set of heavy oni footprints in the mud. The
+  unseen protagonist stands nearby as a simple dark silhouette with a
+  sheathed katana. Pale dawn light, cool green-gray forest, brown path,
+  quiet survival mood, 16:9.
+placeholder: "[CG] 朝の山道で、霞が鬼の足跡を避ける鹿の道を示す"
+refs:
+  characters: [kasumi, player]
+  location: mountain-road
+  time: 朝
+size_hint:
+  tui: { cols: 80, rows: 30 }
+  web: { aspect: "16:9" }
+tags: [bond, kasumi, key-moment]
+tui_render:
+  symbols: quad
+  colors: "16"
+  dither: ordered

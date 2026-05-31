@@ -24,10 +24,14 @@ requires:
 
 @kasumi ほら、鹿が教えてくれる。鬼の通り道は、ここじゃない。
 
+:cg assets/cgs/bond-kasumi-03
+
 ? それでも、聞きたかった。
   - 「あんたは、なぜ私と歩く」 +kasumi
   - 「猟師は、いつ刀を持つ」 +kasumi
   - 「鹿の道を、私にも教えてくれ」 +2kasumi
+
+:hide-cg
 
 @kasumi あんたが鹿の道を歩けるようになったら、私の役目は終わる。
 

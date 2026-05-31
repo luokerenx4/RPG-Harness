@@ -2,6 +2,9 @@
 id: mio
 name: 澪
 defaultAffection: 0
+portraits:
+  default: assets/portraits/mio-calm
+  calm: assets/portraits/mio-calm
 custom:
   faction: shogunate_inspector
   gift_preference: silk_charm

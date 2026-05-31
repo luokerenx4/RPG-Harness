@@ -20,6 +20,8 @@ requires:
 
 @mio 私の鏡は、儀の最中、お主の脈が乱れないよう側で見立てる。
 
+:cg assets/cgs/ending-pure-rite
+
 @narrator 三人の手が刀に重なる。鎮魂結界——お主の家伝が、今日、何百年ぶりに、本来の意味を取り戻した。
 
 @narrator 鬼の声は、暫く江戸から遠ざかった。

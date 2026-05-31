@@ -1,0 +1,27 @@
+kind: cg
+description: |
+  篝の第三絆CG。宿の月明かりの窓辺で、篝が槍を壁に預け、
+  主人公の隣に肩を寄せる。二人の距離が刀一本分ではなくなる。
+prompt: |
+  Cinematic anime visual novel CG, simplified colors, bold cel shading,
+  high contrast, intimate but restrained composition for chafa/TUI
+  conversion. A quiet inn room at night. Kagari, a young female warrior in
+  practical dark armor and travel clothes, sits by a moonlit window with
+  her spear leaning against the wall. The unseen protagonist sits beside
+  her, represented by a dark shoulder silhouette and the cursed katana laid
+  carefully between them but no longer dividing them. Kagari leans closer
+  with a rare softened expression. Moon blue, black armor, muted red cord,
+  warm floor shadows, 16:9.
+placeholder: "[CG] 月明かりの宿で、篝が槍を預けてお主の肩に近づく"
+refs:
+  characters: [kagari, player]
+  location: inn
+  time: 夜
+size_hint:
+  tui: { cols: 80, rows: 30 }
+  web: { aspect: "16:9" }
+tags: [bond, kagari, key-moment]
+tui_render:
+  symbols: half
+  colors: "16"
+  dither: diffusion

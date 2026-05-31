@@ -22,10 +22,14 @@ requires:
 
 @kagari お主の妖刀が、私の槍の何倍も重そうな夜——どうやって寝ている。
 
+:cg assets/cgs/bond-kagari-03
+
 ? それでも、答える。
   - 「夢を見ないようにしている」 +kagari
   - 「鎮魂法で、毎晩二十押し返す」 +kagari
   - 「眠らない」 +2kagari
+
+:hide-cg
 
 @kagari 嘘でも、答えてくれたのが嬉しい。
 

@@ -3,6 +3,8 @@ dist
 *.tsbuildinfo
 .DS_Store
 .bun
+.vite
+**/.vite/
 *.log
 
 # Player save state — local only

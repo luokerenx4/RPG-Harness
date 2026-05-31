@@ -12,6 +12,8 @@ characters: []
 
 @narrator 「松本家——あなたの首尾、京には全て届いている。」
 
+:cg assets/cgs/letter-01-suspicion
+
 @narrator 使者は箱を地に置き、両手をついて目を伏せる。
 
 @narrator 文を解く。墨は新しく、まだ匂いが残っている。
@@ -25,6 +27,8 @@ characters: []
 @narrator 「次に出帰る時、その目が今と同じであるかを、別の妖刀使が見立てに参る。」
 
 @narrator 「気を確かに。」
+
+:hide-cg
 
 @narrator 文の末尾、印は朝廷ではなく——別の家。お主は知らない家紋だ。
 

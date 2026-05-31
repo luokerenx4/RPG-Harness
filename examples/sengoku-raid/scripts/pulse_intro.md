@@ -12,6 +12,8 @@ requires:
 
 @narrator 家伝の口伝書を開く。先祖の筆跡で、こうある——
 
+:cg assets/cgs/pulse-intro
+
 @narrator 「鬼を斬りし時、其の妖力、刀身に三脈に分れて流る。」
 
 @narrator 「浄の脈は鎮魂に帰す。鬼の脈は刀を肥やす。凡の脈は穏当に整える。」
@@ -19,6 +21,8 @@ requires:
 @narrator 「流す脈は、斬りし者の選びに在り。選ばざれば——お主の家は、選んでこなかった。」
 
 @narrator お主は選んだ。これは、家業を「家業」にし直すための、最初の決断だった。
+
+:hide-cg
 
 ```yaml
 type: effects
