@@ -1,0 +1,30 @@
+name: 霞の最終羁絆が単独で午後の山道を指定する
+description: |
+  bond_kasumi_04 opens from the Edo-castle hub but narrates an afternoon
+  mountain path. It must stage that location independently and continue the
+  visual geography established by bond_kasumi_03.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - bond_kasumi_03
+    characters:
+      kasumi:
+        stats: { affection: 10 }
+    switches:
+      road_kasumi_2_seen: true
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kasumi
+inputs:
+  - type: doActivity
+    id: script:bond_kasumi_04
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/mountain-path-afternoon

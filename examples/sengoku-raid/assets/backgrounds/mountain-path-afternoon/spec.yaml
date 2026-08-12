@@ -1,0 +1,19 @@
+kind: bg
+description: |
+  午後の光に満ちた山際の獣道。乾いた土に鹿の蹄跡と大きな鬼の爪跡が残り、
+  緑の斜面と遠山の薄い霧が、朝に歩いた道の続きを示している。
+prompt: |
+  The same early Edo-period Japanese mountain-edge trail in settled early
+  afternoon. Warm green sunlight, dry earth, ferns and cedar shade, distant
+  wooded hills with only thin lingering mist. Deer hoofprints bend around
+  larger ominous footprints. Painterly 16:9 visual-novel background, quiet
+  sense of recognition and completion, no people, animals, buildings or text.
+placeholder: "[山際・午後の獣道] 日を受けた緑、鹿と鬼の足跡、薄霧の遠山"
+refs:
+  location: mountain-edge-path
+  time: 昼下がり
+  variant_of: assets/backgrounds/mountain-path-morning
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-1, bond, kasumi, mountain, afternoon]

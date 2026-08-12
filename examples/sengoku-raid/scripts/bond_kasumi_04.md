@@ -2,6 +2,7 @@
 id: bond_kasumi_04
 title: 役目の終わった日
 characters: [kasumi]
+bg: assets/backgrounds/mountain-path-afternoon
 requires:
   all:
     - { affection: { character: kasumi, min: 8 } }
