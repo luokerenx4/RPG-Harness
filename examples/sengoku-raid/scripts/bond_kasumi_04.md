@@ -30,10 +30,30 @@ requires:
 
 @kasumi 終わっちゃった。たった今。
 
-? 道の真ん中で、なんと言う？
-  - 「役目が終わったなら、今度は理由なしで隣を歩け」 -> +2kasumi
-  - 「嘘だ。俺はまだ、お前の足音しか読めていない」 -> +2kasumi
-  - 黙って、霞の隣まで半歩戻る -> +kasumi
+? 道の真ん中で、なんと言う？ {id: answer-after-the-role-ends}
+  - 「役目が終わったなら、今度は理由なしで隣を歩け」 {id: walk-without-a-reason} -> +2kasumi | goto without_reason
+  - 「嘘だ。俺はまだ、お前の足音しか読めていない」 {id: read-only-her-footsteps} -> +2kasumi | goto footsteps
+  - 黙って、霞の隣まで半歩戻る {id: step-back-beside-her} -> +kasumi | goto half_step
+
+# without_reason
+
+@kasumi 理由なし、か。……じゃあ明日、あたしが勝手に隣にいても、追い返す理由もないね。
+
+:goto after_answer
+
+# footsteps
+
+@kasumi あたしの足音だけ読めるなら、十分じゃない。……迷った時は、それを追って帰ってきな。
+
+:goto after_answer
+
+# half_step
+
+霞は戻った半歩を見て、自分も半歩だけ寄った。道の真ん中に、二人分の足跡が並んだ。
+
+@kasumi ……そういう答え方、覚えたんだ。
+
+# after_answer
 
 霞は俯いて、爪先で土を一度蹴った。猟師が獲物の前では決してやらない、音の出る仕草だった。
 

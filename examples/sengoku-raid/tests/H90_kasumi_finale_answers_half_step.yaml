@@ -1,0 +1,42 @@
+name: Kasumi closes the remaining half step beside the silent player
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kasumi_03]
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+    switches:
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+  sengoku-raid:
+    metCharacters: [kasumi]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kasumi_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 二人分の足跡が並んだ
+  - kind: output
+    type: dialogue
+    speaker: kasumi
+    present: true
+    textIncludes: そういう答え方、覚えた
+  - kind: state
+    path: baseline.variables.kasumi_final_reply
+    eq: half-step
+

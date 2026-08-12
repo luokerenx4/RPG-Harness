@@ -3113,6 +3113,12 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.kagari_rain_reply = reply;
       return;
     }
+    if (scriptId === "bond_kasumi_04") {
+      const replies = ["without-reason", "her-footsteps", "half-step"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kasumi_final_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3204,6 +3210,21 @@ const raidModule: Module = {
           ? "数え直すなら自分の前だけにしろと告げた雨夜。"
           : reply === "poured-back"
             ? "言葉の代わりに篝の盃へ注ぎ返した雨夜。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
+    }
+    if (
+      scriptId === "ending_oni_self" &&
+      beat.type === "narration" &&
+      beat.text.startsWith("門の先へ行けば、同じ道では帰れない。")
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_final_reply;
+      const memory = reply === "without-reason"
+        ? "役目も理由もなく隣を歩けと告げた山道。"
+        : reply === "her-footsteps"
+          ? "迷った時は霞の足音を追って帰ると決めた山道。"
+          : reply === "half-step"
+            ? "霞の隣へ半歩戻り、二人分の足跡を並べた山道。"
             : null;
       if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
     }

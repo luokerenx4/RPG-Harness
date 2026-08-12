@@ -1,0 +1,37 @@
+name: Kasumi offers her footsteps as the player's way home
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kasumi_03]
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+    switches:
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+  sengoku-raid:
+    metCharacters: [kasumi]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kasumi_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: kasumi
+    present: true
+    textIncludes: それを追って帰ってきな
+  - kind: state
+    path: baseline.variables.kasumi_final_reply
+    eq: her-footsteps
+
