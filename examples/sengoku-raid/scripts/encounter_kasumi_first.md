@@ -28,10 +28,10 @@ characters: [kasumi]
 
 :hide-cg
 
-? どう答える？
-- 「将軍家から命を受けている」 -> +kasumi
-- 「いや、家業だ」 -> +2kasumi
-- 「お前、命を救ってくれたな。礼を言う」 -> +2kasumi | goto thanked
+? どう答える？ {id: first-words-to-kasumi}
+- 「将軍家から命を受けている」 {id: serve-the-shogunate} -> +kasumi
+- 「いや、家業だ」 {id: name-it-family-trade} -> +2kasumi
+- 「お前、命を救ってくれたな。礼を言う」 {id: thank-kasumi} -> +2kasumi | goto thanked
 
 @kasumi 将軍家でも家業でも、鬼を斬る腕は同じか。——それより、あんたの妖刀、見せてもらっていいか？
 

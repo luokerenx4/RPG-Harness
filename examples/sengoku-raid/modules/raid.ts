@@ -3071,6 +3071,18 @@ const raidModule: Module = {
   // same immediate companionship contract. The three options express the
   // player's attitude; only 「同行を頼む」 grants affection in the script.
   onChoiceResolved: (ctx, scriptId, _beatIdx, choiceIdx) => {
+    if (scriptId === "encounter_kagari_first") {
+      const replies = ["shared-curse", "silent-nod", "wary"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kagari_first_reply = reply;
+      return;
+    }
+    if (scriptId === "encounter_kasumi_first") {
+      const replies = ["shogunate", "family-trade", "gratitude"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kasumi_first_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3134,6 +3146,36 @@ const raidModule: Module = {
           },
         };
       }
+    }
+    if (
+      scriptId === "bond_kagari_01" &&
+      beat.type === "dialogue" &&
+      beat.text === "いや、答えなくていい。顔色で大体わかる。"
+    ) {
+      const reply = ctx.state.baseline.variables.kagari_first_reply;
+      const memory = reply === "shared-curse"
+        ? "初めて会った時、お主はあたしを同類だと見抜いたな。"
+        : reply === "silent-nod"
+          ? "初めて会った時と同じ顔だ。黙っていても、大体わかる。"
+          : reply === "wary"
+            ? "初めて会った時は、面倒事だと言っていた顔だ。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
+    }
+    if (
+      scriptId === "bond_kasumi_01" &&
+      beat.type === "dialogue" &&
+      beat.text === "いや、刀のこと。あんたが折れる、って言いかけて、刀って言い直した。同じことかと思って。"
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_first_reply;
+      const memory = reply === "gratitude"
+        ? "初めて会った時、命の礼を言った人だから、先に訊いておきたい。"
+        : reply === "family-trade"
+          ? "家業だって言ってたよね。だからこそ、先に訊いておきたい。"
+          : reply === "shogunate"
+            ? "将軍家の命でも、折れる時まで決めてはくれないでしょ。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
     }
     if (!scriptId.startsWith("bond_")) return;
     if (beat.type !== "dialogue") return;

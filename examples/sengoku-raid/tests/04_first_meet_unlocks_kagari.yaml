@@ -37,6 +37,11 @@ inputs:
   - { type: next }
   - { type: next }
 assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: first-words-to-kagari
+    optionId: name-the-shared-curse
   - kind: state
     path: sengoku-raid.metCharacters
     includes: kagari
@@ -46,6 +51,9 @@ assertions:
   - kind: state
     path: baseline.characters.kagari.affection
     eq: 2
+  - kind: state
+    path: baseline.variables.kagari_first_reply
+    eq: shared-curse
   # Still in a raid — we're back at crossroads with control returned to
   # the raid loop (the encounter script doesn't end the raid). raid !==
   # null is the new "in raid" signal; we check chain identity directly.

@@ -1,0 +1,19 @@
+name: Kagari remembers that the player recognized their shared curse at first meeting
+state:
+  baseline:
+    completedScripts: [000_intro, encounter_kagari_first]
+    currentScriptId: bond_kagari_01
+    variables: { kagari_first_reply: shared-curse }
+    characters:
+      kagari:
+        stats: { affection: 2 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: あたしを同類だと見抜いた

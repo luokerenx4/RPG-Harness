@@ -1,0 +1,19 @@
+name: Kasumi remembers that the player thanked her at their first meeting
+state:
+  baseline:
+    completedScripts: [000_intro, encounter_kasumi_first]
+    currentScriptId: bond_kasumi_01
+    variables: { kasumi_first_reply: gratitude }
+    characters:
+      kasumi:
+        stats: { affection: 2 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 命の礼を言った人だから

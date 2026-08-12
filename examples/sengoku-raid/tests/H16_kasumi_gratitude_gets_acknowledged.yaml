@@ -20,6 +20,11 @@ inputs:
   - { type: choose, index: 2 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: first-words-to-kasumi
+    optionId: thank-kasumi
+  - kind: output
     type: dialogue
     present: true
     speaker: kasumi
@@ -27,3 +32,6 @@ assertions:
   - kind: state
     path: baseline.characters.kasumi.stats.affection
     eq: 2
+  - kind: state
+    path: baseline.variables.kasumi_first_reply
+    eq: gratitude
