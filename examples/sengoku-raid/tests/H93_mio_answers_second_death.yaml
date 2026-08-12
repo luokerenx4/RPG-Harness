@@ -26,6 +26,12 @@ inputs:
   - { type: choose, index: 1 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-who-judges-the-inquisitor
+    optionId: ask-about-the-second-death
+    optionAiTagsIncludes: probing
+  - kind: output
     type: dialogue
     speaker: mio
     present: true
@@ -33,4 +39,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_inquest_reply
     eq: second-death
-

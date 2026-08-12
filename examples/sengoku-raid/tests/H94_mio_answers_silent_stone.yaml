@@ -27,6 +27,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-who-judges-the-inquisitor
+    optionId: cast-a-stone-in-silence
+    optionAiTagsIncludes: symbolic
+  - kind: output
     type: narration
     present: true
     textIncludes: 澪とお主の影を同じように歪めた
@@ -38,4 +44,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_inquest_reply
     eq: silent-stone
-

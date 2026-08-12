@@ -31,6 +31,7 @@ assertions:
     choiceId: answer-who-judges-the-inquisitor
     optionId: turn-the-mirror-on-herself
     optionTextIncludes: お前を映せばいい
+    optionAiTagsIncludes: accountable
   - kind: output
     type: dialogue
     speaker: mio
@@ -39,4 +40,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_inquest_reply
     eq: self-mirror
-

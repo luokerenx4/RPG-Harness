@@ -34,9 +34,9 @@ requires:
 @mio 査問する者の霊体化は、誰が見立てる。
 
 ? なんと答える？ {id: answer-who-judges-the-inquisitor}
-  - 「お前の鏡に、お前を映せばいい」 {id: turn-the-mirror-on-herself} -> +2mio | goto mirror
-  - 「斬った二人目を、まだ数えているのか」 {id: ask-about-the-second-death} -> +mio | goto second
-  - 黙って、流れに小石を一つ落とす {id: cast-a-stone-in-silence} -> +mio | goto stone
+  - 「お前の鏡に、お前を映せばいい」 {id: turn-the-mirror-on-herself, ai: introspective accountable} -> +2mio | goto mirror
+  - 「斬った二人目を、まだ数えているのか」 {id: ask-about-the-second-death, ai: blunt probing} -> +mio | goto second
+  - 黙って、流れに小石を一つ落とす {id: cast-a-stone-in-silence, ai: compassionate restrained symbolic} -> +mio | goto stone
 
 # mirror
 
