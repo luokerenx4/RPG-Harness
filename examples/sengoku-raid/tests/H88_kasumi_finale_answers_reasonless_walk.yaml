@@ -32,6 +32,7 @@ assertions:
     choiceId: answer-after-the-role-ends
     optionId: walk-without-a-reason
     optionTextIncludes: 理由なしで隣を歩け
+    optionAiTagsIncludes: loyal
   - kind: output
     type: dialogue
     speaker: kasumi
@@ -40,4 +41,3 @@ assertions:
   - kind: state
     path: baseline.variables.kasumi_final_reply
     eq: without-reason
-

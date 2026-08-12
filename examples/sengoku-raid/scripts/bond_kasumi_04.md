@@ -31,9 +31,9 @@ requires:
 @kasumi 終わっちゃった。たった今。
 
 ? 道の真ん中で、なんと言う？ {id: answer-after-the-role-ends}
-  - 「役目が終わったなら、今度は理由なしで隣を歩け」 {id: walk-without-a-reason} -> +2kasumi | goto without_reason
-  - 「嘘だ。俺はまだ、お前の足音しか読めていない」 {id: read-only-her-footsteps} -> +2kasumi | goto footsteps
-  - 黙って、霞の隣まで半歩戻る {id: step-back-beside-her} -> +kasumi | goto half_step
+  - 「役目が終わったなら、今度は理由なしで隣を歩け」 {id: walk-without-a-reason, ai: romantic loyal} -> +2kasumi | goto without_reason
+  - 「嘘だ。俺はまだ、お前の足音しか読めていない」 {id: read-only-her-footsteps, ai: blunt vulnerable} -> +2kasumi | goto footsteps
+  - 黙って、霞の隣まで半歩戻る {id: step-back-beside-her, ai: social compassionate restrained} -> +kasumi | goto half_step
 
 # without_reason
 

@@ -27,6 +27,12 @@ inputs:
   - { type: choose, index: 1 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-after-the-role-ends
+    optionId: read-only-her-footsteps
+    optionAiTagsIncludes: vulnerable
+  - kind: output
     type: dialogue
     speaker: kasumi
     present: true
@@ -34,4 +40,3 @@ assertions:
   - kind: state
     path: baseline.variables.kasumi_final_reply
     eq: her-footsteps
-
