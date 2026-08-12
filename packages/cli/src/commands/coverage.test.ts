@@ -49,6 +49,7 @@ describe("story coverage", () => {
       started: 1,
       uncovered: 1,
       ignored: 1,
+      legacyCompletions: 1,
       completionPercent: 33.33,
     });
     expect(report.scripts).toEqual([
@@ -69,6 +70,8 @@ describe("story coverage", () => {
         ignoreReason: "redirect placeholder",
       }),
     ]);
+    expect(report.scripts.find((row) => row.id === "done")?.legacySessions)
+      .toEqual(["completed-run"]);
   });
 
   test("rejects session names that escape the session directory", async () => {
@@ -117,6 +120,29 @@ describe("story coverage", () => {
     old.baseline.scripts.scene!.completedRevision = scriptRevision(script);
     expect(analyzeScriptCoverage(game, [{ session: "new-run", state: old }])
       .scripts[0]?.status).toBe("completed");
+  });
+
+  test("strict projects treat unversioned compatibility completions as stale", () => {
+    const script: Script = { id: "scene", title: "Scene", beats: [] };
+    const game = {
+      title: "Strict",
+      characters: [],
+      scripts: [script],
+      coverageEvidence: { requireCurrentRevision: true },
+    } as Game;
+    const legacy = state();
+    legacy.baseline.scripts.scene = {
+      completed: true,
+      selfSwitches: { A: false, B: false, C: false, D: false },
+    };
+
+    const report = analyzeScriptCoverage(game, [{ session: "legacy", state: legacy }]);
+    expect(report.summary).toMatchObject({ completed: 0, stale: 1, legacyCompletions: 1 });
+    expect(report.scripts[0]).toMatchObject({
+      status: "stale",
+      staleSessions: ["legacy"],
+      legacySessions: ["legacy"],
+    });
   });
 
   test("scopes development evidence to a source session and its fork descendants", async () => {

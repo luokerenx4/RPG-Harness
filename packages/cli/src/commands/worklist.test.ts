@@ -173,6 +173,7 @@ describe("AI development worklist", () => {
       status: "uncovered",
       completedSessions: [],
       staleSessions: [],
+      legacySessions: [],
       startedSessions: [],
     };
     const choices = choiceReport();
@@ -217,6 +218,42 @@ describe("AI development worklist", () => {
           sourceSession: "ai-descendant",
         },
       });
+  });
+
+  test("re-verifies stale scripts from a session that owns old completion evidence", () => {
+    const story = storyReport();
+    story.summary.started = 0;
+    story.summary.uncovered = 0;
+    story.summary.stale = 1;
+    story.scripts = [{
+      id: "edited",
+      title: "Edited",
+      status: "stale",
+      completedSessions: [],
+      staleSessions: ["ai-old-proof"],
+      legacySessions: ["ai-old-proof"],
+      startedSessions: [],
+    }];
+    story.sessionErrors = [];
+
+    const report = analyzeDevelopmentWorklist({
+      session: "player",
+      story,
+      choices: { ...choiceReport(), sessionErrors: [], workItems: [], authoring: {
+        ...choiceReport().authoring,
+        workItems: [],
+      } },
+      reports: [],
+    });
+
+    expect(report.items[0]).toMatchObject({
+      key: "story/edited",
+      title: "Re-verify edited script: Edited",
+      operation: {
+        command: "reach-script",
+        args: { scriptId: "edited", fromSession: "ai-old-proof" },
+      },
+    });
   });
 });
 
@@ -263,6 +300,7 @@ function storyReport(): ScriptCoverageReport {
       started: 1,
       uncovered: 1,
       ignored: 0,
+      legacyCompletions: 0,
       completionPercent: 0,
     },
     sessions: ["player"],
@@ -274,6 +312,7 @@ function storyReport(): ScriptCoverageReport {
         status: "started",
         completedSessions: [],
         staleSessions: [],
+        legacySessions: [],
         startedSessions: ["player"],
       },
       {
@@ -282,6 +321,7 @@ function storyReport(): ScriptCoverageReport {
         status: "uncovered",
         completedSessions: [],
         staleSessions: [],
+        legacySessions: [],
         startedSessions: [],
       },
     ],
@@ -307,6 +347,7 @@ function choiceReport(): ChoiceCoverageReport {
       lockedOptions: 0,
       untrackedChoiceEvents: 0,
       staleChoiceEvents: 0,
+      unversionedChoiceEvents: 0,
     },
     sessions: ["player"],
     sessionErrors: [{ session: "broken", error: "bad log" }],

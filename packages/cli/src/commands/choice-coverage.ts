@@ -61,6 +61,7 @@ export interface ChoiceCoverageReport {
     lockedOptions: number;
     untrackedChoiceEvents: number;
     staleChoiceEvents: number;
+    unversionedChoiceEvents: number;
   };
   sessions: string[];
   sessionErrors: Array<{ session: string; error: string }>;
@@ -255,7 +256,12 @@ export async function collectChoiceCoverage(
     } catch (error) {
       sessionErrors.push({ session: onlySession, error: (error as Error).message });
     }
-    return analyzeChoiceCoverage(logs, sessionErrors, authored);
+    return analyzeChoiceCoverage(
+      logs,
+      sessionErrors,
+      authored,
+      game.coverageEvidence?.requireCurrentRevision === true,
+    );
   }
   if (onlySession !== undefined && includeDescendants) {
     try {
@@ -274,13 +280,19 @@ export async function collectChoiceCoverage(
       sessionErrors.push({ session, error: (error as Error).message });
     }
   }
-  return analyzeChoiceCoverage(logs, sessionErrors, authored);
+  return analyzeChoiceCoverage(
+    logs,
+    sessionErrors,
+    authored,
+    game.coverageEvidence?.requireCurrentRevision === true,
+  );
 }
 
 export function analyzeChoiceCoverage(
   logs: Array<{ session: string; entries: LoggedStep[] }>,
   sessionErrors: Array<{ session: string; error: string }> = [],
   authoredChoices: AuthoredChoiceRow[] = [],
+  requireCurrentRevision = false,
 ): ChoiceCoverageReport {
   const choices = new Map<string, MutableChoice>();
   const explicitSelections: Array<{
@@ -292,6 +304,7 @@ export function analyzeChoiceCoverage(
   }> = [];
   let untrackedChoiceEvents = 0;
   let staleChoiceEvents = 0;
+  let unversionedChoiceEvents = 0;
   const currentObservedKeys = new Set<string>();
   const authoredRevisions = new Map(
     authoredChoices.map((choice) => [choice.scriptId, choice.scriptRevision]),
@@ -300,6 +313,9 @@ export function analyzeChoiceCoverage(
   for (const { entries } of logs) {
     for (const entry of entries) {
       const output = asChoiceOutput(entry.output);
+      if (typeof output?.scriptId === "string" && output.scriptRevision === undefined) {
+        unversionedChoiceEvents += 1;
+      }
       if (typeof output?.scriptId === "string" && typeof output.scriptRevision === "string") {
         versionedScripts.add(output.scriptId);
       }
@@ -310,7 +326,7 @@ export function analyzeChoiceCoverage(
   const isCurrentEvidence = (scriptId: string, revision?: string): boolean => {
     const authoredRevision = authoredRevisions.get(scriptId);
     return authoredRevision === undefined ||
-      !versionedScripts.has(scriptId) ||
+      (!requireCurrentRevision && !versionedScripts.has(scriptId)) ||
       revision === authoredRevision;
   };
 
@@ -397,7 +413,7 @@ export function analyzeChoiceCoverage(
           row.everAvailable = option.available;
           row.evidence = undefined;
         }
-        if (option.available && (!versionedScripts.has(stable.scriptId) || currentEvidence)) {
+        if (option.available && currentEvidence) {
           row.everAvailable = true;
           if (isSessionCheckpointRef(entry.checkpoint)) {
             row.evidence = {
@@ -572,6 +588,7 @@ export function analyzeChoiceCoverage(
       lockedOptions: countOption("locked"),
       untrackedChoiceEvents,
       staleChoiceEvents,
+      unversionedChoiceEvents,
     },
     sessions: logs.map(({ session }) => session).sort(),
     sessionErrors,
@@ -683,7 +700,7 @@ export function formatChoiceCoverage(
         : choice.status === statuses,
   );
   const lines = [
-    `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.staleChoiceEvents} stale · ${report.summary.untrackedChoiceEvents} legacy log events`,
+    `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.staleChoiceEvents} stale · ${report.summary.unversionedChoiceEvents} unversioned · ${report.summary.untrackedChoiceEvents} unstable-id log events`,
     `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids · ${report.authoring.summary.convergedResponses} converged responses need review`,
     `AI intent coverage: ${report.authoring.summary.intentCompleteChoices}/${report.authoring.summary.stableChoices} stable choices complete · ${report.authoring.summary.taggedOptions}/${report.authoring.summary.stableOptions} stable options tagged · ${report.authoring.summary.intentPartialChoices} partial · ${report.authoring.summary.intentMissingChoices} missing`,
   ];

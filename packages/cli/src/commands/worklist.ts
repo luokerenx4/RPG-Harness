@@ -250,7 +250,8 @@ export function analyzeDevelopmentWorklist(input: {
       continue;
     }
     const startedSession = script.startedSessions[0];
-    const sourceSession = startedSession ?? input.session ?? "<source-session>";
+    const staleSession = script.staleSessions[0];
+    const sourceSession = startedSession ?? staleSession ?? input.session ?? "<source-session>";
     items.push({
       key: `story/${script.id}`,
       kind: "story-coverage",

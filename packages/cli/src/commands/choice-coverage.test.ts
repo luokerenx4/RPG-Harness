@@ -148,6 +148,7 @@ describe("choice branch coverage", () => {
       lockedOptions: 1,
       untrackedChoiceEvents: 0,
       staleChoiceEvents: 0,
+      unversionedChoiceEvents: 1,
     });
     expect(report.workItems).toEqual([{
       key: "ending/final-tether/friends",
@@ -280,6 +281,39 @@ describe("choice branch coverage", () => {
       expect.objectContaining({ id: "alone", status: "selected" }),
       expect.objectContaining({ id: "friends", status: "pending" }),
     ]);
+  });
+
+  test("strict projects surface unversioned stable choices as stale and unseen", () => {
+    const authored = [{
+      key: "ending/final-tether",
+      scriptId: "ending",
+      scriptRevision: "current",
+      scriptTitle: "Ending",
+      beatIndex: 0,
+      prompt: "Who remains?",
+      choiceId: "final-tether",
+      optionCount: 3,
+      optionIds: ["alone", "friends", "secret"],
+      optionIntents: [],
+      intentStatus: "missing" as const,
+      status: "unseen" as const,
+    }];
+    const report = analyzeChoiceCoverage([{
+      session: "legacy",
+      entries: [{ input: { type: "next" }, output: choice }],
+    }], [], authored, true);
+
+    expect(report.summary).toMatchObject({
+      choices: 1,
+      pendingOptions: 0,
+      staleChoiceEvents: 1,
+      unversionedChoiceEvents: 1,
+    });
+    expect(report.authoring.choices[0]?.status).toBe("unseen");
+    expect(report.authoring.workItems).toContainEqual(expect.objectContaining({
+      kind: "reach-choice",
+      key: "ending/final-tether",
+    }));
   });
 
   test("ignores one-button pacing prompts in runtime and authored branch debt", () => {

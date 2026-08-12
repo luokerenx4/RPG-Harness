@@ -27,6 +27,7 @@ import {
   fireOnScriptComplete,
   fireOnSessionStart,
   markScriptCompleted,
+  scriptRevision,
   runScript,
 } from "@rpg-harness/engine";
 import type { Action, Input, Output, PresetContext } from "@rpg-harness/engine";
@@ -57,7 +58,7 @@ export async function* raidRun(
       const finished = yield* runScript(ctx, script);
       if (finished) {
         const completedId = script.id;
-        markScriptCompleted(ctx.state, completedId);
+        markScriptCompleted(ctx.state, completedId, scriptRevision(script));
         ctx.state.baseline.currentScriptId = null;
         ctx.state.baseline.beatIndex = 0;
         fireOnScriptComplete(ctx, completedId);

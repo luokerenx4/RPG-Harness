@@ -1,7 +1,9 @@
 import {
   assertSessionName,
   isSessionCheckpointRef,
+  loadSessionCheckpoint,
 } from "@rpg-harness/session-store";
+import type { ComposedState } from "@rpg-harness/engine";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readSessionLog, type LoggedStep } from "./commands/fork";
@@ -142,6 +144,36 @@ export async function historicalSessionCheckpoints(
     }
   }
   return candidates;
+}
+
+/**
+ * Locate the newest recoverable point inside a particular script across a
+ * fork lineage. This gives edited-script revalidation a precise replay frame
+ * instead of asking broad state-space search to rediscover old route setup.
+ */
+export async function historicalActiveScriptCheckpoint(
+  gameDir: string,
+  session: string,
+  beforeEntry: number,
+  scriptId: string,
+): Promise<SessionCheckpointCoordinate | null> {
+  const lineage = await readSessionLineage(gameDir, session, beforeEntry);
+  for (let sliceIndex = lineage.length - 1; sliceIndex >= 0; sliceIndex -= 1) {
+    const slice = lineage[sliceIndex]!;
+    for (let index = slice.entries.length - 1; index >= 0; index -= 1) {
+      const checkpoint = slice.entries[index]!.checkpoint;
+      if (!isSessionCheckpointRef(checkpoint)) continue;
+      const state = await loadSessionCheckpoint(
+        gameDir,
+        slice.session,
+        checkpoint,
+      ) as ComposedState;
+      if (state.baseline.currentScriptId === scriptId) {
+        return { session: slice.session, logEntry: index + 1 };
+      }
+    }
+  }
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -14,7 +14,10 @@ import {
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
-import { historicalSessionCheckpoints } from "../session-lineage";
+import {
+  historicalActiveScriptCheckpoint,
+  historicalSessionCheckpoints,
+} from "../session-lineage";
 import { collectScriptCoverage } from "./coverage";
 import {
   assertTargetEmpty,
@@ -121,8 +124,28 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     return search.found;
   };
 
-  await runAttempt(args.fromSession, primarySource);
-  if (!attempts[0]!.search.found && args.fromLogEntry === undefined && remainingNodes > 0) {
+  const activeCheckpoint = row.status === "stale"
+    ? await historicalActiveScriptCheckpoint(
+        args.gameDir,
+        args.fromSession,
+        primarySource.selectedEntry,
+        args.scriptId,
+      )
+    : null;
+  if (activeCheckpoint) {
+    await runAttempt(
+      activeCheckpoint.session,
+      await loadForkSource(
+        args.gameDir,
+        activeCheckpoint.session,
+        activeCheckpoint.logEntry,
+      ),
+    );
+  }
+  if (!attempts.some((attempt) => attempt.search.found) && remainingNodes > 0) {
+    await runAttempt(args.fromSession, primarySource);
+  }
+  if (!attempts.some((attempt) => attempt.search.found) && args.fromLogEntry === undefined && remainingNodes > 0) {
     for (const coordinate of await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
