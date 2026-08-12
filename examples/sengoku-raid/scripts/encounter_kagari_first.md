@@ -25,9 +25,9 @@ characters: [kagari]
 :hide-cg
 
 ? どう応える？ {id: first-words-to-kagari}
-- 同業ということは、お主も…… {id: name-the-shared-curse} -> +2kagari | goto same_curse
-- 軽く頷くだけ {id: nod-to-kagari} -> +kagari | goto silent_nod
-- 面倒事に巻き込まれそうだな {id: warn-kagari-away} -> goto wary
+- 同業ということは、お主も…… {id: name-the-shared-curse, ai: social vulnerable solidarity} -> +2kagari | goto same_curse
+- 軽く頷くだけ {id: nod-to-kagari, ai: restrained respectful} -> +kagari | goto silent_nod
+- 面倒事に巻き込まれそうだな {id: warn-kagari-away, ai: blunt independent wary} -> goto wary
 
 # same_curse
 

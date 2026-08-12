@@ -24,6 +24,7 @@ assertions:
     present: true
     choiceId: first-words-to-kasumi
     optionId: thank-kasumi
+    optionAiTagsIncludes: grateful
   - kind: output
     type: dialogue
     present: true

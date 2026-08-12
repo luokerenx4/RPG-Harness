@@ -42,6 +42,7 @@ assertions:
     present: true
     choiceId: first-words-to-kagari
     optionId: name-the-shared-curse
+    optionAiTagsIncludes: solidarity
   - kind: state
     path: sengoku-raid.metCharacters
     includes: kagari
