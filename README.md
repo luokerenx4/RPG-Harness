@@ -28,10 +28,13 @@ In local Web development, the GUI and CLI also share the `web` save session:
 bun run dev:web
 bun run rpgh peek examples/sengoku-raid --session web
 bun run rpgh report examples/sengoku-raid --session web --title "..."
+# Open any named Headless/AI branch in the GUI:
+# http://127.0.0.1:5174/?session=ai-branch
 ```
 
-Every browser input is appended to that game's normal `state.json` / `log.jsonl`,
-so a GUI finding is immediately replayable and reportable by a Headless agent.
+Every browser input is appended to that game's normal `state.json` / `log.jsonl`.
+Each event also points at an immutable, content-addressed state checkpoint, so a
+GUI finding is immediately forkable and reportable by a Headless agent.
 The GUI watches content revisions and reloads when another surface advances the
 session. Compare-and-swap still rejects a stale write if both act inside the
 same polling window, so progress is never silently overwritten. Static Web
@@ -313,7 +316,15 @@ rpgh step ./my-game --session claude --input '{"type":"choose","index":2}'
 ```
 
 State persists to `<game-dir>/.rpg-harness/sessions/<name>/state.json` between calls.
-Each `step` also appends `(input, output)` to `log.jsonl` for replay.
+Each `step` appends `(input, output, checkpoint)` to `log.jsonl`. Fork any exact
+post-step state without overwriting either session:
+
+```bash
+rpgh fork ./my-game --from claude --to investigate-choice --at 42
+```
+
+Legacy log entries created before checkpoints cannot be reconstructed exactly
+when game logic used RNG; `fork --at` rejects those entries instead of guessing.
 
 ## Test injection
 
@@ -348,9 +359,12 @@ here to gameplay regression.
 ```bash
 rpgh autoplay ./examples/sengoku-raid --persona extractor -v   # always extract / flee / sell
 rpgh autoplay ./examples/sengoku-raid --persona delver    -v   # always attack / push deepest
+rpgh autoplay ./examples/sengoku-raid --persona objective --session ai-run
 ```
 
-Generic personas — `greedy`, `charmer`, `rude`, `random`, `hunter` — also ship
+`objective` follows only renderer-neutral `HubSnapshot.objectives` links and can
+persist every move into a GUI-compatible named session. Generic personas —
+`greedy`, `charmer`, `rude`, `random`, `hunter` — also ship
 for any game (always-first / always-last / always-second / uniform-random /
 training-aware). They're useful for fuzz-testing path coverage. For LLM-driven
 personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/SKILL.md).

@@ -56,6 +56,12 @@ export interface ScriptCursor {
   // Compact fingerprint of the authored beat list last used to render this
   // cursor. Optional so saves created before revision tracking still hydrate.
   scriptRevision?: string;
+  // Beat count at the time this cursor was rendered. Together with the beat
+  // kind it distinguishes an in-place prose edit from structural insertion
+  // or deletion when the exact JSON anchor changes.
+  scriptBeatCount?: number;
+  previousBeatAnchor?: string;
+  nextBeatAnchor?: string;
   // Stage state immediately before this script began. Newer saves retain it
   // so a hot edit can rebuild visuals even when an old directive was deleted.
   entryVisuals?: VisualState;

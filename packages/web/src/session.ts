@@ -11,6 +11,7 @@ import type {
 const LOCAL_PREFIX = "rpgh:save:";
 const BRIDGE_ROOT = "/__rpgh/session-bridge";
 export const WEB_SESSION_NAME = "web";
+export const SESSION_QUERY_PARAM = "session";
 
 export interface WebStepEvent {
   input: Input;
@@ -119,6 +120,21 @@ export async function hasSave(gameId: string): Promise<boolean> {
   return (await loadState(gameId)) !== null;
 }
 
+export function requestedSharedSession(search: string): string | null {
+  const requested = new URLSearchParams(search).get(SESSION_QUERY_PARAM);
+  if (requested === null || requested === "") return null;
+  if (
+    requested === "." ||
+    requested === ".." ||
+    requested.includes("/") ||
+    requested.includes("\\") ||
+    requested.includes("\0")
+  ) {
+    return null;
+  }
+  return requested;
+}
+
 async function detectSessionInfo(): Promise<WebSessionInfo> {
   try {
     const response = await fetch(BRIDGE_ROOT, {
@@ -130,10 +146,12 @@ async function detectSessionInfo(): Promise<WebSessionInfo> {
         defaultSession?: unknown;
       };
       if (payload.enabled === true && typeof payload.defaultSession === "string") {
+        const requested = requestedSharedSession(window.location.search);
+        const session = requested ?? payload.defaultSession;
         return {
           mode: "shared",
-          session: payload.defaultSession,
-          label: `共有セッション: ${payload.defaultSession} · live`,
+          session,
+          label: `共有セッション: ${session} · live`,
         };
       }
     }

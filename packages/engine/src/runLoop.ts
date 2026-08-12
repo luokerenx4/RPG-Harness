@@ -29,7 +29,7 @@ export type InputSource =
 
 export interface RunLoopOptions {
   maxSteps?: number;
-  onStep?: (entry: TraceEntry, state: ComposedState) => void;
+  onStep?: (entry: TraceEntry, state: ComposedState) => void | Promise<void>;
 }
 
 export async function runLoop(
@@ -83,7 +83,19 @@ export async function runLoop(
         output: result.value,
       };
       trace.push(entry);
-      options.onStep?.(entry, engine.getState());
+      await options.onStep?.(entry, engine.getState());
+
+      // gameEnd is a terminal public output. Do not ask an input source for
+      // another move and then misclassify its null response as exhaustion.
+      if (result.value.type === "gameEnd") {
+        await runner.return();
+        return {
+          trace,
+          finalState: engine.getState(),
+          done: true,
+          reason: "completed",
+        };
+      }
 
       let nextInput: Input | null;
       if (inputsArray) {

@@ -232,9 +232,10 @@ export function PlayScreen({
         await saveSession(gameDir, sessionName, finalState);
         await appendLog(gameDir, sessionName, {
           t: Date.now(),
+          source: "tui",
           input,
           output: isDone ? null : value,
-        });
+        }, finalState);
         if (isDone) {
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {

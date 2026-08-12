@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, appendFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
-import { withSessionLock } from "@rpg-harness/session-store";
+import {
+  appendCheckpointedSessionEvent,
+  withSessionLock,
+} from "@rpg-harness/session-store";
 
 const API_ROOT = "/__rpgh/session-bridge";
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -95,15 +98,16 @@ export async function saveBridgeSession(
     await rename(temporary, stateFile);
 
     if (args.event) {
-      await appendFile(
-        path.join(dir, "log.jsonl"),
-        JSON.stringify({
+      await appendCheckpointedSessionEvent(
+        args.gameDir,
+        args.session,
+        {
           t: (args.now ?? Date.now)(),
           source: "web",
           input: args.event.input,
           output: args.event.output,
-        }) + "\n",
-        "utf-8",
+        },
+        args.state,
       );
     }
     return revisionOf(args.state);
@@ -122,6 +126,8 @@ export async function clearBridgeSession(
     await Promise.all([
       unlinkIfPresent(path.join(dir, "state.json")),
       unlinkIfPresent(path.join(dir, "log.jsonl")),
+      unlinkIfPresent(path.join(dir, "fork.json")),
+      rm(path.join(dir, "checkpoints"), { recursive: true, force: true }),
     ]);
   });
 }

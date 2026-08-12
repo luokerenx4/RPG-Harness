@@ -593,7 +593,68 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(2);
   });
 
-  test("fails explicitly when the current beat cannot be relocated safely", async () => {
+  test("resumes an in-place edit to the currently visible narration", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "state-inaccurate old prose" },
+            { type: "narration", text: "next anchor" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    await runScript(oldCtx, oldGame.scripts[0]!).next();
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "state-aware corrected prose" },
+            { type: "narration", text: "next anchor" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(editedCtx, editedGame.scripts[0]!).next();
+    expect(resumed.value).toMatchObject({
+      type: "narration",
+      text: "state-aware corrected prose",
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(0);
+  });
+
+  test("rejects same-type prose replacement when adjacent structure also changed", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        { type: "narration", text: "old current" },
+        { type: "narration", text: "old next" },
+        { type: "endScript" },
+      ] })],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    await runScript(oldCtx, oldGame.scripts[0]!).next();
+
+    const rewrittenGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        { type: "narration", text: "new current" },
+        { type: "narration", text: "new next" },
+        { type: "endScript" },
+      ] })],
+    });
+    const rewrittenCtx = makeCtx(rewrittenGame, { state: oldCtx.state });
+    expect(
+      runScript(rewrittenCtx, rewrittenGame.scripts[0]!).next(),
+    ).rejects.toThrow("script migration required");
+  });
+
+  test("fails explicitly when the changed current beat has a different structure", async () => {
     const oldGame = makeGame({
       scripts: [
         makeScript("s1", {
@@ -612,11 +673,12 @@ describe("runScript — semantic cursor migration after hot edits", () => {
       scripts: [
         makeScript("s1", {
           beats: [
-            { type: "narration", text: "replacement with no anchor" },
+            { type: "dialogue", speaker: "a", text: "replacement with no anchor" },
             { type: "endScript" },
           ],
         }),
       ],
+      characters: [makeCharacter("a")],
     });
     const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
     expect(

@@ -81,6 +81,7 @@ export interface ObjectiveAssertion {
   status?: "active" | "completed" | "blocked";
   titleIncludes?: string;
   relatedActivityIncludes?: string;
+  relatedActivityExcludes?: string;
   requirementId?: string;
   current?: string | number | boolean;
   target?: string | number | boolean;

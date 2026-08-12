@@ -71,6 +71,12 @@ function checkObjective(
   ) {
     return `objective ${a.id}: expected relatedActivityIds to include ${a.relatedActivityIncludes}`;
   }
+  if (
+    a.relatedActivityExcludes !== undefined &&
+    (objective.relatedActivityIds ?? []).includes(a.relatedActivityExcludes)
+  ) {
+    return `objective ${a.id}: expected relatedActivityIds to exclude ${a.relatedActivityExcludes}`;
+  }
   if (a.requirementId !== undefined) {
     const req = (objective.requirements ?? []).find((item) => item.id === a.requirementId);
     if (!req) return `objective ${a.id}: requirement ${a.requirementId} not found`;

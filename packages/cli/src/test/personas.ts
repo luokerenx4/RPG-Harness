@@ -54,6 +54,33 @@ function activityScore(hint: string | undefined): number {
 }
 
 export const personas: Record<string, Persona> = {
+  // Renderer-neutral AI: follow only the public objective contract. It does
+  // not inspect module-specific state or hard-code story thresholds.
+  objective: async (output) => {
+    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "scriptComplete") {
+      const first = output.nextAvailable[0];
+      return first ? { type: "select", scriptId: first.id } : null;
+    }
+    if (output.type === "hubMenu") {
+      const availableById = new Map(
+        output.snapshot.activities
+          .filter((activity) => activity.available)
+          .map((activity) => [activity.id, activity]),
+      );
+      for (const objective of output.snapshot.objectives ?? []) {
+        if (objective.status !== "active") continue;
+        for (const id of objective.relatedActivityIds ?? []) {
+          const activity = availableById.get(id);
+          if (activity) return { type: "doActivity", id: activity.id };
+        }
+      }
+      return { type: "quit" };
+    }
+    if (output.type === "gameEnd") return null;
+    return { type: "next" };
+  },
+
   greedy: async (output) => {
     if (output.type === "choice") return pickFirstAvailableChoice(output);
     if (output.type === "scriptComplete") {
@@ -288,6 +315,7 @@ export const personas: Record<string, Persona> = {
 };
 
 export const personaDescriptions: Record<string, string> = {
+  objective: "只依赖 HubSnapshot.objectives 的可执行链接推进，不读取游戏模块私有状态",
   greedy: "选 effectsHint 数值之和最高的可用项 — 平均下来是温柔系玩家",
   charmer: "总选最后一个可选项 — 倾向更主动的回答",
   rude: "总选第二个 — 偏向冷漠/拒绝路线",

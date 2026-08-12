@@ -8,6 +8,8 @@ import {
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { personaDescriptions, personas } from "../test/personas";
+import { appendLog, loadSession, saveSession } from "../session";
+import { withSessionLock } from "@rpg-harness/session-store";
 
 interface Args {
   gameDir: string;
@@ -15,6 +17,7 @@ interface Args {
   verbose: boolean;
   maxSteps: number;
   seed?: number;
+  session?: string;
 }
 
 export async function autoplayCommand(args: Args): Promise<void> {
@@ -47,43 +50,57 @@ export async function autoplayCommand(args: Args): Promise<void> {
   // carries an unchanged visualState would re-print the same banner.
   let prevVisuals: VisualState = emptyVisualState();
 
-  const result = await runLoop(game, undefined, persona, {
-    maxSteps: args.maxSteps,
-    onStep: args.verbose
-      ? (entry) => {
-          const nextVisuals = entry.output.visualState;
-          if (nextVisuals) {
-            for (const line of diffVisualLines(
-              prevVisuals,
-              nextVisuals,
-              assetMap,
-            )) {
-              process.stderr.write("  " + line + "\n");
-            }
-            // Snapshot: the engine mutates state.baseline.visuals
-            // in place, so without a deep copy `prevVisuals` would
-            // point to the same live object as `nextVisuals` and
-            // future diffs would always be empty.
-            prevVisuals = {
-              bg: nextVisuals.bg,
-              portraits: { ...nextVisuals.portraits },
-              cg: nextVisuals.cg,
-            };
-          }
-          const line = formatOutput(entry.output);
-          if (line) process.stderr.write(line + "\n");
+  const play = async () => {
+    const initialState = args.session
+      ? await loadSession(args.gameDir, args.session, game)
+      : undefined;
+    return runLoop(game, initialState, persona, {
+      maxSteps: args.maxSteps,
+      onStep: async (entry, state) => {
+        if (args.session && entry.input) {
+          await saveSession(args.gameDir, args.session, state);
+          await appendLog(args.gameDir, args.session, {
+            t: Date.now(),
+            source: `autoplay:${args.persona}`,
+            input: entry.input,
+            output: entry.output,
+          }, state);
         }
-      : undefined,
-  });
+        if (!args.verbose) return;
+        const nextVisuals = entry.output.visualState;
+        if (nextVisuals) {
+          for (const line of diffVisualLines(
+            prevVisuals,
+            nextVisuals,
+            assetMap,
+          )) {
+            process.stderr.write("  " + line + "\n");
+          }
+          // Snapshot: the engine mutates state.baseline.visuals
+          // in place, so without a deep copy `prevVisuals` would
+          // point to the same live object as `nextVisuals` and
+          // future diffs would always be empty.
+          prevVisuals = {
+            bg: nextVisuals.bg,
+            portraits: { ...nextVisuals.portraits },
+            cg: nextVisuals.cg,
+          };
+        }
+        const line = formatOutput(entry.output);
+        if (line) process.stderr.write(line + "\n");
+      },
+    });
+  };
+  const result = args.session
+    ? await withSessionLock(args.gameDir, args.session, play)
+    : await play();
 
   process.stderr.write(
     `\n=== done: ${result.reason} in ${result.trace.length} steps ===\n`,
   );
   if (result.error) process.stderr.write(`error: ${result.error}\n`);
 
-  const ending = findEnding(
-    result.finalState as { baseline: { completionOrder: string[] } },
-  );
+  const ending = detectTerminalScriptId(result);
   if (ending) process.stderr.write(`ending: ${ending}\n`);
 
   process.stdout.write(
@@ -92,19 +109,19 @@ export async function autoplayCommand(args: Args): Promise<void> {
       steps: result.trace.length,
       finalState: result.finalState,
       ending,
+      ...(args.session ? { session: args.session } : {}),
     }) + "\n",
   );
 }
 
-function findEnding(state: {
-  baseline: { completionOrder: string[] };
+export function detectTerminalScriptId(result: {
+  done: boolean;
+  trace: ReadonlyArray<{ output: Output }>;
+  finalState: { baseline: { completionOrder: string[] } };
 }): string | null {
-  const completed = state.baseline.completionOrder;
-  for (let i = completed.length - 1; i >= 0; i--) {
-    const id = completed[i];
-    if (id && /^00[5-9]/.test(id)) return id;
-  }
-  return null;
+  return result.done && result.trace.at(-1)?.output.type === "gameEnd"
+    ? result.finalState.baseline.completionOrder.at(-1) ?? null
+    : null;
 }
 
 function formatOutput(o: Output): string | null {

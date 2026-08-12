@@ -317,6 +317,12 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const progressActivityIds = activities
     .filter((activity) => activity.available && progressCategories.has(activity.category))
     .map((activity) => activity.id);
+  const restActivityId = activities.some(
+    (activity) => activity.id === "rest" && activity.available,
+  ) ? ["rest"] : [];
+  const executableProgressActivityIds = progressActivityIds.length > 0
+    ? progressActivityIds
+    : restActivityId;
   const requirement = (
     id: string,
     label: string,
@@ -332,7 +338,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       description: `現在の御沙汰：${directive}`,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 3, raids >= 3)],
-      relatedActivityIds: progressActivityIds,
+      relatedActivityIds: executableProgressActivityIds,
     }];
   }
   if (chapter < 2) {
@@ -346,7 +352,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         requirement("raidsCompleted", "成功撤退", raids, 7, raids >= 7),
         requirement("spectral", "霊体化上限", spectral, "49 以下", spectral <= 49),
       ],
-      relatedActivityIds: progressActivityIds,
+      relatedActivityIds: executableProgressActivityIds,
     }];
   }
   if (chapter < 3) {
@@ -356,7 +362,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       description: `現在の御沙汰：${directive}`,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 12, raids >= 12)],
-      relatedActivityIds: progressActivityIds,
+      relatedActivityIds: executableProgressActivityIds,
     }];
   }
 
@@ -374,6 +380,10 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const endingAvailable = activities.some(
     (activity) => activity.id === endingActivityId && activity.available,
   );
+  const routeImbueActivityId = `imbue:${route.variable.replace("pulse_", "")}`;
+  const routeImbueAvailable = activities.some(
+    (activity) => activity.id === routeImbueActivityId && activity.available,
+  );
   return [{
     id: route.id,
     title: completed ? `${route.title} — 完遂` : route.title,
@@ -386,7 +396,9 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       ? []
       : endingAvailable
         ? [endingActivityId]
-        : progressActivityIds,
+        : routeImbueAvailable
+          ? [routeImbueActivityId]
+          : executableProgressActivityIds,
   }];
 }
 

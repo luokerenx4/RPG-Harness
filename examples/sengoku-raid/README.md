@@ -14,7 +14,9 @@
 rpgh play .                                  # 自分で遊ぶ
 rpgh autoplay . --persona extractor -v       # AI が「逃げ撤退」路線で遊ぶ
 rpgh autoplay . --persona delver    -v       # AI が「直推 boss」路線で遊ぶ
-rpgh test .                                  # fixture 回帰（31 個）
+rpgh autoplay . --persona objective --session ai-run # 公開目標だけで進め、GUI に渡す
+rpgh fork . --from ai-run --to branch --at 42        # 任意 checkpoint から分岐
+rpgh test .                                  # fixture 回帰
 ```
 
 ## 世界観 + 三つの軸

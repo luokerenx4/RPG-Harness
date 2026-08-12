@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createInitialState } from "@rpg-harness/engine";
 import type { ComposedState, Game } from "@rpg-harness/engine";
+import { appendCheckpointedSessionEvent } from "@rpg-harness/session-store";
 
 const SESSION_FILE = "state.json";
 const LOG_FILE = "log.jsonl";
@@ -45,7 +46,20 @@ export async function appendLog(
   gameDir: string,
   name: string,
   entry: unknown,
+  state?: ComposedState,
 ): Promise<void> {
+  if (state !== undefined) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("Checkpointed log entry must be a JSON object");
+    }
+    await appendCheckpointedSessionEvent(
+      gameDir,
+      name,
+      entry as Record<string, unknown>,
+      state,
+    );
+    return;
+  }
   const dir = sessionDir(gameDir, name);
   await mkdir(dir, { recursive: true });
   await writeFile(

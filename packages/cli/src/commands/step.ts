@@ -29,7 +29,7 @@ export async function stepCommand(args: Args): Promise<void> {
       source: "cli",
       input,
       output: next.output,
-    });
+    }, next.state);
     return next;
   });
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));

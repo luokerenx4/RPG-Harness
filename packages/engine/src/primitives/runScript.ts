@@ -58,7 +58,7 @@ export async function* runScript(
     const beatIdx = state.baseline.beatIndex;
     const original = script.beats[beatIdx];
     if (!original) break;
-    setScriptCursor(ctx, script, original);
+    setScriptCursor(ctx, script, original, beatIdx);
 
     // Let modules pre-process / skip / replace the beat.
     const reduced = fireOnBeatBefore(ctx, script.id, beatIdx, original);
@@ -174,6 +174,8 @@ export async function* runScript(
           scriptId: script.id,
           beatAnchor: anchorBeat(beat),
           scriptRevision: revisionOf(script),
+          scriptBeatCount: script.beats.length,
+          ...neighborAnchors(script, beatIdx),
           ...(state.baseline.scriptCursor?.entryVisuals
             ? { entryVisuals: state.baseline.scriptCursor.entryVisuals }
             : {}),
@@ -340,12 +342,15 @@ function setScriptCursor(
   ctx: PresetContext,
   script: Script,
   beat: Beat,
+  beatIndex: number,
 ): void {
   const previous = ctx.state.baseline.scriptCursor;
   ctx.state.baseline.scriptCursor = {
     scriptId: script.id,
     beatAnchor: anchorBeat(beat),
     scriptRevision: revisionOf(script),
+    scriptBeatCount: script.beats.length,
+    ...neighborAnchors(script, beatIndex),
     ...(previous?.scriptId === script.id && previous.entryVisuals
       ? { entryVisuals: previous.entryVisuals }
       : {}),
@@ -365,6 +370,15 @@ function clearConsumedChoiceFallback(ctx: PresetContext, scriptId: string): void
     beatAnchor: cursor.beatAnchor,
     ...(cursor.scriptRevision !== undefined
       ? { scriptRevision: cursor.scriptRevision }
+      : {}),
+    ...(cursor.scriptBeatCount !== undefined
+      ? { scriptBeatCount: cursor.scriptBeatCount }
+      : {}),
+    ...(cursor.previousBeatAnchor !== undefined
+      ? { previousBeatAnchor: cursor.previousBeatAnchor }
+      : {}),
+    ...(cursor.nextBeatAnchor !== undefined
+      ? { nextBeatAnchor: cursor.nextBeatAnchor }
       : {}),
     ...(cursor.entryVisuals !== undefined
       ? { entryVisuals: cursor.entryVisuals }
@@ -387,6 +401,8 @@ function reconcileScriptCursor(
       scriptId: script.id,
       beatAnchor: anchorBeat(current),
       scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, baseline.beatIndex),
       entryVisuals: cloneVisuals(baseline.visuals),
     };
     return;
@@ -465,6 +481,30 @@ function reconcileScriptCursor(
     return;
   }
 
+  if (
+    isSafeInPlaceContentEdit(cursor, current) &&
+    cursor.scriptBeatCount === script.beats.length &&
+    hasMatchingNeighborContext(cursor, script, baseline.beatIndex)
+  ) {
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(
+        ctx,
+        script,
+        labelMap,
+        baseline.beatIndex,
+        cursor,
+      );
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      beatAnchor: anchorBeat(current),
+      scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, baseline.beatIndex),
+    };
+    return;
+  }
+
   if (cursor.choice) {
     const matchingOptions = script.beats.flatMap((beat) => {
       if (beat.type !== "choice") return [];
@@ -496,6 +536,57 @@ function reconcileScriptCursor(
       `beatIndex ${baseline.beatIndex}; the anchored beat changed and could ` +
       `not be relocated safely`,
   );
+}
+
+function isSafeInPlaceContentEdit(
+  cursor: ScriptCursor,
+  current: Beat,
+): boolean {
+  let previous: unknown;
+  try {
+    previous = JSON.parse(cursor.beatAnchor) as unknown;
+  } catch {
+    return false;
+  }
+  if (!previous || typeof previous !== "object" || Array.isArray(previous)) {
+    return false;
+  }
+  const oldBeat = previous as Record<string, unknown>;
+  if (oldBeat.type === "narration" && current.type === "narration") return true;
+  return (
+    oldBeat.type === "dialogue" &&
+    current.type === "dialogue" &&
+    oldBeat.speaker === current.speaker &&
+    oldBeat.candidateEmotion === current.candidateEmotion
+  );
+}
+
+function neighborAnchors(
+  script: Script,
+  beatIndex: number,
+): Pick<ScriptCursor, "previousBeatAnchor" | "nextBeatAnchor"> {
+  const previous = script.beats[beatIndex - 1];
+  const next = script.beats[beatIndex + 1];
+  return {
+    ...(previous ? { previousBeatAnchor: anchorBeat(previous) } : {}),
+    ...(next ? { nextBeatAnchor: anchorBeat(next) } : {}),
+  };
+}
+
+function hasMatchingNeighborContext(
+  cursor: ScriptCursor,
+  script: Script,
+  beatIndex: number,
+): boolean {
+  const previous = script.beats[beatIndex - 1];
+  const next = script.beats[beatIndex + 1];
+  const previousMatches = cursor.previousBeatAnchor === undefined
+    ? previous === undefined
+    : previous !== undefined && anchorBeat(previous) === cursor.previousBeatAnchor;
+  const nextMatches = cursor.nextBeatAnchor === undefined
+    ? next === undefined
+    : next !== undefined && anchorBeat(next) === cursor.nextBeatAnchor;
+  return previousMatches && nextMatches;
 }
 
 function revisionOf(script: Script): string {

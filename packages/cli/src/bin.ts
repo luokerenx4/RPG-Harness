@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { peekCommand } from "./commands/peek";
 import { stepCommand } from "./commands/step";
 import { sessionsCommand } from "./commands/sessions";
+import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
@@ -44,13 +45,20 @@ COMMANDS
   sessions <game-dir>
       List existing sessions (one per line, stdout). Empty status to stderr.
 
+  fork     <game-dir> --from NAME --to NAME [--at N] [--pretty]
+      Fork a save from a recoverable log checkpoint. --at is the 1-based log
+      entry whose resulting state becomes the new session. Legacy entries
+      without checkpoints are rejected rather than nondeterministically replayed.
+
   test     <game-dir>
       Run all fixtures under <game-dir>/tests/*.yaml. Exits 1 on failure.
 
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
+           [--session NAME]
       Have a built-in AI persona play through the game and report the ending.
       Personas: greedy / charmer / rude / random
-      Without -v, only prints the final JSON summary to stdout.
+      --session persists every AI step as the same recoverable save/log used
+      by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
@@ -135,6 +143,8 @@ async function main(): Promise<void> {
       return runStep(rest);
     case "sessions":
       return runSessions(rest);
+    case "fork":
+      return runFork(rest);
     case "test":
       return runTest(rest);
     case "autoplay":
@@ -229,6 +239,34 @@ async function runSessions(args: string[]): Promise<void> {
   await sessionsCommand({ gameDir });
 }
 
+async function runFork(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      from: { type: "string" },
+      to: { type: "string" },
+      at: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh fork <game-dir> --from NAME --to NAME [--at N] [--pretty]",
+  );
+  if (!values.from || !values.to) {
+    process.stderr.write("Missing required flags: --from NAME --to NAME\n");
+    process.exit(2);
+  }
+  await forkCommand({
+    gameDir,
+    from: values.from,
+    to: values.to,
+    ...(values.at !== undefined ? { at: Number(values.at) } : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
 async function runTest(args: string[]): Promise<void> {
   const { positionals } = parseArgs({ args, allowPositionals: true });
   const gameDir = requirePositional(positionals, "rpgh test <game-dir>");
@@ -265,6 +303,7 @@ async function runAutoplay(args: string[]): Promise<void> {
       verbose: { type: "boolean", short: "v", default: false },
       "max-steps": { type: "string", default: "1000" },
       seed: { type: "string" },
+      session: { type: "string" },
     },
     allowPositionals: true,
   });
@@ -278,6 +317,7 @@ async function runAutoplay(args: string[]): Promise<void> {
     verbose: Boolean(values.verbose),
     maxSteps: Number(values["max-steps"] ?? "1000"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
+    ...(values.session !== undefined ? { session: values.session } : {}),
   });
 }
 

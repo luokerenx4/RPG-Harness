@@ -1,0 +1,23 @@
+name: 主線目標は出立が体力で塞がれた時に休息を実行可能な前置きとして示す
+state:
+  baseline:
+    completedScripts: [000_intro, pulse_intro]
+    characters:
+      player:
+        stats: { hp: 28, mental: 9, spectral: 2, intellect: 0 }
+    variables:
+      shogun_chapter: 0
+      raidsCompleted: 1
+    weapons:
+      ancestor_yaodao: { power: 7 }
+  sengoku-raid:
+    raid: null
+    pulsePending: null
+inputs: []
+assertions:
+  - kind: objective
+    id: letter_01_dispatch
+    relatedActivityIncludes: rest
+    requirementId: raidsCompleted
+    current: 1
+    target: 3

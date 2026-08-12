@@ -51,6 +51,11 @@ describe("Web development session bridge", () => {
         source: "web",
         input: { type: "next" },
         output: { type: "dialogue", text: "同じ一歩。" },
+        checkpoint: expect.objectContaining({
+          schemaVersion: 1,
+          file: expect.stringMatching(/^checkpoints\/[a-f0-9]{64}\.json$/),
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
       },
     ]);
   });
@@ -67,6 +72,8 @@ describe("Web development session bridge", () => {
     await writeFile(path.join(sessionDir, "state.json"), "{}", "utf-8");
     await writeFile(path.join(sessionDir, "log.jsonl"), "{}\n", "utf-8");
     await writeFile(path.join(sessionDir, "issues.jsonl"), "{\"id\":\"pt-1\"}\n", "utf-8");
+    await mkdir(path.join(sessionDir, "checkpoints"));
+    await writeFile(path.join(sessionDir, "checkpoints", "old.json"), "{}", "utf-8");
 
     await clearBridgeSession(gameDir, "web");
 
@@ -74,6 +81,7 @@ describe("Web development session bridge", () => {
     expect(
       await readFile(path.join(sessionDir, "issues.jsonl"), "utf-8"),
     ).toContain("pt-1");
+    await expect(readFile(path.join(sessionDir, "checkpoints", "old.json"))).rejects.toThrow();
   });
 
   test("rejects path traversal in session names", async () => {

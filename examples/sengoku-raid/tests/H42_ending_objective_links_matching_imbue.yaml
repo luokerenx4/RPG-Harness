@@ -1,0 +1,40 @@
+name: 終局目標は不足した脈絡と一致する注入だけを次の行動として示す
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, letter_03_choice]
+    switches:
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 3
+    weapons:
+      ancestor_yaodao: { power: 14 }
+    currentMapId: kuro_swamp_crossroads
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    pulsePending:
+      enemyId: oni_lesser
+      absorb: 4
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        kuro_swamp_crossroads:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: objective
+    id: ending_oni_self
+    relatedActivityIncludes: imbue:oni
+    relatedActivityExcludes: imbue:pure
+    requirementId: pulse_oni
+    current: 3
+    target: 8
