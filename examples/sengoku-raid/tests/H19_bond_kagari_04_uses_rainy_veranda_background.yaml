@@ -1,0 +1,30 @@
+name: 篝の長い夜が江戸城ではなく宿の縁側で始まる
+description: |
+  bond_kagari_04 opens on a rainy midnight veranda and must replace the
+  inherited Edo-castle hub background with the authored inn veranda.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - bond_kagari_03
+    characters:
+      kagari:
+        affection: 8
+        custom: {}
+    switches:
+      road_kagari_2_seen: true
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kagari
+inputs:
+  - type: doActivity
+    id: script:bond_kagari_04
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-veranda-night

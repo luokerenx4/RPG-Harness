@@ -2,6 +2,7 @@
 id: bond_kagari_04
 title: 長い夜の答え
 characters: [kagari]
+bg: assets/backgrounds/inn-veranda-night
 requires:
   all:
     - { affection: { character: kagari, min: 8 } }
