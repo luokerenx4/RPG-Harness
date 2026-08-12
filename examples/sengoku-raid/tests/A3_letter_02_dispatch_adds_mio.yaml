@@ -55,11 +55,17 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
-  # Choice (it's the inline ? choice block); pick option 0
+  # Choice (it's the inline ? choice block); pick option 0, then drain its reply.
   - { type: choose, index: 0 }
   - { type: next }
   - { type: next }
+  - { type: next }
 assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: inspection-companionship
+    optionId: ask-her-to-join
   - kind: state
     path: baseline.variables.shogun_chapter
     eq: 2

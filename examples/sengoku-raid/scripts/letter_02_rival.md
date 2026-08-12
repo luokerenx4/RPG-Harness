@@ -41,10 +41,28 @@ requires:
 
 :hide-cg
 
-? それでよい。
-  - 「同行を頼む」 -> +1mio
-  - 「断る術はあるか」
-  - （無言で頷く）
+? それでよい。 {id: inspection-companionship}
+  - 「同行を頼む」 {id: ask-her-to-join} -> +1mio | goto accept_inspection
+  - 「断る術はあるか」 {id: ask-if-refusal-is-possible} -> goto question_inspection
+  - （無言で頷く） {id: nod-in-silence} -> goto silent_inspection
+
+# accept_inspection
+
+@mio 頼まれずとも役目だ。……だが、頼まれたことは覚えておく。
+
+:goto inspection_order
+
+# question_inspection
+
+@mio ない。これは公儀の査問だ。ただし、隣を歩く間、お主を罪人として扱うつもりもない。
+
+:goto inspection_order
+
+# silent_inspection
+
+@mio その頷きで足りる。次の出帰りから、私が右を歩く。
+
+# inspection_order
 
 :hide-cg
 

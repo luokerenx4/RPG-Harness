@@ -1,0 +1,53 @@
+name: questioning the court order gets an answer but cannot cancel Mio's inspection duty
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion]
+    currentScriptId: letter_02_rival
+    beatIndex: 16
+    variables:
+      raidsCompleted: 7
+      shogun_chapter: 2
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 20, intellect: 5 }
+    weapons:
+      ancestor_yaodao: { power: 8 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+inputs:
+  - { type: next }
+  - { type: choose, index: 1 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: inspection-companionship
+    optionId: ask-if-refusal-is-possible
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: ない。これは公儀の査問だ
+  - kind: state
+    path: baseline.characters.mio.affection
+    eq: 0
+  - kind: state
+    path: baseline.switches.mio_inspection_duty
+    eq: true
+  - kind: state
+    path: baseline.switches.companion_mio
+    eq: true
+  - kind: state
+    path: sengoku-raid.companion
+    eq: mio
+  - kind: state
+    path: sengoku-raid.companionHp
+    eq: 10

@@ -3010,12 +3010,11 @@ const raidModule: Module = {
     }
   },
 
-  // Letter 02 already contains the promise to accompany the player. When
-  // they explicitly answer 「同行を頼む」, make that choice operational
-  // immediately instead of sending them back to a contradictory affinity
-  // gate in the hub.
+  // Letter 02 is an official inspection order, so every reply accepts the
+  // same immediate companionship contract. The three options express the
+  // player's attitude; only 「同行を頼む」 grants affection in the script.
   onChoiceResolved: (ctx, scriptId, _beatIdx, choiceIdx) => {
-    if (scriptId !== "letter_02_rival" || choiceIdx !== 0) return;
+    if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
       ctx.state.baseline.switches[`companion_${m.companion}`] = false;
