@@ -433,6 +433,8 @@ rpgh autoplay ./examples/sengoku-raid --persona delver    -v   # always attack /
 rpgh autoplay ./examples/sengoku-raid --persona objective --session ai-run
 rpgh autoplay ./examples/sengoku-raid --persona objective \
   --from-session player-main --session ai-objective-audit --report-on-stop
+rpgh audit ./examples/sengoku-raid --from-session player-main \
+  --session-prefix ai-matrix --max-steps 500
 rpgh cover ./examples/sengoku-raid --source-session player-main \
   --session ai-cover-branch --key SCRIPT/CHOICE/OPTION
 ```
@@ -471,6 +473,15 @@ errors, exact stalls, masked behavior cycles, and zero-progress stops retain
 their stronger severity.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
+`audit` productizes the multi-persona development lane. It preflights the source
+and every target name before writing anything, then forks one protected player
+checkpoint into `${prefix}-${persona}` sessions and runs each through the same
+autoplay/report contract. Its compact matrix summarizes endings, strict stalls,
+masked behavior cycles, progressing budget checkpoints, rejected inputs,
+reports, and GUI-ready Web paths without embedding five full save states.
+Completed lanes remain individually replayable if the command is interrupted;
+rerun with a fresh prefix after inspecting them. Add `random` explicitly with
+`--personas ...random --seed N` so the matrix remains reproducible.
 `cover` is the execution half of that contract: it consumes an available branch
 without requiring an agent to manually translate evidence into `fork` and
 `step` commands, and fails closed if live authoring removed, locked, or replaced

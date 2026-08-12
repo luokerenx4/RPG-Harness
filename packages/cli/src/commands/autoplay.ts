@@ -155,6 +155,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       pretty: false,
     });
   }
+  const originalRandom = Math.random;
   if (args.seed !== undefined) {
     let s = args.seed;
     Math.random = () => {
@@ -276,9 +277,14 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     }
     return result;
   };
-  const result = args.session
-    ? await withSessionLock(args.gameDir, args.session, play)
-    : await play();
+  let result: Awaited<ReturnType<typeof runLoop>>;
+  try {
+    result = args.session
+      ? await withSessionLock(args.gameDir, args.session, play)
+      : await play();
+  } finally {
+    Math.random = originalRandom;
+  }
 
   process.stderr.write(
     `\n=== done: ${result.reason} after ${countDecisions(result.trace)} decisions / ${countRejectedInputs(result.trace)} rejected inputs / ${result.trace.length} visible outputs ===\n`,

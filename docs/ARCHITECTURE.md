@@ -116,6 +116,14 @@ while state differs, the result keeps `reason: max-steps` but attaches a
 deadlocks from pseudo-progress such as a turn counter increasing during a map
 oscillation.
 
+`rpgh audit` is a CLI orchestration layer over this contract, not another game
+runner. It validates a source checkpoint and all `${prefix}-${persona}` target
+sessions up front, then calls persisted `runAutoplay` lanes sequentially. Each
+lane retains ordinary fork provenance, checkpoints, reports, transcript, and
+Web query path; the command returns only a compact cross-lane matrix. This keeps
+the player/GUI branch immutable while making regression sweeps executable by a
+later coding agent without bespoke shell loops.
+
 ## Standard resources (the database)
 
 The engine owns six typed resource schemas. Each has: a `*Def` type, a directory the loader scans, a slot in `BaselineState`, optional `StateDelta` integration, optional `Condition` operators, and primitives for read/write.

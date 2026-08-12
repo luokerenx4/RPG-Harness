@@ -201,6 +201,18 @@ in-flight script make it a resumable budget checkpoint (reported at `note`
 severity). Continue that named session. Escalate only when subsequent evidence
 shows zero progress, a strict `stall`, a `behaviorCycle`, or an engine error.
 
+To audit multiple built-in behaviors from one GUI/player checkpoint, use:
+
+```bash
+rpgh audit "$GAME" --from-session "$SESSION" \
+  --session-prefix "${SESSION}-matrix" --max-steps 500
+```
+
+Read the compact `lanes`, `totals`, and `endings` matrix first, then open or
+transcribe only anomalous named lanes. The source is never mutated and all
+target names are preflighted before the first fork. Use a fresh prefix for each
+audit. If `random` is included in `--personas`, always provide `--seed`.
+
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.

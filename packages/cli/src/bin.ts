@@ -10,6 +10,7 @@ import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
+import { auditCommand, DEFAULT_AUDIT_PERSONAS } from "./commands/audit";
 import { coverChoiceCommand } from "./commands/cover-choice";
 import { reachChoiceCommand } from "./commands/reach-choice";
 import { initCommand } from "./commands/init";
@@ -87,6 +88,15 @@ COMMANDS
       --report-on-stop turns a non-terminal stop into a checkpointed coding issue.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
+
+  audit    <game-dir> --from-session PLAYER --session-prefix PREFIX
+           [--from-at N] [--personas CSV] [--max-steps N] [--seed N]
+           [--no-report-on-stop] [--pretty]
+      Fork one immutable player checkpoint into an isolated AI persona matrix.
+      Preflights every target before running, then summarizes endings, stalls,
+      masked behavior cycles, budget checkpoints, reports, and Web paths.
+      Default personas: objective,greedy,charmer,rude,hunter. Including random
+      requires --seed so the audit can be reproduced exactly.
 
   cover    <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY]
            [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
@@ -203,6 +213,8 @@ async function main(): Promise<void> {
       return runTest(rest);
     case "autoplay":
       return runAutoplay(rest);
+    case "audit":
+      return runAuditCommand(rest);
     case "cover":
       return runCoverChoice(rest);
     case "reach":
@@ -493,6 +505,47 @@ async function runAutoplay(args: string[]): Promise<void> {
       ? { fromLogEntry: Number(values["from-at"]) }
       : {}),
     reportOnStop: Boolean(values["report-on-stop"]),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runAuditCommand(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      "from-session": { type: "string" },
+      "from-at": { type: "string" },
+      "session-prefix": { type: "string" },
+      personas: { type: "string", default: DEFAULT_AUDIT_PERSONAS.join(",") },
+      "max-steps": { type: "string", default: "1000" },
+      seed: { type: "string" },
+      "no-report-on-stop": { type: "boolean", default: false },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh audit <game-dir> --from-session PLAYER --session-prefix PREFIX [--from-at N] [--personas CSV] [--max-steps N] [--seed N] [--no-report-on-stop] [--pretty]",
+  );
+  if (!values["from-session"] || !values["session-prefix"]) {
+    process.stderr.write("Missing required flags: --from-session PLAYER --session-prefix PREFIX\n");
+    process.exit(2);
+  }
+  await auditCommand({
+    gameDir,
+    fromSession: values["from-session"],
+    ...(values["from-at"] !== undefined
+      ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
+    sessionPrefix: values["session-prefix"],
+    personas: String(values.personas ?? "")
+      .split(",")
+      .map((persona) => persona.trim())
+      .filter(Boolean),
+    maxSteps: Number(values["max-steps"] ?? "1000"),
+    ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
+    reportOnStop: !Boolean(values["no-report-on-stop"]),
     pretty: Boolean(values.pretty),
   });
 }
