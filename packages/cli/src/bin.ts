@@ -161,7 +161,8 @@ COMMANDS
                [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]
       Search public Headless inputs until an authored script completes, then
       replay the exact path into a GUI-compatible AI fork. Without --from-at,
-      recoverable historical decision checkpoints share the search budget.
+      recoverable decision checkpoints across the fork ancestry share the
+      search budget.
       A miss is read-only and exits non-zero.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]

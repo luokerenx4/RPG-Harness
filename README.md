@@ -278,6 +278,9 @@ scripts with no choices. A script may declare ordered
 does not reveal how public gameplay can satisfy it. Breadcrumbs guide search
 priority only: every activity must still be present and available in the live
 Headless/GUI output, and the completed path must replay to an identical state.
+Both reach commands follow fork provenance through ancestor sessions, so an AI
+starting from a terminal child branch can recover the exact earlier checkpoint
+where another route was still playable without mutating any ancestor save.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually

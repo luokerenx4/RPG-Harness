@@ -5,6 +5,7 @@ import path from "node:path";
 import { createInitialState, peek, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { appendLog, saveSession, sessionDir } from "../session";
+import { forkSession } from "./fork";
 import { runReachScript } from "./reach-script";
 
 const temporaryDirectories: string[] = [];
@@ -35,10 +36,16 @@ describe("reach-script", () => {
       }, current.state);
     }
     expect(current.output?.type).toBe("gameEnd");
+    await forkSession({
+      gameDir,
+      from: "gui-player",
+      to: "finished-branch",
+      pretty: false,
+    });
 
     const result = await runReachScript({
       gameDir,
-      fromSession: "gui-player",
+      fromSession: "finished-branch",
       session: "ai-target",
       scriptId: "target",
       maxNodes: 100,
@@ -65,6 +72,9 @@ describe("reach-script", () => {
       path.join(sessionDir(gameDir, "ai-target"), "state.json"),
     ).text());
     expect(saved.baseline.scripts.target.completed).toBe(true);
+    expect(JSON.parse(await Bun.file(
+      path.join(sessionDir(gameDir, "ai-target"), "fork.json"),
+    ).text())).toMatchObject({ fromSession: "gui-player", sourceLogEntry: 2 });
   });
 
   test("CLI miss is read-only and exits non-zero", async () => {

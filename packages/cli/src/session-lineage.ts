@@ -1,4 +1,7 @@
-import { assertSessionName } from "@rpg-harness/session-store";
+import {
+  assertSessionName,
+  isSessionCheckpointRef,
+} from "@rpg-harness/session-store";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readSessionLog, type LoggedStep } from "./commands/fork";
@@ -9,6 +12,11 @@ export interface SessionLineageSlice {
   entries: LoggedStep[];
   includedEntries: number;
   totalEntries: number;
+}
+
+export interface SessionCheckpointCoordinate {
+  session: string;
+  logEntry: number;
 }
 
 export async function readSessionLineage(
@@ -65,4 +73,45 @@ export async function readForkProvenance(
     fromSession: value.fromSession,
     sourceLogEntry: value.sourceLogEntry as number,
   };
+}
+
+/**
+ * Return recoverable checkpoints before a source coordinate, newest first,
+ * following fork provenance into every ancestor rather than treating a child
+ * branch's short local log as its whole playable history.
+ */
+export async function historicalSessionCheckpoints(
+  gameDir: string,
+  session: string,
+  beforeEntry: number,
+  outputTypes: ReadonlySet<string>,
+): Promise<SessionCheckpointCoordinate[]> {
+  const lineage = await readSessionLineage(gameDir, session, beforeEntry);
+  const seenRevisions = new Set<string>();
+  const candidates: SessionCheckpointCoordinate[] = [];
+  for (let sliceIndex = lineage.length - 1; sliceIndex >= 0; sliceIndex -= 1) {
+    const slice = lineage[sliceIndex]!;
+    const isCurrent = slice.session === session;
+    const lastIndex = isCurrent
+      ? Math.min(beforeEntry - 2, slice.entries.length - 1)
+      : slice.entries.length - 1;
+    for (let index = lastIndex; index >= 0; index -= 1) {
+      const entry = slice.entries[index]!;
+      if (
+        !isSessionCheckpointRef(entry.checkpoint) ||
+        seenRevisions.has(entry.checkpoint.revision) ||
+        !isRecord(entry.output) ||
+        !outputTypes.has(String(entry.output.type))
+      ) {
+        continue;
+      }
+      seenRevisions.add(entry.checkpoint.revision);
+      candidates.push({ session: slice.session, logEntry: index + 1 });
+    }
+  }
+  return candidates;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

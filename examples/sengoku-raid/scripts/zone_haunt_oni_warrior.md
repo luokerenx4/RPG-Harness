@@ -7,6 +7,15 @@ requires:
     scriptId: zone_haunt_oni_warrior
     name: A
     eq: true
+ai:
+  relatedActivityIds:
+    - depart:mt_houkyou
+    - move:mt_houkyou_stone_paths
+    - move:mt_houkyou_lava_vent
+    - suppress_strike
+    - negotiate_release
+    - extract
+    - script:zone_haunt_oni_warrior
 ---
 
 放した戦鬼が口にした、お主の家紋。あの目に、人間の哀しみが一瞬戻っていた。

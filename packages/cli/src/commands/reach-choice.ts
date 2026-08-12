@@ -10,13 +10,11 @@ import {
   type Input,
   type Output,
 } from "@rpg-harness/engine";
-import {
-  isSessionCheckpointRef,
-  withSessionLock,
-} from "@rpg-harness/session-store";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { createHash } from "node:crypto";
 import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
+import { historicalSessionCheckpoints } from "../session-lineage";
 import {
   recordPlaytestReport,
   type PlaytestReport,
@@ -30,7 +28,6 @@ import {
   createForkFromSource,
   forkSession,
   loadForkSource,
-  readSessionLog,
   type ForkSource,
 } from "./fork";
 
@@ -125,32 +122,38 @@ export async function runReachChoice(
   );
   const targetCoordinates = { scriptId: target.scriptId, choiceId: target.choiceId };
   const attempts: Array<{
+    session: string;
     source: ForkSource;
     search: Awaited<ReturnType<typeof searchForChoice>>;
   }> = [];
   let remainingNodes = args.maxNodes;
 
-  const runAttempt = async (source: ForkSource) => {
+  const runAttempt = async (session: string, source: ForkSource) => {
     const search = await searchForChoice(game, source.state, targetCoordinates, {
       maxNodes: remainingNodes,
       maxSteps: args.maxSteps,
       progressEvery: 100,
       ...(args.onProgress ? { onProgress: args.onProgress } : {}),
     });
-    attempts.push({ source, search });
+    attempts.push({ session, source, search });
     remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
     return search.found;
   };
 
-  await runAttempt(primarySource);
+  await runAttempt(args.fromSession, primarySource);
   if (!attempts[0]!.search.found && args.fromLogEntry === undefined && remainingNodes > 0) {
-    for (const logEntry of await historicalChoiceCheckpoints(
+    for (const coordinate of await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
       primarySource.selectedEntry,
+      new Set(["choice"]),
     )) {
-      const source = await loadForkSource(args.gameDir, args.fromSession, logEntry);
-      if (await runAttempt(source) || remainingNodes === 0) break;
+      const source = await loadForkSource(
+        args.gameDir,
+        coordinate.session,
+        coordinate.logEntry,
+      );
+      if (await runAttempt(coordinate.session, source) || remainingNodes === 0) break;
     }
   }
 
@@ -161,6 +164,7 @@ export async function runReachChoice(
       : best
   );
   const source = selectedAttempt.source;
+  const sourceSession = selectedAttempt.session;
   const selectedSearch = selectedAttempt.search;
   const exploredNodes = attempts.reduce((sum, attempt) => sum + attempt.search.exploredNodes, 0);
   const visitedStates = attempts.reduce((sum, attempt) => sum + attempt.search.visitedStates, 0);
@@ -185,7 +189,7 @@ export async function runReachChoice(
   if (search.found) {
     fork = await createForkFromSource({
       gameDir: args.gameDir,
-      from: args.fromSession,
+      from: sourceSession,
       to: args.session,
       at: source.selectedEntry,
       pretty: false,
@@ -212,7 +216,7 @@ export async function runReachChoice(
   } else if (args.reportOnMiss) {
     fork = await createForkFromSource({
       gameDir: args.gameDir,
-      from: args.fromSession,
+      from: sourceSession,
       to: args.session,
       at: source.selectedEntry,
       pretty: false,
@@ -254,10 +258,11 @@ export async function runReachChoice(
     deepestSteps: search.deepestSteps,
     requestedSession: args.session,
     source: {
-      session: args.fromSession,
+      session: sourceSession,
       logEntry: source.selectedEntry,
       mode: source.mode,
-      historyFallback: source.selectedEntry !== primarySource.selectedEntry,
+      historyFallback: sourceSession !== args.fromSession ||
+        source.selectedEntry !== primarySource.selectedEntry,
     },
     attemptedSources: attempts.length,
     ...(fork
@@ -288,26 +293,6 @@ export function summarizeReachPath(inputs: Input[]): ReachChoicePathSummary {
     activities,
     scriptSelections,
   };
-}
-
-async function historicalChoiceCheckpoints(
-  gameDir: string,
-  session: string,
-  beforeEntry: number,
-): Promise<number[]> {
-  const entries = await readSessionLog(gameDir, session);
-  const seenRevisions = new Set<string>();
-  const candidates: number[] = [];
-  for (let index = Math.min(beforeEntry - 1, entries.length - 1); index >= 0; index -= 1) {
-    const entry = entries[index]!;
-    if (!isSessionCheckpointRef(entry.checkpoint) || seenRevisions.has(entry.checkpoint.revision)) {
-      continue;
-    }
-    if (!isRecord(entry.output) || entry.output.type !== "choice") continue;
-    seenRevisions.add(entry.checkpoint.revision);
-    candidates.push(index + 1);
-  }
-  return candidates;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

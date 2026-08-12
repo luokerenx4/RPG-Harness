@@ -81,6 +81,97 @@ describe("choice state-space search", () => {
     expect(result.state.baseline.scripts.target?.completed).toBe(true);
   });
 
+  test("prefers recovery over unrelated churn when an authored route is closed", async () => {
+    const game = makeGame({
+      variables: [
+        { id: "rested", type: "number", initial: 0 },
+        { id: "churn", type: "number", initial: 0 },
+      ],
+      scripts: [makeScript("target", {
+        ai: { relatedActivityIds: ["depart:mountain"] },
+      })],
+      runFn: async function* (ctx) {
+        while (ctx.state.baseline.scripts.target?.completed !== true) {
+          const restedValue = Number(ctx.state.baseline.variables.rested ?? 0);
+          const rested = restedValue >= 2;
+          if (restedValue === 1) {
+            yield { type: "narration" as const, text: "rest" };
+            ctx.state.baseline.variables.rested = 2;
+            continue;
+          }
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: rested
+                ? [{
+                    id: "depart:mountain",
+                    kind: "action" as const,
+                    title: "Depart",
+                    cost: 0,
+                    available: true,
+                  }]
+                : [
+                    {
+                      id: "sell:trinket",
+                      kind: "action" as const,
+                      title: "Sell",
+                      cost: 0,
+                      available: true,
+                    },
+                    {
+                      id: "rest",
+                      kind: "action" as const,
+                      title: "Rest",
+                      cost: 0,
+                      available: true,
+                    },
+                  ],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "rest") {
+            ctx.state.baseline.variables.rested = 1;
+            yield { type: "narration" as const, text: "rest" };
+            ctx.state.baseline.variables.rested = 2;
+            continue;
+          }
+          if (input.id === "sell:trinket") {
+            ctx.state.baseline.variables.churn =
+              Number(ctx.state.baseline.variables.churn ?? 0) + 1;
+          }
+          if (input.id === "depart:mountain") {
+            ctx.state.baseline.scripts.target = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 10, maxSteps: 10 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "doActivity", id: "rest" },
+      { type: "next" },
+      { type: "doActivity", id: "depart:mountain" },
+    ]);
+    expect(result.state.baseline.variables.churn).toBe(0);
+  });
+
   test("reports a bounded miss without mutating the source state", async () => {
     const game = makeGame({
       characters: [makeCharacter("alice")],

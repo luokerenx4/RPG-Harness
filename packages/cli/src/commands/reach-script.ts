@@ -10,15 +10,15 @@ import {
   type Input,
   type Output,
 } from "@rpg-harness/engine";
-import { isSessionCheckpointRef, withSessionLock } from "@rpg-harness/session-store";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
+import { historicalSessionCheckpoints } from "../session-lineage";
 import { collectScriptCoverage } from "./coverage";
 import {
   assertTargetEmpty,
   createForkFromSource,
   loadForkSource,
-  readSessionLog,
   type ForkSource,
 } from "./fork";
 import { summarizeReachPath, type ReachChoicePathSummary } from "./reach-choice";
@@ -102,31 +102,37 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     args.fromLogEntry,
   );
   const attempts: Array<{
+    session: string;
     source: ForkSource;
     search: Awaited<ReturnType<typeof searchForScript>>;
   }> = [];
   let remainingNodes = args.maxNodes;
-  const runAttempt = async (source: ForkSource) => {
+  const runAttempt = async (session: string, source: ForkSource) => {
     const search = await searchForScript(game, source.state, { scriptId: args.scriptId }, {
       maxNodes: remainingNodes,
       maxSteps: args.maxSteps,
       progressEvery: 100,
       ...(args.onProgress ? { onProgress: args.onProgress } : {}),
     });
-    attempts.push({ source, search });
+    attempts.push({ session, source, search });
     remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
     return search.found;
   };
 
-  await runAttempt(primarySource);
+  await runAttempt(args.fromSession, primarySource);
   if (!attempts[0]!.search.found && args.fromLogEntry === undefined && remainingNodes > 0) {
-    for (const logEntry of await historicalDecisionCheckpoints(
+    for (const coordinate of await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
       primarySource.selectedEntry,
+      new Set(["choice", "hubMenu", "scriptComplete"]),
     )) {
-      const source = await loadForkSource(args.gameDir, args.fromSession, logEntry);
-      if (await runAttempt(source) || remainingNodes === 0) break;
+      const source = await loadForkSource(
+        args.gameDir,
+        coordinate.session,
+        coordinate.logEntry,
+      );
+      if (await runAttempt(coordinate.session, source) || remainingNodes === 0) break;
     }
   }
 
@@ -141,6 +147,7 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
       : best
   );
   const source = selectedAttempt.source;
+  const sourceSession = selectedAttempt.session;
   const selectedSearch = selectedAttempt.search;
   const inputs = foundAttempt?.search.inputs ?? selectedSearch.closest.inputs;
   const found = foundAttempt !== undefined;
@@ -159,7 +166,7 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
   if (found) {
     fork = await createForkFromSource({
       gameDir: args.gameDir,
-      from: args.fromSession,
+      from: sourceSession,
       to: args.session,
       at: source.selectedEntry,
       pretty: false,
@@ -189,35 +196,17 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     search: { exploredNodes, visitedStates, deepestSteps, attemptedSources: attempts.length },
     requestedSession: args.session,
     source: {
-      session: args.fromSession,
+      session: sourceSession,
       logEntry: source.selectedEntry,
       mode: source.mode,
-      historyFallback: source.selectedEntry !== primarySource.selectedEntry,
+      historyFallback: sourceSession !== args.fromSession ||
+        source.selectedEntry !== primarySource.selectedEntry,
     },
     ...(fork ? { session: args.session, webPath: `/?session=${encodeURIComponent(args.session)}`, fork } : {}),
     output,
     replayVerified,
     closest: selectedSearch.closest,
   };
-}
-
-async function historicalDecisionCheckpoints(
-  gameDir: string,
-  session: string,
-  beforeEntry: number,
-): Promise<number[]> {
-  const entries = await readSessionLog(gameDir, session);
-  const seen = new Set<string>();
-  const candidates: number[] = [];
-  for (let index = Math.min(beforeEntry - 1, entries.length - 1); index >= 0; index -= 1) {
-    const entry = entries[index]!;
-    if (!isSessionCheckpointRef(entry.checkpoint) || seen.has(entry.checkpoint.revision)) continue;
-    if (!isRecord(entry.output)) continue;
-    if (!["choice", "hubMenu", "scriptComplete"].includes(String(entry.output.type))) continue;
-    seen.add(entry.checkpoint.revision);
-    candidates.push(index + 1);
-  }
-  return candidates;
 }
 
 async function replayPath(

@@ -7,6 +7,16 @@ requires:
     scriptId: zone_haunt_kijin
     name: A
     eq: true
+ai:
+  relatedActivityIds:
+    - depart:mt_houkyou
+    - move:mt_houkyou_stone_paths
+    - move:mt_houkyou_lava_vent
+    - move:mt_houkyou_caldera
+    - suppress_strike
+    - negotiate_release
+    - extract
+    - script:zone_haunt_kijin
 ---
 
 火口で放した鬼神が最後に呼んだ名——お主の家伝の刀の銘と、一字違わなかった。

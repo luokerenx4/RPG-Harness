@@ -59,6 +59,8 @@ export interface ChoiceSearchClosest {
   outputType: Output["type"] | null;
   /** Ordered authored activity breadcrumbs currently followed by this path. */
   guidanceProgress?: number;
+  /** Low-risk cycle recovery taken while the next authored activity is closed. */
+  guidancePreparation?: number;
 }
 
 interface SearchNode {
@@ -300,6 +302,9 @@ function candidateInputs(
       const authoredActivityRank = new Map(
         target.relatedActivityIds.map((id, index) => [id, index]),
       );
+      const hasAvailableAuthoredActivity = output.snapshot.activities.some(
+        (activity) => activity.available && authoredActivityRank.has(activity.id),
+      );
       const objectiveActivityRank = new Map(
         (output.snapshot.objectives ?? [])
           .filter((objective) => objective.status === "active")
@@ -316,6 +321,14 @@ function candidateInputs(
           const leftAuthoredRank = authoredActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
           const rightAuthoredRank = authoredActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
           if (leftAuthoredRank !== rightAuthoredRank) return leftAuthoredRank - rightAuthoredRank;
+          // A rest action commonly advances the gameplay cycle and restores
+          // access to departures. Prefer it over unrelated economy/social
+          // churn only while none of the authored route is currently open.
+          if (!hasAvailableAuthoredActivity) {
+            const recoveryDifference =
+              Number(right.id === "rest") - Number(left.id === "rest");
+            if (recoveryDifference !== 0) return recoveryDifference;
+          }
           const leftRank = objectiveActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
           const rightRank = objectiveActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
           return leftRank - rightRank;
@@ -375,6 +388,10 @@ function assessNode(
   const targetScriptActive =
     node.state.baseline.currentScriptId === target.scriptId ||
     (node.output?.type === "choice" && node.output.scriptId === target.scriptId);
+  const guidanceProgress = orderedGuidanceProgress(
+    node.inputs,
+    target.relatedActivityIds,
+  );
   return {
     inputs: node.inputs,
     steps: node.inputs.length,
@@ -385,10 +402,12 @@ function assessNode(
     targetScriptActive,
     requirements,
     outputType: node.output?.type ?? null,
-    guidanceProgress: orderedGuidanceProgress(
-      node.inputs,
-      target.relatedActivityIds,
-    ),
+    guidanceProgress,
+    guidancePreparation: guidanceProgress === 0 &&
+        target.relatedActivityIds.length > 0 &&
+        latestActivityId(node.inputs) === "rest"
+      ? 1
+      : 0,
   };
 }
 
@@ -410,6 +429,9 @@ export function compareChoiceSearchAssessment(
   if ((left.guidanceProgress ?? 0) !== (right.guidanceProgress ?? 0)) {
     return (left.guidanceProgress ?? 0) - (right.guidanceProgress ?? 0);
   }
+  if ((left.guidancePreparation ?? 0) !== (right.guidancePreparation ?? 0)) {
+    return (left.guidancePreparation ?? 0) - (right.guidancePreparation ?? 0);
+  }
   const leftTerminal = left.outputType === "gameEnd";
   const rightTerminal = right.outputType === "gameEnd";
   if (leftTerminal !== rightTerminal) return leftTerminal ? -1 : 1;
@@ -421,6 +443,14 @@ export function compareChoiceSearchAssessment(
   return left.totalRequirements > 0
     ? left.steps - right.steps
     : right.steps - left.steps;
+}
+
+function latestActivityId(inputs: Input[]): string | null {
+  for (let index = inputs.length - 1; index >= 0; index -= 1) {
+    const input = inputs[index]!;
+    if (input.type === "doActivity") return input.id;
+  }
+  return null;
 }
 
 function orderedGuidanceProgress(inputs: Input[], relatedActivityIds: string[]): number {
