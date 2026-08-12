@@ -42,12 +42,13 @@ export interface ScriptCoverageReport {
 interface CoverageArgs {
   gameDir: string;
   session?: string;
+  family?: boolean;
   status: "pending" | CoverageStatus | "all";
   format: "table" | "json";
 }
 
 export async function coverageCommand(args: CoverageArgs): Promise<void> {
-  const report = await collectScriptCoverage(args.gameDir, args.session);
+  const report = await collectScriptCoverage(args.gameDir, args.session, args.family);
   const scripts = report.scripts.filter((row) =>
     args.status === "all"
       ? true

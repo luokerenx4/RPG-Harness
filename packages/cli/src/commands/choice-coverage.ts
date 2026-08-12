@@ -178,6 +178,7 @@ interface RuntimeChoiceOutput {
 export interface ChoiceCoverageArgs {
   gameDir: string;
   session?: string;
+  family?: boolean;
   status: "pending" | ChoiceCoverageStatus | "all";
   format: "table" | "json";
 }
@@ -185,7 +186,7 @@ export interface ChoiceCoverageArgs {
 export async function choiceCoverageCommand(
   args: ChoiceCoverageArgs,
 ): Promise<void> {
-  const report = await collectChoiceCoverage(args.gameDir, args.session);
+  const report = await collectChoiceCoverage(args.gameDir, args.session, args.family);
   const choices = report.choices.filter((choice) =>
     args.status === "all"
       ? true

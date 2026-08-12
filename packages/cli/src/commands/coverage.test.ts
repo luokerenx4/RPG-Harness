@@ -77,6 +77,21 @@ describe("story coverage", () => {
     ).rejects.toThrow("Invalid session name");
   });
 
+  test("CLI family scope requires an explicit source session", async () => {
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "coverage",
+      "/tmp/coverage-family-cli",
+      "--family",
+    ], { stdout: "pipe", stderr: "pipe" });
+
+    expect(await child.exited).toBe(2);
+    expect(await new Response(child.stderr).text()).toContain(
+      "--family requires --session",
+    );
+  });
+
   test("marks completions from an edited authored revision as stale", () => {
     const script: Script = {
       id: "scene",

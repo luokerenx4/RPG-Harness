@@ -64,16 +64,18 @@ COMMANDS
   sessions <game-dir>
       List existing sessions (one per line, stdout). Empty status to stderr.
 
-  coverage <game-dir> [--session NAME] [--status pending|completed|started|stale|uncovered|ignored|all]
+  coverage <game-dir> [--session NAME] [--family] [--status pending|completed|started|stale|uncovered|ignored|all]
            [--format table|json]
       Aggregate real save sessions into story coverage. Defaults to pending
-      scripts (started + uncovered), producing an AI-ready playtest worklist.
+      scripts (started + stale + uncovered), producing an AI-ready playtest worklist.
+      --family includes every transitive fork descendant of --session.
 
-  choices  <game-dir> [--session NAME] [--status pending|covered|partial|uncovered|locked|all]
+  choices  <game-dir> [--session NAME] [--family] [--status pending|covered|partial|uncovered|locked|all]
            [--format table|json]
       Aggregate stable choice/option ids from recoverable session logs. Pending
       options include exact fork checkpoints and executable choose inputs;
       authoring work also identifies missing stable ids and semantic AI intent.
+      --family includes every transitive fork descendant of --session.
 
   worklist <game-dir> [--session NAME] [--format table|json]
       Merge open playtest reports, unreadable sessions, story gaps, executable
@@ -401,6 +403,7 @@ async function runCoverage(args: string[]): Promise<void> {
     args,
     options: {
       session: { type: "string" },
+      family: { type: "boolean" },
       status: { type: "string", default: "pending" },
       format: { type: "string", default: "table" },
     },
@@ -408,7 +411,7 @@ async function runCoverage(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh coverage <game-dir> [--session NAME] [--status pending|completed|started|stale|uncovered|ignored|all] [--format table|json]",
+    "rpgh coverage <game-dir> [--session NAME] [--family] [--status pending|completed|started|stale|uncovered|ignored|all] [--format table|json]",
   );
   const status = values.status ?? "pending";
   const allowedStatuses = [
@@ -425,6 +428,10 @@ async function runCoverage(args: string[]): Promise<void> {
     process.exit(2);
   }
   const format = values.format ?? "table";
+  if (values.family && values.session === undefined) {
+    process.stderr.write("--family requires --session\n");
+    process.exit(2);
+  }
   if (format !== "table" && format !== "json") {
     process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
     process.exit(2);
@@ -432,6 +439,7 @@ async function runCoverage(args: string[]): Promise<void> {
   await coverageCommand({
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
+    ...(values.family ? { family: true } : {}),
     status: status as (typeof allowedStatuses)[number],
     format,
   });
@@ -442,6 +450,7 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
     args,
     options: {
       session: { type: "string" },
+      family: { type: "boolean" },
       status: { type: "string", default: "pending" },
       format: { type: "string", default: "table" },
     },
@@ -449,7 +458,7 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh choices <game-dir> [--session NAME] [--status pending|covered|partial|uncovered|locked|all] [--format table|json]",
+    "rpgh choices <game-dir> [--session NAME] [--family] [--status pending|covered|partial|uncovered|locked|all] [--format table|json]",
   );
   const status = values.status ?? "pending";
   const allowed = ["pending", "covered", "partial", "uncovered", "locked", "all"] as const;
@@ -458,6 +467,10 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
     process.exit(2);
   }
   const format = values.format ?? "table";
+  if (values.family && values.session === undefined) {
+    process.stderr.write("--family requires --session\n");
+    process.exit(2);
+  }
   if (format !== "table" && format !== "json") {
     process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
     process.exit(2);
@@ -465,6 +478,7 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
   await choiceCoverageCommand({
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
+    ...(values.family ? { family: true } : {}),
     status: status as (typeof allowed)[number],
     format,
   });
