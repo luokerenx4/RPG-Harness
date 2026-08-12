@@ -1,0 +1,29 @@
+name: 霞への礼が専用の返答へ分岐する
+description: |
+  The gratitude option in encounter_kasumi_first must not fall through to the
+  shared "either way" response written for the player's occupation answers.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentScriptId: encounter_kasumi_first
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    speaker: kasumi
+    textIncludes: 礼なんていい
+  - kind: state
+    path: baseline.characters.kasumi.stats.affection
+    eq: 2

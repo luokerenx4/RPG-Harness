@@ -1,0 +1,28 @@
+name: 篝の槍に触れる選択が言葉なき約束として返される
+description: |
+  The nonverbal hand-on-spear choice in road_kagari_2 must not receive the
+  shared response that claims two promises were spoken.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentScriptId: road_kagari_2
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    speaker: kagari
+    textIncludes: 言葉にしなくても分かる
+  - kind: state
+    path: baseline.characters.kagari.stats.affection
+    eq: 2

@@ -23,11 +23,51 @@ characters: [kagari]
 @kagari お主には、間に合わせたい。祓うんじゃない。鬼にする前に、引き戻す。
 
 ? なんと返す？
-  - 「お前の手は借りない。自分で引き返す」 -> +2kagari
-  - 「もし間に合わなかったら、お前が斬れ」 -> +kagari
-  - 篝の槍に、自分の手を重ねる -> +2kagari
+  - 「お前の手は借りない。自分で引き返す」 -> +2kagari | goto alone
+  - 「もし間に合わなかったら、お前が斬れ」 -> +kagari | goto last_resort
+  - 篝の槍に、自分の手を重ねる -> +2kagari | goto touch
 
-@kagari ……ああ。約束だ。どっちの約束も、覚えておく。
+# alone
+
+@kagari 強がるな。お主が引き返すなら、あたしはその一歩を見届ける。手を出すのは、それでも遅れた時だ。
+
+篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kagari: 1
+  switches:
+    road_kagari_2_seen: true
+```
+
+[end]
+
+# last_resort
+
+@kagari ……ああ。その時は斬る。だから、その時まで勝手に鬼になるな。
+
+篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kagari: 1
+  switches:
+    road_kagari_2_seen: true
+```
+
+[end]
+
+# touch
+
+@kagari ……ああ。言葉にしなくても分かる。それも、約束だ。
 
 篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
 
