@@ -15,6 +15,15 @@ export {
   collectChoiceCoverage,
   formatChoiceCoverage,
 } from "./commands/choice-coverage";
+export {
+  buildTranscriptEvents,
+  collectSessionTranscript,
+  formatSessionTranscript,
+} from "./commands/transcript";
+export type {
+  SessionTranscript,
+  TranscriptEvent,
+} from "./commands/transcript";
 export type {
   ChoiceCoverageEvidence,
   ChoiceCoverageOptionRow,

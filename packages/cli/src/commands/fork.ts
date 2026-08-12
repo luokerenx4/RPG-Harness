@@ -20,10 +20,13 @@ export interface ForkArgs {
 }
 
 export interface LoggedStep {
+  t?: unknown;
+  source?: unknown;
   input?: unknown;
   output?: unknown;
   decision?: unknown;
   checkpoint?: unknown;
+  fork?: unknown;
 }
 
 export async function forkCommand(args: ForkArgs): Promise<void> {

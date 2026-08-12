@@ -1,0 +1,71 @@
+name: Mio's completed bond outlives her official duty in the oni ending
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - road_mio
+      - road_mio_2
+      - bond_mio_04
+    switches:
+      chose_court_defy: true
+      befriended_mio: true
+      road_mio_2_seen: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      mio:
+        stats: { affection: 20 }
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [mio]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+maxSteps: 40
+inputs:
+  - { type: doActivity, id: script:ending_oni_self }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 3 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 役目が終わっても隣にいると決めた澪
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 公儀の役を離れてなお
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: お主と澪の選んだ結末
+  - kind: output
+    type: gameEnd
+    present: true

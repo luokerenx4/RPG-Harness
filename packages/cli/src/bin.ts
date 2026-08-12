@@ -5,6 +5,7 @@ import { stepCommand } from "./commands/step";
 import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
+import { transcriptCommand } from "./commands/transcript";
 import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
@@ -58,6 +59,11 @@ COMMANDS
       Aggregate stable choice/option ids from recoverable session logs. Pending
       options include exact fork checkpoints and executable choose inputs.
 
+  transcript <game-dir> --session NAME [--tail N] [--format text|json]
+      Print a compact player-visible history across the session's exact fork
+      lineage. Keeps choices, stable decisions, activities and checkpoints;
+      omits full save state and visual payloads. --tail 0 prints all events.
+
   fork     <game-dir> --from NAME --to NAME [--at N] [--pretty]
       Fork a save from a recoverable log checkpoint. --at is the 1-based log
       entry whose resulting state becomes the new session. Legacy entries
@@ -69,7 +75,8 @@ COMMANDS
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
            [--session NAME] [--from-session PLAYER] [--report-on-stop] [--pretty]
       Have a built-in AI persona play through the game and report the ending.
-      Personas: greedy / charmer / rude / random
+      Personas: objective / greedy / charmer / rude / random / extractor /
+      delver / hunter. Use an unknown name to print their descriptions.
       --session persists every AI step as the same recoverable save/log used
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
       --from-session atomically forks a player/GUI save into --session before
@@ -169,6 +176,8 @@ async function main(): Promise<void> {
       return runCoverage(rest);
     case "choices":
       return runChoiceCoverage(rest);
+    case "transcript":
+      return runTranscript(rest);
     case "fork":
       return runFork(rest);
     case "test":
@@ -336,6 +345,37 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     status: status as (typeof allowed)[number],
+    format,
+  });
+}
+
+async function runTranscript(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      tail: { type: "string", default: "80" },
+      format: { type: "string", default: "text" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh transcript <game-dir> --session NAME [--tail N] [--format text|json]",
+  );
+  if (!values.session) {
+    process.stderr.write("Missing required flag: --session NAME\n");
+    process.exit(2);
+  }
+  const format = values.format ?? "text";
+  if (format !== "text" && format !== "json") {
+    process.stderr.write(`--format must be 'text' or 'json' (got ${format})\n`);
+    process.exit(2);
+  }
+  await transcriptCommand({
+    gameDir,
+    session: values.session,
+    tail: Number(values.tail ?? "80"),
     format,
   });
 }

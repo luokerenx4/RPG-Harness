@@ -1,8 +1,6 @@
 import { assertSessionName, isSessionCheckpointRef } from "@rpg-harness/session-store";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { listSessions } from "../session";
-import { sessionDir } from "../session";
+import { readSessionLineage } from "../session-lineage";
 import { readSessionLog, type LoggedStep } from "./fork";
 
 export type ChoiceCoverageStatus =
@@ -144,7 +142,9 @@ export async function collectChoiceCoverage(
   const sessionErrors: Array<{ session: string; error: string }> = [];
   if (onlySession !== undefined) {
     try {
-      logs.push(...await readChoiceCoverageLineage(gameDir, onlySession));
+      logs.push(...(await readSessionLineage(gameDir, onlySession)).map(
+        ({ session, entries }) => ({ session, entries }),
+      ));
     } catch (error) {
       sessionErrors.push({ session: onlySession, error: (error as Error).message });
     }
@@ -158,55 +158,6 @@ export async function collectChoiceCoverage(
     }
   }
   return analyzeChoiceCoverage(logs, sessionErrors);
-}
-
-async function readChoiceCoverageLineage(
-  gameDir: string,
-  session: string,
-  limit?: number,
-  seen: Set<string> = new Set(),
-): Promise<Array<{ session: string; entries: LoggedStep[] }>> {
-  assertSessionName(session);
-  if (seen.has(session)) {
-    throw new Error(`Fork lineage cycle detected at session: ${session}`);
-  }
-  seen.add(session);
-  const entries = (await readSessionLog(gameDir, session)).slice(0, limit);
-  const provenance = await readForkProvenance(gameDir, session);
-  if (!provenance) return [{ session, entries }];
-  const ancestors = await readChoiceCoverageLineage(
-    gameDir,
-    provenance.fromSession,
-    provenance.sourceLogEntry,
-    seen,
-  );
-  return [...ancestors, { session, entries }];
-}
-
-async function readForkProvenance(
-  gameDir: string,
-  session: string,
-): Promise<{ fromSession: string; sourceLogEntry: number } | null> {
-  let raw: string;
-  try {
-    raw = await readFile(path.join(sessionDir(gameDir, session), "fork.json"), "utf-8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-  const value = JSON.parse(raw) as Record<string, unknown>;
-  if (
-    typeof value.fromSession !== "string" ||
-    !Number.isInteger(value.sourceLogEntry) ||
-    (value.sourceLogEntry as number) < 0
-  ) {
-    throw new Error(`Invalid fork provenance for session: ${session}`);
-  }
-  assertSessionName(value.fromSession);
-  return {
-    fromSession: value.fromSession,
-    sourceLogEntry: value.sourceLogEntry as number,
-  };
 }
 
 export function analyzeChoiceCoverage(

@@ -19,6 +19,7 @@ rpgh fork . --from ai-run --to branch --at 42        # 任意 checkpoint から�
 rpgh reproduce . <report-id> --to issue-repro        # playtest issue の現場へ戻る
 rpgh coverage . --status pending                      # 未走破 script を AI worklist 化
 rpgh choices . --status pending                       # 未探索の選択枝を checkpoint 付き worklist 化
+rpgh transcript . --session NAME --tail 40            # fork 元を含む実プレイ履歴を AI 向けに圧縮
 rpgh test .                                  # fixture 回帰
 ```
 

@@ -171,7 +171,7 @@ RPG-Harness · headless RPG Maker
 
 Saves live at `<game-dir>/.rpg-harness/sessions/<name>/state.json` — plain JSON, `git diff`-able, copyable between machines.
 
-## The thirteen modes
+## Command surfaces
 
 ```bash
 rpgh init     <dir> [--force]                                  # scaffold a new game
@@ -187,6 +187,7 @@ rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
+rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
 ```
@@ -203,6 +204,10 @@ prints its `/?session=...` path), making the coding issue directly executable.
 `choices` reads stable `choice.id` / `option.id` values from the same recoverable
 session log and emits pending branches with an exact `fork --at` checkpoint plus
 the `choose` input. This catches route gaps hidden by 100% script coverage.
+`transcript` follows the exact fork lineage and reduces large save/log payloads to
+the player-visible story, activities, choices, stable decisions and checkpoint
+coordinates. An AI can therefore review what a GUI or Headless player actually
+experienced without scraping JSONL or confusing later source edits with history.
 `assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
 visual art for the spec.yaml entries scripts reference.
 
