@@ -118,6 +118,51 @@ describe("AI development worklist", () => {
     expect(formatDevelopmentWorklist(report)).toContain("no actionable development work");
   });
 
+  test("keeps legacy audit findings reproducible when replay parameters are absent", () => {
+    const story = storyReport();
+    story.summary.started = 0;
+    story.summary.uncovered = 0;
+    story.sessionErrors = [];
+    story.scripts = [];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.workItems = [];
+    choices.authoring.workItems = [];
+    const legacy = playtestReport("major", "pt-blocker");
+    legacy.evidence.auditMatrix = {
+      sourceRevision: "a".repeat(64),
+      sessionPrefix: "old-matrix",
+      policy: { minUniqueEndings: 2 },
+      observed: { uniqueEndings: 1, uniqueDecisionPaths: 1 },
+      classification: "identical-path",
+      violations: ["unique endings 1 < required 2"],
+      lanes: [{
+        persona: "objective",
+        session: "old-matrix-objective",
+        webPath: "/?session=old-matrix-objective",
+        ending: "intro",
+        reason: "completed",
+        pathRevision: "b".repeat(64),
+      }],
+      choiceDivergences: [],
+    };
+
+    const result = analyzeDevelopmentWorklist({
+      story,
+      choices,
+      reports: [legacy],
+    });
+
+    expect(result.items[0]?.operation).toEqual({
+      command: "reproduce",
+      args: {
+        reportId: legacy.id,
+        session: legacy.session,
+        to: "<new-session>",
+      },
+    });
+  });
+
   test("prefers an exact reach operation over a duplicate uncovered-script hint", () => {
     const story = storyReport();
     story.scripts[1] = {

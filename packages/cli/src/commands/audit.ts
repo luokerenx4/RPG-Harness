@@ -38,6 +38,8 @@ export interface AuditArgs {
   maxSteps: number;
   seed?: number;
   reportOnStop: boolean;
+  /** Internal verification mode: retain a failed result without duplicating its issue. */
+  reportOnQualityFailure?: boolean;
   pretty: boolean;
 }
 
@@ -150,7 +152,7 @@ export async function runAudit(
     assertSessionName(target.session);
     await assertTargetEmpty(args.gameDir, target.session);
   }
-  const qualityEvidenceSession = game.aiAudit
+  const qualityEvidenceSession = game.aiAudit && args.reportOnQualityFailure !== false
     ? `${args.sessionPrefix}-quality-gate`
     : undefined;
   if (qualityEvidenceSession) {
@@ -263,7 +265,8 @@ export async function runAudit(
       )
     : undefined;
   let qualityReport: PlaytestReport | undefined;
-  if (quality?.status === "failed" && qualityEvidenceSession) {
+  if (quality?.status === "failed" && qualityEvidenceSession &&
+    args.reportOnQualityFailure !== false) {
     await createForkFromSource({
       gameDir: args.gameDir,
       from: args.fromSession,
@@ -288,6 +291,8 @@ export async function runAudit(
       auditMatrix: {
         sourceRevision: stateRevision,
         sessionPrefix: args.sessionPrefix,
+        maxSteps: args.maxSteps,
+        ...(args.seed !== undefined ? { seed: args.seed } : {}),
         policy: game.aiAudit!,
         observed: {
           uniqueEndings,

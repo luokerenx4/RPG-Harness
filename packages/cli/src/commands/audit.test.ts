@@ -304,11 +304,10 @@ describe("autoplay audit matrix", () => {
       kind: "playtest-report",
       actionability: "executable",
       operation: {
-        command: "reproduce",
+        command: "verify-audit",
         args: {
           reportId,
-          session: "failing-matrix-quality-gate",
-          to: "<new-session>",
+          sessionPrefix: "<new-session>",
         },
       },
       coordinates: expect.objectContaining({

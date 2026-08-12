@@ -40,6 +40,11 @@ export type {
   DevelopmentWorkPriority,
 } from "./commands/worklist";
 export { runChoiceCoverageWorkItem } from "./commands/cover-choice";
+export { verifyAuditReport } from "./commands/verify-audit";
+export type {
+  VerifyAuditArgs,
+  VerifyAuditSummary,
+} from "./commands/verify-audit";
 export type {
   CoverChoiceArgs,
   CoverChoiceSummary,
@@ -97,6 +102,8 @@ export type {
   PlaytestCheckpointRef,
   PlaytestReport,
   PlaytestSeverity,
+  PlaytestVerification,
+  PlaytestAuditMatrixEvidence,
   RecordPlaytestReportArgs,
   ReproducePlaytestReportArgs,
   ResolvePlaytestReportArgs,

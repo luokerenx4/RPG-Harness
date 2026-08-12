@@ -73,6 +73,9 @@ export interface PlaytestEvidence {
 export interface PlaytestAuditMatrixEvidence {
   sourceRevision: string;
   sessionPrefix: string;
+  /** Present on reports created after deterministic audit verification shipped. */
+  maxSteps?: number;
+  seed?: number;
   policy: {
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
@@ -116,7 +119,34 @@ export interface PlaytestReport {
   target?: string;
   resolvedAt?: string;
   resolution?: string;
+  verification?: PlaytestVerification;
   evidence: PlaytestEvidence;
+}
+
+export interface PlaytestVerification {
+  kind: "ai-audit";
+  verifiedAt: string;
+  sessionPrefix: string;
+  sourceRevision: string;
+  policy: {
+    minUniqueEndings?: number;
+    minUniqueDecisionPaths?: number;
+  };
+  observed: {
+    uniqueEndings: number;
+    uniqueDecisionPaths: number;
+  };
+  classification:
+    | "identical-path"
+    | "convergent-paths"
+    | "divergent-endings";
+  lanes: Array<{
+    persona: string;
+    session: string;
+    webPath: string;
+    ending: string;
+    pathRevision: string;
+  }>;
 }
 
 export interface RecordPlaytestReportArgs {
@@ -137,6 +167,7 @@ export interface ResolvePlaytestReportArgs {
   id: string;
   session?: string;
   resolution?: string;
+  verification?: PlaytestVerification;
 }
 
 export interface ReproducePlaytestReportArgs {
@@ -243,6 +274,7 @@ export async function resolvePlaytestReport(
     status: "resolved",
     resolvedAt: new Date().toISOString(),
     ...(args.resolution?.trim() ? { resolution: args.resolution.trim() } : {}),
+    ...(args.verification ? { verification: args.verification } : {}),
   };
   match.reports[match.index] = resolved;
   const temporary = `${match.file}.${randomUUID()}.tmp`;

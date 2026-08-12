@@ -233,14 +233,16 @@ branches, and authored choice debt into one deterministic priority order. JSON
 items classify their actionability as `executable`, `diagnostic`, or `authoring`,
 retain the source coordinates, and expose a structured next operation such
 as `reproduce`, `transcript`, `cover`, `reach`, `reach-script`, `inspect-script`,
-or `edit`. Story gaps use the same bounded public-input search and exact replay
-contract as choices instead of being mislabeled as generic autoplay.
+`verify-audit`, or `edit`. Story gaps use the same bounded public-input search
+and exact replay contract as choices instead of being mislabeled as generic
+autoplay.
 Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
 `work` consumes that contract without asking the agent to translate camelCase
 operation objects into CLI flags. With no key it selects the deterministic first
-item. Read-only diagnoses execute immediately; `reproduce`, `cover`, and `reach`
-require an explicit unused `--new-session`; authoring operations return source,
+item. Read-only diagnoses execute immediately; `reproduce`, `verify-audit`,
+`cover`, and `reach` require an explicit unused `--new-session`; authoring
+operations return source,
 beat, choice, and optional live-hook context without claiming an edit occurred.
 If an executable item cannot reach its declared target, `work` returns
 `status: "failed"`, keeps the attempted branch unwritten, and exits non-zero.
@@ -558,9 +560,17 @@ The gate is evaluated only when every lane reaches a terminal ending. Passing
 matrices stay silent. A completed matrix below either threshold creates one
 major gameplay report at a frozen copy of the audit source, including every
 lane's GUI path, ending, semantic path revision, and choice divergences. The
-report immediately appears as executable `reproduce` work in `rpgh worklist`,
+report immediately appears as executable `verify-audit` work in `rpgh worklist`,
 and `rpgh audit` exits non-zero, so route collapse becomes a coding issue and CI
-signal instead of disposable console output.
+signal instead of disposable console output. Audit reports retain their persona
+set, seed, decision budget, policy, frozen source revision, and original matrix.
+Running their `work` item with a fresh `--new-session` prefix reconstructs the
+immutable source, preflights and reruns every lane against the live game, and
+closes the issue only when the current quality gate passes. A failed recheck
+stays open and leaves every new lane GUI-readable; a passing recheck records its
+policy, ending/path counts, lane sessions, and revisions as resolution evidence.
+Older reports without deterministic replay parameters keep the ordinary
+`reproduce` workflow.
 Each lane also receives a content-addressed semantic decision-path revision
 derived from stable choice identities, selected scripts, and activity ids.
 The matrix classifies identical paths, different paths converging on one ending,

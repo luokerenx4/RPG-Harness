@@ -28,6 +28,10 @@ export type DevelopmentOperation =
       args: { reportId: string; session: string; to: "<new-session>" };
     }
   | {
+      command: "verify-audit";
+      args: { reportId: string; sessionPrefix: "<new-session>" };
+    }
+  | {
       command: "inspect-report";
       args: { reportId: string; session: string };
     }
@@ -183,6 +187,10 @@ export function analyzeDevelopmentWorklist(input: {
   }
 
   for (const report of input.reports) {
+    const auditMatrix = report.evidence.auditMatrix;
+    const auditVerifiable = auditMatrix !== undefined &&
+      Number.isInteger(auditMatrix.maxSteps) && auditMatrix.maxSteps! >= 0 &&
+      auditMatrix.lanes.length > 0;
     items.push({
       key: `report/${report.id}`,
       kind: "playtest-report",
@@ -191,7 +199,12 @@ export function analyzeDevelopmentWorklist(input: {
       title: report.title,
       ...(report.target ? { target: report.target } : {}),
       detail: `${report.severity} ${report.area} finding in ${report.session}`,
-      operation: report.evidence.checkpoint
+      operation: auditVerifiable && report.evidence.checkpoint
+        ? {
+            command: "verify-audit",
+            args: { reportId: report.id, sessionPrefix: "<new-session>" },
+          }
+        : report.evidence.checkpoint
         ? {
             command: "reproduce",
             args: { reportId: report.id, session: report.session, to: "<new-session>" },
@@ -443,6 +456,7 @@ function workExecutor(
   sourceSession?: string,
 ): DevelopmentWorkItem["executor"] {
   const createsBranch = item.operation.command === "reproduce" ||
+    item.operation.command === "verify-audit" ||
     item.operation.command === "cover" ||
     item.operation.command === "reach" ||
     item.operation.command === "reach-script";

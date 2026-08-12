@@ -9,6 +9,7 @@ import {
   type ReachChoiceSummary,
 } from "./reach-choice";
 import { runReachScript, type ReachScriptSummary } from "./reach-script";
+import { verifyAuditReport } from "./verify-audit";
 import { collectSessionTranscript } from "./transcript";
 import {
   collectDevelopmentWorklist,
@@ -115,6 +116,17 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
         to: target,
       });
       return executed(selection, operation, "isolated-session", true, target, result);
+    }
+    case "verify-audit": {
+      const target = requireNewSession(args, item);
+      const result = await verifyAuditReport({
+        gameDir: args.gameDir,
+        reportId: operation.args.reportId,
+        sessionPrefix: target,
+      });
+      return result.status === "verified"
+        ? executed(selection, operation, "isolated-session", true, target, result)
+        : failedAfterWrite(selection, operation, target, result);
     }
     case "cover": {
       const target = requireNewSession(args, item);
@@ -358,6 +370,26 @@ function failed(
     selection,
     operation,
     safety: { mode: "read-only", writes: false, targetSession: null },
+    result,
+  };
+}
+
+function failedAfterWrite(
+  selection: NonNullable<WorkResult["selection"]>,
+  operation: DevelopmentOperation,
+  targetSession: string,
+  result: unknown,
+): WorkResult {
+  return {
+    schemaVersion: 1,
+    status: "failed",
+    selection,
+    operation,
+    safety: {
+      mode: "isolated-session",
+      writes: true,
+      targetSession,
+    },
     result,
   };
 }
