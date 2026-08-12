@@ -417,6 +417,68 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(5);
   });
 
+  test("choice intent wins when the old shared reply remains in another branch", async () => {
+    const selectedText = "Try reading the tracks";
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [{ text: selectedText }, { text: "Admit defeat" }],
+            },
+            { type: "dialogue", speaker: "a", text: "old shared reply" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    await oldRun.next();
+    expect((await oldRun.next({ type: "choose", index: 0 })).value).toMatchObject({
+      text: "old shared reply",
+    });
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [
+                { text: selectedText, goto: "learn" },
+                { text: "Admit defeat", goto: "honest" },
+              ],
+            },
+            { type: "label", name: "learn" },
+            { type: "dialogue", speaker: "a", text: "active instruction" },
+            { type: "endScript" },
+            { type: "label", name: "honest" },
+            { type: "dialogue", speaker: "a", text: "old shared reply" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "dialogue",
+      text: "active instruction",
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(2);
+  });
+
   test("fails explicitly when the current beat cannot be relocated safely", async () => {
     const oldGame = makeGame({
       scripts: [

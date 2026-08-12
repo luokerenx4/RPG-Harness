@@ -371,11 +371,41 @@ function reconcileScriptCursor(
     };
     return;
   }
-  if (anchorBeat(current) === cursor.beatAnchor) return;
 
   const anchoredIndexes = script.beats.flatMap((beat, index) =>
     anchorBeat(beat) === cursor.beatAnchor ? [index] : [],
   );
+
+  // A hot edit may split a formerly shared reply into per-option branches
+  // while retaining the old reply for one of the *other* options. In that
+  // case the textual anchor still exists, but following it would contradict
+  // the player's persisted choice. Validate branch membership first.
+  const selectedBranchTarget = cursor.choice
+    ? choiceBranchTarget(script, labelMap, cursor.choice)
+    : undefined;
+  const semanticIndex =
+    anchoredIndexes.length === 1
+      ? anchoredIndexes[0]!
+      : baseline.beatIndex;
+  if (
+    selectedBranchTarget !== undefined &&
+    !indexBelongsToChoiceBranch(
+      script,
+      labelMap,
+      cursor.choice!,
+      selectedBranchTarget,
+      semanticIndex,
+    )
+  ) {
+    baseline.beatIndex = selectedBranchTarget;
+    baseline.scriptCursor = {
+      ...cursor,
+      beatAnchor: anchorBeat(script.beats[selectedBranchTarget]!),
+    };
+    return;
+  }
+  if (anchorBeat(current) === cursor.beatAnchor) return;
+
   if (anchoredIndexes.length === 1) {
     const target = anchoredIndexes[0]!;
     baseline.beatIndex = target;
@@ -410,4 +440,47 @@ function reconcileScriptCursor(
       `beatIndex ${baseline.beatIndex}; the anchored beat changed and could ` +
       `not be relocated safely`,
   );
+}
+
+function choiceBranchTarget(
+  script: Script,
+  labelMap: Map<string, number>,
+  choice: NonNullable<NonNullable<PresetContext["state"]["baseline"]["scriptCursor"]>["choice"]>,
+): number | undefined {
+  const matchingOptions = script.beats.flatMap((beat) => {
+    if (beat.type !== "choice") return [];
+    if ((beat.prompt ?? null) !== choice.prompt) return [];
+    return beat.options.filter((option) => option.text === choice.optionText);
+  });
+  if (matchingOptions.length !== 1) return undefined;
+  const targetName = matchingOptions[0]!.goto;
+  return targetName ? labelMap.get(targetName) : undefined;
+}
+
+function indexBelongsToChoiceBranch(
+  script: Script,
+  labelMap: Map<string, number>,
+  choice: NonNullable<NonNullable<PresetContext["state"]["baseline"]["scriptCursor"]>["choice"]>,
+  target: number,
+  index: number,
+): boolean {
+  const siblingTargets = script.beats.flatMap((beat) => {
+    if (beat.type !== "choice") return [];
+    if ((beat.prompt ?? null) !== choice.prompt) return [];
+    return beat.options.flatMap((option) => {
+      const optionTarget = option.goto ? labelMap.get(option.goto) : undefined;
+      return optionTarget === undefined ? [] : [optionTarget];
+    });
+  });
+  const nextSibling = siblingTargets
+    .filter((candidate) => candidate > target)
+    .sort((a, b) => a - b)[0];
+  const endScript = script.beats.findIndex(
+    (beat, beatIndex) => beatIndex >= target && beat.type === "endScript",
+  );
+  const exclusiveEnd = Math.min(
+    nextSibling ?? script.beats.length,
+    endScript >= 0 ? endScript + 1 : script.beats.length,
+  );
+  return index >= target && index < exclusiveEnd;
 }
