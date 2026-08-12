@@ -1,5 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import type {
+  AiAuditConfig,
   EndConditionSpec,
   StatDef,
   StatThreshold,
@@ -11,6 +12,8 @@ import { parseCondition } from "./condition";
 
 export interface Manifest {
   title: string;
+  /** Optional deterministic-persona diversity acceptance gate. */
+  aiAudit?: AiAuditConfig;
   training?: TrainingConfig;
   // Declared boolean switches. Each entry: { initial, description? }.
   switches?: SwitchDef[];
@@ -50,6 +53,9 @@ export function parseManifest(content: string): Manifest {
     throw new ManifestParseError("Manifest missing `title`");
   }
   const manifest: Manifest = { title: obj.title };
+  if (obj.ai_audit !== undefined) {
+    manifest.aiAudit = parseAiAudit(obj.ai_audit);
+  }
   if (obj.training !== undefined) {
     manifest.training = parseTraining(obj.training);
   }
@@ -78,6 +84,38 @@ export function parseManifest(content: string): Manifest {
     manifest.hidden = obj.hidden;
   }
   return manifest;
+}
+
+function parseAiAudit(raw: unknown): AiAuditConfig {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestParseError("`ai_audit` must be an object");
+  }
+  const obj = raw as Record<string, unknown>;
+  const known = new Set(["min_unique_endings", "min_unique_decision_paths"]);
+  const unknown = Object.keys(obj).filter((key) => !known.has(key));
+  if (unknown.length > 0) {
+    throw new ManifestParseError(
+      `ai_audit: unknown field(s): ${unknown.join(", ")}`,
+    );
+  }
+  const config: AiAuditConfig = {};
+  for (const [source, target] of [
+    ["min_unique_endings", "minUniqueEndings"],
+    ["min_unique_decision_paths", "minUniqueDecisionPaths"],
+  ] as const) {
+    const value = obj[source];
+    if (value === undefined) continue;
+    if (!Number.isInteger(value) || (value as number) < 1) {
+      throw new ManifestParseError(`ai_audit.${source} must be a positive integer`);
+    }
+    config[target] = value as number;
+  }
+  if (Object.keys(config).length === 0) {
+    throw new ManifestParseError(
+      "`ai_audit` must declare min_unique_endings and/or min_unique_decision_paths",
+    );
+  }
+  return config;
 }
 
 // Switches block: a map of id → { initial: boolean, description? }.

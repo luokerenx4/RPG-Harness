@@ -2,7 +2,13 @@ import { access } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { assertSessionName } from "@rpg-harness/session-store";
+import type { AiAuditConfig } from "@rpg-harness/engine";
 import { sessionDir } from "../session";
+import { loadGame } from "../loader";
+import {
+  recordPlaytestReport,
+  type PlaytestReport,
+} from "../playtest-reports";
 import { personaDescriptions, personas } from "../test/personas";
 import {
   assertTargetEmpty,
@@ -96,6 +102,21 @@ export interface AuditSummary {
       notReachedBy: string[];
     }>;
   };
+  qualityGate?: {
+    policy: AiAuditConfig;
+    status: "passed" | "failed" | "not-evaluated";
+    observed: {
+      uniqueEndings: number;
+      uniqueDecisionPaths: number;
+    };
+    violations: string[];
+    evidenceSession?: string;
+    report?: {
+      id: string;
+      severity: string;
+      title: string;
+    };
+  };
 }
 
 export interface AuditHooks {
@@ -109,6 +130,7 @@ export async function auditCommand(args: AuditArgs): Promise<void> {
   process.stdout.write(
     (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) + "\n",
   );
+  if (summary.qualityGate?.status === "failed") process.exitCode = 1;
 }
 
 export async function runAudit(
@@ -118,6 +140,7 @@ export async function runAudit(
   validateAuditArgs(args);
   assertSessionName(args.fromSession);
   await assertSourceExists(args.gameDir, args.fromSession);
+  const game = await loadGame(args.gameDir);
 
   const targets = args.personas.map((persona) => ({
     persona,
@@ -126,6 +149,13 @@ export async function runAudit(
   for (const target of targets) {
     assertSessionName(target.session);
     await assertTargetEmpty(args.gameDir, target.session);
+  }
+  const qualityEvidenceSession = game.aiAudit
+    ? `${args.sessionPrefix}-quality-gate`
+    : undefined;
+  if (qualityEvidenceSession) {
+    assertSessionName(qualityEvidenceSession);
+    await assertTargetEmpty(args.gameDir, qualityEvidenceSession);
   }
 
   // Capture the live player branch exactly once. The player may keep using
@@ -217,6 +247,66 @@ export async function runAudit(
   const allTerminal = lanes.every(
     (lane) => lane.reason === "completed" && lane.ending !== null,
   );
+  const classification = !allTerminal
+    ? "incomplete" as const
+    : uniqueEndings > 1
+      ? "divergent-endings" as const
+      : uniqueDecisionPaths > 1
+        ? "convergent-paths" as const
+        : "identical-path" as const;
+  const quality = game.aiAudit
+    ? evaluateQualityGate(
+        game.aiAudit,
+        allTerminal,
+        uniqueEndings,
+        uniqueDecisionPaths,
+      )
+    : undefined;
+  let qualityReport: PlaytestReport | undefined;
+  if (quality?.status === "failed" && qualityEvidenceSession) {
+    await createForkFromSource({
+      gameDir: args.gameDir,
+      from: args.fromSession,
+      to: qualityEvidenceSession,
+      pretty: false,
+    }, source);
+    qualityReport = await recordPlaytestReport({
+      gameDir: args.gameDir,
+      session: qualityEvidenceSession,
+      area: "gameplay",
+      severity: "major",
+      title: `AI audit diversity gate failed (${uniqueEndings} endings, ${uniqueDecisionPaths} paths)`,
+      details: [
+        `The deterministic persona matrix completed ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
+        `Observed endings: ${formatEndingCounts(endings)}.`,
+        `Quality violations: ${quality.violations.join("; ")}.`,
+        `Classification: ${classification}.`,
+        `Personas: ${args.personas.join(", ")}.`,
+        "Reproduce the attached audit-source checkpoint, then decide whether to improve authored intent/route reachability or revise the explicit game-level threshold.",
+      ].join(" "),
+      target: "game.yaml",
+      auditMatrix: {
+        sourceRevision: stateRevision,
+        sessionPrefix: args.sessionPrefix,
+        policy: game.aiAudit!,
+        observed: {
+          uniqueEndings,
+          uniqueDecisionPaths,
+        },
+        classification,
+        violations: quality.violations,
+        lanes: lanes.map((lane) => ({
+          persona: lane.persona,
+          session: lane.session,
+          webPath: lane.webPath,
+          ending: lane.ending,
+          reason: lane.reason,
+          pathRevision: lane.path.revision,
+        })),
+        choiceDivergences,
+      },
+    });
+  }
   return {
     source: {
       session: args.fromSession,
@@ -238,22 +328,78 @@ export async function runAudit(
       ).length,
       errors: lanes.filter((lane) => lane.reason === "error").length,
       rejectedInputs: lanes.reduce((sum, lane) => sum + lane.rejectedInputs, 0),
-      openReports: lanes.filter((lane) => lane.report !== undefined).length,
+      openReports: lanes.filter((lane) => lane.report !== undefined).length +
+        (qualityReport ? 1 : 0),
     },
     endings,
     diversity: {
-      classification: !allTerminal
-        ? "incomplete"
-        : uniqueEndings > 1
-          ? "divergent-endings"
-          : uniqueDecisionPaths > 1
-            ? "convergent-paths"
-            : "identical-path",
+      classification,
       uniqueEndings,
       uniqueDecisionPaths,
       choiceDivergences,
     },
+    ...(quality
+      ? {
+          qualityGate: {
+            policy: game.aiAudit!,
+            ...quality,
+            ...(qualityEvidenceSession && quality.status === "failed"
+              ? { evidenceSession: qualityEvidenceSession }
+              : {}),
+            ...(qualityReport
+              ? {
+                  report: {
+                    id: qualityReport.id,
+                    severity: qualityReport.severity,
+                    title: qualityReport.title,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
+}
+
+function evaluateQualityGate(
+  policy: AiAuditConfig,
+  allTerminal: boolean,
+  uniqueEndings: number,
+  uniqueDecisionPaths: number,
+): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
+  const observed = { uniqueEndings, uniqueDecisionPaths };
+  if (!allTerminal) {
+    return {
+      status: "not-evaluated",
+      observed,
+      violations: ["not every audit lane reached a terminal ending"],
+    };
+  }
+  const violations: string[] = [];
+  if (policy.minUniqueEndings !== undefined &&
+    uniqueEndings < policy.minUniqueEndings) {
+    violations.push(
+      `unique endings ${uniqueEndings} < required ${policy.minUniqueEndings}`,
+    );
+  }
+  if (policy.minUniqueDecisionPaths !== undefined &&
+    uniqueDecisionPaths < policy.minUniqueDecisionPaths) {
+    violations.push(
+      `unique decision paths ${uniqueDecisionPaths} < required ${policy.minUniqueDecisionPaths}`,
+    );
+  }
+  return {
+    status: violations.length > 0 ? "failed" : "passed",
+    observed,
+    violations,
+  };
+}
+
+function formatEndingCounts(endings: Record<string, number>): string {
+  const entries = Object.entries(endings);
+  return entries.length > 0
+    ? entries.map(([ending, count]) => `${ending}=${count}`).join(", ")
+    : "none";
 }
 
 function summarizeChoiceDivergences(

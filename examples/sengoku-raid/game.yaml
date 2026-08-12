@@ -3,6 +3,13 @@ preset: ./preset/run.ts
 modules:
   - ./modules/raid.ts
 
+# The default five-persona headless matrix is a project acceptance test, not
+# just telemetry. Falling below either threshold creates a reproducible coding
+# issue at the frozen audit source checkpoint.
+ai_audit:
+  min_unique_endings: 2
+  min_unique_decision_paths: 3
+
 switches:
   learnedChinkonho: false
   learnedHayagake: false

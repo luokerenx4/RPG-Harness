@@ -110,6 +110,7 @@ export type {
   ActionResult,
   ActivityForecast,
   ActivityForecastMetric,
+  AiAuditConfig,
   AssetKind,
   AssetRefs,
   AssetRenderings,

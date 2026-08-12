@@ -66,7 +66,41 @@ export interface PlaytestEvidence {
   checkpoint?: PlaytestCheckpointRef;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  auditMatrix?: PlaytestAuditMatrixEvidence;
   captureErrors?: string[];
+}
+
+export interface PlaytestAuditMatrixEvidence {
+  sourceRevision: string;
+  sessionPrefix: string;
+  policy: {
+    minUniqueEndings?: number;
+    minUniqueDecisionPaths?: number;
+  };
+  observed: {
+    uniqueEndings: number;
+    uniqueDecisionPaths: number;
+  };
+  classification:
+    | "identical-path"
+    | "convergent-paths"
+    | "divergent-endings"
+    | "incomplete";
+  violations: string[];
+  lanes: Array<{
+    persona: string;
+    session: string;
+    webPath: string;
+    ending: string | null;
+    reason: string;
+    pathRevision: string;
+  }>;
+  choiceDivergences: Array<{
+    scriptId: string;
+    choiceId: string;
+    selections: Array<{ optionId: string; personas: string[] }>;
+    notReachedBy: string[];
+  }>;
 }
 
 export interface PlaytestReport {
@@ -95,6 +129,7 @@ export interface RecordPlaytestReportArgs {
   target?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  auditMatrix?: PlaytestAuditMatrixEvidence;
 }
 
 export interface ResolvePlaytestReportArgs {
@@ -133,6 +168,7 @@ export async function recordPlaytestReport(
         ...await captureEvidence(args.gameDir, args.session),
         ...(args.stall ? { stall: args.stall } : {}),
         ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
+        ...(args.auditMatrix ? { auditMatrix: args.auditMatrix } : {}),
       },
     };
 

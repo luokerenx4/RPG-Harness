@@ -546,6 +546,21 @@ reports, and GUI-ready Web paths without embedding five full save states.
 The player can keep advancing the source session while the sequential matrix
 runs: every lane reports the same audit-time `source.stateRevision` and cannot
 drift onto a later GUI/TUI state.
+Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
+
+```yaml
+ai_audit:
+  min_unique_endings: 2
+  min_unique_decision_paths: 3
+```
+
+The gate is evaluated only when every lane reaches a terminal ending. Passing
+matrices stay silent. A completed matrix below either threshold creates one
+major gameplay report at a frozen copy of the audit source, including every
+lane's GUI path, ending, semantic path revision, and choice divergences. The
+report immediately appears as executable `reproduce` work in `rpgh worklist`,
+and `rpgh audit` exits non-zero, so route collapse becomes a coding issue and CI
+signal instead of disposable console output.
 Each lane also receives a content-addressed semantic decision-path revision
 derived from stable choice identities, selected scripts, and activity ids.
 The matrix classifies identical paths, different paths converging on one ending,

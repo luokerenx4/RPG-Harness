@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
+import { listPlaytestReports } from "../playtest-reports";
 import { loadSession, saveSession, sessionDir } from "../session";
 import { runAudit } from "./audit";
 import { readSessionLog } from "./fork";
+import { collectDevelopmentWorklist } from "./worklist";
 
 const temporaryDirectories: string[] = [];
 
@@ -202,6 +204,187 @@ describe("autoplay audit matrix", () => {
     });
     expect(summary.totals.completed).toBe(1);
     expect(Math.random).toBe(before);
+  });
+
+  test("passes an author-owned diversity gate without creating work", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit choice test",
+      "ai_audit:",
+      "  min_unique_endings: 1",
+      "  min_unique_decision_paths: 3",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "passing-matrix",
+      personas: ["objective", "greedy", "charmer", "rude"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toEqual({
+      policy: { minUniqueEndings: 1, minUniqueDecisionPaths: 3 },
+      status: "passed",
+      observed: { uniqueEndings: 1, uniqueDecisionPaths: 3 },
+      violations: [],
+    });
+    expect(summary.totals.openReports).toBe(0);
+    expect(await listPlaytestReports(gameDir)).toEqual([]);
+  });
+
+  test("turns a failed diversity gate into reproducible development work", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit choice test",
+      "ai_audit:",
+      "  min_unique_endings: 2",
+      "  min_unique_decision_paths: 3",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "failing-matrix",
+      personas: ["objective", "greedy", "charmer", "rude"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toMatchObject({
+      policy: { minUniqueEndings: 2, minUniqueDecisionPaths: 3 },
+      status: "failed",
+      observed: { uniqueEndings: 1, uniqueDecisionPaths: 3 },
+      violations: ["unique endings 1 < required 2"],
+      evidenceSession: "failing-matrix-quality-gate",
+      report: { severity: "major" },
+    });
+    expect(summary.totals.openReports).toBe(1);
+    const reportId = summary.qualityGate?.report?.id;
+    expect(reportId).toBeString();
+    const reports = await listPlaytestReports(gameDir);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      id: reportId,
+      session: "failing-matrix-quality-gate",
+      target: "game.yaml",
+      evidence: {
+        checkpoint: { schemaVersion: 1 },
+        auditMatrix: {
+          sessionPrefix: "failing-matrix",
+          policy: { minUniqueEndings: 2, minUniqueDecisionPaths: 3 },
+          observed: { uniqueEndings: 1, uniqueDecisionPaths: 3 },
+          classification: "convergent-paths",
+          violations: ["unique endings 1 < required 2"],
+          lanes: expect.arrayContaining([
+            expect.objectContaining({
+              persona: "charmer",
+              session: "failing-matrix-charmer",
+              ending: "intro",
+              pathRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+            }),
+          ]),
+          choiceDivergences: [expect.objectContaining({
+            scriptId: "intro",
+            choiceId: "route",
+          })],
+        },
+      },
+    });
+    const worklist = await collectDevelopmentWorklist(gameDir);
+    expect(worklist.items).toContainEqual(expect.objectContaining({
+      key: `report/${reportId}`,
+      kind: "playtest-report",
+      actionability: "executable",
+      operation: {
+        command: "reproduce",
+        args: {
+          reportId,
+          session: "failing-matrix-quality-gate",
+          to: "<new-session>",
+        },
+      },
+      coordinates: expect.objectContaining({
+        auditMatrix: expect.objectContaining({
+          violations: ["unique endings 1 < required 2"],
+        }),
+      }),
+    }));
+  });
+
+  test("CLI exits non-zero when the authored diversity gate fails", async () => {
+    const gameDir = await temporaryGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit test",
+      "ai_audit:",
+      "  min_unique_endings: 2",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "audit",
+      gameDir,
+      "--from-session",
+      "player",
+      "--session-prefix",
+      "cli-failing-matrix",
+      "--personas",
+      "objective,greedy",
+      "--max-steps",
+      "10",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [exitCode, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      qualityGate: {
+        status: "failed",
+        violations: ["unique endings 1 < required 2"],
+      },
+    });
+  });
+
+  test("does not judge diversity or file matrix noise before every lane ends", async () => {
+    const gameDir = await temporaryGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit test",
+      "ai_audit:",
+      "  min_unique_endings: 2",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "incomplete-matrix",
+      personas: ["objective", "greedy"],
+      maxSteps: 0,
+      reportOnStop: false,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toEqual({
+      policy: { minUniqueEndings: 2 },
+      status: "not-evaluated",
+      observed: { uniqueEndings: 0, uniqueDecisionPaths: 1 },
+      violations: ["not every audit lane reached a terminal ending"],
+    });
+    expect(summary.totals.openReports).toBe(0);
+    expect(await listPlaytestReports(gameDir)).toEqual([]);
   });
 });
 

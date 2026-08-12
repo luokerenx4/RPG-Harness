@@ -210,6 +210,9 @@ export function analyzeDevelopmentWorklist(input: {
         ...(report.evidence.checkpoint
           ? { checkpoint: report.evidence.checkpoint }
           : {}),
+        ...(report.evidence.auditMatrix
+          ? { auditMatrix: report.evidence.auditMatrix }
+          : {}),
       },
     });
   }

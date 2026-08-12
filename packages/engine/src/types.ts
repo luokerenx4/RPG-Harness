@@ -21,6 +21,12 @@ export interface VariableDef {
   description?: string;
 }
 
+/** Author-owned acceptance thresholds for a deterministic persona matrix. */
+export interface AiAuditConfig {
+  minUniqueEndings?: number;
+  minUniqueDecisionPaths?: number;
+}
+
 export interface CharacterState {
   // Per-character numeric stats. Author declares these in the character
   // markdown frontmatter (`stats: { affection: { initial: 0 } }`); the
@@ -1072,6 +1078,8 @@ export interface ActionResult {
 
 export interface Game {
   title: string;
+  /** Optional project-level quality gate consumed by `rpgh audit`. */
+  aiAudit?: AiAuditConfig;
   characters: CharacterDef[];
   scripts: Script[];
   // Declared switches (boolean) — engine pre-populates baseline.switches

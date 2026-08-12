@@ -139,3 +139,30 @@ describe("parseManifest — basic", () => {
     );
   });
 });
+
+describe("parseManifest — AI audit quality gate", () => {
+  test("parses author-owned diversity thresholds", () => {
+    const manifest = parseManifest([
+      "title: t",
+      "ai_audit:",
+      "  min_unique_endings: 2",
+      "  min_unique_decision_paths: 3",
+    ].join("\n"));
+
+    expect(manifest.aiAudit).toEqual({
+      minUniqueEndings: 2,
+      minUniqueDecisionPaths: 3,
+    });
+  });
+
+  test("rejects empty, non-positive, and unknown audit policy", () => {
+    expect(() => parseManifest("title: t\nai_audit: {}\n"))
+      .toThrow(/must declare/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  min_unique_endings: 0\n",
+    )).toThrow(/positive integer/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  mystery: 2\n",
+    )).toThrow(/unknown field/);
+  });
+});
