@@ -26,6 +26,7 @@ assertions:
     present: true
     choiceId: question-on-deer-path
     optionId: ask-when-hunter-draws
+    optionAiTagsIncludes: protective
   - kind: output
     type: dialogue
     present: true
@@ -33,4 +34,3 @@ assertions:
   - kind: state
     path: baseline.variables.kasumi_deer_reply
     eq: hunter-blade
-

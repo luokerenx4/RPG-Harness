@@ -31,9 +31,9 @@ requires:
 :cg assets/cgs/bond-kasumi-03
 
 ? それでも、聞きたかった。 {id: question-on-deer-path}
-  - 「あんたは、なぜ私と歩く」 {id: ask-why-she-walks} -> +kasumi | goto why_walk
-  - 「猟師は、いつ刀を持つ」 {id: ask-when-hunter-draws} -> +kasumi | goto hunter_blade
-  - 「鹿の道を、私にも教えてくれ」 {id: ask-to-learn-deer-path} -> +2kasumi | goto learn_path
+  - 「あんたは、なぜ私と歩く」 {id: ask-why-she-walks, ai: romantic vulnerable} -> +kasumi | goto why_walk
+  - 「猟師は、いつ刀を持つ」 {id: ask-when-hunter-draws, ai: blunt protective} -> +kasumi | goto hunter_blade
+  - 「鹿の道を、私にも教えてくれ」 {id: ask-to-learn-deer-path, ai: trusting disciplined} -> +2kasumi | goto learn_path
 
 :hide-cg
 
