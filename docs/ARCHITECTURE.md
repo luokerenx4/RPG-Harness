@@ -139,6 +139,11 @@ a small tag subset, and LLM or game-specific agents can consume the rest. When
 stable choice identities are available, built-in personas submit those ids
 instead of presentation indexes, keeping authored intent invariant under UI
 reordering.
+The authored-choice inventory reports semantic coverage independently of
+runtime branch coverage. A stable multi-option choice is `complete` only when
+every stable option declares at least one tag (`neutral` is an explicit valid
+intent); partial and wholly missing choices become source-located
+`annotate-choice-intent` work items for the next development agent.
 
 ## Standard resources (the database)
 

@@ -78,6 +78,8 @@ assertions:
     present: true
     choiceId: final-court-directive
     optionId: draw-against-court
+    optionTextIncludes: 公儀に刀を抜く
+    optionAiTagsIncludes: defiant
   - kind: state
     path: baseline.switches.chose_court_defy
     eq: true

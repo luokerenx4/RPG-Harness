@@ -142,6 +142,13 @@ rpgh cover "$GAME" --source-session "$SESSION" \
   --session "${SESSION}-cover" --key SCRIPT/CHOICE/OPTION
 ```
 
+The `choices` result separates runtime branch work from `authoring.workItems`.
+Runtime pending options have executable checkpoints; authoring items instead
+locate content debt such as missing stable ids, unseen choices, converged
+responses, or incomplete `aiTags`. For `annotate-choice-intent`, inspect the
+named source and `missingOptionIds`; use an explicit `neutral` tag when an
+option truly has no stronger semantic intent rather than leaving it ambiguous.
+
 `cover` forks the exact immutable checkpoint, verifies that live edits still
 present the same stable choice and option, selects by option id, and continues
 on the new session. Never copy a live session directory: that can race GUI or

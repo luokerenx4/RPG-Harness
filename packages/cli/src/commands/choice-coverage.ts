@@ -75,6 +75,11 @@ export interface ChoiceCoverageReport {
       observedStableChoices: number;
       unseenStableChoices: number;
       convergedResponses: number;
+      intentCompleteChoices: number;
+      intentPartialChoices: number;
+      intentMissingChoices: number;
+      taggedOptions: number;
+      untaggedOptions: number;
     };
     choices: AuthoredChoiceRow[];
     workItems: ChoiceAuthoringWorkItem[];
@@ -91,6 +96,12 @@ export interface AuthoredChoiceRow {
   choiceId?: string;
   optionCount: number;
   optionIds: string[];
+  optionIntents: Array<{
+    optionId?: string;
+    text: string;
+    aiTags: string[];
+  }>;
+  intentStatus: "complete" | "partial" | "missing";
   status: "observed" | "unseen" | "legacy";
   requires?: Condition;
 }
@@ -105,6 +116,17 @@ export type ChoiceAuthoringWorkItem =
       prompt: string | null;
       optionCount: number;
       action: "add stable choice.id and option.id values";
+    }
+  | {
+      kind: "annotate-choice-intent";
+      key: string;
+      scriptId: string;
+      choiceId: string;
+      source?: string;
+      beatIndex: number;
+      prompt: string | null;
+      missingOptionIds: string[];
+      action: "add at least one aiTag to every stable option; use neutral explicitly when intended";
     }
   | {
       kind: "reach-choice";
@@ -408,6 +430,25 @@ export function analyzeChoiceCoverage(
         action: "reach this authored choice in a recoverable session" as const,
       });
     }
+    if (
+      choice.choiceId &&
+      choice.optionIds.length === choice.optionCount &&
+      choice.intentStatus !== "complete"
+    ) {
+      authoringWorkItems.push({
+        kind: "annotate-choice-intent",
+        key: `${choice.key}/ai-intent`,
+        scriptId: choice.scriptId,
+        choiceId: choice.choiceId,
+        ...(choice.source ? { source: choice.source } : {}),
+        beatIndex: choice.beatIndex,
+        prompt: choice.prompt,
+        missingOptionIds: choice.optionIntents.flatMap((option) =>
+          option.aiTags.length === 0 && option.optionId ? [option.optionId] : []
+        ),
+        action: "add at least one aiTag to every stable option; use neutral explicitly when intended",
+      });
+    }
   }
   const authoredByKey = new Map(
     authoringChoices.map((choice) => [`${choice.scriptId}/${choice.choiceId ?? ""}`, choice]),
@@ -440,6 +481,15 @@ export function analyzeChoiceCoverage(
   const convergedResponses = authoringWorkItems.filter((item) =>
     item.kind === "review-converged-response"
   ).length;
+  const intentCompleteChoices = stableChoices.filter(
+    (choice) => choice.intentStatus === "complete",
+  ).length;
+  const intentPartialChoices = stableChoices.filter(
+    (choice) => choice.intentStatus === "partial",
+  ).length;
+  const intentMissingChoices = stableChoices.filter(
+    (choice) => choice.intentStatus === "missing",
+  ).length;
   const countChoice = (status: ChoiceCoverageStatus) =>
     rows.filter((choice) => choice.status === status).length;
   const countOption = (status: ChoiceCoverageOptionRow["status"]) =>
@@ -471,6 +521,21 @@ export function analyzeChoiceCoverage(
         observedStableChoices: stableChoices.filter((choice) => choice.status === "observed").length,
         unseenStableChoices: stableChoices.filter((choice) => choice.status === "unseen").length,
         convergedResponses,
+        intentCompleteChoices,
+        intentPartialChoices,
+        intentMissingChoices,
+        taggedOptions: stableChoices.reduce(
+          (sum, choice) => sum + choice.optionIntents.filter(
+            (option) => option.aiTags.length > 0,
+          ).length,
+          0,
+        ),
+        untaggedOptions: stableChoices.reduce(
+          (sum, choice) => sum + choice.optionIntents.filter(
+            (option) => option.aiTags.length === 0,
+          ).length,
+          0,
+        ),
       },
       choices: authoringChoices,
       workItems: authoringWorkItems,
@@ -486,6 +551,17 @@ export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredCh
       : gameDir === undefined
         ? script.source
         : path.relative(gameDir, script.source).split(path.sep).join("/");
+    const optionIntents = beat.options.map((option) => ({
+      ...(option.id ? { optionId: option.id } : {}),
+      text: option.text,
+      aiTags: [...(option.aiTags ?? [])],
+    }));
+    const taggedOptions = optionIntents.filter((option) => option.aiTags.length > 0).length;
+    const intentStatus = taggedOptions === 0
+      ? "missing" as const
+      : taggedOptions === optionIntents.length
+        ? "complete" as const
+        : "partial" as const;
     return [{
       key: beat.id === undefined
         ? `${script.id}/beat-${beatIndex}`
@@ -498,6 +574,8 @@ export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredCh
       ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
       optionCount: beat.options.length,
       optionIds: beat.options.flatMap((option) => option.id ? [option.id] : []),
+      optionIntents,
+      intentStatus,
       status: beat.id === undefined ? "legacy" as const : "unseen" as const,
       ...(script.requires ? { requires: script.requires } : {}),
     }];
@@ -536,6 +614,7 @@ export function formatChoiceCoverage(
   const lines = [
     `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.untrackedChoiceEvents} legacy log events`,
     `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids · ${report.authoring.summary.convergedResponses} converged responses need review`,
+    `AI intent coverage: ${report.authoring.summary.intentCompleteChoices}/${report.authoring.summary.stableChoices} stable choices complete · ${report.authoring.summary.taggedOptions}/${report.authoring.summary.stableOptions} stable options tagged · ${report.authoring.summary.intentPartialChoices} partial · ${report.authoring.summary.intentMissingChoices} missing`,
   ];
   if (rows.length === 0) lines.push("(no matching runtime choices)");
   for (const choice of rows) {
@@ -563,7 +642,9 @@ export function formatChoiceCoverage(
         ? `  ○ stabilize ${item.key} · ${location} · ${item.optionCount} options · ${item.prompt ?? "—"}`
         : item.kind === "reach-choice"
           ? `  ○ reach ${item.key} · ${location} · ${item.prompt ?? "—"}`
-          : `  △ review shared response ${item.key} · ${location} · ${item.optionIds.length} options share ${formatNarrativeResponseTrace(item.responseTrace)}`);
+          : item.kind === "annotate-choice-intent"
+            ? `  ○ annotate intent ${item.scriptId}/${item.choiceId} · ${location} · missing [${item.missingOptionIds.join(", ")}]`
+            : `  △ review shared response ${item.key} · ${location} · ${item.optionIds.length} options share ${formatNarrativeResponseTrace(item.responseTrace)}`);
     }
     if (authoringItems.length > 20) {
       lines.push(`  … ${authoringItems.length - 20} more (use --format json for the complete worklist)`);

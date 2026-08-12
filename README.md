@@ -511,7 +511,10 @@ copy edits and option reordering. Concise Markdown accepts `{id: ...}` on both
 the `?` prompt and each `-` option; fenced YAML accepts ordinary `id` fields.
 `rpgh choices` merges this authored inventory with runtime logs, separately
 reporting choices that need ids, stable choices that have never been reached,
-and reached options that still need an exact checkpoint fork. Once every
+stable options missing explicit semantic intent, and reached options that still
+need an exact checkpoint fork. Every option in a semantically complete branch
+has at least one `aiTag`; authors use `neutral` when the lack of stronger intent
+is deliberate, so omission remains actionable instead of ambiguous. Once every
 executable option has a stable, replayed decision, it also compares each
 option's complete narrative response trace up to the next interactive output.
 If distinct options produce the same trace, the authoring worklist asks an AI

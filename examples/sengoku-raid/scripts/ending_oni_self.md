@@ -25,27 +25,33 @@ prompt: 灯がいくつか、遠くに見える。
 options:
   - id: kagami
     text: 映し井戸で見た、もう半分の顔を思い出す
+    ai_tags: [introspective]
     requires: { scriptCompleted: zone_haunt_kagami_oni }
     goto: tether_kagami
   - id: kagari
     text: 篝の槍の拍を、最後に一度だけ数えてみる
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kagari } }
     goto: tether_kagari
   - id: kasumi
     text: 霞の言った「鹿の道」を、目で探してみる
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kasumi } }
     goto: tether_kasumi
   - id: mio
     text: 澪の水鏡に、今の自分が映る様を思う
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_mio } }
     goto: tether_mio
   - id: three-flowers
     text: 月下の「三名連署」を、ひとつの灯として見つめる
     aiPriority: 20
+    ai_tags: [social, collective, loyal]
     requires: { switch: { name: three_flowers_pledged } }
     goto: tether_three_flowers
   - id: alone
     text: 振り返るのを、やめる
+    ai_tags: [independent, defiant]
     goto: gate
 ```
 

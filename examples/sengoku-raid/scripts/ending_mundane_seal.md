@@ -31,21 +31,25 @@ prompt: 麓の辻に、人影がある。
 options:
   - id: meet-kagari
     text: 槍を担いだ影
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kagari } }
     locked_hint: 篝と共に戦場を生き延びていない。
     goto: seeoff_kagari
   - id: meet-kasumi
     text: 弓を背負った影
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kasumi } }
     locked_hint: 霞と共に戦場を生き延びていない。
     goto: seeoff_kasumi
   - id: meet-mio
     text: 藍の打掛の影
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_mio } }
     locked_hint: 澪と共に戦場を生き延びていない。
     goto: seeoff_mio
   - id: walk-alone
     text: 誰もいない。それでいい
+    ai_tags: [independent]
     goto: seeoff_none
 ```
 

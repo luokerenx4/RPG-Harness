@@ -46,3 +46,4 @@ assertions:
     optionId: three-flowers
     optionTextIncludes: 三名連署
     optionAiPriority: 20
+    optionAiTagsIncludes: collective

@@ -46,7 +46,10 @@ describe("choice branch coverage", () => {
             type: "choice",
             id: "stable",
             prompt: "Stable?",
-            options: [{ id: "yes", text: "Yes" }, { id: "no", text: "No" }],
+            options: [
+              { id: "yes", text: "Yes", aiTags: ["affirmative"] },
+              { id: "no", text: "No" },
+            ],
           },
         ],
       }],
@@ -63,6 +66,11 @@ describe("choice branch coverage", () => {
       observedStableChoices: 0,
       unseenStableChoices: 1,
       convergedResponses: 0,
+      intentCompleteChoices: 0,
+      intentPartialChoices: 1,
+      intentMissingChoices: 0,
+      taggedOptions: 1,
+      untaggedOptions: 1,
     });
     expect(report.authoring.workItems).toEqual([
       expect.objectContaining({
@@ -71,10 +79,50 @@ describe("choice branch coverage", () => {
         source: "scripts/story.md",
       }),
       expect.objectContaining({ kind: "reach-choice", key: "story/stable" }),
+      expect.objectContaining({
+        kind: "annotate-choice-intent",
+        key: "story/stable/ai-intent",
+        missingOptionIds: ["no"],
+      }),
     ]);
     expect(formatChoiceCoverage(report, "pending")).toContain("1/2 choices stable");
+    expect(formatChoiceCoverage(report, "pending")).toContain("0/1 stable choices complete");
+    expect(formatChoiceCoverage(report, "pending")).toContain("annotate intent story/stable");
     expect(formatChoiceCoverage(report, "pending")).toContain("stabilize story/beat-1");
     expect(formatChoiceCoverage(report, "covered")).not.toContain("AUTHORING WORK");
+  });
+
+  test("treats explicit neutral intent as complete and empty tags as missing", () => {
+    const game = {
+      title: "Intent inventory",
+      characters: [],
+      scripts: [{
+        id: "story",
+        title: "Story",
+        beats: [{
+          type: "choice",
+          id: "tone",
+          prompt: "Tone?",
+          options: [
+            { id: "plain", text: "Plain", aiTags: ["neutral"] },
+            { id: "silent", text: "Silent", aiTags: [] },
+          ],
+        }],
+      }],
+    } as const;
+    const report = analyzeChoiceCoverage([], [], collectAuthoredChoices(game as never));
+
+    expect(report.authoring.summary).toMatchObject({
+      intentCompleteChoices: 0,
+      intentPartialChoices: 1,
+      intentMissingChoices: 0,
+      taggedOptions: 1,
+      untaggedOptions: 1,
+    });
+    expect(report.authoring.workItems).toContainEqual(expect.objectContaining({
+      kind: "annotate-choice-intent",
+      missingOptionIds: ["silent"],
+    }));
   });
 
   test("turns an unselected available option into an executable work item", () => {
@@ -228,6 +276,11 @@ describe("choice branch coverage", () => {
       choiceId: "final-tether",
       optionCount: 2,
       optionIds: ["alone", "friends"],
+      optionIntents: [
+        { optionId: "alone", text: "Alone", aiTags: ["independent"] },
+        { optionId: "friends", text: "With friends", aiTags: ["social"] },
+      ],
+      intentStatus: "complete" as const,
       status: "unseen" as const,
     }];
     const report = analyzeChoiceCoverage([{

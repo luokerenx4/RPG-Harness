@@ -50,3 +50,7 @@ assertions:
   - kind: output
     type: choice
     present: true
+    choiceId: sealed-blade-coda
+    optionId: walk-alone
+    optionTextIncludes: 誰もいない
+    optionAiTagsIncludes: independent

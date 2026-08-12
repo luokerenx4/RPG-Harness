@@ -45,6 +45,7 @@ prompt: 御沙汰を選ぶ。
 options:
   - id: serve-the-court
     text: 公儀に服す——道を整える
+    ai_tags: [loyal, cautious]
     effects:
       switches:
         chose_court_loyal: true
@@ -53,6 +54,7 @@ options:
     goto: end_loyal
   - id: draw-against-court
     text: 公儀に刀を抜く——自らの脈を選ぶ
+    ai_tags: [defiant, aggressive]
     effects:
       switches:
         chose_court_defy: true
@@ -61,6 +63,7 @@ options:
     goto: end_defy
   - id: retire-in-silence
     text: 黙して退く——刀を納める
+    ai_tags: [independent, cautious]
     effects:
       switches:
         chose_court_silent: true

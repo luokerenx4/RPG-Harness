@@ -60,7 +60,8 @@ COMMANDS
   choices  <game-dir> [--session NAME] [--status pending|covered|partial|uncovered|locked|all]
            [--format table|json]
       Aggregate stable choice/option ids from recoverable session logs. Pending
-      options include exact fork checkpoints and executable choose inputs.
+      options include exact fork checkpoints and executable choose inputs;
+      authoring work also identifies missing stable ids and semantic AI intent.
 
   transcript <game-dir> --session NAME [--tail N] [--format text|json]
       Print a compact player-visible history across the session's exact fork
