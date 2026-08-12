@@ -2955,8 +2955,10 @@ const raidModule: Module = {
       ctx.state.baseline.switches.mio_inspection_duty = false;
       if (
         ctx.state.baseline.variables.shogun_chapter === 2 &&
-        ctx.state.baseline.variables.last_directive ===
-          "澪と共に出帰り、見立てを受けよ。"
+        [
+          "澪と共に出帰り、見立てを受けよ。",
+          "澪の見立ては続いている。同行を重ね、最終の報告を待て。",
+        ].includes(String(ctx.state.baseline.variables.last_directive ?? ""))
       ) {
         ctx.state.baseline.variables.last_directive =
           "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。";
