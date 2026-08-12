@@ -34,6 +34,9 @@ inputs:
   - type: next
 assertions:
   - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-garden-dawn
+  - kind: state
     path: baseline.knownSkills
     includes: chinkonho
   - kind: state

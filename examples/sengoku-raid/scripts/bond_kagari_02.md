@@ -2,8 +2,11 @@
 id: bond_kagari_02
 title: 鎮魂法
 characters: [kagari]
+bg: assets/backgrounds/inn-garden-dawn
 requires:
   affection: { character: kagari, min: 4 }
+defaultPortraits:
+  - { characterId: kagari, emotion: default }
 ---
 
 明け方。篝はお主を裏庭に呼んだ。

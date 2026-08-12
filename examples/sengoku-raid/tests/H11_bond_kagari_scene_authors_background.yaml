@@ -1,0 +1,31 @@
+name: 篝の月夜支線が Hub 背景を継承せず宿の縁側を指定する
+description: |
+  Starting bond_kagari_01 from an Edo-castle hub must replace the inherited
+  hall visual with the authored inn-veranda background and Kagari portrait.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - encounter_kagari_first
+    characters:
+      kagari:
+        affection: 2
+        custom: {}
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kagari
+inputs:
+  - type: doActivity
+    id: script:bond_kagari_01
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-veranda-night
+  - kind: state
+    path: baseline.visuals.portraits.center
+    eq: assets/portraits/kagari-smile

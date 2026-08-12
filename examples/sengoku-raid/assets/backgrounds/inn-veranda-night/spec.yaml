@@ -1,0 +1,18 @@
+kind: bg
+description: |
+  街道宿の縁側。古い板間と障子の向こうに灯が残り、庭の松越しに
+  月が出ている。徳利を挟んで静かに話せる、夜更けの私的な場所。
+prompt: |
+  An empty wooden engawa veranda at a modest roadside inn in early
+  Edo-period Japan. Weathered pillars and softly lit shoji, a quiet
+  garden and pine branches framing a clear moon, one sake flask on
+  the boards. Wide hand-painted anime game background, intimate and
+  reflective, cool moonlight against faint warm interior light.
+placeholder: "[街道宿・月夜の縁側] 障子の灯と松越しの月、板間に酒徳利がひとつ"
+refs:
+  location: roadside-inn
+  time: 深夜
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [bond, kagari, inn, night]

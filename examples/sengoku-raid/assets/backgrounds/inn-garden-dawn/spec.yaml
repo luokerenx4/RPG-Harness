@@ -1,0 +1,18 @@
+kind: bg
+description: |
+  街道宿の裏庭。竹垣に囲まれた苔庭の中央に稽古のできる空地があり、
+  濡れた飛石と古松へ夜明けの光が差し始めている。
+prompt: |
+  An empty private back garden at a modest early Edo-period inn at
+  first light. Moss, wet stepping stones, bamboo fence, old pine and
+  a weathered veranda, with a clear central patch for a secret sword
+  lesson. Wide hand-painted anime game background, blue-grey dawn
+  turning pale gold, quiet and disciplined.
+placeholder: "[街道宿・明け方の裏庭] 朝露の飛石と竹垣、稽古場に薄金の光が差す"
+refs:
+  location: roadside-inn
+  time: 明け方
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [bond, kagari, inn, dawn]

@@ -2,6 +2,7 @@
 id: bond_kagari_01
 title: 篝の話を聞く
 characters: [kagari]
+bg: assets/backgrounds/inn-veranda-night
 requires:
   affection: { character: kagari, min: 2 }
 defaultPortraits:
