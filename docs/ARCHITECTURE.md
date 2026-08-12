@@ -148,6 +148,13 @@ runtime branch coverage. A stable multi-option choice is `complete` only when
 every stable option declares at least one tag (`neutral` is an explicit valid
 intent); partial and wholly missing choices become source-located
 `annotate-choice-intent` work items for the next development agent.
+`rpgh probe-choice` closes the authoring feedback loop without creating another
+runtime branch. It loads an immutable session checkpoint, runs the current game
+to its next output in memory, and asks the same deterministic choice-policy
+function used by autoplay to explain each persona's decision. Reporting both
+the stored and evaluated state revisions makes hot script migration observable;
+the source session tree remains byte-for-byte unchanged. Policy explanation and
+execution therefore cannot drift into separate implementations.
 
 ## Standard resources (the database)
 

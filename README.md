@@ -445,6 +445,7 @@ rpgh autoplay ./examples/sengoku-raid --persona objective \
   --from-session player-main --session ai-objective-audit --report-on-stop
 rpgh audit ./examples/sengoku-raid --from-session player-main \
   --session-prefix ai-matrix --max-steps 500
+rpgh probe-choice ./examples/sengoku-raid --session player-main --at 42 --pretty
 rpgh cover ./examples/sengoku-raid --source-session player-main \
   --session ai-cover-branch --key SCRIPT/CHOICE/OPTION
 ```
@@ -502,6 +503,15 @@ longer hides meaningful route variation from the next coding agent.
 Completed lanes remain individually replayable if the command is interrupted;
 rerun with a fresh prefix after inspecting them. Add `random` explicitly with
 `--personas ...random --seed N` so the matrix remains reproducible.
+For authoring a single reached choice, `probe-choice` is the zero-write policy
+lane: it restores the named content-addressed checkpoint in memory, evaluates
+the current game scripts, and reports the stable option plus the exact reason
+for each deterministic persona (`semantic-tags`, `ai-priority`, or positional
+fallback). It does not advance the source, fork sessions, or create budget
+reports. Comparing the same `session@entry` before and after an edit makes
+semantic intent review cheap while still exposing live script migration through
+the source and evaluated state revisions. Random is intentionally excluded
+because a sample is not evidence of authored intent.
 `cover` is the execution half of that contract: it consumes an available branch
 without requiring an agent to manually translate evidence into `fork` and
 `step` commands, and fails closed if live authoring removed, locked, or replaced

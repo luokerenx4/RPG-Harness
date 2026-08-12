@@ -176,6 +176,19 @@ If a bounded search misses, inspect its `closest.requirements`. Use
 coding issue; intentional route exclusivity should be reviewed and resolved so
 automated playtesting does not accumulate false-positive work.
 
+Before editing semantic intent on an already reached choice, probe the exact
+checkpoint without creating audit branches or reports:
+
+```bash
+rpgh probe-choice "$GAME" --session "$SESSION" --at 42 --pretty
+```
+
+Read `decisions[].reason`: semantic matches include the tags and weighted score;
+otherwise the result names the numeric-priority or positional fallback. Run the
+same probe after the edit. It evaluates current scripts against the old
+content-addressed save while leaving that session unchanged, so a before/after
+persona matrix is useful authoring evidence rather than new playthrough state.
+
 ## Turn playtest findings into coding issues
 
 When the story contradicts an earlier choice, progression feels stuck, an engine

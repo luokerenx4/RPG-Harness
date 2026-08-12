@@ -21,6 +21,14 @@ export {
   collectDevelopmentWorklist,
   formatDevelopmentWorklist,
 } from "./commands/worklist";
+export {
+  DEFAULT_CHOICE_PROBE_PERSONAS,
+  runChoiceProbe,
+} from "./commands/probe-choice";
+export type {
+  ChoiceProbeSummary,
+  ProbeChoiceArgs,
+} from "./commands/probe-choice";
 export type {
   DevelopmentOperation,
   DevelopmentWorkItem,

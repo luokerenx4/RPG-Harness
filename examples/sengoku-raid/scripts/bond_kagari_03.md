@@ -28,9 +28,9 @@ requires:
 :cg assets/cgs/bond-kagari-03
 
 ? それでも、答える。 {id: answer-how-the-blade-sleeps}
-  - 「夢を見ないようにしている」 {id: avoid-dreams} -> +kagari | goto dreamless
-  - 「鎮魂法で、毎晩二十押し返す」 {id: use-chinkonho-nightly} -> +kagari | goto chinkonho
-  - 「眠らない」 {id: do-not-sleep} -> +2kagari | goto sleepless
+  - 「夢を見ないようにしている」 {id: avoid-dreams, ai: restrained introspective} -> +kagari | goto dreamless
+  - 「鎮魂法で、毎晩二十押し返す」 {id: use-chinkonho-nightly, ai: loyal disciplined} -> +kagari | goto chinkonho
+  - 「眠らない」 {id: do-not-sleep, ai: defiant independent} -> +2kagari | goto sleepless
 
 :hide-cg
 

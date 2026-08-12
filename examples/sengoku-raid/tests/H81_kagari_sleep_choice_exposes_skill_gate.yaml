@@ -27,7 +27,13 @@ assertions:
     choiceId: answer-how-the-blade-sleeps
     optionId: use-chinkonho-nightly
     optionTextIncludes: 鎮魂法で
+    optionAiTagsIncludes: loyal
     optionAvailable: false
     optionLockedReasonIncludes: まだ伝授されていない
     optionRequires: { switch: { name: learnedChinkonho } }
-
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-how-the-blade-sleeps
+    optionId: do-not-sleep
+    optionAiTagsIncludes: defiant

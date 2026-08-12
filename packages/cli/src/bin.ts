@@ -6,6 +6,10 @@ import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { worklistCommand } from "./commands/worklist";
+import {
+  DEFAULT_CHOICE_PROBE_PERSONAS,
+  probeChoiceCommand,
+} from "./commands/probe-choice";
 import { transcriptCommand } from "./commands/transcript";
 import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
@@ -68,6 +72,11 @@ COMMANDS
       Merge open playtest reports, unreadable sessions, story gaps, executable
       choice branches, and authoring debt into one prioritized AI development
       queue. Every item carries structured coordinates and its next operation.
+
+  probe-choice <game-dir> --session NAME --at N [--personas CSV] [--pretty]
+      Re-evaluate one historical choice with the live game and explain each
+      deterministic persona's option selection. Strictly read-only: creates no
+      branch, session event, or playtest report.
 
   transcript <game-dir> --session NAME [--tail N] [--format text|json]
       Print a compact player-visible history across the session's exact fork
@@ -215,6 +224,8 @@ async function main(): Promise<void> {
       return runChoiceCoverage(rest);
     case "worklist":
       return runWorklist(rest);
+    case "probe-choice":
+      return runProbeChoice(rest);
     case "transcript":
       return runTranscript(rest);
     case "fork":
@@ -416,6 +427,40 @@ async function runWorklist(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
+  });
+}
+
+async function runProbeChoice(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      at: { type: "string" },
+      personas: {
+        type: "string",
+        default: DEFAULT_CHOICE_PROBE_PERSONAS.join(","),
+      },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh probe-choice <game-dir> --session NAME --at N [--personas CSV] [--pretty]",
+  );
+  if (!values.session || values.at === undefined) {
+    process.stderr.write("Missing required flags: --session NAME --at N\n");
+    process.exit(2);
+  }
+  await probeChoiceCommand({
+    gameDir,
+    session: values.session,
+    at: Number(values.at),
+    personas: String(values.personas ?? "")
+      .split(",")
+      .map((persona) => persona.trim())
+      .filter(Boolean),
+    pretty: Boolean(values.pretty),
   });
 }
 

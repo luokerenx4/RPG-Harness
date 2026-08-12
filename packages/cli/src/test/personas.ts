@@ -6,10 +6,38 @@ export type Persona = (
   step: number,
 ) => Promise<Input | null>;
 
-function pickFirstAvailableChoice(output: Output): Input | null {
-  if (output.type !== "choice") return null;
-  const i = output.options.findIndex((o) => o.available);
-  return i >= 0 ? chooseOption(output, i) : { type: "quit" };
+export type DeterministicChoicePersona =
+  | "objective"
+  | "greedy"
+  | "charmer"
+  | "rude"
+  | "extractor"
+  | "delver"
+  | "hunter";
+
+export interface PersonaChoiceDecision {
+  input: Input;
+  optionIndex: number | null;
+  optionId: string | null;
+  reason:
+    | {
+        kind: "semantic-tags";
+        preferredTags: string[];
+        matchedTags: string[];
+        score: number;
+      }
+    | {
+        kind: "ai-priority";
+        priority: number;
+        explicit: boolean;
+        tiedAvailableOptions: number;
+        tieBreak: "first" | null;
+      }
+    | {
+        kind: "positional-fallback";
+        position: "first" | "second" | "last";
+      }
+    | { kind: "no-available-option" };
 }
 
 function chooseOption(
@@ -25,7 +53,7 @@ function chooseOption(
 function pickTaggedChoice(
   output: Extract<Output, { type: "choice" }>,
   preferredTags: readonly string[],
-): Input | null {
+): { index: number; matchedTags: string[]; score: number } | null {
   const weights = new Map(
     preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
   );
@@ -42,33 +70,128 @@ function pickTaggedChoice(
       bestScore = score;
     }
   }
-  return bestIndex >= 0 ? chooseOption(output, bestIndex) : null;
+  if (bestIndex < 0) return null;
+  const matchedTags = (output.options[bestIndex]?.aiTags ?? []).filter((tag) =>
+    weights.has(tag),
+  );
+  return { index: bestIndex, matchedTags, score: bestScore };
 }
 
-function pickHighestPriorityChoice(output: Output): Input | null {
-  if (output.type !== "choice") return null;
-  let bestIndex = -1;
-  let bestPriority = Number.NEGATIVE_INFINITY;
-  for (const [index, option] of output.options.entries()) {
-    if (!option.available) continue;
-    const priority = option.aiPriority ?? 0;
-    if (bestIndex < 0 || priority > bestPriority) {
-      bestIndex = index;
-      bestPriority = priority;
+function choiceDecision(
+  output: Extract<Output, { type: "choice" }>,
+  index: number,
+  reason: PersonaChoiceDecision["reason"],
+): PersonaChoiceDecision {
+  return {
+    input: chooseOption(output, index),
+    optionIndex: index,
+    optionId: output.options[index]?.id ?? null,
+    reason,
+  };
+}
+
+function noAvailableChoice(): PersonaChoiceDecision {
+  return {
+    input: { type: "quit" },
+    optionIndex: null,
+    optionId: null,
+    reason: { kind: "no-available-option" },
+  };
+}
+
+function firstAvailableDecision(
+  output: Extract<Output, { type: "choice" }>,
+): PersonaChoiceDecision {
+  const index = output.options.findIndex((option) => option.available);
+  return index >= 0
+    ? choiceDecision(output, index, {
+        kind: "positional-fallback",
+        position: "first",
+      })
+    : noAvailableChoice();
+}
+
+/**
+ * Explain the exact deterministic choice policy used by built-in autoplay.
+ * This deliberately excludes `random`: sampling is not authoring evidence.
+ */
+export function explainPersonaChoice(
+  persona: DeterministicChoicePersona,
+  output: Extract<Output, { type: "choice" }>,
+): PersonaChoiceDecision {
+  if (persona === "objective") {
+    let bestIndex = -1;
+    let bestPriority = Number.NEGATIVE_INFINITY;
+    for (const [index, option] of output.options.entries()) {
+      if (!option.available) continue;
+      const priority = option.aiPriority ?? 0;
+      if (bestIndex < 0 || priority > bestPriority) {
+        bestIndex = index;
+        bestPriority = priority;
+      }
     }
+    return bestIndex >= 0
+      ? choiceDecision(output, bestIndex, {
+          kind: "ai-priority",
+          priority: bestPriority,
+          explicit: output.options[bestIndex]?.aiPriority !== undefined,
+          tiedAvailableOptions: output.options.filter(
+            (option) =>
+              option.available && (option.aiPriority ?? 0) === bestPriority,
+          ).length,
+          tieBreak: output.options.filter(
+            (option) =>
+              option.available && (option.aiPriority ?? 0) === bestPriority,
+          ).length > 1
+            ? "first"
+            : null,
+        })
+      : noAvailableChoice();
   }
-  return bestIndex >= 0
-    ? chooseOption(output, bestIndex)
-    : { type: "quit" };
-}
 
-function pickLastAvailableChoice(output: Output): Input | null {
-  if (output.type !== "choice") return null;
-  const found = [...output.options]
-    .map((o, i) => ({ o, i }))
-    .reverse()
-    .find(({ o }) => o.available);
-  return found ? chooseOption(output, found.i) : { type: "quit" };
+  if (persona === "charmer") {
+    const preferredTags = ["social", "compassionate", "romantic", "loyal"];
+    const semantic = pickTaggedChoice(output, preferredTags);
+    if (semantic) {
+      return choiceDecision(output, semantic.index, {
+        kind: "semantic-tags",
+        preferredTags,
+        matchedTags: semantic.matchedTags,
+        score: semantic.score,
+      });
+    }
+    for (let index = output.options.length - 1; index >= 0; index -= 1) {
+      if (output.options[index]?.available) {
+        return choiceDecision(output, index, {
+          kind: "positional-fallback",
+          position: "last",
+        });
+      }
+    }
+    return noAvailableChoice();
+  }
+
+  if (persona === "rude") {
+    const preferredTags = ["defiant", "blunt", "independent", "selfish"];
+    const semantic = pickTaggedChoice(output, preferredTags);
+    if (semantic) {
+      return choiceDecision(output, semantic.index, {
+        kind: "semantic-tags",
+        preferredTags,
+        matchedTags: semantic.matchedTags,
+        score: semantic.score,
+      });
+    }
+    if (output.options[1]?.available) {
+      return choiceDecision(output, 1, {
+        kind: "positional-fallback",
+        position: "second",
+      });
+    }
+    return firstAvailableDecision(output);
+  }
+
+  return firstAvailableDecision(output);
 }
 
 function pickActivity(
@@ -123,7 +246,7 @@ export const personas: Record<string, Persona> = {
   // Renderer-neutral AI: follow only the public objective contract. It does
   // not inspect module-specific state or hard-code story thresholds.
   objective: async (output) => {
-    if (output.type === "choice") return pickHighestPriorityChoice(output);
+    if (output.type === "choice") return explainPersonaChoice("objective", output).input;
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -136,7 +259,7 @@ export const personas: Record<string, Persona> = {
   },
 
   greedy: async (output) => {
-    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "choice") return explainPersonaChoice("greedy", output).input;
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -175,10 +298,7 @@ export const personas: Record<string, Persona> = {
 
   charmer: async (output, state) => {
     if (output.type === "choice") {
-      return pickTaggedChoice(
-        output,
-        ["social", "compassionate", "romantic", "loyal"],
-      ) ?? pickLastAvailableChoice(output);
+      return explainPersonaChoice("charmer", output).input;
     }
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
@@ -215,14 +335,7 @@ export const personas: Record<string, Persona> = {
 
   rude: async (output) => {
     if (output.type === "choice") {
-      const semantic = pickTaggedChoice(
-        output,
-        ["defiant", "blunt", "independent", "selfish"],
-      );
-      if (semantic) return semantic;
-      const second = output.options[1];
-      if (second?.available) return chooseOption(output, 1);
-      return pickFirstAvailableChoice(output);
+      return explainPersonaChoice("rude", output).input;
     }
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
@@ -305,7 +418,7 @@ export const personas: Record<string, Persona> = {
       const first = acts[0];
       return first ? { type: "doActivity", id: first.id } : { type: "quit" };
     }
-    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "choice") return explainPersonaChoice("extractor", output).input;
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -376,7 +489,7 @@ export const personas: Record<string, Persona> = {
       const first = acts[0];
       return first ? { type: "doActivity", id: first.id } : { type: "quit" };
     }
-    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "choice") return explainPersonaChoice("delver", output).input;
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -415,7 +528,7 @@ export const personas: Record<string, Persona> = {
         return { type: "doActivity", id: activities[firstAvail]!.id };
       return { type: "quit" };
     }
-    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "choice") return explainPersonaChoice("hunter", output).input;
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -428,8 +541,8 @@ export const personas: Record<string, Persona> = {
 export const personaDescriptions: Record<string, string> = {
   objective: "只依赖 HubSnapshot.objectives 的可执行链接推进，不读取游戏模块私有状态",
   greedy: "选 effectsHint 数值之和最高的可用项 — 平均下来是温柔系玩家",
-  charmer: "总选最后一个可选项 — 倾向更主动的回答",
-  rude: "总选第二个 — 偏向冷漠/拒绝路线",
+  charmer: "优先 social / compassionate / romantic / loyal 语义，未标注时选最后一项",
+  rude: "优先 defiant / blunt / independent / selfish 语义，未标注时选第二项",
   random: "随机选 — 用来 stress-test 路径",
   hunter: "训练模式专用：优先讨伐妖怪，没怪打就睡，平衡灵体化",
   extractor: "extraction-shooter 专用：能撤就撤，能逃就逃，从不打硬仗",
