@@ -53,6 +53,12 @@ export interface ScriptState {
 export interface ScriptCursor {
   scriptId: string;
   beatAnchor: string;
+  // Compact fingerprint of the authored beat list last used to render this
+  // cursor. Optional so saves created before revision tracking still hydrate.
+  scriptRevision?: string;
+  // Stage state immediately before this script began. Newer saves retain it
+  // so a hot edit can rebuild visuals even when an old directive was deleted.
+  entryVisuals?: VisualState;
   choice?: {
     prompt: string | null;
     optionText: string;

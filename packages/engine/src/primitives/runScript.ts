@@ -6,6 +6,7 @@ import type {
   PresetContext,
   RenderedChoice,
   Script,
+  ScriptCursor,
 } from "../types";
 import { END_LABEL } from "../types";
 import { drainNarrations } from "./drainNarrations";
@@ -18,6 +19,8 @@ import {
   fireOnScriptStart,
 } from "./hooks";
 import { mutateState } from "./mutateState";
+
+const scriptRevisionCache = new WeakMap<Script, string>();
 
 // Run a single script's beats from state.baseline.beatIndex forward.
 // Yields per beat; returns true when the script reaches [end] or its
@@ -170,6 +173,10 @@ export async function* runScript(
         state.baseline.scriptCursor = {
           scriptId: script.id,
           beatAnchor: anchorBeat(beat),
+          scriptRevision: revisionOf(script),
+          ...(state.baseline.scriptCursor?.entryVisuals
+            ? { entryVisuals: state.baseline.scriptCursor.entryVisuals }
+            : {}),
           choice: {
             prompt: beat.prompt ?? null,
             optionText: chosen.text,
@@ -338,6 +345,10 @@ function setScriptCursor(
   ctx.state.baseline.scriptCursor = {
     scriptId: script.id,
     beatAnchor: anchorBeat(beat),
+    scriptRevision: revisionOf(script),
+    ...(previous?.scriptId === script.id && previous.entryVisuals
+      ? { entryVisuals: previous.entryVisuals }
+      : {}),
     ...(beat.type !== "choice" &&
     previous?.scriptId === script.id &&
     previous.choice
@@ -352,6 +363,12 @@ function clearConsumedChoiceFallback(ctx: PresetContext, scriptId: string): void
   ctx.state.baseline.scriptCursor = {
     scriptId,
     beatAnchor: cursor.beatAnchor,
+    ...(cursor.scriptRevision !== undefined
+      ? { scriptRevision: cursor.scriptRevision }
+      : {}),
+    ...(cursor.entryVisuals !== undefined
+      ? { entryVisuals: cursor.entryVisuals }
+      : {}),
   };
 }
 
@@ -363,14 +380,18 @@ function reconcileScriptCursor(
   const baseline = ctx.state.baseline;
   const current = script.beats[baseline.beatIndex];
   const cursor = baseline.scriptCursor;
+  const scriptRevision = revisionOf(script);
   if (!current) return;
   if (!cursor || cursor.scriptId !== script.id) {
     baseline.scriptCursor = {
       scriptId: script.id,
       beatAnchor: anchorBeat(current),
+      scriptRevision,
+      entryVisuals: cloneVisuals(baseline.visuals),
     };
     return;
   }
+  const visualsNeedReplay = cursor.scriptRevision !== scriptRevision;
 
   const anchoredIndexes = script.beats.flatMap((beat, index) =>
     anchorBeat(beat) === cursor.beatAnchor ? [index] : [],
@@ -398,18 +419,49 @@ function reconcileScriptCursor(
     )
   ) {
     baseline.beatIndex = selectedBranchTarget;
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(
+        ctx,
+        script,
+        labelMap,
+        selectedBranchTarget,
+        cursor,
+      );
+    }
     baseline.scriptCursor = {
       ...cursor,
       beatAnchor: anchorBeat(script.beats[selectedBranchTarget]!),
+      scriptRevision,
     };
     return;
   }
-  if (anchorBeat(current) === cursor.beatAnchor) return;
+  if (anchorBeat(current) === cursor.beatAnchor) {
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(
+        ctx,
+        script,
+        labelMap,
+        baseline.beatIndex,
+        cursor,
+      );
+      baseline.scriptCursor = { ...cursor, scriptRevision };
+    }
+    return;
+  }
 
   if (anchoredIndexes.length === 1) {
     const target = anchoredIndexes[0]!;
     baseline.beatIndex = target;
-    replayVisualSetupBefore(ctx, script, target);
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+    } else {
+      replayVisualSetupBefore(ctx, script, target);
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      beatAnchor: anchorBeat(script.beats[target]!),
+      scriptRevision,
+    };
     return;
   }
 
@@ -429,7 +481,11 @@ function reconcileScriptCursor(
         baseline.scriptCursor = {
           ...cursor,
           beatAnchor: anchorBeat(script.beats[target]!),
+          scriptRevision,
         };
+        if (visualsNeedReplay) {
+          replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+        }
         return;
       }
     }
@@ -439,6 +495,95 @@ function reconcileScriptCursor(
     `runScript: script migration required for "${script.id}" at persisted ` +
       `beatIndex ${baseline.beatIndex}; the anchored beat changed and could ` +
       `not be relocated safely`,
+  );
+}
+
+function revisionOf(script: Script): string {
+  const cached = scriptRevisionCache.get(script);
+  if (cached !== undefined) return cached;
+  const source = JSON.stringify(script.beats);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const revision = (hash >>> 0).toString(36);
+  scriptRevisionCache.set(script, revision);
+  return revision;
+}
+
+// Rebuild only the silent visual state along the control-flow path that can
+// reach the persisted target. This makes hot edits visible immediately while
+// avoiding effects/dialogue replay and skipping unchosen response branches.
+function replayVisualStateBefore(
+  ctx: PresetContext,
+  script: Script,
+  labelMap: Map<string, number>,
+  targetIndex: number,
+  cursor: ScriptCursor,
+): void {
+  if (cursor.entryVisuals) {
+    ctx.state.baseline.visuals = cloneVisuals(cursor.entryVisuals);
+  }
+  let index = 0;
+  let remaining = script.beats.length + 1;
+  while (index < targetIndex && remaining-- > 0) {
+    const beat = script.beats[index];
+    if (!beat) return;
+    if (isSilentVisualBeat(beat)) applySilentVisualBeat(ctx, beat);
+
+    if (beat.type === "choice") {
+      let selected = choiceMatchesBeat(cursor.choice, beat)
+        ? beat.options.find((option) => option.text === cursor.choice!.optionText)
+        : undefined;
+      if (!selected) {
+        const targets = beat.options.flatMap((option) => {
+          const target = option.goto ? labelMap.get(option.goto) : undefined;
+          return target === undefined ? [] : [{ option, target }];
+        });
+        const candidates = targets.filter(({ target }) =>
+          indexBelongsToBranch(
+            script,
+            targets.map((entry) => entry.target),
+            target,
+            targetIndex,
+          ),
+        );
+        if (candidates.length === 1) selected = candidates[0]!.option;
+      }
+      if (selected?.goto && selected.goto !== END_LABEL) {
+        const target = labelMap.get(selected.goto);
+        if (target !== undefined && target <= targetIndex) {
+          index = target;
+          continue;
+        }
+      }
+    }
+    if (beat.type === "endScript") return;
+    index++;
+  }
+}
+
+function cloneVisuals(
+  visuals: PresetContext["state"]["baseline"]["visuals"],
+): PresetContext["state"]["baseline"]["visuals"] {
+  return {
+    bg: visuals.bg,
+    cg: visuals.cg,
+    portraits: { ...visuals.portraits },
+  };
+}
+
+function choiceMatchesBeat(
+  choice: NonNullable<
+    PresetContext["state"]["baseline"]["scriptCursor"]
+  >["choice"],
+  beat: Extract<Beat, { type: "choice" }>,
+): boolean {
+  return (
+    choice !== undefined &&
+    (beat.prompt ?? null) === choice.prompt &&
+    beat.options.some((option) => option.text === choice.optionText)
   );
 }
 
@@ -472,6 +617,15 @@ function indexBelongsToChoiceBranch(
       return optionTarget === undefined ? [] : [optionTarget];
     });
   });
+  return indexBelongsToBranch(script, siblingTargets, target, index);
+}
+
+function indexBelongsToBranch(
+  script: Script,
+  siblingTargets: number[],
+  target: number,
+  index: number,
+): boolean {
   const nextSibling = siblingTargets
     .filter((candidate) => candidate > target)
     .sort((a, b) => a - b)[0];

@@ -359,6 +359,120 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(2);
   });
 
+  test("replays an edited visual path even when the visible beat text is unchanged", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "showCg", assetPath: "assets/cgs/old-road" },
+            { type: "narration", text: "before" },
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [{ text: "Stay silent" }],
+            },
+            { type: "dialogue", speaker: "a", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    await oldRun.next();
+    await oldRun.next({ type: "next" });
+    expect((await oldRun.next({ type: "choose", index: 0 })).value).toMatchObject({
+      text: "current",
+      visualState: { cg: "assets/cgs/old-road" },
+    });
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "hideCg" },
+            {
+              type: "setPortrait",
+              slot: "center",
+              assetPath: "assets/portraits/a-default",
+            },
+            { type: "narration", text: "before" },
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [{ text: "Stay silent" }],
+            },
+            { type: "dialogue", speaker: "a", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "dialogue",
+      text: "current",
+      visualState: {
+        cg: null,
+        portraits: { center: "assets/portraits/a-default" },
+      },
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(4);
+  });
+
+  test("removes a deleted visual directive by replaying from the entry stage", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "showCg", assetPath: "assets/cgs/to-be-deleted" },
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    oldCtx.state.baseline.visuals.bg = "assets/backgrounds/entry";
+    expect((await runScript(oldCtx, oldGame.scripts[0]!).next()).value).toMatchObject({
+      visualState: { cg: "assets/cgs/to-be-deleted" },
+    });
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+
+    expect(resumed.value).toMatchObject({
+      text: "current",
+      visualState: {
+        bg: "assets/backgrounds/entry",
+        cg: null,
+        portraits: {},
+      },
+    });
+  });
+
   test("uses the selected option to enter a newly authored response branch", async () => {
     const optionText = "Keep pace silently";
     const oldGame = makeGame({
