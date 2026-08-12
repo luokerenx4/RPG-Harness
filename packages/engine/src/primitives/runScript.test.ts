@@ -220,3 +220,135 @@ describe("runScript — stage teardown on script end", () => {
     });
   });
 });
+
+describe("runScript — semantic cursor migration after hot edits", () => {
+  test("relocates the visible beat when earlier beats were inserted", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "first" },
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    expect((await oldRun.next()).value).toMatchObject({ text: "first" });
+    expect((await oldRun.next({ type: "next" })).value).toMatchObject({
+      text: "current",
+    });
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "first" },
+            { type: "narration", text: "new earlier beat" },
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+    expect(resumed.value).toMatchObject({ text: "current" });
+    expect(editedCtx.state.baseline.beatIndex).toBe(2);
+  });
+
+  test("uses the selected option to enter a newly authored response branch", async () => {
+    const optionText = "Keep pace silently";
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [{ text: optionText }],
+            },
+            { type: "dialogue", speaker: "a", text: "old shared reply" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    expect((await oldRun.next()).value).toMatchObject({ type: "choice" });
+    expect((await oldRun.next({ type: "choose", index: 0 })).value).toMatchObject({
+      text: "old shared reply",
+    });
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            {
+              type: "choice",
+              prompt: "Reply?",
+              options: [{ text: optionText, goto: "silent" }],
+            },
+            { type: "label", name: "spoken" },
+            { type: "dialogue", speaker: "a", text: "spoken reply" },
+            { type: "endScript" },
+            { type: "label", name: "silent" },
+            { type: "narration", text: "their footsteps align" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+      characters: [makeCharacter("a")],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+    expect(resumed.value).toMatchObject({
+      type: "narration",
+      text: "their footsteps align",
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(5);
+  });
+
+  test("fails explicitly when the current beat cannot be relocated safely", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "old current beat" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    await runScript(oldCtx, oldGame.scripts[0]!).next();
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "replacement with no anchor" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    expect(
+      runScript(editedCtx, editedGame.scripts[0]!).next(),
+    ).rejects.toThrow("script migration required");
+  });
+});

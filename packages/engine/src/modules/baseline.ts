@@ -182,6 +182,7 @@ export function createBaselineState(
     completionOrder: [],
     currentScriptId: null,
     beatIndex: 0,
+    scriptCursor: null,
     inventory: {},
     currentMapId: null,
     weapons: weaponMap,

@@ -46,6 +46,19 @@ export interface ScriptState {
   selfSwitches: { A: boolean; B: boolean; C: boolean; D: boolean };
 }
 
+// Stable semantic cursor for a currently running script. `beatIndex` remains
+// the fast execution cursor; this companion record lets a reloaded engine
+// detect that an author inserted/reordered beats while a playtest save was in
+// flight and relocate without silently changing the player's branch.
+export interface ScriptCursor {
+  scriptId: string;
+  beatAnchor: string;
+  choice?: {
+    prompt: string | null;
+    optionText: string;
+  };
+}
+
 export function makeScriptState(): ScriptState {
   return {
     completed: false,
@@ -69,6 +82,9 @@ export interface BaselineState {
   completionOrder: string[];
   currentScriptId: string | null;
   beatIndex: number;
+  // Optional for backwards-compatible hydration of saves written before
+  // semantic cursor tracking existed.
+  scriptCursor?: ScriptCursor | null;
   // Engine-owned standard inventory schema. Counts keyed by item id.
   // Invariant: keys with count <= 0 are deleted by applyDelta, so a
   // present key always means count >= 1. Empty record for games that

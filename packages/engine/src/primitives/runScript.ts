@@ -38,6 +38,8 @@ export async function* runScript(
   const labelMap = buildLabelMap(script);
   const { state } = ctx;
 
+  reconcileScriptCursor(ctx, script, labelMap);
+
   fireOnScriptStart(ctx, script.id);
 
   // Drain any narrations the onScriptStart hooks pushed BEFORE we yield
@@ -53,6 +55,7 @@ export async function* runScript(
     const beatIdx = state.baseline.beatIndex;
     const original = script.beats[beatIdx];
     if (!original) break;
+    setScriptCursor(ctx, script, original);
 
     // Let modules pre-process / skip / replace the beat.
     const reduced = fireOnBeatBefore(ctx, script.id, beatIdx, original);
@@ -77,6 +80,7 @@ export async function* runScript(
         // instead of silently swallowing the input. Matches the
         // `choice` case's protocol below.
         if (input.type !== "next") continue;
+        clearConsumedChoiceFallback(ctx, script.id);
         break;
       }
       case "dialogue": {
@@ -120,6 +124,7 @@ export async function* runScript(
         };
         if (input.type === "quit") return false;
         if (input.type !== "next") continue;
+        clearConsumedChoiceFallback(ctx, script.id);
         break;
       }
       case "choice": {
@@ -152,6 +157,14 @@ export async function* runScript(
         const chosen = beat.options[input.index];
         if (!chosen) continue;
         if (rendered[input.index]?.available === false) continue;
+        state.baseline.scriptCursor = {
+          scriptId: script.id,
+          beatAnchor: anchorBeat(beat),
+          choice: {
+            prompt: beat.prompt ?? null,
+            optionText: chosen.text,
+          },
+        };
         fireOnChoiceResolved(ctx, script.id, beatIdx, input.index);
         if (chosen.effects) mutateState(ctx, chosen.effects, "choice");
         if (chosen.goto !== undefined) {
@@ -191,6 +204,7 @@ export async function* runScript(
           visualState: state.baseline.visuals,
         };
         if (input.type === "quit") return false;
+        clearConsumedChoiceFallback(ctx, script.id);
         break;
       }
       // Silent visual mutators — no yield, fall through to
@@ -252,6 +266,7 @@ export async function* runScript(
 function clearStageOnScriptEnd(ctx: PresetContext): void {
   const v = ctx.state.baseline.visuals;
   ctx.state.baseline.visuals = { bg: v.bg, portraits: {}, cg: null };
+  ctx.state.baseline.scriptCursor = null;
 }
 
 function buildLabelMap(script: Script): Map<string, number> {
@@ -261,4 +276,89 @@ function buildLabelMap(script: Script): Map<string, number> {
     if (beat?.type === "label") map.set(beat.name, i);
   }
   return map;
+}
+
+function anchorBeat(beat: Beat): string {
+  return JSON.stringify(beat);
+}
+
+function setScriptCursor(
+  ctx: PresetContext,
+  script: Script,
+  beat: Beat,
+): void {
+  const previous = ctx.state.baseline.scriptCursor;
+  ctx.state.baseline.scriptCursor = {
+    scriptId: script.id,
+    beatAnchor: anchorBeat(beat),
+    ...(beat.type !== "choice" &&
+    previous?.scriptId === script.id &&
+    previous.choice
+      ? { choice: previous.choice }
+      : {}),
+  };
+}
+
+function clearConsumedChoiceFallback(ctx: PresetContext, scriptId: string): void {
+  const cursor = ctx.state.baseline.scriptCursor;
+  if (cursor?.scriptId !== scriptId || cursor.choice === undefined) return;
+  ctx.state.baseline.scriptCursor = {
+    scriptId,
+    beatAnchor: cursor.beatAnchor,
+  };
+}
+
+function reconcileScriptCursor(
+  ctx: PresetContext,
+  script: Script,
+  labelMap: Map<string, number>,
+): void {
+  const baseline = ctx.state.baseline;
+  const current = script.beats[baseline.beatIndex];
+  const cursor = baseline.scriptCursor;
+  if (!current) return;
+  if (!cursor || cursor.scriptId !== script.id) {
+    baseline.scriptCursor = {
+      scriptId: script.id,
+      beatAnchor: anchorBeat(current),
+    };
+    return;
+  }
+  if (anchorBeat(current) === cursor.beatAnchor) return;
+
+  const anchoredIndexes = script.beats.flatMap((beat, index) =>
+    anchorBeat(beat) === cursor.beatAnchor ? [index] : [],
+  );
+  if (anchoredIndexes.length === 1) {
+    baseline.beatIndex = anchoredIndexes[0]!;
+    return;
+  }
+
+  if (cursor.choice) {
+    const matchingOptions = script.beats.flatMap((beat) => {
+      if (beat.type !== "choice") return [];
+      if ((beat.prompt ?? null) !== cursor.choice!.prompt) return [];
+      return beat.options.filter(
+        (option) => option.text === cursor.choice!.optionText,
+      );
+    });
+    if (matchingOptions.length === 1) {
+      const targetName = matchingOptions[0]!.goto;
+      const target = targetName ? labelMap.get(targetName) : undefined;
+      if (target !== undefined) {
+        baseline.beatIndex = target;
+        baseline.scriptCursor = {
+          ...cursor,
+          beatAnchor: anchorBeat(script.beats[target]!),
+        };
+        return;
+      }
+    }
+  }
+
+  throw new Error(
+    `runScript: script migration required for "${script.id}" at persisted ` +
+      `beatIndex ${baseline.beatIndex}; the anchored beat changed and could ` +
+      `not be relocated safely`,
+  );
 }
