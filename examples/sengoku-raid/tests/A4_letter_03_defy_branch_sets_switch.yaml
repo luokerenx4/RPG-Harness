@@ -74,6 +74,14 @@ inputs:
   - type: next
 assertions:
   - kind: output
+    type: narration
+    present: true
+    textIncludes: 妖刀の脈を「浄」に導き
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 公儀と袂を分かち
+  - kind: output
     type: choice
     present: true
     choiceId: final-court-directive
