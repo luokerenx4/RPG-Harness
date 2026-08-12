@@ -1,0 +1,20 @@
+kind: bg
+description: |
+  砲響山の中腹に残る焼け落ちた寺。炭化した柱と崩れた屋根の向こうに
+  黒い本堂が口を開け、濡れた灰の下で熾火だけが赤く息をしている。
+prompt: |
+  A burned Buddhist mountain temple in early Edo Japan, ruined on the
+  volcanic slopes of Mount Houkyou just before dawn. Charred pillars,
+  collapsed roof beams, cracked stone steps, a blackened altar hall open
+  to the sky, scorched prayer ropes and a broken bronze bell. Ash drifts
+  through blue-grey smoke while small embers glow beneath wet soot and
+  volcanic red light silhouettes distant peaks. Wide hand-painted anime
+  game background, solemn dark fantasy atmosphere, empty environment.
+placeholder: "[砲響山・焼け落ちた寺] 炭化した柱、崩れた本堂と濡れた灰の熾火"
+refs:
+  location: mt-houkyou
+  time: 夜明け前
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-1, raid-zone, temple, burned, extraction]

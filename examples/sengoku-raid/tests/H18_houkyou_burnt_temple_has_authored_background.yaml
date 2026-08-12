@@ -1,0 +1,43 @@
+name: 砲響山の焼け落ちた寺が麓の背景を継承しない
+description: |
+  Moving from the stone paths to the burnt-temple extraction zone must replace
+  the inherited foothills art with the authored ruined-temple background.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: mt_houkyou_stone_paths
+    visuals:
+      bg: assets/backgrounds/houkyou-foothills
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          encounterRolled: true
+          pendingLoot: {}
+        mt_houkyou_burnt_temple:
+          visited: false
+          searched: false
+          encounter: null
+          encounterCleared: false
+          encounterRolled: true
+          pendingLoot: {}
+    metCharacters: []
+inputs:
+  - type: doActivity
+    id: move:mt_houkyou_burnt_temple
+  - type: next
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/houkyou-burnt-temple

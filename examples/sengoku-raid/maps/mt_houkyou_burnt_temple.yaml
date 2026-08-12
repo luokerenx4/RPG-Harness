@@ -2,6 +2,7 @@ id: mt_houkyou_burnt_temple
 name: 焼け落ちた寺
 chain: mt_houkyou
 difficulty: 3
+bg: assets/backgrounds/houkyou-burnt-temple
 is_extract: true
 connections:
   - { dir: 戻る, target: mt_houkyou_stone_paths }
