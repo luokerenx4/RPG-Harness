@@ -1,0 +1,29 @@
+name: 霞の早駆け伝授が単独で裏庭を指定する
+description: |
+  bond_kasumi_02 can be entered directly from an Edo-castle hub, so it must
+  stage its own pre-dawn inn garden rather than rely on bond_kasumi_01 having
+  run immediately beforehand.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - bond_kasumi_01
+    characters:
+      kasumi:
+        affection: 4
+        custom: {}
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kasumi
+inputs:
+  - type: doActivity
+    id: script:bond_kasumi_02
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-garden-dawn

@@ -2,6 +2,7 @@
 id: bond_kasumi_01
 title: 霞の弓を借りる夜
 characters: [kasumi]
+bg: assets/backgrounds/inn-garden-dawn
 requires:
   affection: { character: kasumi, min: 2 }
 ---

@@ -1,0 +1,27 @@
+name: 霞の弓支線が宿の裏庭を指定する
+description: |
+  bond_kasumi_01 opens behind the inn and must not inherit the previous
+  character scene's veranda or the Edo-castle hub background.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    characters:
+      kasumi:
+        affection: 2
+        custom: {}
+    visuals:
+      bg: assets/backgrounds/inn-veranda-night
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kasumi
+inputs:
+  - type: doActivity
+    id: script:bond_kasumi_01
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-garden-dawn

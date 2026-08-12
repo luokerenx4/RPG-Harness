@@ -2,6 +2,7 @@
 id: bond_kasumi_02
 title: 霞が伝授する——「早駆け」
 characters: [kasumi]
+bg: assets/backgrounds/inn-garden-dawn
 requires:
   affection: { character: kasumi, min: 4 }
 ---
