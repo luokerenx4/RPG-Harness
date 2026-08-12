@@ -1082,7 +1082,7 @@ function buildRaidMenu(ctx: Ctx): Output {
     );
     const criticalChance = roundForecastPercent(playerStat(ctx, "spectral") * 0.7);
     const fumbleChance = fumbleChancePercent(ctx);
-    const sneakChance = sneakStrikeChancePercent(ctx);
+    const sneakChance = sneakStrikeChancePercent(ctx, inst.encounter.enemyId);
     const fleeChance = fleeSuccessChancePercent(ctx);
     const fleeFailureDamage = Math.max(
       2,
@@ -1163,7 +1163,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       kind: "action",
       actionKind: "sneak_strike",
       title: "不意打ちを狙う",
-      description: "学識+霊体化判定。成功で大ダメージ、失敗で外す",
+      description: "学識+霊体化と敵の狡知で判定。成功で大ダメージ、失敗で外す",
       category: "combat",
       cost: 0,
       available: true,
@@ -1517,14 +1517,16 @@ function sneakAttackDamageRange(ctx: Ctx): NumericRange {
   return boundedFloorRange(combatDamageBase(ctx) * 2.2, 0.9, 1.1);
 }
 
-function sneakStrikeChancePercent(ctx: Ctx): number {
+function sneakStrikeChancePercent(ctx: Ctx, enemyId: string): number {
   return Math.max(
-    0,
+    5,
     Math.min(
-      100,
+      95,
       roundForecastPercent(
-        playerStat(ctx, "intellect") * 5 +
-          playerStat(ctx, "spectral") * 0.5,
+        10 +
+          playerStat(ctx, "intellect") * 2 +
+          playerStat(ctx, "spectral") * 0.5 -
+          enemyCunning(ctx, enemyId) * 8,
       ),
     ),
   );
@@ -1850,8 +1852,8 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak" | "suppress"): void {
     damage = Math.max(0, zone.encounter.enemyHp - negotiationHp);
     hitLine = `刃を返し、殺し切る力だけを逃がす——${damage} のダメージ。`;
   } else if (kind === "sneak") {
-    // Skill check: rng() * 100 < intellect*5 + spectral*0.5
-    const dc = sneakStrikeChancePercent(ctx);
+    // Opposed skill check: knowledge and spectral sensitivity against enemy cunning.
+    const dc = sneakStrikeChancePercent(ctx, zone.encounter.enemyId);
     const roll = ctx.rng() * 100;
     if (roll < dc) {
       damage = Math.floor(combatDamageBase(ctx) * 2.2 * (0.9 + ctx.rng() * 0.2));

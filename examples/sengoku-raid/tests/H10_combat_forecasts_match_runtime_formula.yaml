@@ -43,7 +43,7 @@ assertions:
   - kind: activity
     id: sneak_strike
     forecastMetric: success_chance
-    metricValue: 1
+    metricValue: 5
   - kind: activity
     id: flee
     forecastMetric: success_chance

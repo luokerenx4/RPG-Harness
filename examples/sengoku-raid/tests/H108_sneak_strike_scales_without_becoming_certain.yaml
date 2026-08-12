@@ -1,0 +1,36 @@
+name: 学識を二区域で鍛えても不意打ちは必中にならない
+description: |
+  Reproduce the live GUI state after searching a difficulty-1 and difficulty-2
+  zone. Intellect 20 should make a lesser oni meaningfully easier to ambush,
+  but enemy cunning and a 95% ceiling must preserve combat uncertainty.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_reed_marsh
+    weapons:
+      ancestor_yaodao: { power: 5 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 5, intellect: 20 }
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        sumida_river_reed_marsh:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 8
+            enemyHpMax: 8
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: success_chance
+    metricValue: 44.5
