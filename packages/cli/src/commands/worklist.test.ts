@@ -77,7 +77,18 @@ describe("AI development worklist", () => {
     expect(formatDevelopmentWorklist(report)).toContain(
       "Development worklist: 8 items",
     );
-    expect(formatDevelopmentWorklist(report)).toContain("next: cover");
+    expect(formatDevelopmentWorklist(report)).toContain(
+      "next: work --key 'choice-branch/ending/coda/friends' --session 'player' --new-session <new-session>",
+    );
+    expect(report.items.find((item) => item.kind === "choice-branch")?.executor)
+      .toEqual({
+        command: "work",
+        args: {
+          key: "choice-branch/ending/coda/friends",
+          session: "player",
+          newSession: "<new-session>",
+        },
+      });
   });
 
   test("reports a clean project without inventing work", () => {

@@ -6,6 +6,7 @@ import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { worklistCommand } from "./commands/worklist";
+import { workCommand } from "./commands/work";
 import { inspectScriptCommand } from "./commands/inspect-script";
 import { inspectSessionCommand } from "./commands/inspect-session";
 import {
@@ -75,6 +76,13 @@ COMMANDS
       Merge open playtest reports, unreadable sessions, story gaps, executable
       choice branches, and authoring debt into one prioritized AI development
       queue. Every item carries structured coordinates and its next operation.
+
+  work <game-dir> [--key WORK-KEY] [--session SOURCE]
+       [--new-session NAME] [--persona NAME] [--max-steps N]
+       [--max-nodes N] [--pretty]
+      Select one structured worklist item (highest priority by default) and
+      execute its operation. Diagnostics are read-only; branch-producing work
+      requires an explicit fresh --new-session; edits return authoring context.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,
@@ -239,6 +247,8 @@ async function main(): Promise<void> {
       return runChoiceCoverage(rest);
     case "worklist":
       return runWorklist(rest);
+    case "work":
+      return runWork(rest);
     case "inspect-script":
       return runInspectScript(rest);
     case "inspect-session":
@@ -448,6 +458,42 @@ async function runWorklist(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
+  });
+}
+
+async function runWork(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      key: { type: "string" },
+      session: { type: "string" },
+      "new-session": { type: "string" },
+      persona: { type: "string", default: "objective" },
+      "max-steps": { type: "string" },
+      "max-nodes": { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh work <game-dir> [--key WORK-KEY] [--session SOURCE] [--new-session NAME] [--persona NAME] [--max-steps N] [--max-nodes N] [--pretty]",
+  );
+  await workCommand({
+    gameDir,
+    ...(values.key !== undefined ? { key: values.key } : {}),
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    ...(values["new-session"] !== undefined
+      ? { newSession: values["new-session"] }
+      : {}),
+    ...(values.persona !== undefined ? { persona: values.persona } : {}),
+    ...(values["max-steps"] !== undefined
+      ? { maxSteps: Number(values["max-steps"]) }
+      : {}),
+    ...(values["max-nodes"] !== undefined
+      ? { maxNodes: Number(values["max-nodes"]) }
+      : {}),
+    pretty: Boolean(values.pretty),
   });
 }
 

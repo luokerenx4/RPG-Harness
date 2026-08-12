@@ -69,8 +69,18 @@ export interface DevelopmentWorkItem {
   target?: string;
   detail: string;
   operation: DevelopmentOperation;
+  executor: {
+    command: "work";
+    args: {
+      key: string;
+      session?: string;
+      newSession?: "<new-session>";
+    };
+  };
   coordinates: Record<string, unknown>;
 }
+
+type DevelopmentWorkItemDraft = Omit<DevelopmentWorkItem, "executor">;
 
 export interface DevelopmentWorklist {
   summary: {
@@ -129,7 +139,7 @@ export function analyzeDevelopmentWorklist(input: {
   reports: PlaytestReport[];
   session?: string;
 }): DevelopmentWorklist {
-  const items: DevelopmentWorkItem[] = [];
+  const items: DevelopmentWorkItemDraft[] = [];
 
   const sessionErrors = new Map<string, {
     surfaces: Set<"state" | "log">;
@@ -262,10 +272,14 @@ export function analyzeDevelopmentWorklist(input: {
     kindRank(left.kind) - kindRank(right.kind) ||
     left.key.localeCompare(right.key)
   );
+  const finalizedItems: DevelopmentWorkItem[] = items.map((item) => ({
+    ...item,
+    executor: workExecutor(item, input.session),
+  }));
 
   const byPriority = countBy(
     ["P0", "P1", "P2", "P3"] as const,
-    items,
+    finalizedItems,
     (item) => item.priority,
   );
   const byKind = countBy(
@@ -276,22 +290,22 @@ export function analyzeDevelopmentWorklist(input: {
       "choice-branch",
       "choice-authoring",
     ] as const,
-    items,
+    finalizedItems,
     (item) => item.kind,
   );
   const byActionability = countBy(
     ["executable", "diagnostic", "authoring"] as const,
-    items,
+    finalizedItems,
     (item) => item.actionability,
   );
   return {
     summary: {
       status: byPriority.P0 > 0
         ? "critical"
-        : items.length > 0
+        : finalizedItems.length > 0
           ? "work-pending"
           : "clean",
-      total: items.length,
+      total: finalizedItems.length,
       byPriority,
       byKind,
       byActionability,
@@ -302,7 +316,7 @@ export function analyzeDevelopmentWorklist(input: {
       authoringItems: input.choices.authoring.workItems.length,
     },
     ...(input.session !== undefined ? { session: input.session } : {}),
-    items,
+    items: finalizedItems,
   };
 }
 
@@ -320,7 +334,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
   for (const item of report.items) {
     lines.push(
       `${item.priority}  ${item.actionability.padEnd(10)}  ${item.kind.padEnd(16)}  ${item.key}  ${item.title}`,
-      `    next: ${formatOperation(item.operation)}`,
+      `    next: ${formatExecutor(item.executor)}`,
     );
   }
   return lines.join("\n") + "\n";
@@ -329,7 +343,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
 function authoringItem(
   item: ChoiceAuthoringWorkItem,
   sourceSession?: string,
-): DevelopmentWorkItem {
+): DevelopmentWorkItemDraft {
   const target = item.source ?? item.scriptId;
   const common = {
     key: `choice-authoring/${item.key}`,
@@ -407,6 +421,32 @@ function countBy<const Key extends string>(
   ])) as Record<Key, number>;
 }
 
-function formatOperation(operation: DevelopmentOperation): string {
-  return `${operation.command} ${JSON.stringify(operation.args)}`;
+function workExecutor(
+  item: DevelopmentWorkItemDraft,
+  sourceSession?: string,
+): DevelopmentWorkItem["executor"] {
+  const createsBranch = item.operation.command === "reproduce" ||
+    item.operation.command === "cover" ||
+    item.operation.command === "reach";
+  return {
+    command: "work",
+    args: {
+      key: item.key,
+      ...(sourceSession !== undefined ? { session: sourceSession } : {}),
+      ...(createsBranch ? { newSession: "<new-session>" as const } : {}),
+    },
+  };
+}
+
+function formatExecutor(executor: DevelopmentWorkItem["executor"]): string {
+  const args = [
+    `--key ${shellQuote(executor.args.key)}`,
+    ...(executor.args.session ? [`--session ${shellQuote(executor.args.session)}`] : []),
+    ...(executor.args.newSession ? ["--new-session <new-session>"] : []),
+  ];
+  return `${executor.command} ${args.join(" ")}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

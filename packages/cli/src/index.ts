@@ -21,6 +21,8 @@ export {
   collectDevelopmentWorklist,
   formatDevelopmentWorklist,
 } from "./commands/worklist";
+export { runDevelopmentWorkItem } from "./commands/work";
+export type { WorkArgs, WorkResult } from "./commands/work";
 export {
   DEFAULT_CHOICE_PROBE_PERSONAS,
   runChoiceProbe,

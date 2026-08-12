@@ -155,6 +155,11 @@ prioritizes open reports and broken sessions ahead of coverage and authoring
 debt, while preserving the exact operation and coordinates needed by the
 specialized command. Use `--session "$SESSION"` when the task must stay scoped
 to one player/GUI lineage; omit it only for a deliberate project-wide audit.
+Use `rpgh work "$GAME"` to consume the highest-priority structured item, or add
+`--key` for an exact item. Branch-producing operations require a fresh
+`--new-session`; authoring operations stop at prepared context so the coding
+agent can inspect and patch deliberately rather than treating prose edits as a
+blind CLI mutation.
 
 When a worklist story item names `inspect-script`, execute it directly:
 

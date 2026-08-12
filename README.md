@@ -193,6 +193,7 @@ rpgh sessions <game-dir>                                       # list save sessi
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
+rpgh work     <game-dir> [--key KEY] [--new-session NAME]     # safely execute one structured work item
 rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
 rpgh inspect-session <game-dir> --session NAME               # read-only state/log/checkpoint diagnosis
 rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
@@ -229,6 +230,11 @@ as `reproduce`, `transcript`, `cover`, `reach`, `inspect-script`, or `edit`;
 the queue does not claim generic autoplay can reach a specific script when no
 exact reachability executor exists. Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
+`work` consumes that contract without asking the agent to translate camelCase
+operation objects into CLI flags. With no key it selects the deterministic first
+item. Read-only diagnoses execute immediately; `reproduce`, `cover`, and `reach`
+require an explicit unused `--new-session`; authoring operations return source,
+beat, choice, and optional live-hook context without claiming an edit occurred.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports
