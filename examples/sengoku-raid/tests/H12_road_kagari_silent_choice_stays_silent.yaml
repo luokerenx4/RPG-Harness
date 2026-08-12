@@ -1,0 +1,71 @@
+name: 篝の道中で無言を選ぶと減らず口扱いされない
+description: |
+  Regression for a live playtest mismatch: the silent pace-matching choice
+  must receive its own nonverbal response rather than the promise/banter line.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    weapons:
+      ancestor_yaodao: { power: 6 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 0, intellect: 5 }
+      kagari:
+        stats: { affection: 5 }
+    switches:
+      companion_kagari: true
+    currentMapId: kuro_swamp_edge
+  sengoku-raid:
+    metCharacters: [kagari]
+    companion: kagari
+    companionHp: 10
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 0
+      pendingLoot: {}
+      visited:
+        kuro_swamp_edge:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+        kuro_swamp_crossroads:
+          visited: false
+          searched: false
+          encounter: null
+          encounterRolled: true
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:kuro_swamp_crossroads" }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 石突きの拍が少しだけゆっくりになり
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: false
+    textIncludes: 減らず口
+  - kind: state
+    path: baseline.switches.road_kagari_seen
+    eq: true
+  - kind: state
+    path: baseline.characters.kagari.affection
+    eq: 7

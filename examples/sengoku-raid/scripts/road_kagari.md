@@ -21,13 +21,53 @@ characters: [kagari]
 @kagari 今は、数えなくていい。お主が隣で勝手に鳴らしてる。
 
 ? なんと返す？
-  - 「俺がいなくなったら、また数えるのか」 -> +kagari
-  - 「なら、ずっと鳴らしていよう」 -> +2kagari
-  - 黙って、槍の拍に足を合わせる -> +kagari
+  - 「俺がいなくなったら、また数えるのか」 -> +kagari | goto ask_absence
+  - 「なら、ずっと鳴らしていよう」 -> +2kagari | goto promise
+  - 黙って、槍の拍に足を合わせる -> +kagari | goto keep_pace
 
-@kagari ……減らず口は、生きてる証だ。よし。
+# ask_absence
+
+@kagari いなくなる話は、いなくなってからしろ。今は足を止めるな。
 
 篝は前を向いたまま、口の端だけ上げた。槍を担ぎ直す手が、ほんの少し緩んでいた。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kagari: 1
+  switches:
+    road_kagari_seen: true
+```
+
+[end]
+
+# promise
+
+@kagari ……減らず口は、生きてる証だ。勝手にしろ。
+
+篝は前を向いたまま、口の端だけ上げた。槍を担ぎ直す手が、ほんの少し緩んでいた。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kagari: 1
+  switches:
+    road_kagari_seen: true
+```
+
+[end]
+
+# keep_pace
+
+篝は何も言わなかった。ただ、石突きの拍が少しだけゆっくりになり、お主の歩幅に重なった。
+
+二人ぶんの足音は、もう一つにしか聞こえなかった。
 
 :hide-cg
 
