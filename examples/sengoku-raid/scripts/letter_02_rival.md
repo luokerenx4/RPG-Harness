@@ -42,9 +42,9 @@ requires:
 :hide-cg
 
 ? それでよい。 {id: inspection-companionship}
-  - 「同行を頼む」 {id: ask-her-to-join} -> +1mio | goto accept_inspection
-  - 「断る術はあるか」 {id: ask-if-refusal-is-possible} -> goto question_inspection
-  - （無言で頷く） {id: nod-in-silence} -> goto silent_inspection
+  - 「同行を頼む」 {id: ask-her-to-join, ai: social cooperative trusting} -> +1mio | goto accept_inspection
+  - 「断る術はあるか」 {id: ask-if-refusal-is-possible, ai: defiant independent} -> goto question_inspection
+  - （無言で頷く） {id: nod-in-silence, ai: restrained compliant} -> goto silent_inspection
 
 # accept_inspection
 

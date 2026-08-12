@@ -66,6 +66,7 @@ assertions:
     present: true
     choiceId: inspection-companionship
     optionId: ask-her-to-join
+    optionAiTagsIncludes: cooperative
   - kind: state
     path: baseline.variables.shogun_chapter
     eq: 2
