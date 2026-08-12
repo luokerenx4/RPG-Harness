@@ -255,6 +255,53 @@ describe("AI development worklist", () => {
       },
     });
   });
+
+  test("reaches unseen choices from a session with current script evidence", () => {
+    const story = storyReport();
+    story.summary = {
+      total: 1,
+      tracked: 1,
+      completed: 1,
+      stale: 0,
+      started: 0,
+      uncovered: 0,
+      ignored: 0,
+      legacyCompletions: 0,
+      completionPercent: 100,
+    };
+    story.sessionErrors = [];
+    story.scripts = [{
+      id: "ending",
+      title: "Ending",
+      status: "completed",
+      completedSessions: ["ai-current-proof"],
+      staleSessions: [],
+      legacySessions: [],
+      startedSessions: [],
+    }];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.workItems = [];
+    choices.authoring.workItems = choices.authoring.workItems.filter(
+      (item) => item.kind === "reach-choice",
+    );
+
+    const report = analyzeDevelopmentWorklist({
+      session: "player",
+      story,
+      choices,
+      reports: [],
+    });
+
+    expect(report.items[0]?.operation).toEqual({
+      command: "reach",
+      args: {
+        key: "ending/unseen-choice",
+        fromSession: "ai-current-proof",
+        session: "<new-session>",
+      },
+    });
+  });
 });
 
 function playtestReport(

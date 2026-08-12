@@ -177,24 +177,3 @@ describe("parseManifest — AI audit quality gate", () => {
     )).toThrow(/cannot exceed/);
   });
 });
-
-describe("parseManifest — play evidence policy", () => {
-  test("parses a project-owned current-revision requirement", () => {
-    expect(parseManifest([
-      "title: strict",
-      "coverage_evidence:",
-      "  require_current_revision: true",
-    ].join("\n")).coverageEvidence).toEqual({ requireCurrentRevision: true });
-  });
-
-  test("rejects missing, mistyped, and unknown evidence policy fields", () => {
-    expect(() => parseManifest("title: t\ncoverage_evidence: {}\n"))
-      .toThrow(/require_current_revision/);
-    expect(() => parseManifest(
-      "title: t\ncoverage_evidence:\n  require_current_revision: yes\n",
-    )).toThrow(/boolean/);
-    expect(() => parseManifest(
-      "title: t\ncoverage_evidence:\n  require_current_revision: true\n  mystery: true\n",
-    )).toThrow(/unknown field/);
-  });
-});

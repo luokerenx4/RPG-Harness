@@ -283,7 +283,7 @@ describe("choice branch coverage", () => {
     ]);
   });
 
-  test("strict projects surface unversioned stable choices as stale and unseen", () => {
+  test("unversioned stable choices are stale and unseen against authored inventory", () => {
     const authored = [{
       key: "ending/final-tether",
       scriptId: "ending",
@@ -301,7 +301,7 @@ describe("choice branch coverage", () => {
     const report = analyzeChoiceCoverage([{
       session: "legacy",
       entries: [{ input: { type: "next" }, output: choice }],
-    }], [], authored, true);
+    }], [], authored);
 
     expect(report.summary).toMatchObject({
       choices: 1,

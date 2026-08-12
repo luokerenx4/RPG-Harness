@@ -1106,11 +1106,6 @@ export interface Game {
   title: string;
   /** Optional project-level quality gate consumed by `rpgh audit`. */
   aiAudit?: AiAuditConfig;
-  /** Project-owned standard for accepting persisted playtest evidence. */
-  coverageEvidence?: {
-    /** Reject unversioned compatibility evidence and edited-script revisions. */
-    requireCurrentRevision: boolean;
-  };
   characters: CharacterDef[];
   scripts: Script[];
   // Declared switches (boolean) — engine pre-populates baseline.switches

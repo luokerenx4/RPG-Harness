@@ -260,7 +260,6 @@ export async function collectChoiceCoverage(
       logs,
       sessionErrors,
       authored,
-      game.coverageEvidence?.requireCurrentRevision === true,
     );
   }
   if (onlySession !== undefined && includeDescendants) {
@@ -284,7 +283,6 @@ export async function collectChoiceCoverage(
     logs,
     sessionErrors,
     authored,
-    game.coverageEvidence?.requireCurrentRevision === true,
   );
 }
 
@@ -292,7 +290,6 @@ export function analyzeChoiceCoverage(
   logs: Array<{ session: string; entries: LoggedStep[] }>,
   sessionErrors: Array<{ session: string; error: string }> = [],
   authoredChoices: AuthoredChoiceRow[] = [],
-  requireCurrentRevision = false,
 ): ChoiceCoverageReport {
   const choices = new Map<string, MutableChoice>();
   const explicitSelections: Array<{
@@ -309,24 +306,17 @@ export function analyzeChoiceCoverage(
   const authoredRevisions = new Map(
     authoredChoices.map((choice) => [choice.scriptId, choice.scriptRevision]),
   );
-  const versionedScripts = new Set<string>();
   for (const { entries } of logs) {
     for (const entry of entries) {
       const output = asChoiceOutput(entry.output);
       if (typeof output?.scriptId === "string" && output.scriptRevision === undefined) {
         unversionedChoiceEvents += 1;
       }
-      if (typeof output?.scriptId === "string" && typeof output.scriptRevision === "string") {
-        versionedScripts.add(output.scriptId);
-      }
-      const decision = asStableDecision(entry.decision);
-      if (decision?.scriptRevision !== undefined) versionedScripts.add(decision.scriptId);
     }
   }
   const isCurrentEvidence = (scriptId: string, revision?: string): boolean => {
     const authoredRevision = authoredRevisions.get(scriptId);
     return authoredRevision === undefined ||
-      (!requireCurrentRevision && !versionedScripts.has(scriptId)) ||
       revision === authoredRevision;
   };
 

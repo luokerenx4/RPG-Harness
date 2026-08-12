@@ -156,11 +156,18 @@ export async function historicalActiveScriptCheckpoint(
   session: string,
   beforeEntry: number,
   scriptId: string,
+  preference: "earliest" | "latest" = "latest",
 ): Promise<SessionCheckpointCoordinate | null> {
   const lineage = await readSessionLineage(gameDir, session, beforeEntry);
-  for (let sliceIndex = lineage.length - 1; sliceIndex >= 0; sliceIndex -= 1) {
+  const sliceIndexes = preference === "latest"
+    ? [...lineage.keys()].reverse()
+    : [...lineage.keys()];
+  for (const sliceIndex of sliceIndexes) {
     const slice = lineage[sliceIndex]!;
-    for (let index = slice.entries.length - 1; index >= 0; index -= 1) {
+    const entryIndexes = preference === "latest"
+      ? [...slice.entries.keys()].reverse()
+      : [...slice.entries.keys()];
+    for (const index of entryIndexes) {
       const checkpoint = slice.entries[index]!.checkpoint;
       if (!isSessionCheckpointRef(checkpoint)) continue;
       const state = await loadSessionCheckpoint(

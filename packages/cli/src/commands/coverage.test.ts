@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { analyzeScriptCoverage, collectScriptCoverage } from "./coverage";
+import { loadGame } from "../loader";
 
 const temporaryDirectories: string[] = [];
 
@@ -30,6 +31,7 @@ describe("story coverage", () => {
     const completed = state();
     completed.baseline.scripts.done = {
       completed: true,
+      completedRevision: scriptRevision(scripts[0]!),
       selfSwitches: { A: false, B: false, C: false, D: false },
     };
     completed.baseline.completionOrder.push("done");
@@ -49,7 +51,7 @@ describe("story coverage", () => {
       started: 1,
       uncovered: 1,
       ignored: 1,
-      legacyCompletions: 1,
+      legacyCompletions: 0,
       completionPercent: 33.33,
     });
     expect(report.scripts).toEqual([
@@ -71,7 +73,7 @@ describe("story coverage", () => {
       }),
     ]);
     expect(report.scripts.find((row) => row.id === "done")?.legacySessions)
-      .toEqual(["completed-run"]);
+      .toEqual([]);
   });
 
   test("rejects session names that escape the session directory", async () => {
@@ -122,13 +124,12 @@ describe("story coverage", () => {
       .scripts[0]?.status).toBe("completed");
   });
 
-  test("strict projects treat unversioned compatibility completions as stale", () => {
+  test("unversioned completions are always stale", () => {
     const script: Script = { id: "scene", title: "Scene", beats: [] };
     const game = {
       title: "Strict",
       characters: [],
       scripts: [script],
-      coverageEvidence: { requireCurrentRevision: true },
     } as Game;
     const legacy = state();
     legacy.baseline.scripts.scene = {
@@ -162,6 +163,7 @@ describe("story coverage", () => {
       "[end]",
       "",
     ].join("\n"));
+    const currentRevision = scriptRevision((await loadGame(gameDir)).scripts[0]!);
     const sessionsRoot = path.join(gameDir, ".rpg-harness", "sessions");
     for (const name of ["player", "child", "grandchild", "unrelated"]) {
       await mkdir(path.join(sessionsRoot, name), { recursive: true });
@@ -169,6 +171,7 @@ describe("story coverage", () => {
       if (name !== "player") {
         sessionState.baseline.scripts.scene = {
           completed: true,
+          completedRevision: currentRevision,
           selfSwitches: { A: false, B: false, C: false, D: false },
         };
       }

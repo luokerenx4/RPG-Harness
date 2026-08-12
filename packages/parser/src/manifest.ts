@@ -12,9 +12,6 @@ import { parseCondition } from "./condition";
 
 export interface Manifest {
   title: string;
-  coverageEvidence?: {
-    requireCurrentRevision: boolean;
-  };
   /** Optional deterministic-persona diversity acceptance gate. */
   aiAudit?: AiAuditConfig;
   training?: TrainingConfig;
@@ -56,9 +53,6 @@ export function parseManifest(content: string): Manifest {
     throw new ManifestParseError("Manifest missing `title`");
   }
   const manifest: Manifest = { title: obj.title };
-  if (obj.coverage_evidence !== undefined) {
-    manifest.coverageEvidence = parseCoverageEvidence(obj.coverage_evidence);
-  }
   if (obj.ai_audit !== undefined) {
     manifest.aiAudit = parseAiAudit(obj.ai_audit);
   }
@@ -90,25 +84,6 @@ export function parseManifest(content: string): Manifest {
     manifest.hidden = obj.hidden;
   }
   return manifest;
-}
-
-function parseCoverageEvidence(raw: unknown): NonNullable<Manifest["coverageEvidence"]> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new ManifestParseError("`coverage_evidence` must be an object");
-  }
-  const obj = raw as Record<string, unknown>;
-  const unknown = Object.keys(obj).filter((key) => key !== "require_current_revision");
-  if (unknown.length > 0) {
-    throw new ManifestParseError(
-      `coverage_evidence: unknown field(s): ${unknown.join(", ")}`,
-    );
-  }
-  if (typeof obj.require_current_revision !== "boolean") {
-    throw new ManifestParseError(
-      "coverage_evidence.require_current_revision must be a boolean",
-    );
-  }
-  return { requireCurrentRevision: obj.require_current_revision };
 }
 
 function parseAiAudit(raw: unknown): AiAuditConfig {

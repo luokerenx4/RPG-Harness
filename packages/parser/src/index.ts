@@ -47,7 +47,6 @@ export function buildGame(
     scripts,
   };
   if (manifest.aiAudit) game.aiAudit = manifest.aiAudit;
-  if (manifest.coverageEvidence) game.coverageEvidence = manifest.coverageEvidence;
   if (actions && actions.length > 0) game.actions = actions;
   if (items && items.length > 0) game.items = items;
   if (enemies && enemies.length > 0) game.enemies = enemies;

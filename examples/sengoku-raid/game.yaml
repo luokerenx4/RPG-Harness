@@ -11,12 +11,6 @@ ai_audit:
   min_unique_endings: 2
   min_unique_decision_paths: 3
 
-# Flagship acceptance policy: a completion or branch only counts when its
-# persisted evidence fingerprints the current authored script. Editing prose,
-# gates, effects or branch targets therefore reopens the exact replay work.
-coverage_evidence:
-  require_current_revision: true
-
 switches:
   learnedChinkonho: false
   learnedHayagake: false

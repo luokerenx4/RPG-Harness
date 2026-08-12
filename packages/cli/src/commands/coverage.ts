@@ -105,30 +105,22 @@ export function analyzeScriptCoverage(
 ): ScriptCoverageReport {
   const scripts = game.scripts.map((script): ScriptCoverageRow => {
     const currentRevision = scriptRevision(script);
-    const requireCurrentRevision = game.coverageEvidence?.requireCurrentRevision === true;
     const completionStates = states.filter(({ state }) =>
       state.baseline.scripts[script.id]?.completed === true ||
       state.baseline.completionOrder.includes(script.id)
-    );
-    const hasVersionedEvidence = completionStates.some(({ state }) =>
-      state.baseline.scripts[script.id]?.completedRevision !== undefined
     );
     const legacySessions = completionStates.filter(({ state }) =>
       state.baseline.scripts[script.id]?.completedRevision === undefined
     ).map(({ session }) => session).sort();
     const completedSessions = completionStates
       .filter(({ state }) =>
-        requireCurrentRevision || hasVersionedEvidence
-          ? state.baseline.scripts[script.id]?.completedRevision === currentRevision
-          : true,
+        state.baseline.scripts[script.id]?.completedRevision === currentRevision,
       )
       .map(({ session }) => session)
       .sort();
-    const staleSessions = requireCurrentRevision || hasVersionedEvidence
-      ? completionStates.filter(({ state }) =>
-          state.baseline.scripts[script.id]?.completedRevision !== currentRevision
-        ).map(({ session }) => session).sort()
-      : [];
+    const staleSessions = completionStates.filter(({ state }) =>
+      state.baseline.scripts[script.id]?.completedRevision !== currentRevision
+    ).map(({ session }) => session).sort();
     const startedSessions = states
       .filter(({ session, state }) =>
         state.baseline.currentScriptId === script.id &&

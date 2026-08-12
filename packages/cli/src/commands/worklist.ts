@@ -310,7 +310,12 @@ export function analyzeDevelopmentWorklist(input: {
   }
 
   for (const workItem of input.choices.authoring.workItems) {
-    items.push(authoringItem(workItem, input.session));
+    items.push(authoringItem(
+      workItem,
+      input.session,
+      input.story.scripts.find((script) => script.id === workItem.scriptId)
+        ?.completedSessions[0],
+    ));
   }
 
   items.sort((left, right) =>
@@ -395,6 +400,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
 function authoringItem(
   item: ChoiceAuthoringWorkItem,
   sourceSession?: string,
+  completedEvidenceSession?: string,
 ): DevelopmentWorkItemDraft {
   const target = item.source ?? item.scriptId;
   const common = {
@@ -414,7 +420,7 @@ function authoringItem(
         command: "reach",
         args: {
           key: `${item.scriptId}/${item.choiceId}`,
-          fromSession: sourceSession ?? "<source-session>",
+          fromSession: completedEvidenceSession ?? sourceSession ?? "<source-session>",
           session: "<new-session>",
         },
       },
