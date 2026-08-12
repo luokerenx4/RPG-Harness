@@ -3079,6 +3079,16 @@ const raidModule: Module = {
   // slice). The chapter advance already happened in the dispatch
   // trigger, so we don't touch shogun_chapter here.
   onScriptComplete: (ctx, scriptId) => {
+    if (scriptId === "encounter_kasumi_first") {
+      const zone = currentMapInstance(ctx);
+      if (zone?.encounter) {
+        // The authored encounter has Kasumi's arrow kill the oni before she
+        // speaks. Honor that visible event in runtime state without granting
+        // player kill rewards, spectral absorption, or an imbue decision.
+        zone.encounter = null;
+        zone.encounterCleared = true;
+      }
+    }
     if (scriptId === "letter_02_rival") {
       const m = moduleState(ctx);
       if (!m.metCharacters.includes("mio")) {

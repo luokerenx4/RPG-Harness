@@ -1,0 +1,61 @@
+name: 霞が射抜いた戦鬼は会話後に満血で戻らない
+description: |
+  The first Kasumi scene visibly kills the oni behind the player. Completing
+  that authored encounter must clear the current map encounter without giving
+  player kill rewards; control returns to exploration, not a full-HP combat.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: encounter_kasumi_first
+    currentMapId: mt_houkyou_stone_paths
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 65 }
+  sengoku-raid:
+    metCharacters: [kasumi]
+    pulsePending: null
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 18
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, choiceId: first-words-to-kasumi, optionId: thank-kasumi }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: sengoku-raid.raid.visited.mt_houkyou_stone_paths.encounter
+    eq: null
+  - kind: state
+    path: sengoku-raid.raid.visited.mt_houkyou_stone_paths.encounterCleared
+    eq: true
+  - kind: activity
+    id: attack
+    present: false
+  - kind: state
+    path: sengoku-raid.pulsePending
+    eq: null
