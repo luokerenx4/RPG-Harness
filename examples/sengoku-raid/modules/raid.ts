@@ -1154,6 +1154,55 @@ function buildRaidMenu(ctx: Ctx): Output {
         ],
       },
     });
+    if (!inst.encounter.negotiable) {
+      const negotiationHp = Math.max(
+        1,
+        Math.ceil(inst.encounter.enemyHpMax * 0.3) - 1,
+      );
+      activities.push({
+        id: "suppress_strike",
+        kind: "action",
+        actionKind: "suppress_strike",
+        title: "峰を返して押さえ込む",
+        description: "交渉できる体力まで留める。威力に関係なく敵の反撃を受ける",
+        category: "combat",
+        cost: 0,
+        available: true,
+        forecast: {
+          summary: "非致死。敵を交渉可能にする代わり、必ず反撃を受ける",
+          metrics: [
+            {
+              id: "damage",
+              label: "抑制ダメージ",
+              value: Math.max(0, inst.encounter.enemyHp - negotiationHp),
+              unit: "HP",
+              polarity: "benefit",
+            },
+            {
+              id: "remaining_enemy_hp",
+              label: "敵残存体力",
+              value: negotiationHp,
+              unit: "HP",
+              polarity: "neutral",
+            },
+            {
+              id: "counter_damage",
+              label: "確定反撃（合計）",
+              ...counterDamage.total,
+              unit: "HP",
+              polarity: "risk",
+            },
+            {
+              id: "fumble_chance",
+              label: "妖刀暴発率（反撃 1.6 倍）",
+              value: fumbleChance,
+              unit: "percent",
+              polarity: "risk",
+            },
+          ],
+        },
+      });
+    }
     activities.push({
       id: "flee",
       kind: "action",
@@ -1715,7 +1764,7 @@ function tryCompanionAbsorb(ctx: Ctx, raw: number): number {
 // Combat
 // ============================================================================
 
-function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
+function doAttackRound(ctx: Ctx, kind: "normal" | "sneak" | "suppress"): void {
   const m = moduleState(ctx);
   if (!m.raid) return;
   const zone = currentMapInstance(ctx)!;
@@ -1726,7 +1775,14 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
   // Player strikes first.
   let damage: number;
   let hitLine: string;
-  if (kind === "sneak") {
+  if (kind === "suppress") {
+    const negotiationHp = Math.max(
+      1,
+      Math.ceil(zone.encounter.enemyHpMax * 0.3) - 1,
+    );
+    damage = Math.max(0, zone.encounter.enemyHp - negotiationHp);
+    hitLine = `刃を返し、殺し切る力だけを逃がす——${damage} のダメージ。`;
+  } else if (kind === "sneak") {
     // Skill check: rng() * 100 < intellect*5 + spectral*0.5
     const dc = sneakStrikeChancePercent(ctx);
     const roll = ctx.rng() * 100;
@@ -2392,6 +2448,15 @@ const sneakStrikeHandler: ActionHandler = (ctx) => {
   return {};
 };
 
+const suppressStrikeHandler: ActionHandler = (ctx) => {
+  const zone = currentMapInstance(ctx);
+  if (!zone?.encounter || zone.encounter.negotiable) {
+    return denial("今は押さえ込む相手がいない。");
+  }
+  doAttackRound(ctx, "suppress");
+  return {};
+};
+
 const fleeHandler: ActionHandler = (ctx) => {
   doFlee(ctx);
   return {};
@@ -2714,6 +2779,7 @@ const raidModule: Module = {
     "search",
     "attack",
     "sneak_strike",
+    "suppress_strike",
     "flee",
     "extract",
     "negotiate_listen",
@@ -2742,6 +2808,7 @@ const raidModule: Module = {
     search: searchHandler,
     attack: attackHandler,
     sneak_strike: sneakStrikeHandler,
+    suppress_strike: suppressStrikeHandler,
     flee: fleeHandler,
     extract: extractHandler,
     negotiate_listen: negotiateListenHandler,

@@ -1,0 +1,45 @@
+name: an overpowered sword can suppress an enemy without killing it
+state:
+  baseline:
+    completedScripts: [000_intro, intel_briefing_yaodao]
+    currentMapId: hell_gate_corridor
+    weapons:
+      ancestor_yaodao: { power: 69 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 3, intellect: 99 }
+  sengoku-raid:
+    metCharacters: [kagari, mio]
+    raid:
+      chain: hell_gate
+      entryMapId: hell_gate_mouth
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        hell_gate_corridor:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: kagami_oni
+            enemyHp: 40
+            enemyHpMax: 40
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: suppress_strike }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: sengoku-raid.raid.visited.hell_gate_corridor.encounter.enemyHp
+    eq: 11
+  - kind: state
+    path: sengoku-raid.raid.visited.hell_gate_corridor.encounter.negotiable
+    eq: true
+  - kind: activity
+    id: negotiate_release
+    available: true
+  - kind: activity
+    id: suppress_strike
+    present: false
