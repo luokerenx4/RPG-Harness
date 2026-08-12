@@ -332,6 +332,36 @@ describe("parseScript — fenced YAML choice", () => {
     });
   });
 
+  test("accepts a renderer-neutral AI priority", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "options:",
+      "  - text: 集合成果を選ぶ",
+      "    aiPriority: 20",
+      "```",
+    ].join("\n");
+    const s = parseScript(source("id: x\ntitle: t", body));
+    expect(s.beats[0]).toMatchObject({
+      type: "choice",
+      options: [{ text: "集合成果を選ぶ", aiPriority: 20 }],
+    });
+  });
+
+  test("rejects a non-numeric AI priority", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "options:",
+      "  - text: 壊れた指定",
+      "    aiPriority: high",
+      "```",
+    ].join("\n");
+    expect(() => parseScript(source("id: x\ntitle: t", body))).toThrow(
+      /aiPriority.*number/,
+    );
+  });
+
   test("missing type in fence throws", () => {
     const body = "```yaml\noptions: []\n```";
     expect(() =>

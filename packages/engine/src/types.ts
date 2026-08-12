@@ -719,6 +719,9 @@ export type Beat =
 
 export interface ChoiceOption {
   text: string;
+  // Renderer-neutral preference for deterministic AI players. Higher wins;
+  // human shells need not expose this authoring hint. Unset is equivalent to 0.
+  aiPriority?: number;
   requires?: Condition;
   // Player-facing explanation for an unavailable choice. The underlying
   // condition remains available to headless/tooling clients through
@@ -1077,6 +1080,8 @@ export interface ScriptInfo {
 export interface RenderedChoice {
   text: string;
   available: boolean;
+  // Authored machine preference, passed through without affecting humans.
+  aiPriority?: number;
   lockedReason?: string;
   // Exact authored gate for AI players, inspectors and executable issues.
   // Human shells normally render lockedReason instead of this DSL object.

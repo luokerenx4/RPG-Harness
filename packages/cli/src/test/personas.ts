@@ -12,6 +12,23 @@ function pickFirstAvailableChoice(output: Output): Input | null {
   return i >= 0 ? { type: "choose", index: i } : { type: "quit" };
 }
 
+function pickHighestPriorityChoice(output: Output): Input | null {
+  if (output.type !== "choice") return null;
+  let bestIndex = -1;
+  let bestPriority = Number.NEGATIVE_INFINITY;
+  for (const [index, option] of output.options.entries()) {
+    if (!option.available) continue;
+    const priority = option.aiPriority ?? 0;
+    if (bestIndex < 0 || priority > bestPriority) {
+      bestIndex = index;
+      bestPriority = priority;
+    }
+  }
+  return bestIndex >= 0
+    ? { type: "choose", index: bestIndex }
+    : { type: "quit" };
+}
+
 function pickLastAvailableChoice(output: Output): Input | null {
   if (output.type !== "choice") return null;
   const found = [...output.options]
@@ -57,7 +74,7 @@ export const personas: Record<string, Persona> = {
   // Renderer-neutral AI: follow only the public objective contract. It does
   // not inspect module-specific state or hard-code story thresholds.
   objective: async (output) => {
-    if (output.type === "choice") return pickFirstAvailableChoice(output);
+    if (output.type === "choice") return pickHighestPriorityChoice(output);
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;

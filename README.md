@@ -388,6 +388,8 @@ same structured playtest-report format used by `report`/`reproduce`, and the
 JSON response includes the branch's `webPath` plus report evidence for the next
 coding agent. `max-steps` is an exact AI-decision budget: the summary reports
 those decisions separately from visible `steps`, including the initial output.
+Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
+the highest available value while GUI/TUI presentation remains unchanged.
 
 ## Architecture in one paragraph
 

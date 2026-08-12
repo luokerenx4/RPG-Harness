@@ -557,6 +557,14 @@ function parseFenceChoice(
       );
     }
     const requires = parseCondition(opt.requires);
+    const rawAiPriority = opt.aiPriority ?? opt.ai_priority;
+    if (rawAiPriority !== undefined && typeof rawAiPriority !== "number") {
+      throw new ScriptParseError(
+        `Choice option ${idx} \`aiPriority\` must be a number`,
+        source,
+      );
+    }
+    const aiPriority = rawAiPriority as number | undefined;
     const lockedHint =
       typeof opt.lockedHint === "string"
         ? opt.lockedHint
@@ -567,6 +575,7 @@ function parseFenceChoice(
     const goto = typeof opt.goto === "string" ? opt.goto : undefined;
     return {
       text: opt.text,
+      ...(aiPriority !== undefined ? { aiPriority } : {}),
       ...(requires !== undefined ? { requires } : {}),
       ...(lockedHint !== undefined ? { lockedHint } : {}),
       ...(effects !== undefined ? { effects } : {}),

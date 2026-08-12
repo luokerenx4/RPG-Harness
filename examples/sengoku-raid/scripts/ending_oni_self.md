@@ -35,6 +35,7 @@ options:
     requires: { switch: { name: befriended_mio } }
     goto: tether_mio
   - text: 月下の「三名連署」を、ひとつの灯として見つめる
+    aiPriority: 20
     requires: { switch: { name: three_flowers_pledged } }
     goto: tether_three_flowers
   - text: 振り返るのを、やめる

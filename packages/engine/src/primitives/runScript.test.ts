@@ -108,6 +108,7 @@ describe("runScript — machine-readable choice consequences", () => {
         options: [
           {
             text: "stay",
+            aiPriority: 20,
             effects: { characterStats: { a: { affection: 2 } } },
             goto: "after",
           },
@@ -135,6 +136,7 @@ describe("runScript — machine-readable choice consequences", () => {
         {
           text: "stay",
           available: true,
+          aiPriority: 20,
           consequence: {
             effects: { characterStats: { a: { affection: 2 } } },
             goto: "after",

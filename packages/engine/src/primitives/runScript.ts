@@ -139,6 +139,9 @@ export async function* runScript(
           return {
             text: opt.text,
             available: r.ok,
+            ...(opt.aiPriority !== undefined
+              ? { aiPriority: opt.aiPriority }
+              : {}),
             ...(r.ok
               ? {}
               : { lockedReason: opt.lockedHint ?? r.reason }),
