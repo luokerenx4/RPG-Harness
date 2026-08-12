@@ -483,6 +483,12 @@ reports, and GUI-ready Web paths without embedding five full save states.
 The player can keep advancing the source session while the sequential matrix
 runs: every lane reports the same audit-time `source.stateRevision` and cannot
 drift onto a later GUI/TUI state.
+Each lane also receives a content-addressed semantic decision-path revision
+derived from stable choice identities, selected scripts, and activity ids.
+The matrix classifies identical paths, different paths converging on one ending,
+different endings, and incomplete sweeps separately; stable choice divergences
+name the exact option selected by each persona. Ending convergence therefore no
+longer hides meaningful route variation from the next coding agent.
 Completed lanes remain individually replayable if the command is interrupted;
 rerun with a fresh prefix after inspecting them. Add `random` explicitly with
 `--personas ...random --seed N` so the matrix remains reproducible.

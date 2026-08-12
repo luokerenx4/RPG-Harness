@@ -4,6 +4,7 @@ import type {
   LoopReason,
   Output,
   StallDiagnostic,
+  TraceEntry,
   VisualState,
 } from "@rpg-harness/engine";
 import {
@@ -12,6 +13,7 @@ import {
   formatHubCalendar,
 } from "@rpg-harness/frontend-core";
 import { access } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
@@ -69,6 +71,7 @@ export interface AutoplaySummary {
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
   progress: AutoplayProgress;
+  decisionPath: AutoplayDecisionPath;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -83,6 +86,16 @@ export interface AutoplaySummary {
     pendingBranches: ChoiceCoverageWorkItem[];
   };
   targetChoice?: TargetChoiceResult;
+}
+
+export type AutoplaySemanticDecision =
+  | { type: "choose"; scriptId: string; choiceId: string; optionId: string }
+  | { type: "select"; scriptId: string }
+  | { type: "doActivity"; id: string };
+
+export interface AutoplayDecisionPath {
+  revision: string;
+  decisions: AutoplaySemanticDecision[];
 }
 
 export interface AutoplayProgress {
@@ -313,6 +326,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     result.finalState,
     result.trace,
   );
+  const decisionPath = summarizeDecisionPath(result.trace);
 
   let report: PlaytestReport | undefined;
   if (args.reportOnStop && args.session && !result.done) {
@@ -369,6 +383,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     ...(result.stall ? { stall: result.stall } : {}),
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
     progress,
+    decisionPath,
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
@@ -391,6 +406,28 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
         }
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
+  };
+}
+
+export function summarizeDecisionPath(
+  trace: ReadonlyArray<Pick<TraceEntry, "input" | "decision" | "inputResult">>,
+): AutoplayDecisionPath {
+  const decisions: AutoplaySemanticDecision[] = [];
+  for (const entry of trace) {
+    if (entry.inputResult?.accepted === false) continue;
+    if (entry.decision) {
+      decisions.push({ type: "choose", ...entry.decision });
+      continue;
+    }
+    if (entry.input?.type === "select") {
+      decisions.push({ type: "select", scriptId: entry.input.scriptId });
+    } else if (entry.input?.type === "doActivity") {
+      decisions.push({ type: "doActivity", id: entry.input.id });
+    }
+  }
+  return {
+    revision: createHash("sha256").update(JSON.stringify(decisions)).digest("hex"),
+    decisions,
   };
 }
 

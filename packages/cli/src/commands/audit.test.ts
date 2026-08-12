@@ -49,6 +49,12 @@ describe("autoplay audit matrix", () => {
         openReports: 0,
       },
       endings: { intro: 2 },
+      diversity: {
+        classification: "identical-path",
+        uniqueEndings: 1,
+        uniqueDecisionPaths: 1,
+        choiceDivergences: [],
+      },
     });
     expect(summary.lanes.map((lane) => ({
       persona: lane.persona,
@@ -130,6 +136,40 @@ describe("autoplay audit matrix", () => {
       .toEqual({});
   });
 
+  test("distinguishes convergent endings from identical persona paths", async () => {
+    const gameDir = await temporaryChoiceGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "diverse-matrix",
+      personas: ["objective", "greedy", "charmer", "rude"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.endings).toEqual({ intro: 4 });
+    expect(summary.diversity).toEqual({
+      classification: "convergent-paths",
+      uniqueEndings: 1,
+      uniqueDecisionPaths: 3,
+      choiceDivergences: [{
+        scriptId: "intro",
+        choiceId: "route",
+        selections: [
+          { optionId: "first", personas: ["objective", "greedy"] },
+          { optionId: "third", personas: ["charmer"] },
+          { optionId: "second", personas: ["rude"] },
+        ],
+        notReachedBy: [],
+      }],
+    });
+    expect(new Set(summary.lanes.map((lane) => lane.path.revision)).size).toBe(3);
+  });
+
   test("requires a seed when random is part of a reproducible matrix", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
@@ -178,6 +218,29 @@ async function temporaryGame(): Promise<string> {
     "---",
     "",
     "One beat.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryChoiceGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-choice-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), "title: Audit choice test\n", "utf-8");
+  await writeFile(path.join(dir, "scripts", "intro.md"), [
+    "---",
+    "id: intro",
+    "title: Intro",
+    "characters: []",
+    "---",
+    "",
+    "? Pick a route. {id: route}",
+    "- First {id: first}",
+    "- Second {id: second}",
+    "- Third {id: third}",
     "",
     "[end]",
     "",

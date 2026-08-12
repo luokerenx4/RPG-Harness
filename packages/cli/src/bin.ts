@@ -94,7 +94,8 @@ COMMANDS
            [--no-report-on-stop] [--pretty]
       Fork one immutable player checkpoint into an isolated AI persona matrix.
       Preflights every target before running, then summarizes endings, stalls,
-      masked behavior cycles, budget checkpoints, reports, and Web paths.
+      masked behavior cycles, semantic path diversity, choice divergences,
+      budget checkpoints, reports, and Web paths.
       Default personas: objective,greedy,charmer,rude,hunter. Including random
       requires --seed so the audit can be reproduced exactly.
 

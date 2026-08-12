@@ -126,6 +126,12 @@ Web query path; the command returns only a compact cross-lane matrix. This keeps
 the audit start point stable even if the player/GUI branch advances concurrently,
 while making regression sweeps executable by a later coding agent without
 bespoke shell loops.
+The compact matrix does not equate an ending with a route. `runAutoplay`
+content-addresses the accepted semantic inputs (`choose` by authored identity,
+`select` by script id, and `doActivity` by activity id), while `audit` reports
+unique path and ending counts plus persona-grouped stable-choice divergences.
+This lets autonomous development distinguish intentional narrative convergence
+from a policy matrix that never made meaningfully different decisions.
 
 ## Standard resources (the database)
 

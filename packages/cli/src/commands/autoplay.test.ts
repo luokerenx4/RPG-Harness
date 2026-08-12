@@ -9,7 +9,11 @@ import {
   reproducePlaytestReport,
 } from "../playtest-reports";
 import { saveSession, sessionDir } from "../session";
-import { detectTerminalScriptId, runAutoplay } from "./autoplay";
+import {
+  detectTerminalScriptId,
+  runAutoplay,
+  summarizeDecisionPath,
+} from "./autoplay";
 
 const temporaryDirectories: string[] = [];
 
@@ -36,6 +40,41 @@ describe("autoplay ending summary", () => {
       trace: [],
       finalState: { baseline: { completionOrder: ["scene_005"] } },
     })).toBeNull();
+  });
+});
+
+describe("autoplay semantic decision paths", () => {
+  test("content-addresses accepted semantic ids and ignores rejected inputs", () => {
+    const first = summarizeDecisionPath([
+      {
+        input: { type: "doActivity", id: "locked" },
+        inputResult: { accepted: false, code: "activity-locked", message: "locked", expected: [] },
+      },
+      {
+        input: { type: "doActivity", id: "search" },
+        inputResult: { accepted: true, code: "accepted", message: "accepted", expected: [] },
+      },
+      {
+        input: { type: "choose", index: 2 },
+        inputResult: { accepted: true, code: "accepted", message: "accepted", expected: [] },
+        decision: { scriptId: "intro", choiceId: "route", optionId: "third" },
+      },
+      { input: { type: "next" } },
+    ]);
+    const second = summarizeDecisionPath([
+      { input: { type: "doActivity", id: "search" } },
+      {
+        input: { type: "choose", choiceId: "route", optionId: "third" },
+        decision: { scriptId: "intro", choiceId: "route", optionId: "third" },
+      },
+    ]);
+
+    expect(first).toEqual(second);
+    expect(first.decisions).toEqual([
+      { type: "doActivity", id: "search" },
+      { type: "choose", scriptId: "intro", choiceId: "route", optionId: "third" },
+    ]);
+    expect(first.revision).toMatch(/^[a-f0-9]{64}$/);
   });
 });
 

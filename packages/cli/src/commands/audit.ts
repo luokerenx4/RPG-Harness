@@ -45,6 +45,11 @@ export interface AuditLaneSummary {
   rejectedInputs: number;
   ending: string | null;
   progress: AutoplayProgress;
+  path: {
+    revision: string;
+    semanticDecisions: number;
+    choices: number;
+  };
   stall?: AutoplaySummary["stall"];
   behaviorCycle?: AutoplaySummary["behaviorCycle"];
   report?: {
@@ -76,6 +81,21 @@ export interface AuditSummary {
     openReports: number;
   };
   endings: Record<string, number>;
+  diversity: {
+    classification:
+      | "identical-path"
+      | "convergent-paths"
+      | "divergent-endings"
+      | "incomplete";
+    uniqueEndings: number;
+    uniqueDecisionPaths: number;
+    choiceDivergences: Array<{
+      scriptId: string;
+      choiceId: string;
+      selections: Array<{ optionId: string; personas: string[] }>;
+      notReachedBy: string[];
+    }>;
+  };
 }
 
 export interface AuditHooks {
@@ -122,6 +142,11 @@ export async function runAudit(
     .digest("hex");
 
   const lanes: AuditLaneSummary[] = [];
+  const choicesByPersona = new Map<string, Array<{
+    scriptId: string;
+    choiceId: string;
+    optionId: string;
+  }>>();
   for (const [index, target] of targets.entries()) {
     const preparedFork = await createForkFromSource({
       gameDir: args.gameDir,
@@ -149,6 +174,13 @@ export async function runAudit(
       rejectedInputs: summary.rejectedInputs,
       ending: summary.ending,
       progress: summary.progress,
+      path: {
+        revision: summary.decisionPath.revision,
+        semanticDecisions: summary.decisionPath.decisions.length,
+        choices: summary.decisionPath.decisions.filter(
+          (decision) => decision.type === "choose",
+        ).length,
+      },
       ...(summary.stall ? { stall: summary.stall } : {}),
       ...(summary.behaviorCycle ? { behaviorCycle: summary.behaviorCycle } : {}),
       ...(summary.report
@@ -161,6 +193,13 @@ export async function runAudit(
           }
         : {}),
     };
+    choicesByPersona.set(
+      target.persona,
+      summary.decisionPath.decisions.filter(
+        (decision): decision is Extract<typeof decision, { type: "choose" }> =>
+          decision.type === "choose",
+      ),
+    );
     lanes.push(lane);
     await hooks.onLaneComplete?.(lane, index);
   }
@@ -169,6 +208,15 @@ export async function runAudit(
   for (const lane of lanes) {
     if (lane.ending) endings[lane.ending] = (endings[lane.ending] ?? 0) + 1;
   }
+  const uniqueDecisionPaths = new Set(lanes.map((lane) => lane.path.revision)).size;
+  const uniqueEndings = Object.keys(endings).length;
+  const choiceDivergences = summarizeChoiceDivergences(
+    args.personas,
+    choicesByPersona,
+  );
+  const allTerminal = lanes.every(
+    (lane) => lane.reason === "completed" && lane.ending !== null,
+  );
   return {
     source: {
       session: args.fromSession,
@@ -193,7 +241,67 @@ export async function runAudit(
       openReports: lanes.filter((lane) => lane.report !== undefined).length,
     },
     endings,
+    diversity: {
+      classification: !allTerminal
+        ? "incomplete"
+        : uniqueEndings > 1
+          ? "divergent-endings"
+          : uniqueDecisionPaths > 1
+            ? "convergent-paths"
+            : "identical-path",
+      uniqueEndings,
+      uniqueDecisionPaths,
+      choiceDivergences,
+    },
   };
+}
+
+function summarizeChoiceDivergences(
+  personas: string[],
+  choicesByPersona: Map<string, Array<{
+    scriptId: string;
+    choiceId: string;
+    optionId: string;
+  }>>,
+): AuditSummary["diversity"]["choiceDivergences"] {
+  const choices = new Map<string, {
+    scriptId: string;
+    choiceId: string;
+    selections: Map<string, string[]>;
+    reachedBy: Set<string>;
+  }>();
+  for (const persona of personas) {
+    for (const decision of choicesByPersona.get(persona) ?? []) {
+      const key = `${decision.scriptId}\u0000${decision.choiceId}`;
+      let choice = choices.get(key);
+      if (!choice) {
+        choice = {
+          scriptId: decision.scriptId,
+          choiceId: decision.choiceId,
+          selections: new Map(),
+          reachedBy: new Set(),
+        };
+        choices.set(key, choice);
+      }
+      choice.reachedBy.add(persona);
+      const selectedBy = choice.selections.get(decision.optionId) ?? [];
+      if (!selectedBy.includes(persona)) selectedBy.push(persona);
+      choice.selections.set(decision.optionId, selectedBy);
+    }
+  }
+  return [...choices.values()].flatMap((choice) => {
+    const notReachedBy = personas.filter((persona) => !choice.reachedBy.has(persona));
+    if (choice.selections.size === 1 && notReachedBy.length === 0) return [];
+    return [{
+      scriptId: choice.scriptId,
+      choiceId: choice.choiceId,
+      selections: [...choice.selections].map(([optionId, selectedBy]) => ({
+        optionId,
+        personas: selectedBy,
+      })),
+      notReachedBy,
+    }];
+  });
 }
 
 function validateAuditArgs(args: AuditArgs): void {
