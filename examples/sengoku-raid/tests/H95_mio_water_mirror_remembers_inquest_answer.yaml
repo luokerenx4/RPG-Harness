@@ -1,0 +1,30 @@
+name: Mio's shared water mirror remembers the player's first judgment
+state:
+  baseline:
+    completedScripts: [000_intro, bond_mio_01]
+    variables: { mio_inquest_reply: second-death }
+    switches: { befriended_mio: true }
+    characters:
+      mio:
+        stats: { affection: 6 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 二人目をまだ数えているのか
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 答えは、今も同じ

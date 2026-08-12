@@ -33,12 +33,30 @@ requires:
 
 @mio 査問する者の霊体化は、誰が見立てる。
 
-? なんと答える？
-  - 「お前の鏡に、お前を映せばいい」 -> +2mio
-  - 「斬った二人目を、まだ数えているのか」 -> +mio
-  - 黙って、流れに小石を一つ落とす -> +mio
+? なんと答える？ {id: answer-who-judges-the-inquisitor}
+  - 「お前の鏡に、お前を映せばいい」 {id: turn-the-mirror-on-herself} -> +2mio | goto mirror
+  - 「斬った二人目を、まだ数えているのか」 {id: ask-about-the-second-death} -> +mio | goto second
+  - 黙って、流れに小石を一つ落とす {id: cast-a-stone-in-silence} -> +mio | goto stone
 
-@mio ……そうだな。
+# mirror
+
+@mio ……私を、私の鏡で。考えたことがない、と言えば嘘になる。見るのを避けてきた。
+
+:goto after_answer
+
+# second
+
+@mio 数えている。十一人ではない。あの一人だけを、夜ごと最初から数え直している。
+
+:goto after_answer
+
+# stone
+
+小石の波紋が、澪とお主の影を同じように歪めた。
+
+@mio ……答えないのか。いや、その波紋が答えか。測る側だけ、水の外には立てぬ。
+
+# after_answer
 
 @mio 私は、自分の影をいちばん長く見てきた者だ。だから分かる——お主は、まだ堕ちていない。
 

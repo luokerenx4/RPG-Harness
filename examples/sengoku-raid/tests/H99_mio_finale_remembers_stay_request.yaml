@@ -1,0 +1,41 @@
+name: Mio's final report remembers that she already chose the player's side
+state:
+  baseline:
+    completedScripts: [000_intro, letter_02_rival, bond_mio_03]
+    currentScriptId: bond_mio_04
+    variables: { mio_mirror_reply: stay-beside }
+    switches:
+      befriended_mio: true
+      road_mio_2_seen: true
+    characters:
+      mio:
+        stats: { affection: 8 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 自分の意志で隣にいると答えた
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 役目という最後の口実
+

@@ -71,6 +71,8 @@ variables:
   kasumi_bond_reply: { type: string, initial: "" }
   kasumi_deer_reply: { type: string, initial: "" }
   kasumi_final_reply: { type: string, initial: "" }
+  mio_inquest_reply: { type: string, initial: "" }
+  mio_mirror_reply: { type: string, initial: "" }
   kagari_sleep_reply: { type: string, initial: "" }
   kagari_rain_reply: { type: string, initial: "" }
   # 情報屋 — intel_active is the briefing text injected at raid start;

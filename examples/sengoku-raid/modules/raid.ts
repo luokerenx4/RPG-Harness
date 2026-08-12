@@ -3070,53 +3070,124 @@ const raidModule: Module = {
   // Letter 02 is an official inspection order, so every reply accepts the
   // same immediate companionship contract. The three options express the
   // player's attitude; only 「同行を頼む」 grants affection in the script.
-  onChoiceResolved: (ctx, scriptId, _beatIdx, choiceIdx) => {
+  onChoiceResolved: (ctx, scriptId, _beatIdx, choiceIdx, resolution) => {
     if (scriptId === "encounter_kagari_first") {
-      const replies = ["shared-curse", "silent-nod", "wary"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "name-the-shared-curse": "shared-curse",
+        "nod-to-kagari": "silent-nod",
+        "warn-kagari-away": "wary",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["shared-curse", "silent-nod", "wary"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kagari_first_reply = reply;
       return;
     }
     if (scriptId === "encounter_kasumi_first") {
-      const replies = ["shogunate", "family-trade", "gratitude"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "serve-the-shogunate": "shogunate",
+        "name-it-family-trade": "family-trade",
+        "thank-kasumi": "gratitude",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["shogunate", "family-trade", "gratitude"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kasumi_first_reply = reply;
       return;
     }
     if (scriptId === "bond_kagari_01") {
-      const replies = ["asked-regret", "accepted-flask"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "ask-about-regret": "asked-regret",
+        "accept-the-flask": "accepted-flask",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["asked-regret", "accepted-flask"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kagari_bond_reply = reply;
       return;
     }
     if (scriptId === "bond_kasumi_01") {
-      const replies = ["not-foolish", "same-loss", "sat-beside"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "deny-it-is-foolish": "not-foolish",
+        "admit-the-same-loss": "same-loss",
+        "sit-beside-her": "sat-beside",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["not-foolish", "same-loss", "sat-beside"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kasumi_bond_reply = reply;
       return;
     }
     if (scriptId === "bond_kasumi_03") {
-      const replies = ["why-walk", "hunter-blade", "learn-path"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "ask-why-she-walks": "why-walk",
+        "ask-when-hunter-draws": "hunter-blade",
+        "ask-to-learn-deer-path": "learn-path",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["why-walk", "hunter-blade", "learn-path"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kasumi_deer_reply = reply;
       return;
     }
     if (scriptId === "bond_kagari_03") {
-      const replies = ["avoid-dreams", "chinkonho", "sleepless"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "avoid-dreams": "avoid-dreams",
+        "use-chinkonho-nightly": "chinkonho",
+        "do-not-sleep": "sleepless",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["avoid-dreams", "chinkonho", "sleepless"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kagari_sleep_reply = reply;
       return;
     }
     if (scriptId === "bond_kagari_04") {
-      const replies = ["alive", "count-before-me", "poured-back"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "name-her-alive": "alive",
+        "count-only-before-me": "count-before-me",
+        "pour-back": "poured-back",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["alive", "count-before-me", "poured-back"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kagari_rain_reply = reply;
       return;
     }
     if (scriptId === "bond_kasumi_04") {
-      const replies = ["without-reason", "her-footsteps", "half-step"];
-      const reply = replies[choiceIdx];
+      const replies: Record<string, string> = {
+        "walk-without-a-reason": "without-reason",
+        "read-only-her-footsteps": "her-footsteps",
+        "step-back-beside-her": "half-step",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["without-reason", "her-footsteps", "half-step"][choiceIdx];
       if (reply) ctx.state.baseline.variables.kasumi_final_reply = reply;
+      return;
+    }
+    if (scriptId === "bond_mio_01") {
+      const replies: Record<string, string> = {
+        "turn-the-mirror-on-herself": "self-mirror",
+        "ask-about-the-second-death": "second-death",
+        "cast-a-stone-in-silence": "silent-stone",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["self-mirror", "second-death", "silent-stone"][choiceIdx];
+      if (reply) ctx.state.baseline.variables.mio_inquest_reply = reply;
+      return;
+    }
+    if (scriptId === "bond_mio_03") {
+      const replies: Record<string, string> = {
+        "ask-about-her-younger-shadow": "younger-shadow",
+        "ask-if-the-mirror-shows-future": "future-direction",
+        "ask-her-to-stay-beside-him": "stay-beside",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["younger-shadow", "future-direction", "stay-beside"][choiceIdx];
+      if (reply) ctx.state.baseline.variables.mio_mirror_reply = reply;
       return;
     }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
@@ -3225,6 +3296,21 @@ const raidModule: Module = {
           ? "迷った時は霞の足音を追って帰ると決めた山道。"
           : reply === "half-step"
             ? "霞の隣へ半歩戻り、二人分の足跡を並べた山道。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
+    }
+    if (
+      scriptId === "ending_oni_self" &&
+      beat.type === "narration" &&
+      beat.text.startsWith("「未だ堕ちず」。あの見立てを、")
+    ) {
+      const reply = ctx.state.baseline.variables.mio_mirror_reply;
+      const memory = reply === "younger-shadow"
+        ? "水鏡に置き去りの若い影まで並べた夕暮れ。"
+        : reply === "future-direction"
+          ? "鏡は未来でなく、まだ選べる方角を示すと聞いた夕暮れ。"
+          : reply === "stay-beside"
+            ? "沙汰ではなく自分の意志で隣にいると答えた夕暮れ。"
             : null;
       if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
     }
@@ -3349,6 +3435,36 @@ const raidModule: Module = {
             ? "あの夜みたいに黙って隣へ来る、"
             : null;
       if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
+    }
+    if (
+      scriptId === "bond_mio_03" &&
+      beat.type === "dialogue" &&
+      beat.text === "私の家業——水鏡——は、自分を見るためのものでもある。"
+    ) {
+      const reply = ctx.state.baseline.variables.mio_inquest_reply;
+      const memory = reply === "self-mirror"
+        ? "あの夕暮れ、お主は私の鏡に私を映せと言ったな。今夜、ようやく従う。"
+        : reply === "second-death"
+          ? "あの夕暮れ、お主は二人目をまだ数えているのかと訊いたな。答えは、今も同じだ。"
+          : reply === "silent-stone"
+            ? "あの夕暮れ、お主が落とした小石は、測る側の影も同じように歪めた。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
+    }
+    if (
+      scriptId === "bond_mio_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "ずっと、出せずにいた。出せば役目が終わる。終われば、隣にいる理由が消える。"
+    ) {
+      const reply = ctx.state.baseline.variables.mio_mirror_reply;
+      if (reply === "stay-beside") {
+        return {
+          replace: {
+            ...beat,
+            text: "水鏡の前で、私は自分の意志で隣にいると答えた。それでも、出せずにいた。出せば役目という最後の口実が消える。",
+          },
+        };
+      }
     }
     if (!scriptId.startsWith("bond_")) return;
     if (beat.type !== "dialogue") return;

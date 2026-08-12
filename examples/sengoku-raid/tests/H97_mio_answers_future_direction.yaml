@@ -1,0 +1,33 @@
+name: Mio says the mirror shows a direction that can still be chosen
+state:
+  baseline:
+    completedScripts: [000_intro, bond_mio_01]
+    switches: { befriended_mio: true }
+    characters:
+      mio:
+        stats: { affection: 6 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: まだ選べる方角
+  - kind: state
+    path: baseline.variables.mio_mirror_reply
+    eq: future-direction
+

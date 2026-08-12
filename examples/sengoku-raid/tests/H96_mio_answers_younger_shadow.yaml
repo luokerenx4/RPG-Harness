@@ -1,0 +1,39 @@
+name: Mio explains the younger self left behind in her reflection
+state:
+  baseline:
+    completedScripts: [000_intro, bond_mio_01]
+    switches: { befriended_mio: true }
+    characters:
+      mio:
+        stats: { affection: 6 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-before-the-water-mirror
+    optionId: ask-about-her-younger-shadow
+    optionTextIncludes: 影、若く見える
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 二人目を斬る前の私
+  - kind: state
+    path: baseline.variables.mio_mirror_reply
+    eq: younger-shadow
+

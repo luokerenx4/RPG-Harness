@@ -1,0 +1,36 @@
+name: Mio admits she still counts the second death every night
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio:
+        stats: { affection: 2 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_01 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 夜ごと最初から数え直している
+  - kind: state
+    path: baseline.variables.mio_inquest_reply
+    eq: second-death
+

@@ -1,0 +1,42 @@
+name: Mio accepts turning her own mirror back on the inquisitor
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio:
+        stats: { affection: 2 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_01 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-who-judges-the-inquisitor
+    optionId: turn-the-mirror-on-herself
+    optionTextIncludes: お前を映せばいい
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 見るのを避けてきた
+  - kind: state
+    path: baseline.variables.mio_inquest_reply
+    eq: self-mirror
+

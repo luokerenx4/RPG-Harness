@@ -31,12 +31,34 @@ requires:
 
 @mio 嘘をつかない。
 
-? それでも、何か答えたかった。
-  - 「お前自身の影、若く見えるが」 -> +mio
-  - 「鏡が示すのは、未来か」 -> +mio
-  - 「黙って、隣にいてくれ」 -> +2mio
+? それでも、何か答えたかった。 {id: answer-before-the-water-mirror}
+  - 「お前自身の影、若く見えるが」 {id: ask-about-her-younger-shadow} -> +mio | goto young_shadow
+  - 「鏡が示すのは、未来か」 {id: ask-if-the-mirror-shows-future} -> +mio | goto future
+  - 「黙って、隣にいてくれ」 {id: ask-her-to-stay-beside-him} -> +2mio | goto stay
+
+# young_shadow
 
 :hide-cg
+
+@mio あれは、二人目を斬る前の私だ。水鏡は歳ではなく、見ないふりをして置き去りにした時を映すことがある。
+
+:goto after_answer
+
+# future
+
+:hide-cg
+
+@mio 未来は示さぬ。今ここにある歪みと、まだ選べる方角だけだ。未来にするのは、見る者の足だ。
+
+:goto after_answer
+
+# stay
+
+:hide-cg
+
+@mio ……ああ。沙汰が命じるからではない。私がここにいたい間は、隣にいる。
+
+# after_answer
 
 @mio 公儀の沙汰がどう下ろうと——私の鏡には、お主は未だ堕ちず。
 

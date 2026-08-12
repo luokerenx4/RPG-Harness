@@ -1,0 +1,41 @@
+name: Mio reads the silent stone as an answer about shared distortion
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio:
+        stats: { affection: 2 }
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_mio_01 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 澪とお主の影を同じように歪めた
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 測る側だけ、水の外には立てぬ
+  - kind: state
+    path: baseline.variables.mio_inquest_reply
+    eq: silent-stone
+
