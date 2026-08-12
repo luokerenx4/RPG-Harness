@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { searchForChoice } from "./search";
+import { compareChoiceSearchAssessment, searchForChoice } from "./search";
 import { makeCharacter, makeGame, makeScript, makeState } from "./test-utils";
 
 describe("choice state-space search", () => {
@@ -66,6 +66,60 @@ describe("choice state-space search", () => {
     expect(result.found).toBe(false);
     expect(result.reason).toBe("exhausted");
     expect(state).toEqual(before);
+  });
+
+  test("reports renderer-neutral progress at a caller-selected node interval", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      scripts: [makeScript("only", {
+        beats: [{
+          type: "choice",
+          id: "fork",
+          options: [{ id: "a", text: "A" }, { id: "b", text: "B" }],
+        }],
+      })],
+    });
+    const updates: number[] = [];
+
+    await searchForChoice(
+      game,
+      makeState(game),
+      { scriptId: "missing", choiceId: "missing" },
+      {
+        maxNodes: 10,
+        maxSteps: 3,
+        progressEvery: 1,
+        onProgress: (progress) => updates.push(progress.exploredNodes),
+      },
+    );
+
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates[0]).toBe(1);
+  });
+
+  test("follows explicit-requirement plateaus deeply enough to change state", async () => {
+    const shallow = {
+      inputs: [{ type: "next" as const }],
+      steps: 1,
+      progress: 0,
+      satisfiedRequirements: 0,
+      totalRequirements: 1,
+      targetScriptCompleted: false,
+      targetScriptActive: false,
+      requirements: [],
+      outputType: "hubMenu" as const,
+    };
+    const deep = { ...shallow, inputs: Array(5).fill({ type: "next" as const }), steps: 5 };
+
+    expect(compareChoiceSearchAssessment(deep, shallow)).toBeGreaterThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...deep, totalRequirements: 0 },
+      { ...shallow, totalRequirements: 0 },
+    )).toBeLessThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...deep, outputType: "gameEnd" },
+      deep,
+    )).toBeLessThan(0);
   });
 
   test("explains the closest state's satisfied and blocked requirements", async () => {

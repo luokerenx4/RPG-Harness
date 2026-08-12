@@ -11,6 +11,17 @@ export interface ChoiceSearchTarget {
 export interface ChoiceSearchOptions {
   maxNodes?: number;
   maxSteps?: number;
+  /** Emit bounded progress without coupling the engine to a renderer. */
+  onProgress?: (progress: ChoiceSearchProgress) => void;
+  progressEvery?: number;
+}
+
+export interface ChoiceSearchProgress {
+  exploredNodes: number;
+  visitedStates: number;
+  frontierNodes: number;
+  deepestSteps: number;
+  closest: ChoiceSearchClosest;
 }
 
 export interface ChoiceSearchResult {
@@ -71,6 +82,10 @@ export async function searchForChoice(
   if (!Number.isInteger(maxSteps) || maxSteps < 0) {
     throw new Error("choice search maxSteps must be a non-negative integer");
   }
+  const progressEvery = options.progressEvery ?? 250;
+  if (!Number.isInteger(progressEvery) || progressEvery < 1) {
+    throw new Error("choice search progressEvery must be a positive integer");
+  }
 
   const start = await settleForced(
     game,
@@ -88,7 +103,7 @@ export async function searchForChoice(
 
   while (queue.length > 0) {
     queue.sort((left, right) =>
-      compareAssessment(
+      compareChoiceSearchAssessment(
         assessNode(game, target, right),
         assessNode(game, target, left),
       )
@@ -100,9 +115,18 @@ export async function searchForChoice(
     visited.add(fingerprint);
     exploredNodes += 1;
     const assessment = assessNode(game, target, node);
-    if (compareAssessment(assessment, closest) > 0) {
+    if (compareChoiceSearchAssessment(assessment, closest) > 0) {
       closest = assessment;
       closestNode = node;
+    }
+    if (options.onProgress && exploredNodes % progressEvery === 0) {
+      options.onProgress({
+        exploredNodes,
+        visitedStates: visited.size,
+        frontierNodes: queue.length,
+        deepestSteps,
+        closest,
+      });
     }
 
     if (isTargetChoice(node.output, target)) {
@@ -231,12 +255,23 @@ function candidateInputs(
         scriptId: script.id,
       }));
     case "hubMenu":
+      const objectiveActivityRank = new Map(
+        (output.snapshot.objectives ?? [])
+          .filter((objective) => objective.status === "active")
+          .flatMap((objective) => objective.relatedActivityIds ?? [])
+          .map((id, index) => [id, index]),
+      );
       return output.snapshot.activities
         .filter((activity) => activity.available)
-        .sort((left, right) =>
-          Number(right.id === `script:${target.scriptId}`) -
-          Number(left.id === `script:${target.scriptId}`)
-        )
+        .sort((left, right) => {
+          const targetDifference =
+            Number(right.id === `script:${target.scriptId}`) -
+            Number(left.id === `script:${target.scriptId}`);
+          if (targetDifference !== 0) return targetDifference;
+          const leftRank = objectiveActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+          const rightRank = objectiveActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+          return leftRank - rightRank;
+        })
         .map((activity) => ({ type: "doActivity" as const, id: activity.id }));
     case "gameEnd":
       return [];
@@ -295,7 +330,7 @@ function assessNode(
   };
 }
 
-function compareAssessment(
+export function compareChoiceSearchAssessment(
   left: ChoiceSearchClosest,
   right: ChoiceSearchClosest,
 ): number {
@@ -309,7 +344,17 @@ function compareAssessment(
   if (left.satisfiedRequirements !== right.satisfiedRequirements) {
     return left.satisfiedRequirements - right.satisfiedRequirements;
   }
-  return right.steps - left.steps;
+  const leftTerminal = left.outputType === "gameEnd";
+  const rightTerminal = right.outputType === "gameEnd";
+  if (leftTerminal !== rightTerminal) return leftTerminal ? -1 : 1;
+  // With an explicit long-term goal, a shallower tie-break breadth-explores
+  // every hub permutation before any raid-sized path can change a condition.
+  // Follow one plateau deeper instead; as soon as progress changes, the
+  // requirement score takes priority again. Requirement-free story lookup
+  // still prefers the shortest public-input path.
+  return left.totalRequirements > 0
+    ? left.steps - right.steps
+    : right.steps - left.steps;
 }
 
 function topLevelRequirements(condition: Condition | undefined): Condition[] {

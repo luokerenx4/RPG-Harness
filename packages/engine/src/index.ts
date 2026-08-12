@@ -28,6 +28,7 @@ export { step, peek } from "./step";
 export { searchForChoice } from "./search";
 export type {
   ChoiceSearchOptions,
+  ChoiceSearchProgress,
   ChoiceSearchClosest,
   ChoiceSearchRequirement,
   ChoiceSearchResult,

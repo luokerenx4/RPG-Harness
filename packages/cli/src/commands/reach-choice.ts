@@ -5,6 +5,7 @@ import {
   step,
   type ComposedState,
   type ChoiceSearchClosest,
+  type ChoiceSearchProgress,
   type Input,
   type Output,
 } from "@rpg-harness/engine";
@@ -36,6 +37,7 @@ export interface ReachChoiceArgs {
   maxSteps: number;
   reportOnMiss?: boolean;
   pretty: boolean;
+  onProgress?: (progress: ChoiceSearchProgress) => void;
 }
 
 export interface ReachChoiceSummary {
@@ -58,7 +60,14 @@ export interface ReachChoiceSummary {
 }
 
 export async function reachChoiceCommand(args: ReachChoiceArgs): Promise<void> {
-  const summary = await runReachChoice(args);
+  const summary = await runReachChoice({
+    ...args,
+    onProgress: (progress) => {
+      process.stderr.write(
+        `search: ${progress.exploredNodes} explored · ${progress.frontierNodes} frontier · depth ${progress.deepestSteps} · best ${progress.closest.satisfiedRequirements}/${progress.closest.totalRequirements} requirements\n`,
+      );
+    },
+  });
   process.stdout.write(
     (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) +
       "\n",
@@ -92,7 +101,12 @@ export async function runReachChoice(
     game,
     source.state,
     { scriptId: target.scriptId, choiceId: target.choiceId },
-    { maxNodes: args.maxNodes, maxSteps: args.maxSteps },
+    {
+      maxNodes: args.maxNodes,
+      maxSteps: args.maxSteps,
+      progressEvery: 100,
+      ...(args.onProgress ? { onProgress: args.onProgress } : {}),
+    },
   );
 
   let replayVerified = false;
