@@ -28,6 +28,7 @@ assertions:
     choiceId: answer-before-the-water-mirror
     optionId: ask-about-her-younger-shadow
     optionTextIncludes: 影、若く見える
+    optionAiTagsIncludes: introspective
   - kind: output
     type: dialogue
     speaker: mio
@@ -36,4 +37,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_mirror_reply
     eq: younger-shadow
-

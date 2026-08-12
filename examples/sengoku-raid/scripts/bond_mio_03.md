@@ -32,9 +32,9 @@ requires:
 @mio 嘘をつかない。
 
 ? それでも、何か答えたかった。 {id: answer-before-the-water-mirror}
-  - 「お前自身の影、若く見えるが」 {id: ask-about-her-younger-shadow} -> +mio | goto young_shadow
-  - 「鏡が示すのは、未来か」 {id: ask-if-the-mirror-shows-future} -> +mio | goto future
-  - 「黙って、隣にいてくれ」 {id: ask-her-to-stay-beside-him} -> +2mio | goto stay
+  - 「お前自身の影、若く見えるが」 {id: ask-about-her-younger-shadow, ai: introspective probing} -> +mio | goto young_shadow
+  - 「鏡が示すのは、未来か」 {id: ask-if-the-mirror-shows-future, ai: hopeful pragmatic} -> +mio | goto future
+  - 「黙って、隣にいてくれ」 {id: ask-her-to-stay-beside-him, ai: romantic vulnerable loyal} -> +2mio | goto stay
 
 # young_shadow
 

@@ -23,6 +23,12 @@ inputs:
   - { type: choose, index: 2 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-before-the-water-mirror
+    optionId: ask-her-to-stay-beside-him
+    optionAiTagsIncludes: loyal
+  - kind: output
     type: dialogue
     speaker: mio
     present: true
@@ -30,4 +36,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_mirror_reply
     eq: stay-beside
-

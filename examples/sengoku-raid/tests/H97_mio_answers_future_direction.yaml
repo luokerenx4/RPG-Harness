@@ -23,6 +23,12 @@ inputs:
   - { type: choose, index: 1 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-before-the-water-mirror
+    optionId: ask-if-the-mirror-shows-future
+    optionAiTagsIncludes: hopeful
+  - kind: output
     type: dialogue
     speaker: mio
     present: true
@@ -30,4 +36,3 @@ assertions:
   - kind: state
     path: baseline.variables.mio_mirror_reply
     eq: future-direction
-
