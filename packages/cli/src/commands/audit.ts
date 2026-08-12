@@ -40,6 +40,8 @@ export interface AuditArgs {
   reportOnStop: boolean;
   /** Internal verification mode: retain a failed result without duplicating its issue. */
   reportOnQualityFailure?: boolean;
+  /** Internal verification mode: never accept a gate weaker than this policy. */
+  qualityFloor?: AiAuditConfig;
   pretty: boolean;
 }
 
@@ -143,6 +145,7 @@ export async function runAudit(
   assertSessionName(args.fromSession);
   await assertSourceExists(args.gameDir, args.fromSession);
   const game = await loadGame(args.gameDir);
+  const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
 
   const targets = args.personas.map((persona) => ({
     persona,
@@ -152,7 +155,7 @@ export async function runAudit(
     assertSessionName(target.session);
     await assertTargetEmpty(args.gameDir, target.session);
   }
-  const qualityEvidenceSession = game.aiAudit && args.reportOnQualityFailure !== false
+  const qualityEvidenceSession = qualityPolicy && args.reportOnQualityFailure !== false
     ? `${args.sessionPrefix}-quality-gate`
     : undefined;
   if (qualityEvidenceSession) {
@@ -256,9 +259,9 @@ export async function runAudit(
       : uniqueDecisionPaths > 1
         ? "convergent-paths" as const
         : "identical-path" as const;
-  const quality = game.aiAudit
+  const quality = qualityPolicy
     ? evaluateQualityGate(
-        game.aiAudit,
+        qualityPolicy,
         allTerminal,
         uniqueEndings,
         uniqueDecisionPaths,
@@ -293,7 +296,7 @@ export async function runAudit(
         sessionPrefix: args.sessionPrefix,
         maxSteps: args.maxSteps,
         ...(args.seed !== undefined ? { seed: args.seed } : {}),
-        policy: game.aiAudit!,
+        policy: qualityPolicy!,
         observed: {
           uniqueEndings,
           uniqueDecisionPaths,
@@ -346,7 +349,7 @@ export async function runAudit(
     ...(quality
       ? {
           qualityGate: {
-            policy: game.aiAudit!,
+            policy: qualityPolicy!,
             ...quality,
             ...(qualityEvidenceSession && quality.status === "failed"
               ? { evidenceSession: qualityEvidenceSession }
@@ -364,6 +367,31 @@ export async function runAudit(
         }
       : {}),
   };
+}
+
+function mergeQualityPolicies(
+  current: AiAuditConfig | undefined,
+  floor: AiAuditConfig | undefined,
+): AiAuditConfig | undefined {
+  if (!current && !floor) return undefined;
+  const minUniqueEndings = maxDefined(
+    current?.minUniqueEndings,
+    floor?.minUniqueEndings,
+  );
+  const minUniqueDecisionPaths = maxDefined(
+    current?.minUniqueDecisionPaths,
+    floor?.minUniqueDecisionPaths,
+  );
+  return {
+    ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
+    ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
+  };
+}
+
+function maxDefined(left: number | undefined, right: number | undefined): number | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return Math.max(left, right);
 }
 
 function evaluateQualityGate(

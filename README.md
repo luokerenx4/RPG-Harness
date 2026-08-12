@@ -566,7 +566,9 @@ signal instead of disposable console output. Audit reports retain their persona
 set, seed, decision budget, policy, frozen source revision, and original matrix.
 Running their `work` item with a fresh `--new-session` prefix reconstructs the
 immutable source, preflights and reruns every lane against the live game, and
-closes the issue only when the current quality gate passes. A failed recheck
+closes the issue only when both the current quality gate and the original
+finding's thresholds pass, so lowering or removing a threshold cannot erase
+existing quality debt. A failed recheck
 stays open and leaves every new lane GUI-readable; a passing recheck records its
 policy, ending/path counts, lane sessions, and revisions as resolution evidence.
 Older reports without deterministic replay parameters keep the ordinary
