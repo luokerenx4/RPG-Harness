@@ -2579,7 +2579,7 @@ const negotiateListenHandler: ActionHandler = (ctx) => {
   if (success && dropId) {
     deltas.inventory = { [dropId]: 1 };
     narrations.push(
-      `${enemyName(ctx, enemyId)}は最後に何かを差し出して、霧に溶けた——${itemName(ctx, dropId)} ×1。`,
+      `${enemyName(ctx, enemyId)}は返答の代わりに何かを足元へ放った——${itemName(ctx, dropId)} ×1。だが、構えは解かない。`,
     );
   } else {
     narrations.push(

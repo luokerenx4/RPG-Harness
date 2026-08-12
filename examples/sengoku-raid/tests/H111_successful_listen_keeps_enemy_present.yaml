@@ -1,0 +1,64 @@
+name: 聞き出し成功は戦利品を渡すが敵を消したとは語らない
+description: |
+  A successful listen grants the authored drop while the encounter remains
+  alive with its negotiation window consumed. The narration must make that
+  persistent combat state explicit instead of claiming the enemy dissolved.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    characters:
+      player:
+        stats:
+          hp: 30
+          mental: 8
+          spectral: 0
+          intellect: 0
+    currentMapId: kuro_swamp_ruined_hut
+  runtime:
+    rng:
+      algorithm: mulberry32
+      state: 0
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        kuro_swamp_ruined_hut:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 2
+            enemyHpMax: 8
+            negotiable: true
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - type: doActivity
+    id: negotiate_listen
+  - type: next
+  - type: next
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 構えは解かない
+  - kind: state
+    path: baseline.inventory.soul_shard
+    eq: 1
+  - kind: state
+    path: sengoku-raid.raid.visited.kuro_swamp_ruined_hut.encounter.enemyHp
+    eq: 2
+  - kind: state
+    path: sengoku-raid.raid.visited.kuro_swamp_ruined_hut.encounter.negotiationConsumed
+    eq: true
+  - kind: activity
+    id: attack
+    present: true
+  - kind: activity
+    id: negotiate_listen
+    present: false
