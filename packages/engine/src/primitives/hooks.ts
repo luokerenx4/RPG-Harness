@@ -138,6 +138,13 @@ export function fireOnHubBuild(ctx: PresetContext): Output | undefined {
     const r = mod.onHubBuild?.(ctx);
     if (winner === undefined && r !== undefined) winner = r;
   }
+  // The composed baseline is the single source of truth for the current
+  // stage. Custom hub builders frequently focus on activities and omit
+  // visualState; forwarding such an output would make stateful shells retain
+  // the previous script's portrait/CG even after runScript cleared it.
+  if (winner?.type === "hubMenu") {
+    winner = { ...winner, visualState: ctx.state.baseline.visuals };
+  }
   // Record the hubMenu's activities so dispatchActivity can resolve
   // Input.doActivity ids back to their actionKind + payload. This is
   // what lets onHubBuild emit fully-dynamic activities without each
