@@ -22,10 +22,10 @@ characters: [kagari]
 
 @kagari 今は、数えなくていい。お主が隣で勝手に鳴らしてる。
 
-? なんと返す？
-  - 「俺がいなくなったら、また数えるのか」 -> +kagari | goto ask_absence
-  - 「なら、ずっと鳴らしていよう」 -> +2kagari | goto promise
-  - 黙って、槍の拍に足を合わせる -> +kagari | goto keep_pace
+? なんと返す？ {id: answer-spear-rhythm}
+  - 「俺がいなくなったら、また数えるのか」 {id: ask-after-absence} -> +kagari | goto ask_absence
+  - 「なら、ずっと鳴らしていよう」 {id: promise-to-keep-ringing} -> +2kagari | goto promise
+  - 黙って、槍の拍に足を合わせる {id: match-the-spear-rhythm} -> +kagari | goto keep_pace
 
 # ask_absence
 

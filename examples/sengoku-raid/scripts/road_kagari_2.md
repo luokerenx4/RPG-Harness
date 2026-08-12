@@ -24,10 +24,10 @@ characters: [kagari]
 
 @kagari お主には、間に合わせたい。祓うんじゃない。鬼にする前に、引き戻す。
 
-? なんと返す？
-  - 「お前の手は借りない。自分で引き返す」 -> +2kagari | goto alone
-  - 「もし間に合わなかったら、お前が斬れ」 -> +kagari | goto last_resort
-  - 篝の槍に、自分の手を重ねる -> +2kagari | goto touch
+? なんと返す？ {id: answer-kagari-last-resort}
+  - 「お前の手は借りない。自分で引き返す」 {id: promise-to-return-alone} -> +2kagari | goto alone
+  - 「もし間に合わなかったら、お前が斬れ」 {id: entrust-the-last-resort} -> +kagari | goto last_resort
+  - 篝の槍に、自分の手を重ねる {id: seal-the-spear-promise} -> +2kagari | goto touch
 
 # alone
 

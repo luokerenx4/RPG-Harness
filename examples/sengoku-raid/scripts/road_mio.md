@@ -20,12 +20,30 @@ characters: [mio]
 
 @mio お主と歩くうち、私の影が、人のものに戻ってきている。
 
-? なんと言う？
-  - 「揺れる影のほうが、よく映る」 -> +2mio
-  - 「測るのを、やめてもいいんだぞ」 -> +mio
-  - 二人の影が重なるよう、半歩寄る -> +2mio
+? なんと言う？ {id: answer-the-human-reflection}
+  - 「揺れる影のほうが、よく映る」 {id: trust-the-shaking-shadow} -> +2mio | goto shaking_shadow
+  - 「測るのを、やめてもいいんだぞ」 {id: release-her-from-measuring} -> +mio | goto stop_measuring
+  - 二人の影が重なるよう、半歩寄る {id: join-the-same-reflection} -> +2mio | goto shared_reflection
 
-@mio ……公儀には、書けぬ見立てだな。
+# shaking_shadow
+
+@mio 揺れれば、見落としていたものまで映るということか。……公儀には、書けぬ見立てだな。
+
+:goto after_answer
+
+# stop_measuring
+
+@mio 測るのをやめた時、私に何が残る。……それを確かめるために歩くのも、悪くない。
+
+:goto after_answer
+
+# shared_reflection
+
+澪は重なった影を見下ろした。離れろとは言わなかった。
+
+@mio ……近すぎて、二人を別々には測れぬな。公儀には、なおさら書けぬ。
+
+# after_answer
 
 澪は刀身を鞘に納め、水面の波紋が消えるのを待った。それから、お主の歩幅に合わせて、静かに歩き出した。
 

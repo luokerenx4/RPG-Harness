@@ -22,10 +22,28 @@ characters: [mio]
 
 @mio だから、上申を遅らせている。役目を口実に、隣にいる。……監察役にあるまじき、私情だ。
 
-? なんと言う？
-  - 「役目が要るなら、ずっと結論を出すな」 -> +2mio
-  - 「役目が無くても、隣にいろ」 -> +2mio
-  - 「お前の私情を、俺が引き受ける」 -> +mio
+? なんと言う？ {id: answer-mios-private-feeling}
+  - 「役目が要るなら、ずっと結論を出すな」 {id: ask-her-never-to-conclude} -> +2mio | goto no_false_duty
+  - 「役目が無くても、隣にいろ」 {id: ask-her-to-stay-without-duty} -> +2mio | goto stay_without_duty
+  - 「お前の私情を、俺が引き受ける」 {id: accept-her-private-feeling} -> +mio | goto share_feeling
+
+# no_false_duty
+
+@mio それは聞けぬ。役目を嘘にして隣にいるなら、今までと同じだ。……結論は出す。その後も隣にいたいと、私の名で言う。
+
+:goto after_answer
+
+# stay_without_duty
+
+@mio ……その一言を、沙汰より先に聞きたかった。ならば役目を終えた後は、私自身の理由で隣にいる。
+
+:goto after_answer
+
+# share_feeling
+
+@mio 私情は引き受けさせるものではない。だが、共に持つというなら——預ける。
+
+# after_answer
 
 @mio ……公儀には、一生書けぬ供述だな。
 

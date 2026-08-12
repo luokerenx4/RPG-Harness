@@ -1,0 +1,41 @@
+name: Mio's final report remembers being asked to stay without duty
+state:
+  baseline:
+    completedScripts: [000_intro, letter_02_rival, bond_mio_03]
+    currentScriptId: bond_mio_04
+    variables: { mio_road_reply: stay-without-duty }
+    switches:
+      befriended_mio: true
+      road_mio_2_seen: true
+    characters:
+      mio:
+        stats: { affection: 8 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 役目が無くても隣にいろ
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 最後の口実
+

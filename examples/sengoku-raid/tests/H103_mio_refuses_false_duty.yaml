@@ -1,0 +1,29 @@
+name: Mio refuses to preserve a false official duty as an excuse
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: road_mio_2
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - type: choose
+    index: 0
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 役目を嘘にして隣にいるなら
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 私の名で言う
+  - kind: state
+    path: baseline.variables.mio_road_reply
+    eq: reject-false-duty

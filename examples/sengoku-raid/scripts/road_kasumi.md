@@ -22,10 +22,10 @@ characters: [kasumi]
 
 @kasumi 跡を読むなら、後ろも見な。鬼が「どこから来たか」は、「次どこへ行くか」と同じ顔してる。
 
-? どうする？
-  - 振り返って、来た道の跡を読んでみる -> +2kasumi | goto learn
-  - 「お前が見ててくれ。俺は前を持つ」 -> +kasumi | goto split_roles
-  - 「猟師の目は、借り物じゃ身につかないな」 -> +kasumi | goto honest
+? どうする？ {id: answer-reading-the-trail}
+  - 振り返って、来た道の跡を読んでみる {id: turn-and-read-the-trail} -> +2kasumi | goto learn
+  - 「お前が見ててくれ。俺は前を持つ」 {id: divide-front-and-rear} -> +kasumi | goto split_roles
+  - 「猟師の目は、借り物じゃ身につかないな」 {id: admit-borrowed-eyes} -> +kasumi | goto honest
 
 # learn
 

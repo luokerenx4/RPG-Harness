@@ -3190,6 +3190,42 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.mio_mirror_reply = reply;
       return;
     }
+    if (scriptId === "road_kagari_2") {
+      const replies: Record<string, string> = {
+        "promise-to-return-alone": "return-alone",
+        "entrust-the-last-resort": "last-resort",
+        "seal-the-spear-promise": "spear-promise",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["return-alone", "last-resort", "spear-promise"][choiceIdx];
+      if (reply) ctx.state.baseline.variables.kagari_road_reply = reply;
+      return;
+    }
+    if (scriptId === "road_kasumi_2") {
+      const replies: Record<string, string> = {
+        "vow-not-to-lose-kasumi": "no-loss",
+        "remember-her-returning-step": "returning-step",
+        "rest-her-bow-on-his-knees": "rested-bow",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["no-loss", "returning-step", "rested-bow"][choiceIdx];
+      if (reply) ctx.state.baseline.variables.kasumi_road_reply = reply;
+      return;
+    }
+    if (scriptId === "road_mio_2") {
+      const replies: Record<string, string> = {
+        "ask-her-never-to-conclude": "reject-false-duty",
+        "ask-her-to-stay-without-duty": "stay-without-duty",
+        "accept-her-private-feeling": "share-private-feeling",
+      };
+      const reply = resolution.optionId
+        ? replies[resolution.optionId]
+        : ["reject-false-duty", "stay-without-duty", "share-private-feeling"][choiceIdx];
+      if (reply) ctx.state.baseline.variables.mio_road_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3377,6 +3413,21 @@ const raidModule: Module = {
     if (
       scriptId === "bond_kagari_04" &&
       beat.type === "dialogue" &&
+      beat.text === "答えるよ。今夜は、十分に長い。"
+    ) {
+      const reply = ctx.state.baseline.variables.kagari_road_reply;
+      const memory = reply === "return-alone"
+        ? "あの道で、自分の足で引き返すと言ったな。その一歩を見届ける約束は、まだ生きてる。"
+        : reply === "last-resort"
+          ? "間に合わなければ斬れと言った、あの道の約束も忘れてない。だから今夜は、間に合ううちに話す。"
+          : reply === "spear-promise"
+            ? "あの道で槍に重ねた手の意味を、あたしは忘れてない。言葉にしなかった分まで、今夜は話す。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
+    }
+    if (
+      scriptId === "bond_kagari_04" &&
+      beat.type === "dialogue" &&
       beat.text === "最初の夜、伯母を斬ったことを話したな。あのとき、あたしは答えを一つ、徳利の底に置いてきた。" &&
       ctx.state.baseline.variables.kagari_bond_reply === "accepted-flask"
     ) {
@@ -3399,6 +3450,21 @@ const raidModule: Module = {
           text: "「夜が長いうちに、いつか話す」——そう言って逃げた。覚えてるか。",
         },
       };
+    }
+    if (
+      scriptId === "bond_kasumi_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "……今の、あたし、何も教えてないよ。"
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_road_reply;
+      const memory = reply === "no-loss"
+        ? "前に、あたしを失くすわけにはいかないって言ったよね。だから分かってた。"
+        : reply === "returning-step"
+          ? "あたしを連れて帰る足音を覚えたって、前に言ったよね。だから分かってた。"
+          : reply === "rested-bow"
+            ? "前に、父の弓を膝へ預けても、あんたは黙って一緒に持ってくれた。だから分かってた。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
     }
     if (
       scriptId === "bond_kasumi_04" &&
@@ -3456,12 +3522,25 @@ const raidModule: Module = {
       beat.type === "dialogue" &&
       beat.text === "ずっと、出せずにいた。出せば役目が終わる。終われば、隣にいる理由が消える。"
     ) {
-      const reply = ctx.state.baseline.variables.mio_mirror_reply;
-      if (reply === "stay-beside") {
+      const mirrorReply = ctx.state.baseline.variables.mio_mirror_reply;
+      const roadReply = ctx.state.baseline.variables.mio_road_reply;
+      const memories = [
+        mirrorReply === "stay-beside"
+          ? "水鏡の前で、私は自分の意志で隣にいると答えた。"
+          : null,
+        roadReply === "reject-false-duty"
+          ? "あの水辺では、役目を嘘にするなと言われた。"
+          : roadReply === "stay-without-duty"
+            ? "あの水辺では、役目が無くても隣にいろと言われた。"
+            : roadReply === "share-private-feeling"
+              ? "あの水辺では、この私情を共に持つと言われた。"
+              : null,
+      ].filter((memory): memory is string => memory !== null);
+      if (memories.length > 0) {
         return {
           replace: {
             ...beat,
-            text: "水鏡の前で、私は自分の意志で隣にいると答えた。それでも、出せずにいた。出せば役目という最後の口実が消える。",
+            text: `${memories.join("")}それでも、出せずにいた。出せば役目という最後の口実が消える。`,
           },
         };
       }

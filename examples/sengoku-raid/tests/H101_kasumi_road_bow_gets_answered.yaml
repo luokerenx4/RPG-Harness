@@ -1,0 +1,25 @@
+name: Kasumi recognizes the player silently carrying her father's bow
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: road_kasumi_2
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - type: choose
+    index: 2
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: kasumi
+    present: true
+    textIncludes: 二人で持って帰ろう
+  - kind: state
+    path: baseline.variables.kasumi_road_reply
+    eq: rested-bow

@@ -1,0 +1,30 @@
+name: Kasumi remembers entrusting her father's bow to the player
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kasumi_03]
+    currentScriptId: bond_kasumi_04
+    variables: { kasumi_road_reply: rested-bow }
+    switches:
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: kasumi
+    present: true
+    textIncludes: 父の弓を膝へ預けても
+  - kind: output
+    type: dialogue
+    speaker: kasumi
+    present: true
+    textIncludes: 一緒に持ってくれた
+

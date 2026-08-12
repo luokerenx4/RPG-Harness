@@ -1,0 +1,26 @@
+name: Mio considers who she is when she stops measuring people
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: road_mio
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - type: choose
+    index: 1
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: true
+    textIncludes: 私に何が残る
+  - kind: output
+    type: dialogue
+    speaker: mio
+    present: false
+    textIncludes: 公儀には、書けぬ見立てだな
