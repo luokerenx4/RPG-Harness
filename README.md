@@ -235,6 +235,8 @@ operation objects into CLI flags. With no key it selects the deterministic first
 item. Read-only diagnoses execute immediately; `reproduce`, `cover`, and `reach`
 require an explicit unused `--new-session`; authoring operations return source,
 beat, choice, and optional live-hook context without claiming an edit occurred.
+If an executable item cannot reach its declared target, `work` returns
+`status: "failed"`, keeps the attempted branch unwritten, and exits non-zero.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports
@@ -252,10 +254,14 @@ from a source checkpoint, stops on the stable target id, and replays the found
 path into a named session usable by Web/TUI/Headless. It then compares the full
 searched and replayed states, so an apparently successful but non-reproducible
 route fails loudly instead of becoming misleading coverage evidence.
+When `--from-at` is omitted and the current save cannot progress (including a
+completed GUI playthrough), `reach` retries recoverable historical choice
+checkpoints newest-first. All attempts share the same `--max-nodes` budget, and
+the resulting fork records the exact checkpoint that produced the route.
 On a bounded miss, `closest` reports the best path plus each satisfied/blocked
 target requirement. Add `--report-on-miss` to persist that closest state and
 turn the diagnosis into a reproducible playtest issue; without it, a miss stays
-strictly read-only and creates no session.
+strictly read-only and creates no session. Either miss mode exits non-zero.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually

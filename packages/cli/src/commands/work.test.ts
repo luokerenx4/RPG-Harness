@@ -265,7 +265,93 @@ describe("structured development work execution", () => {
     });
     expect(await snapshotTree(sessionDir(gameDir, "fresh-player"))).toEqual(sourceBefore);
   });
+
+  test("reports an unreachable authored choice as failed without creating a branch", async () => {
+    const gameDir = await temporaryImpossibleReachGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const result = await runDevelopmentWorkItem({
+      gameDir,
+      session: "player",
+      key: "choice-authoring/target/reply",
+      newSession: "ai-unreachable",
+      maxNodes: 20,
+      maxSteps: 10,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      safety: { mode: "read-only", writes: false, targetSession: null },
+      result: {
+        status: "not-reached",
+        found: false,
+        replayVerified: false,
+      },
+    });
+    await expect(readdir(sessionDir(gameDir, "ai-unreachable"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  test("exits non-zero when structured work cannot reach its target", async () => {
+    const gameDir = await temporaryImpossibleReachGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "work",
+      gameDir,
+      "--session",
+      "player",
+      "--key",
+      "choice-authoring/target/reply",
+      "--new-session",
+      "ai-unreachable-cli",
+      "--max-nodes",
+      "20",
+      "--max-steps",
+      "10",
+    ], { stdout: "pipe", stderr: "pipe" });
+
+    expect(await child.exited).toBe(1);
+    expect(JSON.parse(await new Response(child.stdout).text())).toMatchObject({
+      status: "failed",
+      result: { status: "not-reached", found: false },
+    });
+    expect(await new Response(child.stderr).text()).toBe("");
+  });
 });
+
+async function temporaryImpossibleReachGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-work-unreachable-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Unreachable work test",
+    "switches:",
+    "  impossible: { initial: false }",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "target.md"), [
+    "---",
+    "id: target",
+    "title: Target",
+    "characters: []",
+    "requires: { switch: { name: impossible } }",
+    "---",
+    "",
+    "Approach.",
+    "",
+    "? Reply? {id: reply}",
+    "- Stay {id: stay, ai: social}",
+    "- Leave {id: leave, ai: independent}",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
 
 async function temporaryWorkGame(withLegacyChoice: boolean): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-work-"));

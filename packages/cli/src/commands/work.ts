@@ -23,7 +23,7 @@ export interface WorkArgs {
 
 export interface WorkResult {
   schemaVersion: 1;
-  status: "clean" | "executed" | "prepared";
+  status: "clean" | "executed" | "prepared" | "failed";
   selection: {
     key: string;
     priority: DevelopmentWorkItem["priority"];
@@ -45,6 +45,7 @@ export async function workCommand(args: WorkArgs): Promise<void> {
   process.stdout.write(
     (args.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n",
   );
+  if (result.status === "failed") process.exitCode = 1;
 }
 
 /** Select and execute one structured worklist operation with explicit write boundaries. */
@@ -146,14 +147,14 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
         pretty: false,
       });
       const wroteSession = result.session !== undefined;
-      return executed(
+      return result.found ? executed(
         selection,
         operation,
         wroteSession ? "isolated-session" : "read-only",
         wroteSession,
         result.session ?? null,
         result,
-      );
+      ) : failed(selection, operation, result);
     }
     case "edit": {
       const scriptId = typeof item.coordinates.scriptId === "string"
@@ -186,6 +187,21 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
       };
     }
   }
+}
+
+function failed(
+  selection: NonNullable<WorkResult["selection"]>,
+  operation: DevelopmentOperation,
+  result: unknown,
+): WorkResult {
+  return {
+    schemaVersion: 1,
+    status: "failed",
+    selection,
+    operation,
+    safety: { mode: "read-only", writes: false, targetSession: null },
+    result,
+  };
 }
 
 function selectWorkItem(

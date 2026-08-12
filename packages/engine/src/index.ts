@@ -27,7 +27,7 @@ export {
 } from "./presets/training";
 export { vnRun } from "./presets/vn/run";
 export { step, peek } from "./step";
-export { searchForChoice } from "./search";
+export { compareChoiceSearchAssessment, searchForChoice } from "./search";
 export type {
   ChoiceSearchOptions,
   ChoiceSearchProgress,

@@ -83,6 +83,7 @@ COMMANDS
       Select one structured worklist item (highest priority by default) and
       execute its operation. Diagnostics are read-only; branch-producing work
       requires an explicit fresh --new-session; edits return authoring context.
+      An execution that cannot reach its declared target exits non-zero.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,
@@ -146,10 +147,13 @@ COMMANDS
            [--report-on-miss] [--pretty]
       Search the public Headless state space for an unseen stable authored
       choice, then replay the discovered inputs into a GUI-compatible AI fork.
+      Unless --from-at is explicit, a terminal source automatically retries
+      its recoverable historical choice checkpoints within one node budget.
       Search is read-only; a found path is accepted only when replay reaches
       the same stable choice and produces the identical persisted state.
       --report-on-miss persists only the closest state and files a structured
-      coding issue with its path and unmet target requirements.
+      coding issue with its path and unmet target requirements. A miss exits
+      non-zero whether or not a report was requested.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
