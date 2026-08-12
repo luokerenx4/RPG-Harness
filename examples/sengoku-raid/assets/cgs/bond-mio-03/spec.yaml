@@ -1,25 +1,26 @@
 kind: cg
 description: |
-  澪の第三絆CG。夕暮れの隅田河で、澪と主人公が水面を覗く。
-  澪が指で水を乱し、主人公の黒く滲む影だけが散る。
+  澪との邦絆頂点 CG。夕暮れ、隅田河の岸辺。二人とも水際に膝をつき、
+  水面を覗き込む。映る二つの影——澪の影は揺れず澪自身より若く、
+  主人公の影は半分が黒く滲んでいる。最も近い距離。
 prompt: |
   Cinematic anime visual novel CG, simplified colors, bold cel shading,
-  high contrast, symbolic reflection composition for chafa/TUI conversion.
-  At the Sumida riverbank at dusk, Mio in deep indigo kneels beside the
-  unseen protagonist. Both look into the water. Mio's reflected silhouette
-  is calm and strangely younger; the protagonist's reflection is half
-  stained with black, but Mio's fingertip disturbs the water and breaks the
-  dark stain into ripples. Include a small mirror or wakizashi motif near
-  Mio. Deep indigo, river gray, sunset gold, black ripple shapes, 16:9.
-placeholder: "[CG] 隅田河の水鏡で、澪が黒く滲むお主の影を散らす"
+  high contrast, large readable silhouettes for chafa/TUI conversion.
+  Riverbank at dusk. Mio, a composed young woman in a deep indigo
+  over-robe, kneels at the water's edge beside the kneeling unseen
+  protagonist, both looking down into the still water. Two reflections
+  float on the surface: hers calm and youthful, the protagonist's with
+  one half darkened/smudged in shadow. Quiet, intimate, melancholy mood.
+  Cold-warm dusk light, limited palette, clean background masses, 16:9.
+placeholder: "[CG] 夕の岸辺、澪と並んで水を覗く——影は半分黒い"
 refs:
-  characters: [mio, player]
-  location: sumida-river
-  time: 夕暮れ
+  characters: [ mio, player ]
+  location: riverbank
+  time: 夕
 size_hint:
   tui: { cols: 80, rows: 30 }
   web: { aspect: "16:9" }
-tags: [bond, mio, key-moment]
+tags: [ bond, route-peak, mio ]
 tui_render:
   symbols: half
   colors: "16"

@@ -285,7 +285,7 @@ async function runAssets(args: string[]): Promise<void> {
   if (sub === "prompts") return runAssetsPrompts(rest);
   process.stderr.write(
     "Usage:\n" +
-      "  rpgh assets list    <game-dir> [--missing] [--format table|json]\n" +
+      "  rpgh assets list    <game-dir> [--missing] [--character <id>] [--format table|json]\n" +
       "  rpgh assets prompts <game-dir> [<asset-path>] [--missing] [--format text|json]\n",
   );
   process.exit(2);
@@ -297,12 +297,13 @@ async function runAssetsList(rest: string[]): Promise<void> {
     options: {
       missing: { type: "boolean", default: false },
       format: { type: "string", default: "table" },
+      character: { type: "string" },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh assets list <game-dir> [--missing] [--format table|json]",
+    "rpgh assets list <game-dir> [--missing] [--character <id>] [--format table|json]",
   );
   const fmt = values.format ?? "table";
   if (fmt !== "table" && fmt !== "json") {
@@ -313,6 +314,7 @@ async function runAssetsList(rest: string[]): Promise<void> {
     gameDir,
     missing: Boolean(values.missing),
     format: fmt as "table" | "json",
+    ...(values.character ? { character: values.character } : {}),
   });
 }
 

@@ -1,0 +1,20 @@
+kind: sheet
+description: |
+  霞の全身ターンアラウンド（正面・斜め・横・背面）。立绘・CG 生成
+  の身元アンカー。（外見の正は characters/kasumi.md の「外見」節）
+prompt: |
+  Character turnaround reference sheet of Kasumi, a small young
+  huntress from the late Sengoku era: four full-body views in a row
+  (front, three-quarter, side, back), identical proportions and
+  outfit across views. Short windswept flaxen (light chestnut) hair,
+  big round amber eyes, sun-tanned skin. Hemp-colored kosode and
+  trousers, young-grass-green arm and leg guards, longbow and quiver
+  on her back. Sunlight-warm palette, clean flat neutral background,
+  model-sheet style with even lighting.
+placeholder: "[霞・設定画] 全身四面図——麻×若草の猟師"
+refs:
+  characters: [kasumi]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../kasumi-master

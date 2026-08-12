@@ -42,8 +42,12 @@ characters: [alice]      # which characters appear
 requires:                # optional — when this script becomes available
   affection: { character: alice, min: 1 }
 bg: assets/backgrounds/sakura-path     # optional — scene's backdrop
-defaultPortraits:                       # optional — visuals set on entry
-  center: { characterId: alice, emotion: smile }
+defaultPortraits:                       # optional — portraits set on entry.
+  - { characterId: alice, emotion: smile }   # list form auto-assigns slots:
+  - { characterId: bob, emotion: default }   # 1 → center; 2 → left, right;
+                                        # 3 → left, center, right; 4+ → pos-1..pos-N
+                                        # (map form `center: {characterId, emotion}`
+                                        # also works when you need explicit slots)
 ---
 
 narration line.          # plain text is narration
@@ -51,7 +55,8 @@ narration line.          # plain text is narration
 @alice 嗨。               # @<id> <text> is dialogue from character <id>
 
 @alice smile 嗨，又见面了。  # optional emotion token resolves via
-                            # alice.portraits.smile → portrait swap
+                            # alice.portraits.smile → swaps the slot alice
+                            # already occupies (or center if she's not on stage)
 
 ? 你怎么回应？             # ? at start = choice block
 - 打招呼 -> +alice         # inline: "<text> -> <effects>"
@@ -113,7 +118,7 @@ Label names: ASCII letters/digits/underscore/hyphen. Cannot start with `$` (rese
 ```
 @alice smile こんにちは。
 ```
-Resolves `smile` against `alice.portraits.smile` (declared in `characters/alice.md`'s frontmatter `portraits:` map) and updates the `center` portrait slot before yielding the dialogue. The lookup is **runtime, not parse-time**: if `smile` isn't in alice's portraits map, the engine treats `smile` as the first word of dialogue text — graceful fallback, no parse error.
+Resolves `smile` against `alice.portraits.smile` (declared in `characters/alice.md`'s frontmatter `portraits:` map) and swaps the portrait slot alice already occupies (any slot currently showing one of her portrait paths — so multi-portrait scenes keep her in place), falling back to `center` when she isn't on stage. The lookup is **runtime, not parse-time**: if `smile` isn't in alice's portraits map, the engine treats `smile` as the first word of dialogue text — graceful fallback, no parse error.
 
 Authors who don't want emotions in their game can ignore this entirely; `@alice こんにちは。` works unchanged.
 
@@ -129,6 +134,8 @@ Authors who don't want emotions in their game can ignore this entirely; `@alice 
 ```
 
 Slots are open-shape strings. `left` / `center` / `right` get canonical layout positions in the TUI; other names render in declaration order. The asset path must exist (the loader warns at load time on dangling references). All directives are silent — they mutate `state.baseline.visuals` but don't yield a beat. The next narration / dialogue / choice carries the new visuals to the renderer.
+
+**Stage teardown is automatic**: when a script finishes (`[end]` or last beat), the engine clears portraits and any active CG; only the bg persists into the hub / next script. You never need a trailing `:clear-visuals` for end-of-scene cleanup — use it only for mid-script stage resets. A `quit` (player pausing out) does NOT tear down; the script resumes with its stage intact.
 
 **YAML fenced choice** — when you need flags, requires on options, or multi-effect:
 
@@ -204,6 +211,8 @@ defaultPortrait: default                    # optional, defaults to "default"
 The `id` must match what scripts use in `@<id>` dialogue beats.
 
 The `portraits` map binds emotion names (used in scripts as `@alice smile`) to asset paths. Paths are full — repeating `assets/portraits/` per entry is intentional, so an AI reader sees the source-of-truth path at the declaration site rather than tracing through a config indirection. See the Visual assets section below for the directory shape on the other end.
+
+**Appearance canon** — if the character will have portraits or appear in CGs, give the body an `## 外見` (appearance) section that locks the visual design: hair (color + shape — distinct silhouettes per cast member), eyes (shape + color), build, outfit + palette, signature item, expression baseline. Every portrait/CG `spec.yaml` prompt must derive from this section, never invent its own description — and asset specs should note the back-reference (`外見の正は characters/<id>.md`). Write the cast's definitions **contrastively** (different palettes, silhouettes, props) so characters stay distinguishable at a glance; the cheapest source of contrast axes is usually the characters' names. See the Character art pipeline below for generation order.
 
 ## Item file format — `items/<id>.md`
 
@@ -438,7 +447,9 @@ assets/
       ...
 ```
 
-Three kinds, no others in v1: **portrait** (right/left/center character on a backdrop), **bg** (full-stage backdrop), **cg** (full-screen takeover for cinematic moments).
+Four kinds: **portrait** (right/left/center character on a backdrop), **bg** (full-stage backdrop), **cg** (full-screen takeover for cinematic moments), and **sheet** — a *descriptive* asset (character turnarounds, expression sheets) under `assets/sheets/<slug>/`. Sheets never appear on the game stage (no script directive renders them); they exist for authors and image generators as the identity source that portraits and CGs derive from, and are browsable in the studio gallery like everything else.
+
+**Check for ghost references** — a script can `:cg`/`:bg`/`:portrait` a path (or `defaultPortraits` an emotion) that nothing backs. Players hit these as placeholder text mid-scene. Both surfaces report them: `rpgh assets list <game-dir>` prints a `MISSING` section (also in `--format json` under `dangling`), and the studio gallery pins red ghost cards with every referencing site. Run the scan after writing scripts that mention new assets — the reference and its spec.yaml should land in the same commit.
 
 ### `spec.yaml` fields
 
@@ -452,9 +463,10 @@ prompt: |                                   # required — generator-facing
 placeholder: "[薄樱・微笑] 桜の下、淡く笑む"   # required — short, AI-visible
 style_ref: ../alice-normal                  # optional — points to another spec
                                             # for style consistency reference
-refs:                                       # optional — what the asset depicts
-  characters: [alice]
-  emotion: smile
+refs:                                       # optional — what the asset depicts.
+  characters: [alice]                       # for CGs this is a generation contract:
+  emotion: smile                            # attach each character's anchor portrait
+                                            # as a reference image (see pipeline below)
 size_hint:                                  # optional — playback / web sizing
   tui:  { cols: 28, rows: 16 }
   web:  { aspect: "3:4" }
@@ -472,6 +484,17 @@ tui_render:                                 # optional — authoring metadata
 `prompt` is consumed by image generators. Write it the way you'd write to Midjourney / SD / Claude — full sentences, style guidance, palette hints. Authors who want a different prompt format for their generator can edit the field freely; the engine doesn't validate it beyond non-empty.
 
 `tui_render` is **authoring metadata only** — the engine doesn't read it. The studio (browser workbench, see below) writes this after a successful chafa render so the next-time author opens the page, the render-options form is pre-filled with the combo that worked.
+
+### Character art pipeline — generation order matters
+
+Character art generated in the wrong order produces casts that look alike across characters yet inconsistent within one character. The contract, from simple to composite:
+
+1. **Lock the text first.** The character's `## 外見` section (see Character file format) is the only source of appearance truth. No sheet, portrait, or CG prompt invents looks ad hoc.
+2. **Master design sheet.** Generate ONE comprehensive `sheet` asset per character (`assets/sheets/<id>-master/`) — full-body front/back, head studies, expression busts, and equipment detail callouts all on a single image. Compose the prompt from [templates/character-master-sheet.md](templates/character-master-sheet.md) (the template is the source; the spec's prompt is its build artifact — record `custom: { template: ... }`). One image forces one coherent interpretation; separate batches drift. A human approves the master (this is the casting decision). The same template works for enemies/creatures — swap expressions for threat poses.
+3. **Split sheets & portraits.** Finer sheets (turnaround `<id>-turnaround/`, expression grid `<id>-expressions/`) and every in-game portrait are generated image-to-image FROM the master (declare `style_ref: ../<id>-master` in their specs), never from text alone. Register portraits in the character's `portraits:` map.
+4. **CGs last.** A CG's `refs.characters` list is a real contract: attach each listed character's **master sheet — exactly one reference image per character**. The information density belongs INSIDE the reference (a master already carries multiple views, expressions, and detail close-ups in one image), not in a stack of separate reference images — generators reconcile a multi-image stack poorly, and a single-view reference (a lone portrait) invites pose-pasting. The prompt describes the scene; the references carry the identity. **Spell out the split in the generation instruction**: references pin identity ONLY (face features, apparent age, hair color/style, eye color, outfit, palette) — pose, camera angle, facial expression, framing, and lighting must come from the scene description, never copied from the reference. An instruction like "match the reference closely" produces portrait-paste CGs where the character stands in her portrait pose under portrait lighting in every scene.
+
+Portrait image format: 3:4, **transparent background** (real alpha — verify, don't trust the RGBA flag), half-body, bottom edge may bleed/fade (the web frontend anchors portraits flush to the stage bottom and the dialogue box covers the waist cut). Keep `source.quality.png` as the local master and commit a slimmed `source.compressed.webp` (cwebp output, roughly ≤300KB).
 
 ### Render priority in the TUI
 

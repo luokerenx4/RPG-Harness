@@ -1,0 +1,20 @@
+kind: sheet
+description: |
+  篝の全身ターンアラウンド（正面・斜め・横・背面）。立绘・CG 生成
+  の身元アンカー。（外見の正は characters/kagari.md の「外見」節）
+prompt: |
+  Character turnaround reference sheet of Kagari, a tall young
+  spearwoman from the late Sengoku era: four full-body views in a row
+  (front, three-quarter, side, back), identical proportions and
+  outfit across views. Ink-black hair in a high ponytail, sharp
+  narrow eyes with grey-crimson irises, youthful late-teens face.
+  Black kosode under a deep crimson haori, crossed sleeve cords
+  (tasuki), vermillion-shafted long spear. Black-and-crimson palette,
+  clean flat neutral background, model-sheet style with even lighting.
+placeholder: "[篝・設定画] 全身四面図——黒×緋の槍使い"
+refs:
+  characters: [kagari]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../kagari-master

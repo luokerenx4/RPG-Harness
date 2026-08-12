@@ -18,6 +18,7 @@
   --portrait: #f0a55f;
   --bg-kind: #8fb56f;
   --cg-kind: #c878d5;
+  --sheet-kind: #6fa8e8;
   --warn: #e8b76b;
   --error: #e07070;
 }
@@ -193,6 +194,38 @@ code, pre, .mono {
 .kind-badge.portrait { color: var(--portrait); border-color: var(--portrait); }
 .kind-badge.bg { color: var(--bg-kind); border-color: var(--bg-kind); }
 .kind-badge.cg { color: var(--cg-kind); border-color: var(--cg-kind); }
+.kind-badge.sheet { color: var(--sheet-kind); border-color: var(--sheet-kind); }
+
+/* Ghost cards — references that resolve to nothing. Red-tinted so a
+   gallery with ghosts is visibly "not shippable" at a glance. */
+.ghost-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  color: var(--error);
+  background: rgba(224, 112, 112, 0.08);
+  font-size: 13px;
+}
+.ghost-card {
+  border-color: var(--error);
+}
+.ghost-card .ghost-thumb {
+  color: var(--error);
+  border: 1px dashed var(--error);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+}
+.ghost-flag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--error);
+  letter-spacing: 0.05em;
+}
+.ghost-card .muted {
+  color: var(--text-faint);
+}
 
 .rendering-flags {
   display: flex;

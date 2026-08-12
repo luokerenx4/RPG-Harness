@@ -1,0 +1,24 @@
+kind: sheet
+description: |
+  澪の表情差分シート（六分割グリッド）。default / soft / displeased /
+  sad / surprised / resolve。表情筋がほぼ動かない——差分は目元と
+  眉の角度だけで成立させる。
+  （外見の正は characters/mio.md の「外見」節）
+prompt: |
+  Expression sheet of Mio, a composed young inspector: a 3x2 grid of
+  bust-up faces of the SAME character, labeled — neutral, faint
+  softening around the eyes (her version of a smile), displeasure
+  (slightly narrowed eyes only), sadness (gaze dropped, mouth
+  unchanged), surprise (a hair's-width widening of the eyes),
+  resolve (steady direct gaze). ALL changes subtle — this character
+  barely moves her face; differences live in the eyes and brows.
+  Indigo-black formal updo, half-lidded deep indigo eyes, white
+  kosode with deep indigo uchikake collar visible. Consistent face
+  across all six cells, clean neutral background, model-sheet style.
+placeholder: "[澪・表情差分] 六面グリッド——目元だけで語る"
+refs:
+  characters: [mio]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../mio-master

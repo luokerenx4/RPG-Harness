@@ -1,0 +1,24 @@
+kind: portrait
+description: |
+  澪（みお）の半身像。朝廷の監察役、白の小袖に深い藍の打掛、
+  裾に水紋。きっちり結い上げた藍墨色の髪、伏し目がちの半眼。
+  表情は動かない——感情は目の揺れにしか出ない。
+  （外見の正は characters/mio.md の「外見」節）
+prompt: |
+  Anime-style half-body portrait of Mio, a young female shogunate
+  inspector from the late Sengoku era. Indigo-black hair in an
+  immaculate formal updo, not a strand out of place. Calm half-lidded
+  deep indigo eyes. White kosode under a deep indigo uchikake
+  (over-robe) with a subtle water-ripple pattern at the hem, a
+  family-heirloom wakizashi (short sword) at her waist. Upright
+  vertical posture, still and composed; her expression barely moves.
+  White-and-deep-indigo palette, muted painterly rendering.
+  Background neutral / removed.
+placeholder: "[澪・無表情] 藍の打掛の監察役、静かな半眼"
+refs:
+  characters: [mio]
+  emotion: default
+size_hint:
+  tui: { cols: 28, rows: 16 }
+  web: { aspect: "3:4" }
+tags: [main-cast]

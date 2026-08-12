@@ -6,6 +6,8 @@ requires:
   switch: { name: pulse_intro_seen, eq: false }
 ---
 
+:cg assets/cgs/pulse-intro
+
 @narrator 最初の鬼を斬って帰った夜、屋敷の縁側で、お主は刀を解いて鞘の蒔絵を撫でていた。
 
 @narrator 刀は震えていない——だが、何かが胸の奥に降りた感覚がある。今日、お主は脈を選んだ。

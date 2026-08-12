@@ -1,0 +1,20 @@
+kind: sheet
+description: |
+  霞の表情差分シート（六分割グリッド）。default / smile / laugh /
+  angry / sad / surprised。感情がそのまま顔に出るタイプ。
+  （外見の正は characters/kasumi.md の「外見」節）
+prompt: |
+  Expression sheet of Kasumi, a young huntress: a 3x2 grid of bust-up
+  faces of the SAME character, labeled — neutral, easy smile, open
+  laugh, puffed-cheek anger, teary sadness, wide-eyed surprise. Every
+  emotion plainly readable. Short windswept flaxen hair, big round
+  amber eyes, sun-tanned skin, hemp kosode collar visible. Consistent
+  face across all six cells, clean neutral background, model-sheet
+  style.
+placeholder: "[霞・表情差分] 六面グリッド——感情がそのまま顔に出る"
+refs:
+  characters: [kasumi]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../kasumi-master

@@ -1,0 +1,21 @@
+kind: sheet
+description: |
+  澪の全身ターンアラウンド（正面・斜め・横・背面）。立绘・CG 生成
+  の身元アンカー。（外見の正は characters/mio.md の「外見」節）
+prompt: |
+  Character turnaround reference sheet of Mio, a young female
+  shogunate inspector from the late Sengoku era: four full-body views
+  in a row (front, three-quarter, side, back), identical proportions
+  and outfit across views. Indigo-black hair in an immaculate formal
+  updo, calm half-lidded deep indigo eyes. White kosode under a deep
+  indigo uchikake with a subtle water-ripple pattern at the hem,
+  family-heirloom wakizashi at her waist. White-and-deep-indigo
+  palette, upright vertical posture, clean flat neutral background,
+  model-sheet style with even lighting.
+placeholder: "[澪・設定画] 全身四面図——白×藏藍の監察役"
+refs:
+  characters: [mio]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../mio-master

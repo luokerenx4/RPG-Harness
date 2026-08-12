@@ -1,0 +1,32 @@
+kind: sheet
+description: |
+  澪の総合キャラクターデザインシート（一枚絵）。全身正面・背面、
+  頭部三角度、表情四種（すべて目元の微差）、脇差と装束のディテール
+  拡大を同一画面に収める。以降の分割シート・立绘・CG はすべて
+  この一枚を正とする。
+  （外見の文字正典は characters/mio.md の「外見」節）
+prompt: |
+  Complete character design master sheet of Mio, a composed young
+  shogunate inspector from the late Sengoku era, everything on ONE
+  sheet, model-sheet style with even lighting and a clean flat
+  background:
+  (a) full-body front view and back view, identical proportions,
+  upright vertical posture;
+  (b) a row of head studies — front, three-quarter, profile;
+  (c) four small expression busts — neutral, faint softening around
+  the eyes, slight displeasure, resolve; ALL differences subtle,
+  living only in the eyes and brows;
+  (d) detail callouts — the family-heirloom wakizashi (sheathed and
+  hilt close-up), the water-ripple hem pattern of the uchikake, the
+  hair ornament of her formal updo, geta footwear.
+  Indigo-black hair in an immaculate updo, calm half-lidded deep
+  indigo eyes. White kosode under a deep indigo uchikake.
+  White-and-deep-indigo palette.
+placeholder: "[澪・総合設定画] 一枚に全身・頭部三角度・表情・脇差詳細"
+refs:
+  characters: [mio]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet, master]
+custom:
+  template: character-master-sheet-v1

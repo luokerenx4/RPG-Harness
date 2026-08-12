@@ -1,0 +1,20 @@
+kind: sheet
+description: |
+  篝の表情差分シート（六分割グリッド）。default / smile / angry /
+  sad / surprised / wry。目元は常に冷たく、感情は口元と眉に出る。
+  （外見の正は characters/kagari.md の「外見」節）
+prompt: |
+  Expression sheet of Kagari, a young spearwoman: a 3x2 grid of
+  bust-up faces of the SAME character, labeled — neutral, faint smile
+  (eyes stay cold, only lip corners lift), anger (narrowed eyes, set
+  jaw), sadness (gaze lowered), surprise (slightly widened eyes), wry
+  smirk. Ink-black high ponytail, grey-crimson narrow eyes, black
+  kosode with crimson haori collar visible. Consistent face across
+  all six cells, clean neutral background, model-sheet style.
+placeholder: "[篝・表情差分] 六面グリッド——冷たい目のまま口元だけが変わる"
+refs:
+  characters: [kagari]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet]
+style_ref: ../kagari-master

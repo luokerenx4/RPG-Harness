@@ -4,6 +4,8 @@ title: 篝の話を聞く
 characters: [kagari]
 requires:
   affection: { character: kagari, min: 2 }
+defaultPortraits:
+  - { characterId: kagari, emotion: default }
 ---
 
 宿の縁側。月が出ている。

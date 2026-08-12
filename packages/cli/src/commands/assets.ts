@@ -1,9 +1,13 @@
-import { loadGame } from "../loader";
+import { collectDanglingRefs, loadGame } from "../loader";
 
 interface Args {
   gameDir: string;
   missing: boolean;
   format: "table" | "json";
+  // The "asset pack" query: narrow to assets whose refs.characters
+  // includes this id — a character's full design package (sheets,
+  // portraits, CGs they appear in) in one view.
+  character?: string;
 }
 
 interface AssetRow {
@@ -26,7 +30,13 @@ interface AssetRow {
 // command is just the convenient query view.
 export async function assetsListCommand(args: Args): Promise<void> {
   const game = await loadGame(args.gameDir);
-  const all: AssetRow[] = (game.assets ?? []).map((a) => ({
+  const dangling = collectDanglingRefs(game, game.assets ?? []);
+  const specs = args.character
+    ? (game.assets ?? []).filter((a) =>
+        a.refs?.characters?.includes(args.character!),
+      )
+    : game.assets ?? [];
+  const all: AssetRow[] = specs.map((a) => ({
     path: a.path,
     kind: a.kind,
     ans: a.renderings.tuiAns !== undefined,
@@ -41,7 +51,9 @@ export async function assetsListCommand(args: Args): Promise<void> {
   const rows = args.missing ? all.filter((r) => !r.ans && !r.txt) : all;
 
   if (args.format === "json") {
-    process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ assets: rows, dangling }, null, 2) + "\n",
+    );
     return;
   }
 
@@ -51,6 +63,7 @@ export async function assetsListCommand(args: Args): Promise<void> {
         ? "All assets have at least one TUI rendering.\n"
         : "No assets declared.\n",
     );
+    writeDanglingSection(dangling);
     return;
   }
 
@@ -85,6 +98,37 @@ export async function assetsListCommand(args: Args): Promise<void> {
       args.missing ? " missing TUI renderings" : ""
     }.\n`,
   );
+  writeDanglingSection(dangling);
+}
+
+// Referenced-but-unresolvable section. These are the assets a player
+// will hit as placeholder text in-game: scripts/characters point at
+// them but no spec.yaml (or portraits-map emotion) exists. Printed on
+// every run — an author who never sees this section never ships a
+// ghost reference.
+function writeDanglingSection(d: {
+  missingAssets: Array<{ assetPath: string; referencedBy: string[] }>;
+  missingEmotions: Array<{
+    characterId: string;
+    emotion: string;
+    referencedBy: string[];
+  }>;
+}): void {
+  if (d.missingAssets.length === 0 && d.missingEmotions.length === 0) return;
+  process.stdout.write(
+    `\nMISSING — referenced in scripts/characters but no spec exists:\n`,
+  );
+  for (const m of d.missingAssets) {
+    process.stdout.write(
+      `  ✗ ${m.assetPath}\n      referenced by: ${m.referencedBy.join(", ")}\n`,
+    );
+  }
+  for (const m of d.missingEmotions) {
+    process.stdout.write(
+      `  ✗ ${m.characterId} portraits.${m.emotion} (emotion not in character's portraits map)\n` +
+        `      referenced by: ${m.referencedBy.join(", ")}\n`,
+    );
+  }
 }
 
 interface PromptsArgs {

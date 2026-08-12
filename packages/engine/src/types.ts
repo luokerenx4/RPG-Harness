@@ -385,7 +385,7 @@ export interface CharacterSpawnRule {
 }
 
 // Visual asset registry. An asset is a directory under
-// <gameDir>/assets/{portraits,backgrounds,cgs}/<slug>/ containing a
+// <gameDir>/assets/{portraits,backgrounds,cgs,sheets}/<slug>/ containing a
 // spec.yaml plus any number of pre-rendered files (source.quality.png /
 // source.compressed.{webp,png,jpg,jpeg}, tui.txt, tui.ans, web.webp).
 // The engine never decodes images; it
@@ -394,7 +394,13 @@ export interface CharacterSpawnRule {
 // to the spec's `placeholder` text — that text is also what AI/
 // headless consumers see, making it the self-describing ground truth
 // against which a misselected asset can be detected.
-export type AssetKind = "portrait" | "bg" | "cg";
+//
+// portrait / bg / cg are stage assets — scripts put them on screen.
+// `sheet` is a descriptive asset: character design references
+// (turnarounds, expression sheets) that no script directive renders;
+// they exist for authors and generators — the identity source that
+// portraits and CGs are derived from.
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet";
 
 export interface AssetSpec {
   // Logical id = the asset directory's forward-slash relative path
@@ -634,10 +640,12 @@ export type Beat =
       // token (when lowercase-leading) is parsed as a *candidate*
       // emotion. The engine resolves it against the character's
       // portraits map at runtime — if the key exists, the engine
-      // mutates state.baseline.visuals.portraits.center to the
-      // resolved asset path; if not, the engine prepends
-      // `candidateEmotion + " "` back onto `text` and yields. This
-      // keeps the parser free of cross-file character lookups.
+      // swaps the slot the speaker already occupies (any slot whose
+      // current path is one of their portrait paths), falling back to
+      // "center" when they're not on stage; if not, the engine
+      // prepends `candidateEmotion + " "` back onto `text` and
+      // yields. This keeps the parser free of cross-file character
+      // lookups.
       candidateEmotion?: string;
     }
   | {

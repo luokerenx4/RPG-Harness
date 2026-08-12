@@ -4,6 +4,8 @@ title: 三叉路の出会い
 characters: [kagari]
 ---
 
+:cg assets/cgs/encounter-kagari-first
+
 霧の向こうから、もう一つの足音が近づいてくる。
 
 @narrator 黒い具足。槍の柄。年若い女が、お主と同じく刀ではなく長物を構えていた。

@@ -2,29 +2,45 @@
 id: three_flowers_alliance
 title: 三花の盟
 characters: [kagari, kasumi, mio]
+defaultPortraits:
+  - { characterId: kagari, emotion: default }
+  - { characterId: mio, emotion: default }
+  - { characterId: kasumi, emotion: default }
 ---
-
-深夜。大名府の中庭。三人の女が並んで立っている。
-
-@kagari 召されたのは私一人ではないらしいな。
-
-@kasumi 私は、月見だと聞いて来た。
-
-@mio 私は——公儀の沙汰ではなく、個人の用で。
-
-@narrator お主は三人の前に立つ。手には何も持っていない。
 
 :cg assets/cgs/three-flowers-alliance
 
-@narrator 「三度、お主たちと出帰った。生きて戻った。」
+深夜。大名府の中庭。三人の女が、それぞれ別の方角から現れて、月の下で鉢合わせた。
+
+@kagari 召されたのは私一人ではないらしいな。
+
+@kasumi あたしは、月見だって聞いて来たんだけど。……酒、ないの？
+
+@mio 私は——公儀の沙汰ではなく、個人の用で。
+
+@kagari ほう。監察殿の「個人の用」とは。お役目より重いものを、いつの間に拵えた。
+
+:cg assets/cgs/three-flowers-alliance
+
+@mio ……槍の者。お主とは一度、ゆっくり話さねばと思っていたところだ。
+
+@kasumi ねえ、これ、あたし帰ったほうがいい流れ？　弓は槍と刀の喧嘩には混ざらないよ。
+
+@narrator 三人の視線が、ほとんど同時に、中庭の入り口へ向いた。お主が立っている。手には、何も持っていない。
+
+@narrator 「三度、お主たちと出帰った。三度とも、生きて戻った。」
+
+@narrator 「一人で歩いていた頃は、生きて戻ることを、戻ってから数えていた。今は違う。出る前から、戻る方を向いて歩いている。」
 
 @narrator 「鬼を狩る生き方が、いつ終わるか、私には見えない。だが、終わるその日まで——」
 
 :hide-cg
 
 ? それでも、口にしたかった。
-  - 「三人とも、隣にいてくれ」 +kagari +kasumi +mio
-  - 「お主たちと共に死ぬ覚悟を、私は持っている」 +2kagari +2kasumi +2mio
+  - 「三人とも、隣にいてくれ」 -> +kagari +kasumi +mio
+  - 「お主たちと共に死ぬ覚悟を、私は持っている」 -> +2kagari +2kasumi +2mio
+
+@narrator 短い沈黙。最初に動いたのは、槍の石突きだった。土を一度、強く打った。
 
 @kagari 私の槍は、お主の刀の後ろを守る。
 
@@ -33,6 +49,16 @@ characters: [kagari, kasumi, mio]
 @mio 私の鏡は、お主の刀が映す影を読む。
 
 @narrator 三人の声が一度に降りる。中庭の月が、いつもより低く見えた。
+
+@kasumi ——で、いまの、誰の口上がいちばん良かった？
+
+@kagari 比べるな。盟が緩む。
+
+@mio ……記録には「三名連署」とだけ残す。順位は、書かぬ。
+
+@kasumi 監察殿、それ、いちばんずるい答えだ。
+
+@narrator 笑い声が一つ、二つ、三つ。揃いはしない。揃わないまま、同じ月の下にある。それでよかった。
 
 ```yaml
 type: effects

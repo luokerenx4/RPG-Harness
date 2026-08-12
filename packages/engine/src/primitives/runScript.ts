@@ -83,16 +83,24 @@ export async function* runScript(
         const speakerName =
           ctx.characterNameMap.get(beat.speaker) ?? beat.speaker;
         // Resolve a candidate emotion against the character's
-        // portraits map. Hit → set state.baseline.visuals.portraits
-        // for the conventional "center" slot. Miss → restore the
-        // candidate token to the front of the dialogue text (it was
-        // not actually an emotion, just the first word of dialogue).
+        // portraits map. Hit → swap the slot the speaker already
+        // occupies (any slot currently showing one of their portrait
+        // paths — multi-portrait scenes seed left/right etc.), or the
+        // conventional "center" slot when they're not on stage. Miss →
+        // restore the candidate token to the front of the dialogue
+        // text (it was not actually an emotion, just the first word
+        // of dialogue).
         let dialogueText = beat.text;
         if (beat.candidateEmotion !== undefined) {
           const ch = ctx.game.characters.find((c) => c.id === beat.speaker);
           const path = ch?.portraits?.[beat.candidateEmotion];
           if (path) {
-            state.baseline.visuals.portraits.center = path;
+            const ownPaths = new Set(Object.values(ch?.portraits ?? {}));
+            const slot =
+              Object.entries(state.baseline.visuals.portraits).find(
+                ([, p]) => p !== null && ownPaths.has(p),
+              )?.[0] ?? "center";
+            state.baseline.visuals.portraits[slot] = path;
           } else {
             // Restore the candidate to the dialogue text. Preserve the
             // space iff there was any text after; otherwise the token
@@ -174,6 +182,7 @@ export async function* runScript(
       }
       case "endScript": {
         fireOnBeatAfter(ctx, script.id, beatIdx, beat);
+        clearStageOnScriptEnd(ctx);
         return true;
       }
       case "clear": {
@@ -229,7 +238,20 @@ export async function* runScript(
     fireOnBeatAfter(ctx, script.id, beatIdx, beat);
     state.baseline.beatIndex++;
   }
+  clearStageOnScriptEnd(ctx);
   return true;
+}
+
+// Scene teardown: a finished script clears its cast off the stage —
+// portraits and any active cg go, bg stays (slowest-changing layer,
+// same rule as the `:clear-visuals` directive). Runs on both finish
+// paths ([end] and last-beat fall-through) but NOT on quit, which is
+// a pause: the script resumes at the same beat next step. Builds a
+// fresh visuals object instead of mutating in place so outputs already
+// yielded keep the stage they were rendered with.
+function clearStageOnScriptEnd(ctx: PresetContext): void {
+  const v = ctx.state.baseline.visuals;
+  ctx.state.baseline.visuals = { bg: v.bg, portraits: {}, cg: null };
 }
 
 function buildLabelMap(script: Script): Map<string, number> {

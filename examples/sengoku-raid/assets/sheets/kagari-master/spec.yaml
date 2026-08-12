@@ -1,0 +1,27 @@
+kind: sheet
+description: |
+  篝の総合キャラクターデザインシート（一枚絵）。全身正面・背面、
+  頭部三角度、表情四種、得物と小物のディテール拡大を同一画面
+  に収める。以降の分割シート・立绘・CG はすべてこの一枚を正とする。
+  （外見の文字正典は characters/kagari.md の「外見」節）
+prompt: |
+  Complete character design master sheet of Kagari, a tall young
+  spearwoman from the late Sengoku era, everything on ONE sheet,
+  model-sheet style with even lighting and a clean flat background:
+  (a) full-body front view and back view, identical proportions;
+  (b) a row of head studies — front, three-quarter, profile;
+  (c) four small expression busts — neutral, faint smile with cold
+  eyes, anger, wry smirk;
+  (d) detail callouts — the vermillion-shafted long spear (full and
+  blade close-up), tasuki sleeve cords, waist sash knot, footwear.
+  Ink-black hair in a high ponytail, sharp narrow eyes with
+  grey-crimson irises, youthful late-teens face. Black kosode under
+  a deep crimson haori. Black-and-crimson palette.
+placeholder: "[篝・総合設定画] 一枚に全身・頭部三角度・表情・得物詳細"
+refs:
+  characters: [kagari]
+size_hint:
+  web: { aspect: "16:9" }
+tags: [main-cast, design-sheet, master]
+custom:
+  template: character-master-sheet-v1

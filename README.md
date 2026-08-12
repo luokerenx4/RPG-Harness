@@ -76,10 +76,12 @@ The AI discovers the format on its own. To enable this in a game folder created 
 ```
 rpg-harness/
 ├── packages/
-│   ├── engine/    Pure state-machine runtime. No DOM, no Node-specific APIs.
-│   ├── parser/    Markdown + frontmatter + YAML fence → engine AST.
-│   ├── cli/       The `rpgh` binary: init / play / step / peek / autoplay / test / sessions / assets / studio.
-│   └── studio/    Browser-based asset workbench (chafa render loop, spec editor).
+│   ├── engine/         Pure state-machine runtime. No DOM, no Node-specific APIs.
+│   ├── parser/         Markdown + frontmatter + YAML fence → engine AST.
+│   ├── frontend-core/  Renderer-agnostic Output→ScreenModel reducer, shared by every shell.
+│   ├── cli/            The `rpgh` binary: init / play / step / peek / autoplay / test / sessions / assets / studio.
+│   ├── web/            Browser (React DOM) shell — engine bundled in-tab, games baked at build time, saves in localStorage. Static; deployable to any host.
+│   └── studio/         Browser-based asset workbench (chafa render loop, spec editor).
 ├── examples/
 │   ├── sengoku-raid/    "妖刀奇譚" — bundled flagship. Extraction-shooter raid loop +
 │   │                    GalGame bonds + 3 endings + most of the engine surface
@@ -254,12 +256,13 @@ id: 002_under_sakura
 title: 樱花树下
 characters: [alice]
 bg: assets/backgrounds/sakura-path        ← scene's backdrop (set on entry)
-defaultPortraits:
-  center: { characterId: alice, emotion: smile }
+defaultPortraits:                          ← list form: slots auto-assigned
+  - { characterId: alice, emotion: smile } ← 1 → center; 2 → left/right;
+  - { characterId: bob, emotion: default } ← 3 → left/center/right; 4+ → pos-N
 ---
 
-@alice smile 嗨，又见面了。                ← inline emotion: swaps to
-                                          ← alice.portraits.smile
+@alice smile 嗨，又见面了。                ← inline emotion: swaps the slot
+                                          ← alice already occupies (or center)
 
 :cg assets/cgs/handshake                   ← full-screen CG takes over
 @alice 别说什么了。
@@ -268,7 +271,7 @@ defaultPortraits:
 [end]
 ```
 
-Backgrounds, portraits, and CGs are **visual assets** — each lives in `assets/<kind>/<id>/` with a `spec.yaml` describing what it depicts plus optional pre-rendered files. The convention is two-tier: `source.quality.png` is the author's high-res master (gitignored, kept local) and `source.compressed.{webp,png,jpg,jpeg}` is the slimmed distribution copy that travels with the repo so cloners get a working visual experience out of the box. ASCII art `tui.txt` and color `tui.ans` are what the TUI actually renders; missing renderings degrade to the spec's placeholder text, which is also what AI players see in the headless JSON event stream. See the [rpg-harness-author skill](.claude/skills/rpg-harness-author/SKILL.md) for the full asset spec format.
+Backgrounds, portraits, CGs, and character sheets are **visual assets** — each lives in `assets/<kind>/<id>/` with a `spec.yaml` describing what it depicts plus optional pre-rendered files. Sheets (`assets/sheets/`) are descriptive: master design sheets (one image: views + expressions + detail callouts), turnarounds, and expression grids that anchor a character's identity for generation; no script renders them on stage, but the web frontend's 設定集 (art book, in the play HUD) shows them to players grouped per character — the same canon the art pipeline reads. Query a character's full pack with `rpgh assets list <game-dir> --character <id>` or the studio's character filter chips. References that resolve to nothing (a `:cg` path with no spec, a `defaultPortraits` emotion missing from the character's map) are surfaced everywhere: the loader warns on stderr, `rpgh assets list` prints a `MISSING` section, and the studio gallery pins red ghost cards. The convention is two-tier: `source.quality.png` is the author's high-res master (gitignored, kept local) and `source.compressed.{webp,png,jpg,jpeg}` is the slimmed distribution copy that travels with the repo so cloners get a working visual experience out of the box. ASCII art `tui.txt` and color `tui.ans` are what the TUI actually renders; missing renderings degrade to the spec's placeholder text, which is also what AI players see in the headless JSON event stream. See the [rpg-harness-author skill](.claude/skills/rpg-harness-author/SKILL.md) for the full asset spec format.
 
 ## Headless step API
 
@@ -347,8 +350,11 @@ if you're an AI playing the games.
 
 Pre-alpha. Works end-to-end. Hub-mode TUI with multi-save and live hot-reload,
 markdown content authoring, headless step API, fixture testing, built-in autoplay
-personas, AI player + author skills, and a scaffold command (`rpgh init`) are
-all landed. Combat/training modules, web frontend, and plugin registry are next.
+personas, AI player + author skills, a scaffold command (`rpgh init`), and a
+static **web frontend** (engine bundled in-tab, games baked at build time, saves
+in localStorage — same engine + same screen-model reducer as the TUI; see
+`packages/web/`) are all landed. Combat/training modules and a plugin registry
+are next.
 
 ## License
 

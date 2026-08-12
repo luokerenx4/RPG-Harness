@@ -64,16 +64,25 @@ export function parseScript(content: string, source?: string): Script {
   };
 }
 
-// defaultPortraits: { center: { characterId: kagari, emotion: smile } }
+// Two accepted shapes:
+//   map  — { center: { characterId: kagari, emotion: smile } }
+//          explicit slot per entry, author controls placement
+//   list — [ { characterId: kagari, emotion: smile }, ... ]
+//          slots are auto-assigned by cast size (single portrait is
+//          just the 1-person case): 1 → center; 2 → left, right;
+//          3 → left, center, right; 4+ → pos-1..pos-N in list order
 function parseDefaultPortraits(raw: unknown, source: string | undefined): Beat[] {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!raw || typeof raw !== "object") {
     throw new ScriptParseError(
-      "`defaultPortraits` must be an object map { slot: { characterId, emotion } }",
+      "`defaultPortraits` must be a { slot: { characterId, emotion } } map or a [{ characterId, emotion }] list",
       source,
     );
   }
+  const entries: Array<[string, unknown]> = Array.isArray(raw)
+    ? raw.map((val, i) => [autoSlots(raw.length)[i] ?? `pos-${i + 1}`, val])
+    : Object.entries(raw as Record<string, unknown>);
   const out: Beat[] = [];
-  for (const [slot, val] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [slot, val] of entries) {
     if (!val || typeof val !== "object" || Array.isArray(val)) {
       throw new ScriptParseError(
         `defaultPortraits.${slot} must be an object`,
@@ -98,6 +107,13 @@ function parseDefaultPortraits(raw: unknown, source: string | undefined): Beat[]
     out.push({ type: "setPortrait", slot, characterId, emotion });
   }
   return out;
+}
+
+function autoSlots(n: number): string[] {
+  if (n === 1) return ["center"];
+  if (n === 2) return ["left", "right"];
+  if (n === 3) return ["left", "center", "right"];
+  return Array.from({ length: n }, (_, i) => `pos-${i + 1}`);
 }
 
 function readString(

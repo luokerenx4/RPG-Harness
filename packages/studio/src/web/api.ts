@@ -8,7 +8,7 @@ export interface GameSummary {
   gameDir: string;
 }
 
-export type AssetKind = "portrait" | "bg" | "cg";
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet";
 
 export interface TuiRenderPrefs {
   symbols?: string;
@@ -70,7 +70,25 @@ export async function fetchGame(): Promise<GameSummary> {
   return r.json();
 }
 
-export async function fetchAssets(): Promise<AssetRow[]> {
+// Ghost references: paths that scripts/characters point at with no
+// spec.yaml behind them, plus defaultPortraits emotions missing from
+// a character's portraits map. Mirrors collectDanglingRefs in the
+// CLI loader.
+export interface DanglingRefs {
+  missingAssets: Array<{ assetPath: string; referencedBy: string[] }>;
+  missingEmotions: Array<{
+    characterId: string;
+    emotion: string;
+    referencedBy: string[];
+  }>;
+}
+
+export interface AssetsResponse {
+  assets: AssetRow[];
+  dangling: DanglingRefs;
+}
+
+export async function fetchAssets(): Promise<AssetsResponse> {
   const r = await fetch("/api/assets");
   if (!r.ok) throw new Error(`/api/assets: ${r.status}`);
   return r.json();

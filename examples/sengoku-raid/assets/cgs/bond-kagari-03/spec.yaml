@@ -1,26 +1,25 @@
 kind: cg
 description: |
-  篝の第三絆CG。宿の月明かりの窓辺で、篝が槍を壁に預け、
-  主人公の隣に肩を寄せる。二人の距離が刀一本分ではなくなる。
+  篝との邦絆頂点 CG。宿の窓辺、月明かり。篝が主人公の隣に座り、
+  肩を寄せる。距離は「刀一本分」ではなくなった——槍は壁に立てかけ、
+  二人とも武器を手放している。
 prompt: |
   Cinematic anime visual novel CG, simplified colors, bold cel shading,
-  high contrast, intimate but restrained composition for chafa/TUI
-  conversion. A quiet inn room at night. Kagari, a young female warrior in
-  practical dark armor and travel clothes, sits by a moonlit window with
-  her spear leaning against the wall. The unseen protagonist sits beside
-  her, represented by a dark shoulder silhouette and the cursed katana laid
-  carefully between them but no longer dividing them. Kagari leans closer
-  with a rare softened expression. Moon blue, black armor, muted red cord,
-  warm floor shadows, 16:9.
-placeholder: "[CG] 月明かりの宿で、篝が槍を預けてお主の肩に近づく"
+  high contrast, large readable silhouettes for chafa/TUI conversion.
+  Quiet inn room at night, moonlight through a lattice window. Kagari, a
+  young female warrior, sits close beside the unseen protagonist on a low
+  bench, leaning her shoulder against them, her spear set aside against
+  the wall. Soft, intimate, guarded-warmth mood. Strong moon rim light,
+  limited palette, clean background masses, 16:9.
+placeholder: "[CG] 月の宿、篝が肩を寄せる——距離は刀一本分ではない"
 refs:
-  characters: [kagari, player]
-  location: inn
+  characters: [ kagari, player ]
+  location: inn-room
   time: 夜
 size_hint:
   tui: { cols: 80, rows: 30 }
   web: { aspect: "16:9" }
-tags: [bond, kagari, key-moment]
+tags: [ bond, route-peak, kagari ]
 tui_render:
   symbols: half
   colors: "16"

@@ -187,6 +187,7 @@ const ASSET_KIND_DIRS: ReadonlyArray<{ name: string; kind: AssetKind }> = [
   { name: "portraits", kind: "portrait" },
   { name: "backgrounds", kind: "bg" },
   { name: "cgs", kind: "cg" },
+  { name: "sheets", kind: "sheet" },
 ];
 
 async function loadAssets(gameDir: string): Promise<AssetSpec[]> {
@@ -278,41 +279,105 @@ async function discoverRenderings(assetDir: string): Promise<AssetRenderings> {
   return out;
 }
 
-// Emit a stderr warning for every asset reference (in character
-// portraits, script frontmatter-seeded beats, or script body beats)
-// that doesn't resolve to a loaded AssetSpec. Warn-only — broken refs
-// fall back to placeholder mode at runtime; the warning just helps
-// authors notice.
-function warnDanglingAssetRefs(game: Game, assets: AssetSpec[]): void {
-  const known = new Set(assets.map((a) => a.path));
-  const warn = (msg: string) =>
-    process.stderr.write(`[assets] ${msg}\n`);
+// A reference that doesn't resolve: either an asset path nobody
+// created a spec.yaml for, or a defaultPortraits emotion missing from
+// the character's portraits map. `referencedBy` lists every site that
+// makes the reference, e.g. "script bond_kagari_03 :cg" or
+// "character kagari portraits.smile".
+export interface MissingAssetRef {
+  assetPath: string;
+  referencedBy: string[];
+}
+export interface MissingEmotionRef {
+  characterId: string;
+  emotion: string;
+  referencedBy: string[];
+}
+export interface DanglingRefs {
+  missingAssets: MissingAssetRef[];
+  missingEmotions: MissingEmotionRef[];
+}
 
+// Scan every asset reference in the game — character portraits maps,
+// script frontmatter-seeded beats, script body directives — and
+// return the ones that don't resolve. Shared by the loader's stderr
+// warnings, `rpgh assets list`'s MISSING section, and the studio's
+// ghost cards.
+export function collectDanglingRefs(
+  game: Game,
+  assets: AssetSpec[],
+): DanglingRefs {
+  const known = new Set(assets.map((a) => a.path));
+  const missingAssets = new Map<string, string[]>();
+  const missingEmotions = new Map<string, string[]>();
+  const addAsset = (assetPath: string, site: string) => {
+    if (known.has(assetPath)) return;
+    const sites = missingAssets.get(assetPath) ?? [];
+    sites.push(site);
+    missingAssets.set(assetPath, sites);
+  };
+
+  const charById = new Map(game.characters.map((c) => [c.id, c]));
   for (const c of game.characters) {
     if (!c.portraits) continue;
     for (const [emotion, p] of Object.entries(c.portraits)) {
-      if (!known.has(p)) {
-        warn(`character ${c.id}.portraits.${emotion} → "${p}" not found`);
-      }
+      addAsset(p, `character ${c.id} portraits.${emotion}`);
     }
   }
   for (const s of game.scripts) {
     for (const beat of s.beats) {
       if (beat.type === "setBg" && beat.assetPath !== null) {
-        if (!known.has(beat.assetPath)) {
-          warn(`script ${s.id} :bg → "${beat.assetPath}" not found`);
-        }
-      } else if (beat.type === "setPortrait" && beat.assetPath) {
-        if (!known.has(beat.assetPath)) {
-          warn(
-            `script ${s.id} :portrait ${beat.slot} → "${beat.assetPath}" not found`,
-          );
+        addAsset(beat.assetPath, `script ${s.id} :bg`);
+      } else if (beat.type === "setPortrait") {
+        if (beat.assetPath) {
+          addAsset(beat.assetPath, `script ${s.id} :portrait ${beat.slot}`);
+        } else if (beat.characterId && beat.emotion) {
+          // defaultPortraits form: resolves through the character's
+          // portraits map at runtime. Missing emotion → portrait
+          // silently never appears; surface it here instead.
+          const ch = charById.get(beat.characterId);
+          if (!ch?.portraits?.[beat.emotion]) {
+            const key = `${beat.characterId} ${beat.emotion}`;
+            const sites = missingEmotions.get(key) ?? [];
+            sites.push(`script ${s.id} defaultPortraits ${beat.slot}`);
+            missingEmotions.set(key, sites);
+          }
         }
       } else if (beat.type === "showCg") {
-        if (!known.has(beat.assetPath)) {
-          warn(`script ${s.id} :cg → "${beat.assetPath}" not found`);
-        }
+        addAsset(beat.assetPath, `script ${s.id} :cg`);
       }
+    }
+  }
+
+  return {
+    missingAssets: [...missingAssets.entries()].map(
+      ([assetPath, referencedBy]) => ({ assetPath, referencedBy }),
+    ),
+    missingEmotions: [...missingEmotions.entries()].map(
+      ([key, referencedBy]) => {
+        const [characterId = "", emotion = ""] = key.split(" ");
+        return { characterId, emotion, referencedBy };
+      },
+    ),
+  };
+}
+
+// Emit a stderr warning for every dangling reference. Warn-only —
+// broken refs fall back to placeholder mode at runtime; the warning
+// just helps authors notice.
+function warnDanglingAssetRefs(game: Game, assets: AssetSpec[]): void {
+  const warn = (msg: string) => process.stderr.write(`[assets] ${msg}\n`);
+  const { missingAssets, missingEmotions } = collectDanglingRefs(game, assets);
+  for (const m of missingAssets) {
+    for (const site of m.referencedBy) {
+      warn(`${site} → "${m.assetPath}" not found`);
+    }
+  }
+  for (const m of missingEmotions) {
+    for (const site of m.referencedBy) {
+      warn(
+        `${site} → character ${m.characterId} has no portraits.${m.emotion}`,
+      );
     }
   }
 }

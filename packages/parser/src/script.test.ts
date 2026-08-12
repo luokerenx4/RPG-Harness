@@ -382,6 +382,102 @@ describe("parseScript — visual frontmatter", () => {
     ).toThrow(/bg/);
   });
 
+  test("defaultPortraits list form: single entry lands in center", () => {
+    const s = parseScript(
+      source(
+        [
+          "id: x",
+          "title: t",
+          "defaultPortraits:",
+          "  - { characterId: kagari, emotion: smile }",
+        ].join("\n"),
+        "",
+      ),
+    );
+    expect(s.beats).toEqual([
+      { type: "setPortrait", slot: "center", characterId: "kagari", emotion: "smile" },
+    ]);
+  });
+
+  test("defaultPortraits list form: two entries auto-spread left/right", () => {
+    const s = parseScript(
+      source(
+        [
+          "id: x",
+          "title: t",
+          "defaultPortraits:",
+          "  - { characterId: kagari, emotion: default }",
+          "  - { characterId: kasumi, emotion: smile }",
+        ].join("\n"),
+        "",
+      ),
+    );
+    expect(s.beats).toEqual([
+      { type: "setPortrait", slot: "left", characterId: "kagari", emotion: "default" },
+      { type: "setPortrait", slot: "right", characterId: "kasumi", emotion: "smile" },
+    ]);
+  });
+
+  test("defaultPortraits list form: three entries fill left/center/right", () => {
+    const s = parseScript(
+      source(
+        [
+          "id: x",
+          "title: t",
+          "defaultPortraits:",
+          "  - { characterId: kagari, emotion: default }",
+          "  - { characterId: mio, emotion: default }",
+          "  - { characterId: kasumi, emotion: default }",
+        ].join("\n"),
+        "",
+      ),
+    );
+    expect(s.beats.map((b) => (b as { slot: string }).slot)).toEqual([
+      "left",
+      "center",
+      "right",
+    ]);
+  });
+
+  test("defaultPortraits list form: four+ entries use pos-N in order", () => {
+    const s = parseScript(
+      source(
+        [
+          "id: x",
+          "title: t",
+          "defaultPortraits:",
+          "  - { characterId: a, emotion: default }",
+          "  - { characterId: b, emotion: default }",
+          "  - { characterId: c, emotion: default }",
+          "  - { characterId: d, emotion: default }",
+        ].join("\n"),
+        "",
+      ),
+    );
+    expect(s.beats.map((b) => (b as { slot: string }).slot)).toEqual([
+      "pos-1",
+      "pos-2",
+      "pos-3",
+      "pos-4",
+    ]);
+  });
+
+  test("defaultPortraits list entry missing emotion throws", () => {
+    expect(() =>
+      parseScript(
+        source(
+          [
+            "id: x",
+            "title: t",
+            "defaultPortraits:",
+            "  - { characterId: kagari }",
+          ].join("\n"),
+          "",
+        ),
+      ),
+    ).toThrow(/emotion/);
+  });
+
   test("defaultPortraits missing characterId throws", () => {
     expect(() =>
       parseScript(

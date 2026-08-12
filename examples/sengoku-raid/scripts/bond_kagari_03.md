@@ -8,6 +8,8 @@ requires:
     - { switch: { name: befriended_kagari } }
 ---
 
+:cg assets/cgs/bond-kagari-03
+
 宿。月。
 
 @kagari 共に出立すると、刀の音が違って聞こえる。
@@ -25,14 +27,16 @@ requires:
 :cg assets/cgs/bond-kagari-03
 
 ? それでも、答える。
-  - 「夢を見ないようにしている」 +kagari
-  - 「鎮魂法で、毎晩二十押し返す」 +kagari
-  - 「眠らない」 +2kagari
+  - 「夢を見ないようにしている」 -> +kagari
+  - 「鎮魂法で、毎晩二十押し返す」 -> +kagari
+  - 「眠らない」 -> +2kagari
 
 :hide-cg
 
 @kagari 嘘でも、答えてくれたのが嬉しい。
 
 @narrator 篝はお主の隣に座り、肩を寄せた。距離は、刀一本分ではなくなった。
+
+:hide-cg
 
 [end]

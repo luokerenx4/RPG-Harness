@@ -3,12 +3,15 @@ description: |
   霞（かすみ）の半身像。若い女の猟師、麻の着物に弓を背負い、
   明るい目をして口元に笑みを浮かべる。篝とは対照的に「軽い」
   雰囲気——肩の力が抜けている。
+  （外見の正は characters/kasumi.md の「外見」節）
 prompt: |
-  Anime-style half-body portrait of Kasumi, a young huntress from
-  the late Sengoku era. Hemp-colored kosode and trousers, a yumi
-  (Japanese bow) slung across her back, a quiver of arrows. Bright,
-  open eyes; an easy smile. Lighter and less formal than the
-  swordswoman aesthetic — windswept hair, sunlight-warm palette.
+  Anime-style half-body portrait of Kasumi, a small young huntress
+  from the late Sengoku era. Short windswept flaxen (light chestnut)
+  hair, big round amber eyes, sun-tanned skin. Hemp-colored kosode
+  and trousers with young-grass-green arm and leg guards, a yumi
+  (Japanese bow) slung across her back, a quiver of arrows. An easy
+  carefree smile. Sunlight-warm palette, lighter and less formal than
+  the spearwoman aesthetic. Background neutral / removed.
 placeholder: "[霞・微笑] 弓を背負った若き猟師、明るく笑む"
 refs:
   characters: [kasumi]

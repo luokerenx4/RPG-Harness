@@ -1,14 +1,18 @@
 kind: portrait
 description: |
-  篝（かがり）の半身像。戦国期の女剣士、藍鼠色の小袖に
-  たすき掛け、刀を背に淡く笑む。冷たい目元に、口角だけが
-  わずかに上がっている——一族当主としての余裕。
+  篝（かがり）の半身像。戦国期の女槍使い、黒の小袖に深紅の
+  羽織、たすき掛け、朱柄の長槍を肩に淡く笑む。冷たい目元に、
+  口角だけがわずかに上がっている——一族当主としての余裕。
+  （外見の正は characters/kagari.md の「外見」節）
 prompt: |
-  Anime-style half-body portrait of Kagari, a young female swordswoman
-  from the late Sengoku era. Indigo-grey kosode with crossed sleeve
-  cords (tasuki), a katana across her back. Cold eyes, a faint smile
-  with the lips. Muted painterly palette. Background neutral / removed.
-placeholder: "[篝・微笑] 若き女剣士、刀を背に淡く笑む"
+  Anime-style half-body portrait of Kagari, a tall young spearwoman
+  from the late Sengoku era. Ink-black hair in a high ponytail, sharp
+  narrow eyes with grey-crimson irises. Black kosode under a deep
+  crimson haori, crossed sleeve cords (tasuki), a vermillion-shafted
+  long spear resting against her shoulder. Eyes stay cold; only the
+  corners of her lips lift. Black-and-crimson palette, muted painterly
+  rendering. Background neutral / removed.
+placeholder: "[篝・微笑] 朱柄の槍を肩にした若き女当主、淡く笑む"
 refs:
   characters: [kagari]
   emotion: smile

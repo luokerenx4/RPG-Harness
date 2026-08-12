@@ -1,7 +1,7 @@
 import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AssetSpec, TuiRenderPrefs } from "@rpg-harness/engine";
-import { loadGame } from "@rpg-harness/cli/loader";
+import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
@@ -85,7 +85,12 @@ async function getAssets(ctx: Ctx): Promise<Response> {
   const rows = await Promise.all(
     (game.assets ?? []).map((a) => projectAsset(a)),
   );
-  return json(rows);
+  // Ghost references ride along: paths scripts/characters point at
+  // with no spec behind them. The gallery renders them as warning
+  // cards so an author catches a typo'd or unwritten asset here
+  // instead of mid-playthrough.
+  const dangling = collectDanglingRefs(game, game.assets ?? []);
+  return json({ assets: rows, dangling });
 }
 
 async function getAssetSpec(ctx: Ctx, assetPath: string): Promise<Response> {

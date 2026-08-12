@@ -8,6 +8,8 @@ requires:
     - { variable: { name: raidsCompleted, min: 12 } }
 ---
 
+:cg assets/cgs/letter-03-choice
+
 @narrator 十二度目の出帰り。
 
 @narrator 大広間の襖が左右に開く。座しているのは将軍家の側用人——そして、その隣に澪。
@@ -79,9 +81,9 @@ options:
 
 @narrator 「公儀の道は、お主が代々生き残ってきた道ではない。お主の家伝は、鬼を斬り続けることだ。」
 
-@narrator @mio （静かに、自らの脇差を抜きかける——だが止める）
+@narrator 澪が静かに、自らの脇差を抜きかけ——止めた。
 
-@narrator 「……分かった。」
+@mio ……分かった。
 
 [end]
 
