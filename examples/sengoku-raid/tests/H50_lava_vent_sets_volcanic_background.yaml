@@ -1,0 +1,38 @@
+name: entering the lava vent replaces the foothills background
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_stone_paths
+    visuals:
+      bg: assets/backgrounds/houkyou-foothills
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    metCharacters: [kasumi]
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        mt_houkyou_foothills:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:mt_houkyou_lava_vent" }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: mt_houkyou_lava_vent
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/houkyou-caldera

@@ -2,6 +2,7 @@ id: mt_houkyou_lava_vent
 name: 噴気孔
 chain: mt_houkyou
 difficulty: 3
+bg: assets/backgrounds/houkyou-caldera
 connections:
   - { dir: 奥, target: mt_houkyou_caldera }
   - { dir: 戻る, target: mt_houkyou_stone_paths }
