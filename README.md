@@ -220,8 +220,13 @@ the `choose` input. This catches route gaps hidden by 100% script coverage.
 `cover` consumes one of those work items end to end: it creates a new AI session
 at the immutable checkpoint, verifies the edited game still presents the same
 stable choice and option, selects by option id rather than stale array position,
-then continues with a built-in persona. Use `--source-session` to constrain the
-worklist to one GUI/headless lineage and `--key` to select a specific branch.
+then advances only until the containing script completes. Its result includes
+the observed narration/dialogue response trace, so runtime hook transforms are
+audited along with authored Markdown without spending tokens or changing state
+in unrelated later scenes. A branch that emits `gameEnd` remains a genuine
+completed ending rather than a local-stop result. Use `--source-session` to
+constrain the worklist to one GUI/headless lineage and `--key` to select a
+specific branch.
 `worklist` is the project-level orchestration view: it merges open playtest
 reports, unreadable session state/logs, story coverage gaps, executable choice
 branches, and authored choice debt into one deterministic priority order. JSON

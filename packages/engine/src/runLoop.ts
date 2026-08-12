@@ -14,6 +14,7 @@ export interface TraceEntry {
 
 export type LoopReason =
   | "completed"
+  | "condition-met"
   | "inputs-exhausted"
   | "max-steps"
   | "stalled"
@@ -62,6 +63,11 @@ export interface RunLoopOptions {
     maxCycleLength?: number;
   };
   onStep?: (entry: TraceEntry, state: ComposedState) => void | Promise<void>;
+  /** Stop after persisting/observing the current public output and state. */
+  stopWhen?: (
+    entry: TraceEntry,
+    state: ComposedState,
+  ) => boolean | Promise<boolean>;
 }
 
 export async function runLoop(
@@ -121,10 +127,13 @@ export async function runLoop(
       };
       lastOutput = result.value;
       trace.push(entry);
-      await options.onStep?.(entry, engine.getState());
+      const currentState = engine.getState();
+      await options.onStep?.(entry, currentState);
 
       // gameEnd is a terminal public output. Do not ask an input source for
       // another move and then misclassify its null response as exhaustion.
+      // Terminal truth also takes precedence over a caller-owned local stop:
+      // a branch probe that reaches an ending really did complete the game.
       if (result.value.type === "gameEnd") {
         await runner.return();
         return {
@@ -132,6 +141,16 @@ export async function runLoop(
           finalState: engine.getState(),
           done: true,
           reason: "completed",
+        };
+      }
+
+      if (await options.stopWhen?.(entry, currentState)) {
+        await runner.return();
+        return {
+          trace,
+          finalState: currentState,
+          done: false,
+          reason: "condition-met",
         };
       }
 

@@ -291,7 +291,7 @@ export function analyzeChoiceCoverage(
         const response = asNarrativeResponse(entry.output);
         if (response) {
           activeSelection.responseTrace.push(response);
-        } else {
+        } else if (!isPacingChoice(entry.output)) {
           activeSelection = null;
         }
       }
@@ -667,6 +667,12 @@ function asNarrativeResponse(value: unknown): NarrativeResponse | null {
     text: output.text,
     ...(typeof output.speakerId === "string" ? { speakerId: output.speakerId } : {}),
   };
+}
+
+/** A single-option choice is a continue button, not a new semantic branch. */
+function isPacingChoice(value: unknown): boolean {
+  const output = asChoiceOutput(value);
+  return Array.isArray(output?.options) && output.options.length === 1;
 }
 
 function narrativeResponseTraceKey(trace: NarrativeResponse[]): string {

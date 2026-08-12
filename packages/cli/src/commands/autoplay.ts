@@ -6,6 +6,7 @@ import type {
   StallDiagnostic,
   TraceEntry,
   VisualState,
+  ComposedState,
 } from "@rpg-harness/engine";
 import {
   buildHubView,
@@ -50,6 +51,9 @@ export interface AutoplayArgs {
   // only submitted after the recoverable checkpoint still presents this
   // exact stable choice and option; option array indexes may safely change.
   targetChoice?: TargetChoice;
+  // Internal local-verification boundary used by `rpgh cover`: stop after
+  // the selected option's containing script has completed.
+  stopAfterTargetScript?: boolean;
 }
 
 export interface TargetChoice {
@@ -205,6 +209,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     ? { ...args.targetChoice, status: "not-selected" }
     : undefined;
   let awaitingTarget = args.targetChoice !== undefined;
+  let targetSelected = false;
 
   const targetedPersona = async (
     output: Output,
@@ -239,6 +244,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       );
     }
     awaitingTarget = false;
+    targetSelected = true;
     targetChoiceResult = {
       ...args.targetChoice!,
       status: "selected",
@@ -295,6 +301,13 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
         const line = formatOutput(entry.output);
         if (line) process.stderr.write(line + "\n");
       },
+      ...(args.stopAfterTargetScript && args.targetChoice
+        ? {
+            stopWhen: (_entry: unknown, state: ComposedState) =>
+              targetSelected &&
+              state.baseline.scripts[args.targetChoice!.scriptId]?.completed === true,
+          }
+        : {}),
     });
     // Persist the exact terminal state as well as each successful step. This
     // matters when a run stops between public outputs (max-steps) or an input

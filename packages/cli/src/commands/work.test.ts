@@ -111,6 +111,8 @@ describe("structured development work execution", () => {
       },
       result: {
         targetChoice: { status: "selected", optionId: "stay" },
+        targetScriptCompleted: true,
+        responseTrace: [],
         workItem: { key: "scene/reply/stay" },
         inputs: 1,
         visibleOutputs: 2,

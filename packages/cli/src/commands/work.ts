@@ -250,6 +250,8 @@ function compactCoverResult(result: CoverChoiceSummary) {
       ? { choiceCoverage: { summary: result.choiceCoverage.summary } }
       : {}),
     targetChoice: result.targetChoice,
+    targetScriptCompleted: result.targetScriptCompleted,
+    responseTrace: result.responseTrace,
     workItem: {
       key: result.workItem.key,
       scriptId: result.workItem.scriptId,

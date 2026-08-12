@@ -1,6 +1,11 @@
 import {
+  readSessionLog,
+  type LoggedStep,
+} from "./fork";
+import {
   collectChoiceCoverage,
   type ChoiceCoverageWorkItem,
+  type NarrativeResponse,
 } from "./choice-coverage";
 import {
   runAutoplay,
@@ -20,6 +25,8 @@ export interface CoverChoiceArgs {
 
 export interface CoverChoiceSummary extends AutoplaySummary {
   workItem: ChoiceCoverageWorkItem;
+  targetScriptCompleted: boolean;
+  responseTrace: NarrativeResponse[];
 }
 
 export async function coverChoiceCommand(args: CoverChoiceArgs): Promise<void> {
@@ -61,6 +68,7 @@ export async function runChoiceCoverageWorkItem(
       optionId: workItem.optionId,
       optionText: workItem.optionText,
     },
+    stopAfterTargetScript: true,
   });
   if (summary.targetChoice?.status !== "selected") {
     throw new Error(
@@ -69,7 +77,59 @@ export async function runChoiceCoverageWorkItem(
       }`,
     );
   }
-  return { ...summary, workItem };
+  const targetScriptCompleted =
+    summary.finalState.baseline.scripts[workItem.scriptId]?.completed === true;
+  if (!targetScriptCompleted) {
+    throw new Error(
+      `Choice coverage response did not finish target script: ${workItem.scriptId}`,
+    );
+  }
+  return {
+    ...summary,
+    workItem,
+    targetScriptCompleted,
+    responseTrace: extractTargetResponse(
+      await readSessionLog(args.gameDir, args.session),
+      workItem,
+    ),
+  };
+}
+
+function extractTargetResponse(
+  entries: LoggedStep[],
+  workItem: ChoiceCoverageWorkItem,
+): NarrativeResponse[] {
+  const start = entries.findIndex((entry) => {
+    const decision = entry.decision as Record<string, unknown> | undefined;
+    return decision?.scriptId === workItem.scriptId &&
+      decision.choiceId === workItem.choiceId &&
+      decision.optionId === workItem.optionId;
+  });
+  if (start < 0) return [];
+  const trace: NarrativeResponse[] = [];
+  for (const entry of entries.slice(start)) {
+    const output = entry.output as Record<string, unknown> | undefined;
+    if (output?.type === "narration" && typeof output.text === "string") {
+      trace.push({ type: "narration", text: output.text });
+      continue;
+    }
+    if (output?.type === "dialogue" && typeof output.text === "string") {
+      trace.push({
+        type: "dialogue",
+        text: output.text,
+        ...(typeof output.speakerId === "string"
+          ? { speakerId: output.speakerId }
+          : {}),
+      });
+      continue;
+    }
+    if (output?.type === "choice" &&
+      Array.isArray(output.options) && output.options.length === 1) {
+      continue;
+    }
+    if (trace.length > 0) break;
+  }
+  return trace;
 }
 
 function selectWorkItem(

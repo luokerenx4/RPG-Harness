@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createInitialState } from "./state";
 import { runLoop } from "./runLoop";
+import { makeGame } from "./test-utils";
 import type { Game } from "./types";
 
 const terminalGame: Game = {
@@ -20,6 +21,31 @@ const terminalGame: Game = {
 };
 
 describe("runLoop terminal output", () => {
+  test("stops at a caller-owned observable condition without claiming game completion", async () => {
+    const game = makeGame({
+      runFn: async function* (ctx) {
+        yield { type: "narration" as const, text: "before" };
+        ctx.state.baseline.variables.reached = 1;
+        yield { type: "narration" as const, text: "boundary" };
+        yield { type: "narration" as const, text: "after" };
+      },
+    });
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async () => ({ type: "next" }),
+      {
+        stopWhen: (_entry, state) => state.baseline.variables.reached === 1,
+      },
+    );
+
+    expect(result.reason).toBe("condition-met");
+    expect(result.done).toBe(false);
+    expect(result.trace.map(({ output }) =>
+      output.type === "narration" ? output.text : output.type
+    )).toEqual(["before", "boundary"]);
+  });
+
   test("classifies gameEnd as completed without requesting another input", async () => {
     let inputCalls = 0;
     const result = await runLoop(
@@ -34,6 +60,19 @@ describe("runLoop terminal output", () => {
     expect(result.done).toBe(true);
     expect(result.trace.at(-1)?.output.type).toBe("gameEnd");
     expect(inputCalls).toBe(0);
+  });
+
+  test("terminal output takes precedence over a matching local stop condition", async () => {
+    const result = await runLoop(
+      terminalGame,
+      createInitialState(terminalGame),
+      async () => ({ type: "next" }),
+      { stopWhen: () => true },
+    );
+
+    expect(result.reason).toBe("completed");
+    expect(result.done).toBe(true);
+    expect(result.trace.at(-1)?.output.type).toBe("gameEnd");
   });
 
   test("does not request a decision after the input budget is exhausted", async () => {

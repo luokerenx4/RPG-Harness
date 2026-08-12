@@ -54,7 +54,16 @@ describe("coverage-driven autoplay", () => {
       status: "selected",
       index: 0,
     });
+    // This tiny fixture ends with the target script, so terminal truth wins
+    // over the local coverage boundary.
     expect(summary.reason).toBe("completed");
+    expect(summary.targetScriptCompleted).toBe(true);
+    expect(summary.responseTrace).toEqual([
+      { type: "narration", text: "After the choice." },
+      { type: "narration", text: "After the pacing prompt." },
+    ]);
+    expect(summary.decisions).toBe(4);
+    expect(summary.ending).toBe("intro");
     // The branch lineage intentionally excludes the source's later alpha
     // selection, so it still sees alpha as its sibling work item. Global
     // aggregation combines the two independent pieces of evidence.
@@ -120,6 +129,11 @@ async function writeScript(
       ...options,
       "",
       "After the choice.",
+      "",
+      "? Enter.",
+      "- Continue",
+      "",
+      "After the pacing prompt.",
       "",
       "[end]",
       "",

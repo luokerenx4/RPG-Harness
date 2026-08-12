@@ -378,6 +378,46 @@ describe("choice branch coverage", () => {
     expect(report.authoring.summary.convergedResponses).toBe(0);
   });
 
+  test("follows a selected response through one-button pacing prompts", () => {
+    const pacing = {
+      type: "choice",
+      prompt: "Enter?",
+      options: [{ text: "Enter", available: true }],
+    };
+    const report = analyzeChoiceCoverage([{
+      session: "seed",
+      entries: [{ input: { type: "next" }, output: choice, checkpoint: checkpoint("2".repeat(64)) }],
+    }, {
+      session: "alone",
+      entries: [{
+        input: { type: "choose", index: 0 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "alone" },
+        output: { type: "narration", text: "A shared threshold." },
+      }, {
+        input: { type: "next" },
+        output: pacing,
+      }, {
+        input: { type: "choose", index: 0 },
+        output: { type: "narration", text: "You enter alone." },
+      }],
+    }, {
+      session: "friends",
+      entries: [{
+        input: { type: "choose", index: 1 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "friends" },
+        output: { type: "narration", text: "A shared threshold." },
+      }, {
+        input: { type: "next" },
+        output: pacing,
+      }, {
+        input: { type: "choose", index: 0 },
+        output: { type: "narration", text: "You enter together." },
+      }],
+    }]);
+
+    expect(report.authoring.summary.convergedResponses).toBe(0);
+  });
+
   test("a single branch report follows fork ancestry only to its checkpoint", async () => {
     const gameDir = await mkdtemp(path.join(tmpdir(), "rpgh-choice-lineage-"));
     temporaryDirectories.push(gameDir);
