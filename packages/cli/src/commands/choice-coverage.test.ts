@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { scriptRevision } from "@rpg-harness/engine";
 import { analyzeChoiceCoverage, collectAuthoredChoices, collectChoiceCoverage, formatChoiceCoverage } from "./choice-coverage";
 
 const temporaryDirectories: string[] = [];
@@ -146,6 +147,7 @@ describe("choice branch coverage", () => {
       pendingOptions: 1,
       lockedOptions: 1,
       untrackedChoiceEvents: 0,
+      staleChoiceEvents: 0,
     });
     expect(report.workItems).toEqual([{
       key: "ending/final-tether/friends",
@@ -221,6 +223,63 @@ describe("choice branch coverage", () => {
     expect(report.summary.untrackedChoiceEvents).toBe(1);
     expect(report.choices).toEqual([]);
     expect(report.workItems).toEqual([]);
+  });
+
+  test("ignores old branch evidence after a current authored revision is observed", () => {
+    const game = {
+      title: "Fresh choices",
+      characters: [],
+      scripts: [{
+        id: "ending",
+        title: "Ending",
+        beats: [{
+          type: "choice",
+          id: "final-tether",
+          prompt: "Who remains now?",
+          options: [
+            { id: "alone", text: "Alone", aiTags: ["independent"] },
+            { id: "friends", text: "With friends", aiTags: ["social"] },
+          ],
+        }],
+      }],
+    } as const;
+    const currentRevision = scriptRevision(game.scripts[0] as never);
+    const current = {
+      ...choice,
+      scriptRevision: currentRevision,
+      prompt: "Who remains now?",
+      options: choice.options.slice(0, 2),
+    };
+    const report = analyzeChoiceCoverage([{
+      session: "old",
+      entries: [{
+        input: { type: "next" },
+        output: { ...choice, scriptRevision: "old-revision" },
+        checkpoint: checkpoint("d".repeat(64)),
+      }],
+    }, {
+      session: "current",
+      entries: [{
+        input: { type: "next" },
+        output: current,
+        checkpoint: checkpoint("e".repeat(64)),
+      }, {
+        input: { type: "choose", index: 0 },
+        decision: {
+          scriptId: "ending",
+          scriptRevision: currentRevision,
+          choiceId: "final-tether",
+          optionId: "alone",
+        },
+        output: { type: "narration", text: "Current response" },
+      }],
+    }], [], collectAuthoredChoices(game as never));
+
+    expect(report.summary.staleChoiceEvents).toBe(1);
+    expect(report.choices[0]?.options).toEqual([
+      expect.objectContaining({ id: "alone", status: "selected" }),
+      expect.objectContaining({ id: "friends", status: "pending" }),
+    ]);
   });
 
   test("ignores one-button pacing prompts in runtime and authored branch debt", () => {

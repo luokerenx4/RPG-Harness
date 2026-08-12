@@ -64,7 +64,7 @@ COMMANDS
   sessions <game-dir>
       List existing sessions (one per line, stdout). Empty status to stderr.
 
-  coverage <game-dir> [--session NAME] [--status pending|completed|started|uncovered|ignored|all]
+  coverage <game-dir> [--session NAME] [--status pending|completed|started|stale|uncovered|ignored|all]
            [--format table|json]
       Aggregate real save sessions into story coverage. Defaults to pending
       scripts (started + uncovered), producing an AI-ready playtest worklist.
@@ -408,13 +408,14 @@ async function runCoverage(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh coverage <game-dir> [--session NAME] [--status pending|completed|started|uncovered|ignored|all] [--format table|json]",
+    "rpgh coverage <game-dir> [--session NAME] [--status pending|completed|started|stale|uncovered|ignored|all] [--format table|json]",
   );
   const status = values.status ?? "pending";
   const allowedStatuses = [
     "pending",
     "completed",
     "started",
+    "stale",
     "uncovered",
     "ignored",
     "all",

@@ -10,6 +10,7 @@ import type {
   ScriptCursor,
 } from "../types";
 import { END_LABEL } from "../types";
+import { scriptRevision as revisionOf } from "../scriptRevision";
 import { drainNarrations } from "./drainNarrations";
 import {
   fireOnBeatAfter,
@@ -20,8 +21,6 @@ import {
   fireOnScriptStart,
 } from "./hooks";
 import { mutateState } from "./mutateState";
-
-const scriptRevisionCache = new WeakMap<Script, string>();
 
 // Run a single script's beats from state.baseline.beatIndex forward.
 // Yields per beat; returns true when the script reaches [end] or its
@@ -170,6 +169,7 @@ export async function* runScript(
         const presented = {
           type: "choice",
           scriptId: script.id,
+          scriptRevision: revisionOf(script),
           ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
           prompt: beat.prompt,
           options: rendered,
@@ -852,20 +852,6 @@ function hasMatchingNeighborContext(
     ? next === undefined
     : next !== undefined && anchorBeat(next) === cursor.nextBeatAnchor;
   return previousMatches && nextMatches;
-}
-
-function revisionOf(script: Script): string {
-  const cached = scriptRevisionCache.get(script);
-  if (cached !== undefined) return cached;
-  const source = JSON.stringify(script.beats);
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < source.length; i++) {
-    hash ^= source.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  const revision = (hash >>> 0).toString(36);
-  scriptRevisionCache.set(script, revision);
-  return revision;
 }
 
 // Rebuild only the silent visual state along the control-flow path that can

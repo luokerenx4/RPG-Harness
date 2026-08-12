@@ -167,6 +167,7 @@ export function applyDelta(
 export function markScriptCompleted(
   state: ComposedState,
   scriptId: string,
+  completedRevision?: string,
 ): void {
   let entry = state.baseline.scripts[scriptId];
   if (!entry) {
@@ -175,6 +176,7 @@ export function markScriptCompleted(
   }
   const wasCompleted = entry.completed;
   entry.completed = true;
+  if (completedRevision !== undefined) entry.completedRevision = completedRevision;
   if (!wasCompleted) {
     state.baseline.completionOrder.push(scriptId);
   }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ComposedState, Game, Script } from "@rpg-harness/engine";
+import { scriptRevision, type ComposedState, type Game, type Script } from "@rpg-harness/engine";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -45,6 +45,7 @@ describe("story coverage", () => {
       total: 4,
       tracked: 3,
       completed: 1,
+      stale: 0,
       started: 1,
       uncovered: 1,
       ignored: 1,
@@ -74,6 +75,33 @@ describe("story coverage", () => {
     await expect(
       collectScriptCoverage("/tmp/coverage-test", "../outside"),
     ).rejects.toThrow("Invalid session name");
+  });
+
+  test("marks completions from an edited authored revision as stale", () => {
+    const script: Script = {
+      id: "scene",
+      title: "Scene",
+      beats: [{ type: "narration", text: "new copy" }],
+    };
+    const game = { title: "Freshness", characters: [], scripts: [script] } as Game;
+    const old = state();
+    old.baseline.scripts.scene = {
+      completed: true,
+      completedRevision: "old-revision",
+      selfSwitches: { A: false, B: false, C: false, D: false },
+    };
+    const report = analyzeScriptCoverage(game, [{ session: "old-run", state: old }]);
+
+    expect(report.summary).toMatchObject({ completed: 0, stale: 1 });
+    expect(report.scripts[0]).toMatchObject({
+      status: "stale",
+      completedSessions: [],
+      staleSessions: ["old-run"],
+    });
+
+    old.baseline.scripts.scene!.completedRevision = scriptRevision(script);
+    expect(analyzeScriptCoverage(game, [{ session: "new-run", state: old }])
+      .scripts[0]?.status).toBe("completed");
   });
 
   test("scopes development evidence to a source session and its fork descendants", async () => {

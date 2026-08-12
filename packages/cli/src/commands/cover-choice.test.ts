@@ -88,7 +88,7 @@ describe("coverage-driven autoplay", () => {
       maxSteps: 20,
       verbose: false,
       pretty: false,
-    })).rejects.toThrow("Choice coverage option is stale");
+    })).rejects.toThrow("Pending choice branch not found");
 
     expect((await readSessionLog(gameDir, "cover-stale")).some((entry) =>
       (entry.decision as { optionId?: string } | undefined)?.optionId !== undefined

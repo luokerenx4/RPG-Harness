@@ -172,6 +172,7 @@ describe("AI development worklist", () => {
       title: "Ending",
       status: "uncovered",
       completedSessions: [],
+      staleSessions: [],
       startedSessions: [],
     };
     const choices = choiceReport();
@@ -258,6 +259,7 @@ function storyReport(): ScriptCoverageReport {
       total: 2,
       tracked: 2,
       completed: 0,
+      stale: 0,
       started: 1,
       uncovered: 1,
       ignored: 0,
@@ -271,6 +273,7 @@ function storyReport(): ScriptCoverageReport {
         title: "Started",
         status: "started",
         completedSessions: [],
+        staleSessions: [],
         startedSessions: ["player"],
       },
       {
@@ -278,6 +281,7 @@ function storyReport(): ScriptCoverageReport {
         title: "Unseen",
         status: "uncovered",
         completedSessions: [],
+        staleSessions: [],
         startedSessions: [],
       },
     ],
@@ -302,6 +306,7 @@ function choiceReport(): ChoiceCoverageReport {
       pendingOptions: 1,
       lockedOptions: 0,
       untrackedChoiceEvents: 0,
+      staleChoiceEvents: 0,
     },
     sessions: ["player"],
     sessionErrors: [{ session: "broken", error: "bad log" }],

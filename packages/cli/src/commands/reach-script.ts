@@ -3,6 +3,7 @@ import {
   compareChoiceSearchAssessment,
   peek,
   searchForScript,
+  scriptRevision,
   step,
   type ChoiceSearchClosest,
   type ChoiceSearchProgress,
@@ -174,7 +175,8 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     }, source);
     const replay = await replayPath(args, game, inputs);
     output = replay.output;
-    if (replay.state.baseline.scripts[args.scriptId]?.completed !== true) {
+    const completed = replay.state.baseline.scripts[args.scriptId];
+    if (completed?.completed !== true || completed.completedRevision !== scriptRevision(script)) {
       throw new Error(`Reach replay did not complete script ${args.scriptId}`);
     }
     if (canonicalJson(replay.state) !== canonicalJson(foundAttempt.search.state)) {
@@ -217,6 +219,13 @@ async function replayPath(
 ): Promise<{ output: Output | null; state: ComposedState }> {
   return withSessionLock(args.gameDir, args.session, async () => {
     let state = await loadSession(args.gameDir, args.session, game);
+    const targetScript = game.scripts.find((script) => script.id === args.scriptId)!;
+    const prior = state.baseline.scripts[args.scriptId];
+    if (prior?.completed === true && prior.completedRevision !== scriptRevision(targetScript)) {
+      prior.completed = false;
+      state.baseline.completionOrder = state.baseline.completionOrder
+        .filter((scriptId) => scriptId !== args.scriptId);
+    }
     let current = await peek(game, state);
     state = current.state;
     for (const input of inputs) {

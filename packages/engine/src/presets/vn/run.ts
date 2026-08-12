@@ -13,6 +13,7 @@
 
 import { evaluateCondition } from "../../condition";
 import { markScriptCompleted } from "../../state";
+import { scriptRevision } from "../../scriptRevision";
 import {
   checkTriggers,
   drainNarrations,
@@ -57,7 +58,7 @@ export async function* vnRun(
       const finished = yield* runScript(ctx, script);
       if (finished) {
         const completedId = script.id;
-        markScriptCompleted(ctx.state, completedId);
+        markScriptCompleted(ctx.state, completedId, scriptRevision(script));
         ctx.state.baseline.currentScriptId = null;
         ctx.state.baseline.beatIndex = 0;
         fireOnScriptComplete(ctx, completedId);

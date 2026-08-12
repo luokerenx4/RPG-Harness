@@ -42,6 +42,7 @@ export type {
   ScriptSearchTarget,
 } from "./search";
 export { runLoop } from "./runLoop";
+export { scriptRevision } from "./scriptRevision";
 export type { StepResult } from "./step";
 export type {
   TraceEntry,

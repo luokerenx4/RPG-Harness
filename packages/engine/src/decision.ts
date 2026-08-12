@@ -2,6 +2,7 @@ import type { Input, Output } from "./types";
 
 export interface ChoiceDecisionContext {
   scriptId: string;
+  scriptRevision?: string;
   choiceId: string;
   optionId: string;
 }
@@ -48,6 +49,9 @@ export function choiceDecisionContext(
     ? undefined
     : {
         scriptId: output.scriptId,
+        ...(output.scriptRevision !== undefined
+          ? { scriptRevision: output.scriptRevision }
+          : {}),
         choiceId: output.choiceId,
         optionId,
       };

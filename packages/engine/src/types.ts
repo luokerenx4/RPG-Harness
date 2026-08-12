@@ -51,6 +51,8 @@ export interface CharacterState {
 // already taken") without polluting the global variables namespace.
 export interface ScriptState {
   completed: boolean;
+  /** Authored runtime revision that this completion actually exercised. */
+  completedRevision?: string;
   selfSwitches: { A: boolean; B: boolean; C: boolean; D: boolean };
 }
 
@@ -1326,6 +1328,7 @@ export type Output =
   | {
       type: "choice";
       scriptId?: string;
+      scriptRevision?: string;
       choiceId?: string;
       prompt?: string;
       options: RenderedChoice[];

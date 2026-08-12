@@ -6,10 +6,12 @@ describe("choice decision context", () => {
     expect(choiceDecisionContext({
       type: "choice",
       scriptId: "ending",
+      scriptRevision: "rev-2",
       choiceId: "route",
       options: [{ id: "friends", text: "Friends", available: true }],
     }, { type: "choose", index: 0 })).toEqual({
       scriptId: "ending",
+      scriptRevision: "rev-2",
       choiceId: "route",
       optionId: "friends",
     });

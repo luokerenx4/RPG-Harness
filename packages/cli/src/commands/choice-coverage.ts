@@ -1,5 +1,5 @@
 import { assertSessionName, isSessionCheckpointRef } from "@rpg-harness/session-store";
-import type { Condition, Game } from "@rpg-harness/engine";
+import { scriptRevision, type Condition, type Game } from "@rpg-harness/engine";
 import path from "node:path";
 import { loadGame } from "../loader";
 import { listSessions } from "../session";
@@ -60,6 +60,7 @@ export interface ChoiceCoverageReport {
     pendingOptions: number;
     lockedOptions: number;
     untrackedChoiceEvents: number;
+    staleChoiceEvents: number;
   };
   sessions: string[];
   sessionErrors: Array<{ session: string; error: string }>;
@@ -89,6 +90,7 @@ export interface ChoiceCoverageReport {
 export interface AuthoredChoiceRow {
   key: string;
   scriptId: string;
+  scriptRevision?: string;
   scriptTitle: string;
   source?: string;
   beatIndex: number;
@@ -167,6 +169,7 @@ interface RuntimeChoiceOption {
 interface RuntimeChoiceOutput {
   type: "choice";
   scriptId?: unknown;
+  scriptRevision?: unknown;
   choiceId?: unknown;
   prompt?: unknown;
   options?: unknown;
@@ -217,6 +220,7 @@ interface MutableOption {
   selectedSessions: Set<string>;
   responseTraces: Map<string, NarrativeResponse[]>;
   evidence?: ChoiceCoverageEvidence;
+  currentObserved: boolean;
 }
 
 interface MutableChoice {
@@ -286,6 +290,28 @@ export function analyzeChoiceCoverage(
     responseTrace: NarrativeResponse[];
   }> = [];
   let untrackedChoiceEvents = 0;
+  let staleChoiceEvents = 0;
+  const currentObservedKeys = new Set<string>();
+  const authoredRevisions = new Map(
+    authoredChoices.map((choice) => [choice.scriptId, choice.scriptRevision]),
+  );
+  const versionedScripts = new Set<string>();
+  for (const { entries } of logs) {
+    for (const entry of entries) {
+      const output = asChoiceOutput(entry.output);
+      if (typeof output?.scriptId === "string" && typeof output.scriptRevision === "string") {
+        versionedScripts.add(output.scriptId);
+      }
+      const decision = asStableDecision(entry.decision);
+      if (decision?.scriptRevision !== undefined) versionedScripts.add(decision.scriptId);
+    }
+  }
+  const isCurrentEvidence = (scriptId: string, revision?: string): boolean => {
+    const authoredRevision = authoredRevisions.get(scriptId);
+    return authoredRevision === undefined ||
+      !versionedScripts.has(scriptId) ||
+      revision === authoredRevision;
+  };
 
   for (const { session, entries } of logs) {
     let pending: { choice: MutableChoice; options: RuntimeChoiceOption[] } | null = null;
@@ -293,7 +319,10 @@ export function analyzeChoiceCoverage(
     for (let offset = 0; offset < entries.length; offset += 1) {
       const entry = entries[offset]!;
       const explicitDecision = asStableDecision(entry.decision);
-      if (explicitDecision) {
+      if (explicitDecision && isCurrentEvidence(
+        explicitDecision.scriptId,
+        explicitDecision.scriptRevision,
+      )) {
         const selection = {
           session,
           ...explicitDecision,
@@ -331,7 +360,10 @@ export function analyzeChoiceCoverage(
         untrackedChoiceEvents += 1;
         continue;
       }
+      const currentEvidence = isCurrentEvidence(stable.scriptId, stable.scriptRevision);
+      if (!currentEvidence) staleChoiceEvents += 1;
       const key = `${stable.scriptId}/${stable.choiceId}`;
+      if (currentEvidence) currentObservedKeys.add(key);
       let choice = choices.get(key);
       if (!choice) {
         choice = {
@@ -353,12 +385,18 @@ export function analyzeChoiceCoverage(
             everAvailable: false,
             selectedSessions: new Set(),
             responseTraces: new Map(),
+            currentObserved: false,
           };
           choice!.options.set(option.id, row);
         }
         row.text = option.text;
         row.index = index;
-        if (option.available) {
+        if (currentEvidence) {
+          row.currentObserved = true;
+          row.everAvailable = option.available;
+          row.evidence = undefined;
+        }
+        if (option.available && (!versionedScripts.has(stable.scriptId) || currentEvidence)) {
           row.everAvailable = true;
           if (isSessionCheckpointRef(entry.checkpoint)) {
             row.evidence = {
@@ -376,7 +414,9 @@ export function analyzeChoiceCoverage(
           }
         }
       });
-      pending = { choice, options: output.options as RuntimeChoiceOption[] };
+      pending = currentEvidence
+        ? { choice, options: output.options as RuntimeChoiceOption[] }
+        : null;
     }
   }
 
@@ -393,6 +433,12 @@ export function analyzeChoiceCoverage(
     }
   }
 
+  for (const choice of choices.values()) {
+    if (!currentObservedKeys.has(choice.key)) continue;
+    for (const [optionId, option] of choice.options) {
+      if (!option.currentObserved) choice.options.delete(optionId);
+    }
+  }
   const rows = [...choices.values()]
     .map(finalizeChoice)
     .sort((a, b) => a.key.localeCompare(b.key));
@@ -411,12 +457,11 @@ export function analyzeChoiceCoverage(
     ),
   );
   const optionRows = rows.flatMap((choice) => choice.options);
-  const observedKeys = new Set(rows.map((choice) => choice.key));
   const authoringChoices = authoredChoices.map((choice): AuthoredChoiceRow => ({
     ...choice,
     status: choice.choiceId === undefined
       ? "legacy"
-      : observedKeys.has(`${choice.scriptId}/${choice.choiceId}`)
+      : currentObservedKeys.has(`${choice.scriptId}/${choice.choiceId}`)
         ? "observed"
         : "unseen",
   }));
@@ -525,6 +570,7 @@ export function analyzeChoiceCoverage(
       pendingOptions: countOption("pending"),
       lockedOptions: countOption("locked"),
       untrackedChoiceEvents,
+      staleChoiceEvents,
     },
     sessions: logs.map(({ session }) => session).sort(),
     sessionErrors,
@@ -586,6 +632,7 @@ export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredCh
         ? `${script.id}/beat-${beatIndex}`
         : `${script.id}/${beat.id}`,
       scriptId: script.id,
+      scriptRevision: scriptRevision(script),
       scriptTitle: script.title,
       ...(source ? { source } : {}),
       beatIndex,
@@ -603,6 +650,7 @@ export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredCh
 
 function asStableDecision(value: unknown): {
   scriptId: string;
+  scriptRevision?: string;
   choiceId: string;
   optionId: string;
 } | null {
@@ -613,6 +661,9 @@ function asStableDecision(value: unknown): {
     typeof decision.optionId === "string"
     ? {
         scriptId: decision.scriptId,
+        ...(typeof decision.scriptRevision === "string"
+          ? { scriptRevision: decision.scriptRevision }
+          : {}),
         choiceId: decision.choiceId,
         optionId: decision.optionId,
       }
@@ -631,7 +682,7 @@ export function formatChoiceCoverage(
         : choice.status === statuses,
   );
   const lines = [
-    `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.untrackedChoiceEvents} legacy log events`,
+    `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.staleChoiceEvents} stale · ${report.summary.untrackedChoiceEvents} legacy log events`,
     `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids · ${report.authoring.summary.convergedResponses} converged responses need review`,
     `AI intent coverage: ${report.authoring.summary.intentCompleteChoices}/${report.authoring.summary.stableChoices} stable choices complete · ${report.authoring.summary.taggedOptions}/${report.authoring.summary.stableOptions} stable options tagged · ${report.authoring.summary.intentPartialChoices} partial · ${report.authoring.summary.intentMissingChoices} missing`,
   ];
@@ -757,6 +808,7 @@ function asChooseInput(value: unknown): { type: "choose"; index: number } | null
 
 function stableChoice(output: RuntimeChoiceOutput): {
   scriptId: string;
+  scriptRevision?: string;
   choiceId: string;
   options: Array<{ id: string; text: string; available: boolean }>;
 } | null {
@@ -771,6 +823,9 @@ function stableChoice(output: RuntimeChoiceOutput): {
   )) return null;
   return {
     scriptId: output.scriptId,
+    ...(typeof output.scriptRevision === "string"
+      ? { scriptRevision: output.scriptRevision }
+      : {}),
     choiceId: output.choiceId,
     options: options as Array<{ id: string; text: string; available: boolean }>,
   };

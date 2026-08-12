@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { ComposedState, Game } from "@rpg-harness/engine";
+import { scriptRevision, type ComposedState, type Game } from "@rpg-harness/engine";
 import { assertSessionName } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { listSessions, sessionDir } from "../session";
@@ -8,6 +8,7 @@ import { sessionFamily } from "../session-lineage";
 
 export type CoverageStatus =
   | "completed"
+  | "stale"
   | "started"
   | "uncovered"
   | "ignored";
@@ -17,6 +18,7 @@ export interface ScriptCoverageRow {
   title: string;
   status: CoverageStatus;
   completedSessions: string[];
+  staleSessions: string[];
   startedSessions: string[];
   ignoreReason?: string;
 }
@@ -26,6 +28,7 @@ export interface ScriptCoverageReport {
     total: number;
     tracked: number;
     completed: number;
+    stale: number;
     started: number;
     uncovered: number;
     ignored: number;
@@ -49,7 +52,7 @@ export async function coverageCommand(args: CoverageArgs): Promise<void> {
     args.status === "all"
       ? true
       : args.status === "pending"
-        ? row.status === "started" || row.status === "uncovered"
+        ? row.status === "started" || row.status === "stale" || row.status === "uncovered"
         : row.status === args.status,
   );
   if (args.format === "json") {
@@ -98,13 +101,27 @@ export function analyzeScriptCoverage(
   sessionErrors: Array<{ session: string; error: string }> = [],
 ): ScriptCoverageReport {
   const scripts = game.scripts.map((script): ScriptCoverageRow => {
-    const completedSessions = states
+    const currentRevision = scriptRevision(script);
+    const completionStates = states.filter(({ state }) =>
+      state.baseline.scripts[script.id]?.completed === true ||
+      state.baseline.completionOrder.includes(script.id)
+    );
+    const hasVersionedEvidence = completionStates.some(({ state }) =>
+      state.baseline.scripts[script.id]?.completedRevision !== undefined
+    );
+    const completedSessions = completionStates
       .filter(({ state }) =>
-        state.baseline.scripts[script.id]?.completed === true ||
-        state.baseline.completionOrder.includes(script.id),
+        hasVersionedEvidence
+          ? state.baseline.scripts[script.id]?.completedRevision === currentRevision
+          : true,
       )
       .map(({ session }) => session)
       .sort();
+    const staleSessions = hasVersionedEvidence
+      ? completionStates.filter(({ state }) =>
+          state.baseline.scripts[script.id]?.completedRevision !== currentRevision
+        ).map(({ session }) => session).sort()
+      : [];
     const startedSessions = states
       .filter(({ session, state }) =>
         state.baseline.currentScriptId === script.id &&
@@ -118,12 +135,15 @@ export function analyzeScriptCoverage(
         ? "completed"
         : startedSessions.length > 0
           ? "started"
+          : staleSessions.length > 0
+            ? "stale"
           : "uncovered";
     return {
       id: script.id,
       title: script.title,
       status,
       completedSessions,
+      staleSessions,
       startedSessions,
       ...(script.coverage?.reason ? { ignoreReason: script.coverage.reason } : {}),
     };
@@ -139,6 +159,7 @@ export function analyzeScriptCoverage(
       total: scripts.length,
       tracked,
       completed,
+      stale: count("stale"),
       started: count("started"),
       uncovered: count("uncovered"),
       ignored,
@@ -156,7 +177,7 @@ function formatScriptCoverage(
   scripts: ScriptCoverageRow[],
 ): string {
   const lines = [
-    `Story coverage: ${report.summary.completed}/${report.summary.tracked} completed (${report.summary.completionPercent}%) · ${report.summary.started} started · ${report.summary.uncovered} uncovered · ${report.summary.ignored} ignored`,
+    `Story coverage: ${report.summary.completed}/${report.summary.tracked} completed (${report.summary.completionPercent}%) · ${report.summary.started} started · ${report.summary.stale} stale · ${report.summary.uncovered} uncovered · ${report.summary.ignored} ignored`,
   ];
   if (scripts.length === 0) lines.push("(no matching scripts)");
   else {
@@ -169,6 +190,8 @@ function formatScriptCoverage(
           ? row.completedSessions.join(",")
           : row.status === "started"
             ? row.startedSessions.join(",")
+            : row.status === "stale"
+              ? row.staleSessions.join(",")
             : row.ignoreReason ?? "—";
       lines.push(
         `${row.status.padEnd(statusWidth)}  ${row.id.padEnd(idWidth)}  ${row.title}  ${sessions || "—"}`,

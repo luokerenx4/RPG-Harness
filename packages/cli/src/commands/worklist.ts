@@ -245,7 +245,7 @@ export function analyzeDevelopmentWorklist(input: {
       .map((item) => item.scriptId),
   );
   for (const script of input.story.scripts) {
-    if (script.status !== "started" && script.status !== "uncovered") continue;
+    if (script.status !== "started" && script.status !== "stale" && script.status !== "uncovered") continue;
     if (script.status === "uncovered" && preciselyReachableScripts.has(script.id)) {
       continue;
     }
@@ -254,10 +254,12 @@ export function analyzeDevelopmentWorklist(input: {
     items.push({
       key: `story/${script.id}`,
       kind: "story-coverage",
-      priority: script.status === "started" ? "P1" : "P2",
+      priority: script.status === "started" || script.status === "stale" ? "P1" : "P2",
       actionability: "executable",
       title: script.status === "started"
         ? `Finish started script: ${script.title}`
+        : script.status === "stale"
+          ? `Re-verify edited script: ${script.title}`
         : `Reach uncovered script: ${script.title}`,
       detail: `${script.id} is ${script.status} in real session coverage`,
       operation: {
@@ -273,6 +275,7 @@ export function analyzeDevelopmentWorklist(input: {
         status: script.status,
         completedSessions: script.completedSessions,
         startedSessions: script.startedSessions,
+        staleSessions: script.staleSessions,
       },
     });
   }
@@ -353,7 +356,7 @@ export function analyzeDevelopmentWorklist(input: {
       byActionability,
       openReports: input.reports.length,
       sessionErrors: sessionErrors.size,
-      storyPending: input.story.summary.started + input.story.summary.uncovered,
+      storyPending: input.story.summary.started + (input.story.summary.stale ?? 0) + input.story.summary.uncovered,
       choiceBranches: input.choices.workItems.length,
       authoringItems: input.choices.authoring.workItems.length,
     },

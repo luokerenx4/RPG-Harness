@@ -1,6 +1,7 @@
 import { cloneState } from "./state";
 import { peek, step } from "./step";
 import { evaluateCondition } from "./condition";
+import { scriptRevision } from "./scriptRevision";
 import type {
   ComposedState,
   Condition,
@@ -92,7 +93,13 @@ interface SearchNode {
 
 type SearchTarget =
   | { kind: "choice"; scriptId: string; choiceId: string; relatedActivityIds: string[] }
-  | { kind: "script"; scriptId: string; relatedActivityIds: string[] };
+  | {
+      kind: "script";
+      scriptId: string;
+      revision: string;
+      acceptUnversionedCompletion: true;
+      relatedActivityIds: string[];
+    };
 
 /**
  * Goal-directed best-first search over the same public Input/Output contract
@@ -123,6 +130,12 @@ export async function searchForScript(
   return searchForTarget(game, initialState, {
     kind: "script",
     ...target,
+    revision: scriptRevision(game.scripts.find((script) => script.id === target.scriptId) ?? {
+      id: target.scriptId,
+      title: target.scriptId,
+      beats: [],
+    }),
+    acceptUnversionedCompletion: true,
     relatedActivityIds: relatedActivities(game, target.scriptId),
   }, options);
 }
@@ -146,9 +159,18 @@ async function searchForTarget(
     throw new Error("choice search progressEvery must be a positive integer");
   }
 
+  const startingState = cloneState(initialState);
+  if (isScriptTarget(target)) {
+    const prior = startingState.baseline.scripts[target.scriptId];
+    if (prior?.completed === true && prior.completedRevision !== target.revision) {
+      prior.completed = false;
+      startingState.baseline.completionOrder = startingState.baseline.completionOrder
+        .filter((scriptId) => scriptId !== target.scriptId);
+    }
+  }
   const start = await settleForced(
     game,
-    cloneState(initialState),
+    startingState,
     [],
     target,
     maxSteps,
@@ -406,7 +428,11 @@ function isTargetReached(
   target: SearchTarget,
 ): boolean {
   if (isScriptTarget(target)) {
-    return node.state.baseline.scripts[target.scriptId]?.completed === true;
+    const state = node.state.baseline.scripts[target.scriptId];
+    return state?.completed === true && (
+      state.completedRevision === target.revision ||
+      target.acceptUnversionedCompletion
+    );
   }
   return node.output?.type === "choice" &&
     node.output.scriptId === target.scriptId &&
@@ -451,8 +477,9 @@ function assessNode(
       ...(evaluated.reason ? { reason: evaluated.reason } : {}),
     };
   });
-  const targetScriptCompleted =
-    node.state.baseline.scripts[target.scriptId]?.completed === true;
+  const targetState = node.state.baseline.scripts[target.scriptId];
+  const targetScriptCompleted = targetState?.completed === true &&
+    (!isScriptTarget(target) || targetState.completedRevision === target.revision);
   const targetScriptActive =
     node.state.baseline.currentScriptId === target.scriptId ||
     (node.output?.type === "choice" && node.output.scriptId === target.scriptId);
