@@ -415,6 +415,17 @@ function reconcileScriptCursor(
   const anchoredIndexes = script.beats.flatMap((beat, index) =>
     anchorBeat(beat) === cursor.beatAnchor ? [index] : [],
   );
+  const choicePresentationAnchor = presentationStableChoiceAnchorFromSerialized(
+    cursor.beatAnchor,
+  );
+  const presentationStableIndexes =
+    choicePresentationAnchor === undefined
+      ? []
+      : script.beats.flatMap((beat, index) =>
+          presentationStableChoiceAnchor(beat) === choicePresentationAnchor
+            ? [index]
+            : [],
+        );
 
   // A hot edit may split a formerly shared reply into per-option branches
   // while retaining the old reply for one of the *other* options. In that
@@ -484,6 +495,28 @@ function reconcileScriptCursor(
     return;
   }
 
+  // Player-facing lock copy is deliberately presentation metadata: authors
+  // can improve it while a save is sitting on the choice without changing
+  // the prompt, options, gates, effects or branches. Locate that same semantic
+  // choice uniquely, then replay any newly inserted visual setup on its path.
+  if (presentationStableIndexes.length === 1) {
+    const target = presentationStableIndexes[0]!;
+    baseline.beatIndex = target;
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+    } else {
+      replayVisualSetupBefore(ctx, script, target);
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      beatAnchor: anchorBeat(script.beats[target]!),
+      scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, target),
+    };
+    return;
+  }
+
   if (
     isSafeInPlaceContentEdit(cursor, current) &&
     cursor.scriptBeatCount === script.beats.length &&
@@ -539,6 +572,24 @@ function reconcileScriptCursor(
       `beatIndex ${baseline.beatIndex}; the anchored beat changed and could ` +
       `not be relocated safely`,
   );
+}
+
+function presentationStableChoiceAnchorFromSerialized(
+  serialized: string,
+): string | undefined {
+  try {
+    return presentationStableChoiceAnchor(JSON.parse(serialized) as Beat);
+  } catch {
+    return undefined;
+  }
+}
+
+function presentationStableChoiceAnchor(beat: Beat): string | undefined {
+  if (!beat || beat.type !== "choice") return undefined;
+  return JSON.stringify({
+    ...beat,
+    options: beat.options.map(({ lockedHint: _lockedHint, ...option }) => option),
+  });
 }
 
 function isSafeInPlaceContentEdit(

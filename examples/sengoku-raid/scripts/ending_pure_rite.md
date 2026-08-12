@@ -32,18 +32,23 @@ requires:
 
 儀を終えて、夜気が白み始める。
 
+:hide-cg
+
 ```yaml
 type: choice
 prompt: 最初に、誰のところへ歩く？
 options:
   - text: 篝のところへ
     requires: { switch: { name: befriended_kagari } }
+    locked_hint: 篝と共に戦場を生き延びていない。
     goto: coda_kagari
   - text: 霞のところへ
     requires: { switch: { name: befriended_kasumi } }
+    locked_hint: 霞と共に戦場を生き延びていない。
     goto: coda_kasumi
   - text: 澪のところへ
     requires: { switch: { name: befriended_mio } }
+    locked_hint: 澪と共に戦場を生き延びていない。
     goto: coda_mio
   - text: 一人で、白む空を見に行く
     goto: coda_alone

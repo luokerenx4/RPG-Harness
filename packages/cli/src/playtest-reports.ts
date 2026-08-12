@@ -53,6 +53,11 @@ export interface PlaytestEvidence {
     input: unknown;
     output: unknown;
   } | null;
+  visualState?: {
+    bg: string | null;
+    portraits: Record<string, string | null>;
+    cg: string | null;
+  };
   checkpoint?: PlaytestCheckpointRef;
   captureErrors?: string[];
 }
@@ -325,6 +330,7 @@ async function captureEvidence(
   let lastCompletedScriptId: string | null = null;
   let logEntry: number | null = null;
   let lastEvent: PlaytestEvidence["lastEvent"] = null;
+  let visualState: PlaytestEvidence["visualState"];
   let checkpoint: PlaytestCheckpointRef | undefined;
 
   try {
@@ -333,6 +339,7 @@ async function captureEvidence(
       baseline?: {
         currentScriptId?: unknown;
         completionOrder?: unknown;
+        visuals?: unknown;
       };
     };
     if (typeof state.baseline?.currentScriptId === "string") {
@@ -343,6 +350,7 @@ async function captureEvidence(
       const last = order[order.length - 1];
       if (typeof last === "string") lastCompletedScriptId = last;
     }
+    visualState = compactVisualState(state.baseline?.visuals);
     checkpoint = await persistPlaytestCheckpoint(gameDir, session, serialized);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -380,9 +388,34 @@ async function captureEvidence(
     currentScriptId,
     lastCompletedScriptId,
     lastEvent,
+    ...(visualState !== undefined ? { visualState } : {}),
     ...(checkpoint !== undefined ? { checkpoint } : {}),
     ...(captureErrors.length > 0 ? { captureErrors } : {}),
   };
+}
+
+function compactVisualState(
+  value: unknown,
+): PlaytestEvidence["visualState"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const visuals = value as Record<string, unknown>;
+  const bg = typeof visuals.bg === "string" ? visuals.bg : null;
+  const cg = typeof visuals.cg === "string" ? visuals.cg : null;
+  const portraits: Record<string, string | null> = {};
+  if (
+    visuals.portraits &&
+    typeof visuals.portraits === "object" &&
+    !Array.isArray(visuals.portraits)
+  ) {
+    for (const [slot, asset] of Object.entries(
+      visuals.portraits as Record<string, unknown>,
+    )) {
+      if (typeof asset === "string" || asset === null) portraits[slot] = asset;
+    }
+  }
+  return { bg, portraits, cg };
 }
 
 async function persistPlaytestCheckpoint(

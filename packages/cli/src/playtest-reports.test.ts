@@ -32,6 +32,14 @@ describe("playtest reports", () => {
         baseline: {
           currentScriptId: "bond_kagari_04",
           completionOrder: ["000_intro", "bond_kagari_01"],
+          visuals: {
+            bg: "assets/backgrounds/inn-veranda-night",
+            portraits: {
+              left: "assets/portraits/kagari-default",
+              right: null,
+            },
+            cg: "assets/cgs/bond-kagari-03",
+          },
         },
       }),
     );
@@ -69,6 +77,14 @@ describe("playtest reports", () => {
     expect(report.evidence.currentScriptId).toBe("bond_kagari_04");
     expect(report.evidence.lastCompletedScriptId).toBe("bond_kagari_01");
     expect(report.evidence.logEntry).toBe(2);
+    expect(report.evidence.visualState).toEqual({
+      bg: "assets/backgrounds/inn-veranda-night",
+      portraits: {
+        left: "assets/portraits/kagari-default",
+        right: null,
+      },
+      cg: "assets/cgs/bond-kagari-03",
+    });
     expect(report.evidence.checkpoint).toMatchObject({
       schemaVersion: 1,
       file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),

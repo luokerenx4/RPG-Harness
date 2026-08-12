@@ -1,0 +1,57 @@
+name: 浄線結局は儀式 CG を退場させ、人物の鍵を人間向けに説明する
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+    switches:
+      chose_court_loyal: true
+      befriended_mio: true
+      pulse_intro_seen: true
+    variables:
+      raidsCompleted: 14
+      shogun_chapter: 3
+      pulse_pure: 5
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 0, intellect: 30 }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    visuals:
+      bg: assets/backgrounds/edo-castle
+  runtime:
+    firedTriggers:
+      - letter_01_dispatch
+      - letter_02_dispatch
+      - letter_03_dispatch
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+    companion: null
+    companionHp: 0
+    pulsePending: null
+inputs:
+  - { type: doActivity, id: script:ending_pure_rite }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/edo-castle
+  - kind: state
+    path: baseline.visuals.cg
+    eq: null
+  - kind: output
+    type: choice
+    present: true

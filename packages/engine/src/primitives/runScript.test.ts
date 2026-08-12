@@ -471,6 +471,93 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(4);
   });
 
+  test("relocates a choice after adding lock hints and replays inserted visual setup", async () => {
+    const oldGame = makeGame({
+      switches: [{ id: "met_a", initial: false }],
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "showCg", assetPath: "assets/cgs/rite" },
+            { type: "narration", text: "the rite ends" },
+            {
+              type: "choice",
+              prompt: "Where now?",
+              options: [
+                {
+                  text: "Find A",
+                  requires: { switch: { name: "met_a" } },
+                  goto: "a",
+                },
+                { text: "Walk alone", goto: "alone" },
+              ],
+            },
+            { type: "label", name: "a" },
+            { type: "endScript" },
+            { type: "label", name: "alone" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    await oldRun.next();
+    expect((await oldRun.next({ type: "next" })).value).toMatchObject({
+      type: "choice",
+      visualState: { cg: "assets/cgs/rite" },
+    });
+
+    const editedGame = makeGame({
+      switches: [{ id: "met_a", initial: false }],
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "showCg", assetPath: "assets/cgs/rite" },
+            { type: "narration", text: "the rite ends" },
+            { type: "hideCg" },
+            {
+              type: "choice",
+              prompt: "Where now?",
+              options: [
+                {
+                  text: "Find A",
+                  requires: { switch: { name: "met_a" } },
+                  lockedHint: "You have not survived a journey together.",
+                  goto: "a",
+                },
+                { text: "Walk alone", goto: "alone" },
+              ],
+            },
+            { type: "label", name: "a" },
+            { type: "endScript" },
+            { type: "label", name: "alone" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "choice",
+      options: [
+        {
+          text: "Find A",
+          available: false,
+          lockedReason: "You have not survived a journey together.",
+        },
+        { text: "Walk alone", available: true },
+      ],
+      visualState: { cg: null },
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(3);
+  });
+
   test("removes a deleted visual directive by replaying from the entry stage", async () => {
     const oldGame = makeGame({
       scripts: [
