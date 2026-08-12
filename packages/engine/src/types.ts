@@ -770,6 +770,12 @@ export interface Script {
     ignore: true;
     reason?: string;
   };
+  // Renderer-neutral breadcrumbs for bounded AI reachability search. These
+  // are not an autoplay macro: the search still submits only currently
+  // available public activities and verifies the resulting replay.
+  ai?: {
+    relatedActivityIds: string[];
+  };
   requires?: Condition;
   characters?: string[];
   beats: Beat[];

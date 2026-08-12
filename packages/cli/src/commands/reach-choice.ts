@@ -248,7 +248,7 @@ export async function runReachChoice(
     reason: search.reason,
     target,
     inputs: search.inputs,
-    path: summarizeInputPath(search.inputs),
+    path: summarizeReachPath(search.inputs),
     exploredNodes: search.exploredNodes,
     visitedStates: search.visitedStates,
     deepestSteps: search.deepestSteps,
@@ -274,7 +274,7 @@ export async function runReachChoice(
   };
 }
 
-function summarizeInputPath(inputs: Input[]): ReachChoicePathSummary {
+export function summarizeReachPath(inputs: Input[]): ReachChoicePathSummary {
   const choices = inputs.filter((input) => input.type === "choose").length;
   const activities = inputs.filter((input) => input.type === "doActivity").length;
   const scriptSelections = inputs.filter((input) => input.type === "select").length;

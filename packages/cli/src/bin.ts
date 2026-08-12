@@ -21,6 +21,7 @@ import { autoplayCommand } from "./commands/autoplay";
 import { auditCommand, DEFAULT_AUDIT_PERSONAS } from "./commands/audit";
 import { coverChoiceCommand } from "./commands/cover-choice";
 import { reachChoiceCommand } from "./commands/reach-choice";
+import { reachScriptCommand } from "./commands/reach-script";
 import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
@@ -156,6 +157,13 @@ COMMANDS
       coding issue with its path and unmet target requirements. A miss exits
       non-zero whether or not a report was requested.
 
+  reach-script <game-dir> --script ID --from-session NAME --session AI
+               [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]
+      Search public Headless inputs until an authored script completes, then
+      replay the exact path into a GUI-compatible AI fork. Without --from-at,
+      recoverable historical decision checkpoints share the search budget.
+      A miss is read-only and exits non-zero.
+
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
       Record an actionable playtest issue and attach evidence from the current
@@ -274,6 +282,8 @@ async function main(): Promise<void> {
       return runCoverChoice(rest);
     case "reach":
       return runReachChoice(rest);
+    case "reach-script":
+      return runReachScript(rest);
     case "report":
       return runReport(rest);
     case "reports":
@@ -835,6 +845,44 @@ async function runReachChoice(args: string[]): Promise<void> {
     maxNodes: Number(values["max-nodes"] ?? "5000"),
     maxSteps: Number(values["max-steps"] ?? "250"),
     reportOnMiss: Boolean(values["report-on-miss"]),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runReachScript(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      script: { type: "string" },
+      "from-session": { type: "string" },
+      "from-at": { type: "string" },
+      session: { type: "string" },
+      "max-nodes": { type: "string", default: "5000" },
+      "max-steps": { type: "string", default: "250" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh reach-script <game-dir> --script ID --from-session NAME --session AI [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]",
+  );
+  if (!values.script || !values["from-session"] || !values.session) {
+    process.stderr.write(
+      "Missing required flags: --script ID --from-session NAME --session AI\n",
+    );
+    process.exit(2);
+  }
+  await reachScriptCommand({
+    gameDir,
+    scriptId: values.script,
+    fromSession: values["from-session"],
+    ...(values["from-at"] !== undefined
+      ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
+    session: values.session,
+    maxNodes: Number(values["max-nodes"] ?? "5000"),
+    maxSteps: Number(values["max-steps"] ?? "250"),
     pretty: Boolean(values.pretty),
   });
 }

@@ -22,6 +22,7 @@ export function parseScript(content: string, source?: string): Script {
   const requires = parseCondition(meta.requires);
   const characters = readStringArray(meta, "characters");
   const coverage = parseCoverage(meta.coverage, source);
+  const ai = parseAi(meta.ai, source);
 
   const beats = parseBody(body, source);
 
@@ -60,11 +61,31 @@ export function parseScript(content: string, source?: string): Script {
     title,
     ...(source !== undefined ? { source } : {}),
     ...(coverage !== undefined ? { coverage } : {}),
+    ...(ai !== undefined ? { ai } : {}),
     ...(requires !== undefined ? { requires } : {}),
     ...(characters !== undefined ? { characters } : {}),
     beats: finalBeats,
     ...(cost !== undefined ? { cost } : {}),
   };
+}
+
+function parseAi(raw: unknown, source?: string): Script["ai"] | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ScriptParseError("`ai` must be an object", source);
+  }
+  const value = (raw as Record<string, unknown>).relatedActivityIds;
+  if (
+    !Array.isArray(value) || value.length === 0 ||
+    value.some((id) => typeof id !== "string" || id.trim().length === 0) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new ScriptParseError(
+      "`ai.relatedActivityIds` must be a non-empty array of unique activity ids",
+      source,
+    );
+  }
+  return { relatedActivityIds: value as string[] };
 }
 
 function parseCoverage(

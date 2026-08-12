@@ -199,6 +199,7 @@ rpgh inspect-session <game-dir> --session NAME               # read-only state/l
 rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
 rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
 rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] # find unseen choice
+rpgh reach-script <game-dir> --script ID --from-session SAVE --session AI # complete uncovered story
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
@@ -226,9 +227,10 @@ reports, unreadable session state/logs, story coverage gaps, executable choice
 branches, and authored choice debt into one deterministic priority order. JSON
 items classify their actionability as `executable`, `diagnostic`, or `authoring`,
 retain the source coordinates, and expose a structured next operation such
-as `reproduce`, `transcript`, `cover`, `reach`, `inspect-script`, or `edit`;
-the queue does not claim generic autoplay can reach a specific script when no
-exact reachability executor exists. Placeholders such as
+as `reproduce`, `transcript`, `cover`, `reach`, `reach-script`, `inspect-script`,
+or `edit`. Story gaps use the same bounded public-input search and exact replay
+contract as choices instead of being mislabeled as generic autoplay.
+Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
 `work` consumes that contract without asking the agent to translate camelCase
 operation objects into CLI flags. With no key it selects the deterministic first
@@ -270,6 +272,12 @@ On a bounded miss, `closest` reports the best path plus each satisfied/blocked
 target requirement. Add `--report-on-miss` to persist that closest state and
 turn the diagnosis into a reproducible playtest issue; without it, a miss stays
 strictly read-only and creates no session. Either miss mode exits non-zero.
+`reach-script` applies the same contract to a whole authored script, including
+scripts with no choices. A script may declare ordered
+`ai.relatedActivityIds` breadcrumbs in frontmatter when its top-level condition
+does not reveal how public gameplay can satisfy it. Breadcrumbs guide search
+priority only: every activity must still be present and available in the live
+Headless/GUI output, and the completed path must replay to an identical state.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually

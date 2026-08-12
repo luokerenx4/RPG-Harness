@@ -1,0 +1,260 @@
+import {
+  choiceDecisionContext,
+  compareChoiceSearchAssessment,
+  peek,
+  searchForScript,
+  step,
+  type ChoiceSearchClosest,
+  type ChoiceSearchProgress,
+  type ComposedState,
+  type Input,
+  type Output,
+} from "@rpg-harness/engine";
+import { isSessionCheckpointRef, withSessionLock } from "@rpg-harness/session-store";
+import { loadGame } from "../loader";
+import { appendLog, loadSession, saveSession } from "../session";
+import { collectScriptCoverage } from "./coverage";
+import {
+  assertTargetEmpty,
+  createForkFromSource,
+  loadForkSource,
+  readSessionLog,
+  type ForkSource,
+} from "./fork";
+import { summarizeReachPath, type ReachChoicePathSummary } from "./reach-choice";
+
+export interface ReachScriptArgs {
+  gameDir: string;
+  fromSession: string;
+  fromLogEntry?: number;
+  session: string;
+  scriptId: string;
+  maxNodes: number;
+  maxSteps: number;
+  pretty: boolean;
+  onProgress?: (progress: ChoiceSearchProgress) => void;
+}
+
+export interface ReachScriptSummary {
+  status: "reached" | "not-reached";
+  found: boolean;
+  reason: "found" | "exhausted" | "max-nodes";
+  target: { scriptId: string; title: string; source?: string };
+  inputs: Input[];
+  path: ReachChoicePathSummary;
+  search: {
+    exploredNodes: number;
+    visitedStates: number;
+    deepestSteps: number;
+    attemptedSources: number;
+  };
+  requestedSession: string;
+  source: {
+    session: string;
+    logEntry: number;
+    mode: ForkSource["mode"];
+    historyFallback: boolean;
+  };
+  session?: string;
+  webPath?: string;
+  fork?: Awaited<ReturnType<typeof createForkFromSource>>;
+  output: Output | null;
+  replayVerified: boolean;
+  closest: ChoiceSearchClosest;
+}
+
+export async function reachScriptCommand(args: ReachScriptArgs): Promise<void> {
+  const summary = await runReachScript({
+    ...args,
+    onProgress: (progress) => {
+      process.stderr.write(
+        `search: ${progress.exploredNodes} explored · ${progress.frontierNodes} frontier · depth ${progress.deepestSteps} · best ${progress.closest.satisfiedRequirements}/${progress.closest.totalRequirements} requirements\n`,
+      );
+    },
+  });
+  process.stdout.write(
+    (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) + "\n",
+  );
+  if (!summary.found) process.exitCode = 1;
+}
+
+export async function runReachScript(args: ReachScriptArgs): Promise<ReachScriptSummary> {
+  await assertTargetEmpty(args.gameDir, args.session);
+  const game = await loadGame(args.gameDir);
+  const script = game.scripts.find((candidate) => candidate.id === args.scriptId);
+  if (!script) {
+    throw new Error(
+      `Script not found: ${args.scriptId}\n\nAvailable scripts:\n  ${game.scripts.map(({ id }) => id).sort().join("\n  ")}`,
+    );
+  }
+  const coverage = await collectScriptCoverage(args.gameDir, args.fromSession);
+  if (coverage.sessionErrors.length > 0) {
+    throw new Error(`Cannot read source session: ${coverage.sessionErrors[0]!.error}`);
+  }
+  const row = coverage.scripts.find((candidate) => candidate.id === args.scriptId)!;
+  if (row.status === "completed") {
+    throw new Error(`Script is already completed in ${args.fromSession}: ${args.scriptId}`);
+  }
+
+  const primarySource = await loadForkSource(
+    args.gameDir,
+    args.fromSession,
+    args.fromLogEntry,
+  );
+  const attempts: Array<{
+    source: ForkSource;
+    search: Awaited<ReturnType<typeof searchForScript>>;
+  }> = [];
+  let remainingNodes = args.maxNodes;
+  const runAttempt = async (source: ForkSource) => {
+    const search = await searchForScript(game, source.state, { scriptId: args.scriptId }, {
+      maxNodes: remainingNodes,
+      maxSteps: args.maxSteps,
+      progressEvery: 100,
+      ...(args.onProgress ? { onProgress: args.onProgress } : {}),
+    });
+    attempts.push({ source, search });
+    remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
+    return search.found;
+  };
+
+  await runAttempt(primarySource);
+  if (!attempts[0]!.search.found && args.fromLogEntry === undefined && remainingNodes > 0) {
+    for (const logEntry of await historicalDecisionCheckpoints(
+      args.gameDir,
+      args.fromSession,
+      primarySource.selectedEntry,
+    )) {
+      const source = await loadForkSource(args.gameDir, args.fromSession, logEntry);
+      if (await runAttempt(source) || remainingNodes === 0) break;
+    }
+  }
+
+  const foundAttempt = attempts.find((attempt) => attempt.search.found);
+  const selectedAttempt = foundAttempt ?? attempts.reduce((best, candidate) =>
+    compareChoiceSearchAssessment(
+        candidate.search.closest,
+        best.search.closest,
+        true,
+      ) > 0
+      ? candidate
+      : best
+  );
+  const source = selectedAttempt.source;
+  const selectedSearch = selectedAttempt.search;
+  const inputs = foundAttempt?.search.inputs ?? selectedSearch.closest.inputs;
+  const found = foundAttempt !== undefined;
+  const reason = found
+    ? "found" as const
+    : remainingNodes === 0
+      ? "max-nodes" as const
+      : "exhausted" as const;
+  const exploredNodes = attempts.reduce((sum, attempt) => sum + attempt.search.exploredNodes, 0);
+  const visitedStates = attempts.reduce((sum, attempt) => sum + attempt.search.visitedStates, 0);
+  const deepestSteps = Math.max(...attempts.map((attempt) => attempt.search.deepestSteps));
+
+  let replayVerified = false;
+  let output = selectedSearch.output;
+  let fork: Awaited<ReturnType<typeof createForkFromSource>> | undefined;
+  if (found) {
+    fork = await createForkFromSource({
+      gameDir: args.gameDir,
+      from: args.fromSession,
+      to: args.session,
+      at: source.selectedEntry,
+      pretty: false,
+    }, source);
+    const replay = await replayPath(args, game, inputs);
+    output = replay.output;
+    if (replay.state.baseline.scripts[args.scriptId]?.completed !== true) {
+      throw new Error(`Reach replay did not complete script ${args.scriptId}`);
+    }
+    if (canonicalJson(replay.state) !== canonicalJson(foundAttempt.search.state)) {
+      throw new Error(`Reach replay diverged from search result for script ${args.scriptId}`);
+    }
+    replayVerified = true;
+  }
+
+  return {
+    status: found ? "reached" : "not-reached",
+    found,
+    reason,
+    target: {
+      scriptId: script.id,
+      title: script.title,
+      ...(script.source ? { source: script.source } : {}),
+    },
+    inputs: found ? foundAttempt.search.inputs : [],
+    path: summarizeReachPath(found ? foundAttempt.search.inputs : []),
+    search: { exploredNodes, visitedStates, deepestSteps, attemptedSources: attempts.length },
+    requestedSession: args.session,
+    source: {
+      session: args.fromSession,
+      logEntry: source.selectedEntry,
+      mode: source.mode,
+      historyFallback: source.selectedEntry !== primarySource.selectedEntry,
+    },
+    ...(fork ? { session: args.session, webPath: `/?session=${encodeURIComponent(args.session)}`, fork } : {}),
+    output,
+    replayVerified,
+    closest: selectedSearch.closest,
+  };
+}
+
+async function historicalDecisionCheckpoints(
+  gameDir: string,
+  session: string,
+  beforeEntry: number,
+): Promise<number[]> {
+  const entries = await readSessionLog(gameDir, session);
+  const seen = new Set<string>();
+  const candidates: number[] = [];
+  for (let index = Math.min(beforeEntry - 1, entries.length - 1); index >= 0; index -= 1) {
+    const entry = entries[index]!;
+    if (!isSessionCheckpointRef(entry.checkpoint) || seen.has(entry.checkpoint.revision)) continue;
+    if (!isRecord(entry.output)) continue;
+    if (!["choice", "hubMenu", "scriptComplete"].includes(String(entry.output.type))) continue;
+    seen.add(entry.checkpoint.revision);
+    candidates.push(index + 1);
+  }
+  return candidates;
+}
+
+async function replayPath(
+  args: ReachScriptArgs,
+  game: Awaited<ReturnType<typeof loadGame>>,
+  inputs: Input[],
+): Promise<{ output: Output | null; state: ComposedState }> {
+  return withSessionLock(args.gameDir, args.session, async () => {
+    let state = await loadSession(args.gameDir, args.session, game);
+    let current = await peek(game, state);
+    state = current.state;
+    for (const input of inputs) {
+      const before = current.output;
+      current = await step(game, state, input);
+      state = current.state;
+      await saveSession(args.gameDir, args.session, state);
+      const decision = choiceDecisionContext(before, input);
+      await appendLog(args.gameDir, args.session, {
+        t: Date.now(),
+        source: "reach-script",
+        input,
+        output: current.output,
+        ...(decision ? { decision } : {}),
+      }, state);
+    }
+    return { output: current.output, state };
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}

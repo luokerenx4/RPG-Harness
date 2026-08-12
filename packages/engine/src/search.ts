@@ -8,6 +8,10 @@ export interface ChoiceSearchTarget {
   choiceId: string;
 }
 
+export interface ScriptSearchTarget {
+  scriptId: string;
+}
+
 export interface ChoiceSearchOptions {
   maxNodes?: number;
   maxSteps?: number;
@@ -53,6 +57,8 @@ export interface ChoiceSearchClosest {
   targetScriptActive: boolean;
   requirements: ChoiceSearchRequirement[];
   outputType: Output["type"] | null;
+  /** Ordered authored activity breadcrumbs currently followed by this path. */
+  guidanceProgress?: number;
 }
 
 interface SearchNode {
@@ -61,6 +67,10 @@ interface SearchNode {
   done: boolean;
   inputs: Input[];
 }
+
+type SearchTarget =
+  | { kind: "choice"; scriptId: string; choiceId: string; relatedActivityIds: string[] }
+  | { kind: "script"; scriptId: string; relatedActivityIds: string[] };
 
 /**
  * Goal-directed best-first search over the same public Input/Output contract
@@ -73,6 +83,33 @@ export async function searchForChoice(
   initialState: ComposedState,
   target: ChoiceSearchTarget,
   options: ChoiceSearchOptions = {},
+): Promise<ChoiceSearchResult> {
+  return searchForTarget(game, initialState, {
+    kind: "choice",
+    ...target,
+    relatedActivityIds: relatedActivities(game, target.scriptId),
+  }, options);
+}
+
+/** Find and complete a script through the same public inputs used by every renderer. */
+export async function searchForScript(
+  game: Game,
+  initialState: ComposedState,
+  target: ScriptSearchTarget,
+  options: ChoiceSearchOptions = {},
+): Promise<ChoiceSearchResult> {
+  return searchForTarget(game, initialState, {
+    kind: "script",
+    ...target,
+    relatedActivityIds: relatedActivities(game, target.scriptId),
+  }, options);
+}
+
+async function searchForTarget(
+  game: Game,
+  initialState: ComposedState,
+  target: SearchTarget,
+  options: ChoiceSearchOptions,
 ): Promise<ChoiceSearchResult> {
   const maxNodes = options.maxNodes ?? 5_000;
   const maxSteps = options.maxSteps ?? 250;
@@ -106,6 +143,7 @@ export async function searchForChoice(
       compareChoiceSearchAssessment(
         assessNode(game, target, right),
         assessNode(game, target, left),
+        isScriptTarget(target),
       )
     );
     const node = queue.shift()!;
@@ -115,7 +153,11 @@ export async function searchForChoice(
     visited.add(fingerprint);
     exploredNodes += 1;
     const assessment = assessNode(game, target, node);
-    if (compareChoiceSearchAssessment(assessment, closest) > 0) {
+    if (compareChoiceSearchAssessment(
+      assessment,
+      closest,
+      isScriptTarget(target),
+    ) > 0) {
       closest = assessment;
       closestNode = node;
     }
@@ -129,7 +171,7 @@ export async function searchForChoice(
       });
     }
 
-    if (isTargetChoice(node.output, target)) {
+    if (isTargetReached(node, target)) {
       return {
         found: true,
         reason: "found",
@@ -198,7 +240,7 @@ async function settleForced(
   game: Game,
   initialState: ComposedState,
   initialInputs: Input[],
-  target: ChoiceSearchTarget,
+  target: SearchTarget,
   maxSteps: number,
   initialOutput?: Output | null,
   initialDone?: boolean,
@@ -217,7 +259,7 @@ async function settleForced(
   while (
     !done &&
     output !== null &&
-    !isTargetChoice(output, target) &&
+    !isTargetReached({ state, output }, target) &&
     inputs.length < maxSteps
   ) {
     const candidates = candidateInputs(output, target);
@@ -234,7 +276,7 @@ async function settleForced(
 
 function candidateInputs(
   output: Output,
-  target: ChoiceSearchTarget,
+  target: SearchTarget,
 ): Input[] {
   switch (output.type) {
     case "narration":
@@ -255,6 +297,9 @@ function candidateInputs(
         scriptId: script.id,
       }));
     case "hubMenu":
+      const authoredActivityRank = new Map(
+        target.relatedActivityIds.map((id, index) => [id, index]),
+      );
       const objectiveActivityRank = new Map(
         (output.snapshot.objectives ?? [])
           .filter((objective) => objective.status === "active")
@@ -268,6 +313,9 @@ function candidateInputs(
             Number(right.id === `script:${target.scriptId}`) -
             Number(left.id === `script:${target.scriptId}`);
           if (targetDifference !== 0) return targetDifference;
+          const leftAuthoredRank = authoredActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+          const rightAuthoredRank = authoredActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+          if (leftAuthoredRank !== rightAuthoredRank) return leftAuthoredRank - rightAuthoredRank;
           const leftRank = objectiveActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
           const rightRank = objectiveActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
           return leftRank - rightRank;
@@ -278,15 +326,25 @@ function candidateInputs(
   }
 }
 
-function isTargetChoice(
-  output: Output | null,
-  target: ChoiceSearchTarget,
+function relatedActivities(game: Game, scriptId: string): string[] {
+  return game.scripts.find((script) => script.id === scriptId)?.ai
+    ?.relatedActivityIds ?? [];
+}
+
+function isTargetReached(
+  node: Pick<SearchNode, "state" | "output">,
+  target: SearchTarget,
 ): boolean {
-  return (
-    output?.type === "choice" &&
-    output.scriptId === target.scriptId &&
-    output.choiceId === target.choiceId
-  );
+  if (isScriptTarget(target)) {
+    return node.state.baseline.scripts[target.scriptId]?.completed === true;
+  }
+  return node.output?.type === "choice" &&
+    node.output.scriptId === target.scriptId &&
+    node.output.choiceId === target.choiceId;
+}
+
+function isScriptTarget(target: SearchTarget): target is Extract<SearchTarget, { kind: "script" }> {
+  return target.kind === "script";
 }
 
 function stateFingerprint(state: ComposedState): string {
@@ -298,7 +356,7 @@ function stateFingerprint(state: ComposedState): string {
 
 function assessNode(
   game: Game,
-  target: ChoiceSearchTarget,
+  target: SearchTarget,
   node: SearchNode,
 ): ChoiceSearchClosest {
   const script = game.scripts.find((candidate) => candidate.id === target.scriptId);
@@ -327,15 +385,20 @@ function assessNode(
     targetScriptActive,
     requirements,
     outputType: node.output?.type ?? null,
+    guidanceProgress: orderedGuidanceProgress(
+      node.inputs,
+      target.relatedActivityIds,
+    ),
   };
 }
 
 export function compareChoiceSearchAssessment(
   left: ChoiceSearchClosest,
   right: ChoiceSearchClosest,
+  targetCompletionIsSuccess = false,
 ): number {
   if (left.targetScriptCompleted !== right.targetScriptCompleted) {
-    return left.targetScriptCompleted ? -1 : 1;
+    return left.targetScriptCompleted === targetCompletionIsSuccess ? 1 : -1;
   }
   if (left.targetScriptActive !== right.targetScriptActive) {
     return left.targetScriptActive ? 1 : -1;
@@ -343,6 +406,9 @@ export function compareChoiceSearchAssessment(
   if (left.progress !== right.progress) return left.progress - right.progress;
   if (left.satisfiedRequirements !== right.satisfiedRequirements) {
     return left.satisfiedRequirements - right.satisfiedRequirements;
+  }
+  if ((left.guidanceProgress ?? 0) !== (right.guidanceProgress ?? 0)) {
+    return (left.guidanceProgress ?? 0) - (right.guidanceProgress ?? 0);
   }
   const leftTerminal = left.outputType === "gameEnd";
   const rightTerminal = right.outputType === "gameEnd";
@@ -355,6 +421,23 @@ export function compareChoiceSearchAssessment(
   return left.totalRequirements > 0
     ? left.steps - right.steps
     : right.steps - left.steps;
+}
+
+function orderedGuidanceProgress(inputs: Input[], relatedActivityIds: string[]): number {
+  if (relatedActivityIds.length === 0) return 0;
+  let progress = 0;
+  for (const input of inputs) {
+    if (input.type !== "doActivity") continue;
+    if (input.id === relatedActivityIds[progress]) {
+      progress += 1;
+      if (progress === relatedActivityIds.length) return progress;
+      continue;
+    }
+    if (relatedActivityIds.includes(input.id)) {
+      progress = input.id === relatedActivityIds[0] ? 1 : 0;
+    }
+  }
+  return progress;
 }
 
 function topLevelRequirements(condition: Condition | undefined): Condition[] {

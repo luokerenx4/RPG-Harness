@@ -27,7 +27,7 @@ describe("AI development worklist", () => {
         "choice-branch": 1,
         "choice-authoring": 2,
       },
-      byActionability: { executable: 3, diagnostic: 4, authoring: 1 },
+      byActionability: { executable: 5, diagnostic: 2, authoring: 1 },
       openReports: 2,
       sessionErrors: 1,
       storyPending: 2,
@@ -70,6 +70,15 @@ describe("AI development worklist", () => {
         command: "reach",
         args: {
           key: "ending/unseen-choice",
+          fromSession: "player",
+          session: "<new-session>",
+        },
+      });
+    expect(report.items.find((item) => item.key === "story/unseen")?.operation)
+      .toEqual({
+        command: "reach-script",
+        args: {
+          scriptId: "unseen",
           fromSession: "player",
           session: "<new-session>",
         },

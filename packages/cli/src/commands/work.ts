@@ -3,7 +3,12 @@ import { runChoiceCoverageWorkItem } from "./cover-choice";
 import type { CoverChoiceSummary } from "./cover-choice";
 import { inspectScript } from "./inspect-script";
 import { inspectSession } from "./inspect-session";
-import { runReachChoice, type ReachChoiceSummary } from "./reach-choice";
+import {
+  runReachChoice,
+  summarizeReachPath,
+  type ReachChoiceSummary,
+} from "./reach-choice";
+import { runReachScript, type ReachScriptSummary } from "./reach-script";
 import { collectSessionTranscript } from "./transcript";
 import {
   collectDevelopmentWorklist,
@@ -164,6 +169,36 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
         compactReachResult(result),
       ) : failed(selection, operation, compactReachResult(result));
     }
+    case "reach-script": {
+      const target = requireNewSession(args, item);
+      const fromSession = operation.args.fromSession === "<source-session>"
+        ? args.session
+        : operation.args.fromSession;
+      if (!fromSession) {
+        throw new Error(
+          `Work item ${item.key} needs a source lineage; pass --session NAME`,
+        );
+      }
+      const result = await runReachScript({
+        gameDir: args.gameDir,
+        fromSession,
+        session: target,
+        scriptId: operation.args.scriptId,
+        maxNodes: args.maxNodes ?? 5000,
+        maxSteps: args.maxSteps ?? 250,
+        pretty: false,
+      });
+      return result.found
+        ? executed(
+            selection,
+            operation,
+            "isolated-session",
+            true,
+            result.session ?? null,
+            compactReachScriptResult(result),
+          )
+        : failed(selection, operation, compactReachScriptResult(result));
+    }
     case "edit": {
       const scriptId = typeof item.coordinates.scriptId === "string"
         ? item.coordinates.scriptId
@@ -248,8 +283,27 @@ function compactReachResult(result: ReachChoiceSummary) {
     ...(result.fork ? { fork: result.fork } : {}),
     output: compactOutput(result.output),
     replayVerified: result.replayVerified,
-    ...(!result.found ? { closest: result.closest } : {}),
+    ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
     ...(result.report ? { report: result.report } : {}),
+  };
+}
+
+function compactReachScriptResult(result: ReachScriptSummary) {
+  return {
+    status: result.status,
+    found: result.found,
+    reason: result.reason,
+    target: result.target,
+    path: result.path,
+    search: result.search,
+    source: result.source,
+    requestedSession: result.requestedSession,
+    ...(result.session ? { session: result.session } : {}),
+    ...(result.webPath ? { webPath: result.webPath } : {}),
+    ...(result.fork ? { fork: result.fork } : {}),
+    output: compactOutput(result.output),
+    replayVerified: result.replayVerified,
+    ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
   };
 }
 
@@ -265,6 +319,23 @@ function compactOutput(output: ReachChoiceSummary["output"]) {
       available: option.available,
       ...(option.lockedReason ? { lockedReason: option.lockedReason } : {}),
     })),
+  };
+}
+
+function compactClosest(closest: ReachChoiceSummary["closest"]) {
+  return {
+    path: summarizeReachPath(closest.inputs),
+    steps: closest.steps,
+    progress: closest.progress,
+    satisfiedRequirements: closest.satisfiedRequirements,
+    totalRequirements: closest.totalRequirements,
+    targetScriptCompleted: closest.targetScriptCompleted,
+    targetScriptActive: closest.targetScriptActive,
+    requirements: closest.requirements,
+    outputType: closest.outputType,
+    ...(closest.guidanceProgress !== undefined
+      ? { guidanceProgress: closest.guidanceProgress }
+      : {}),
   };
 }
 

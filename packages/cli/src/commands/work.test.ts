@@ -17,19 +17,38 @@ afterEach(async () => {
 });
 
 describe("structured development work execution", () => {
-  test("executes the highest-priority uncovered-script diagnosis without writing", async () => {
+  test("executes the highest-priority uncovered script in an isolated branch", async () => {
     const gameDir = await temporaryWorkGame(false);
-    const before = await snapshotTree(gameDir);
-    const result = await runDevelopmentWorkItem({ gameDir, pretty: false });
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+    const before = await snapshotTree(sessionDir(gameDir, "player"));
+    const result = await runDevelopmentWorkItem({
+      gameDir,
+      session: "player",
+      newSession: "ai-reach-scene",
+      maxNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
 
     expect(result).toMatchObject({
       status: "executed",
-      selection: { key: "story/scene", actionability: "diagnostic" },
-      operation: { command: "inspect-script", args: { scriptId: "scene" } },
-      safety: { mode: "read-only", writes: false, targetSession: null },
-      result: { script: { id: "scene", source: "scripts/scene.md" } },
+      selection: { key: "story/scene", actionability: "executable" },
+      operation: { command: "reach-script", args: { scriptId: "scene" } },
+      safety: {
+        mode: "isolated-session",
+        writes: true,
+        targetSession: "ai-reach-scene",
+      },
+      result: {
+        status: "reached",
+        found: true,
+        replayVerified: true,
+        target: { scriptId: "scene" },
+        session: "ai-reach-scene",
+      },
     });
-    expect(await snapshotTree(gameDir)).toEqual(before);
+    expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(before);
   });
 
   test("prepares authoring context instead of pretending an edit was applied", async () => {
@@ -200,7 +219,7 @@ describe("structured development work execution", () => {
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
   });
 
-  test("turns a started-script item into a compact lineage transcript", async () => {
+  test("continues a started script to completion in an isolated branch", async () => {
     const gameDir = await temporaryWorkGame(false);
     const game = await loadGame(gameDir);
     const state = createInitialState(game);
@@ -217,16 +236,21 @@ describe("structured development work execution", () => {
       gameDir,
       key: "story/scene",
       session: "player",
+      newSession: "ai-finish-scene",
       pretty: false,
     });
 
     expect(result).toMatchObject({
       status: "executed",
-      operation: { command: "transcript", args: { session: "player", tail: 80 } },
-      safety: { mode: "read-only", writes: false },
+      operation: {
+        command: "reach-script",
+        args: { scriptId: "scene", fromSession: "player" },
+      },
+      safety: { mode: "isolated-session", writes: true },
       result: {
-        session: "player",
-        summary: { totalEvents: 1, narration: 1, terminal: false },
+        found: true,
+        replayVerified: true,
+        session: "ai-finish-scene",
       },
     });
   });
@@ -295,8 +319,12 @@ describe("structured development work execution", () => {
         status: "not-reached",
         found: false,
         replayVerified: false,
+        closest: {
+          path: { inputs: 0, decisions: 0, forcedAdvances: 0 },
+        },
       },
     });
+    expect(result.result).not.toHaveProperty("closest.inputs");
     await expect(readdir(sessionDir(gameDir, "ai-unreachable"))).rejects.toMatchObject({
       code: "ENOENT",
     });

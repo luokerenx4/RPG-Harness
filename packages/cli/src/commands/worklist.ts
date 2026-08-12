@@ -56,6 +56,14 @@ export type DevelopmentOperation =
       };
     }
   | {
+      command: "reach-script";
+      args: {
+        scriptId: string;
+        fromSession: string;
+        session: "<new-session>";
+      };
+    }
+  | {
       command: "edit";
       args: { target: string; key: string; beatIndex?: number };
     };
@@ -217,18 +225,24 @@ export function analyzeDevelopmentWorklist(input: {
       continue;
     }
     const startedSession = script.startedSessions[0];
+    const sourceSession = startedSession ?? input.session ?? "<source-session>";
     items.push({
       key: `story/${script.id}`,
       kind: "story-coverage",
       priority: script.status === "started" ? "P1" : "P2",
-      actionability: "diagnostic",
+      actionability: "executable",
       title: script.status === "started"
         ? `Finish started script: ${script.title}`
         : `Reach uncovered script: ${script.title}`,
       detail: `${script.id} is ${script.status} in real session coverage`,
-      operation: startedSession
-        ? { command: "transcript", args: { session: startedSession, tail: 80 } }
-        : { command: "inspect-script", args: { scriptId: script.id } },
+      operation: {
+        command: "reach-script",
+        args: {
+          scriptId: script.id,
+          fromSession: sourceSession,
+          session: "<new-session>",
+        },
+      },
       coordinates: {
         scriptId: script.id,
         status: script.status,
@@ -427,7 +441,8 @@ function workExecutor(
 ): DevelopmentWorkItem["executor"] {
   const createsBranch = item.operation.command === "reproduce" ||
     item.operation.command === "cover" ||
-    item.operation.command === "reach";
+    item.operation.command === "reach" ||
+    item.operation.command === "reach-script";
   return {
     command: "work",
     args: {

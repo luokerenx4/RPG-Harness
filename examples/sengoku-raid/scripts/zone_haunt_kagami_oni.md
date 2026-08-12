@@ -7,6 +7,15 @@ requires:
     scriptId: zone_haunt_kagami_oni
     name: A
     eq: true
+ai:
+  relatedActivityIds:
+    - depart:hell_gate
+    - move:hell_gate_corridor
+    - move:hell_gate_mirror_pool
+    - suppress_strike
+    - negotiate_release
+    - extract
+    - script:zone_haunt_kagami_oni
 ---
 
 映し井戸で放した鏡鬼の言葉が、戻ってからも消えない。「俺はお前が見ないことにした半分だ」。

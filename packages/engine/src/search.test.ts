@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { compareChoiceSearchAssessment, searchForChoice } from "./search";
+import {
+  compareChoiceSearchAssessment,
+  searchForChoice,
+  searchForScript,
+} from "./search";
 import { makeCharacter, makeGame, makeScript, makeState } from "./test-utils";
 
 describe("choice state-space search", () => {
@@ -45,6 +49,36 @@ describe("choice state-space search", () => {
       scriptId: "target",
       choiceId: "crossroads",
     });
+  });
+
+  test("finds and completes a script with no authored choice", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      scripts: [
+        makeScript("detour", { beats: [{ type: "narration", text: "Detour" }] }),
+        makeScript("target", {
+          beats: [
+            { type: "narration", text: "First" },
+            { type: "narration", text: "Last" },
+          ],
+        }),
+      ],
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 20, maxSteps: 20 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "select", scriptId: "target" },
+      { type: "next" },
+      { type: "next" },
+    ]);
+    expect(result.state.baseline.scripts.target?.completed).toBe(true);
   });
 
   test("reports a bounded miss without mutating the source state", async () => {
@@ -120,6 +154,16 @@ describe("choice state-space search", () => {
       { ...deep, outputType: "gameEnd" },
       deep,
     )).toBeLessThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...deep, targetScriptCompleted: true },
+      deep,
+      true,
+    )).toBeGreaterThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...shallow, guidanceProgress: 3 },
+      { ...deep, guidanceProgress: 1 },
+      true,
+    )).toBeGreaterThan(0);
   });
 
   test("explains the closest state's satisfied and blocked requirements", async () => {

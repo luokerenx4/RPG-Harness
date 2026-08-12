@@ -47,8 +47,14 @@ export type {
 export { runReachChoice } from "./commands/reach-choice";
 export type {
   ReachChoiceArgs,
+  ReachChoicePathSummary,
   ReachChoiceSummary,
 } from "./commands/reach-choice";
+export { runReachScript } from "./commands/reach-script";
+export type {
+  ReachScriptArgs,
+  ReachScriptSummary,
+} from "./commands/reach-script";
 export {
   buildTranscriptEvents,
   collectSessionTranscript,

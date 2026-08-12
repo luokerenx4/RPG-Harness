@@ -60,6 +60,27 @@ describe("parseScript — frontmatter", () => {
     expect(s.requires).toEqual({ scriptCompleted: "000_intro" });
   });
 
+  test("parses renderer-neutral AI activity breadcrumbs", () => {
+    const s = parseScript(source(
+      "id: x\ntitle: t\nai:\n  relatedActivityIds: [depart:gate, suppress, release]",
+      "",
+    ));
+    expect(s.ai).toEqual({
+      relatedActivityIds: ["depart:gate", "suppress", "release"],
+    });
+  });
+
+  test("rejects empty or duplicate AI activity breadcrumbs", () => {
+    expect(() => parseScript(source(
+      "id: x\ntitle: t\nai:\n  relatedActivityIds: []",
+      "",
+    ))).toThrow(/ai\.relatedActivityIds/);
+    expect(() => parseScript(source(
+      "id: x\ntitle: t\nai:\n  relatedActivityIds: [search, search]",
+      "",
+    ))).toThrow(/unique/);
+  });
+
   test("parses an explicit coverage ignore policy", () => {
     const s = parseScript(
       source(
