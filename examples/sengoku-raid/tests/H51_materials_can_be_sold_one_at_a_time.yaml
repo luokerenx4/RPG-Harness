@@ -1,0 +1,34 @@
+name: crafting materials can be sold one at a time without clearing the stack
+state:
+  baseline:
+    completedScripts: [000_intro]
+    inventory:
+      ryo: 181
+      oni_horn: 3
+      soul_shard: 2
+      cursed_blade_fragment: 1
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 3, intellect: 99 }
+  sengoku-raid:
+    raid: null
+inputs:
+  - { type: doActivity, id: "sell_material:oni_horn" }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.inventory.oni_horn
+    eq: 2
+  - kind: state
+    path: baseline.inventory.ryo
+    eq: 261
+  - kind: activity
+    id: sell_material:oni_horn
+    available: true
+    titleIncludes: 80 両
+  - kind: activity
+    id: sell_material:soul_shard
+    available: true
+  - kind: activity
+    id: sell_material:cursed_blade_fragment
+    available: true

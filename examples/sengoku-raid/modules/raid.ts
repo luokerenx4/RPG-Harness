@@ -638,6 +638,26 @@ function buildHubMenu(ctx: Ctx): Output {
     });
   }
 
+  // Materials are deliberately excluded from the bulk-sale action because
+  // they also fuel upgrades and intel.  Still honour their authored
+  // sell_value one item at a time, so converting a spare never destroys the
+  // player's whole crafting stockpile.
+  for (const [id, count] of Object.entries(ctx.state.baseline.inventory)) {
+    if (count <= 0 || !isMaterial(ctx, id)) continue;
+    const value = sellValue(ctx, id);
+    activities.push({
+      id: `sell_material:${id}`,
+      kind: "action",
+      actionKind: "sell_material",
+      payload: { itemId: id },
+      title: `${itemName(ctx, id)}を一つ売る（${value} 両）`,
+      description: `所持 ${count}。炼器師は一度に一つだけ買い取る`,
+      category: "shop",
+      cost: 0,
+      available: true,
+    });
+  }
+
   // Upgrade weapon — three pulse-paths. Player picks which side to feed
   // based on resources at hand + intended build.
   const shards = ctx.state.baseline.inventory.soul_shard ?? 0;
@@ -1266,6 +1286,11 @@ function isLoot(ctx: Ctx, itemId: string): boolean {
   const item = ctx.game.items?.find((i) => i.id === itemId);
   if (item?.custom?.material === true) return false;
   return typeof sellValueOf(ctx, itemId) === "number";
+}
+
+function isMaterial(ctx: Ctx, itemId: string): boolean {
+  const item = ctx.game.items?.find((i) => i.id === itemId);
+  return item?.custom?.material === true && typeof sellValueOf(ctx, itemId) === "number";
 }
 
 function sellValue(ctx: Ctx, itemId: string): number {
@@ -1924,6 +1949,22 @@ const sellAllLootHandler: ActionHandler = (ctx) => {
   return {
     deltas: { inventory: inventoryDelta },
     narrations: [`炼器師に納めた：${lines.join("、")}。合計 ${total} 両。`],
+  };
+};
+
+const sellMaterialHandler: ActionHandler = (ctx) => {
+  const itemId = ctx.action.payload?.itemId as string | undefined;
+  if (!itemId || !isMaterial(ctx, itemId)) {
+    return denial("炼器師が買い取れる材料ではない。");
+  }
+  const count = ctx.state.baseline.inventory[itemId] ?? 0;
+  if (count < 1) return denial(`${itemName(ctx, itemId)}は手元にない。`);
+  const value = sellValue(ctx, itemId);
+  return {
+    deltas: { inventory: { [itemId]: -1, ryo: value } },
+    narrations: [
+      `炼器師に${itemName(ctx, itemId)}を一つ渡した。秤の分銅が沈む——${value} 両を受け取った（残り ${count - 1}）。`,
+    ],
   };
 };
 
@@ -2663,6 +2704,7 @@ const raidModule: Module = {
     "depart",
     "bond",
     "sell_all_loot",
+    "sell_material",
     "upgrade_mundane",
     "upgrade_pure",
     "upgrade_oni",
@@ -2690,6 +2732,7 @@ const raidModule: Module = {
     depart: departHandler,
     bond: bondHandler,
     sell_all_loot: sellAllLootHandler,
+    sell_material: sellMaterialHandler,
     upgrade_mundane: upgradeMundaneHandler,
     upgrade_pure: upgradePureHandler,
     upgrade_oni: upgradeOniHandler,
