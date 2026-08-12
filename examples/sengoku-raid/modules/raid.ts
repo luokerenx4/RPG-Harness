@@ -330,20 +330,73 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     target: string | number | boolean,
     satisfied: boolean,
   ) => ({ id, label, current, target, satisfied });
+  const withThreeFlowers = <T>(main: T[]) => {
+    const metAll = ["kagari", "kasumi", "mio"].every((id) =>
+      moduleState(ctx).metCharacters.includes(id)
+    );
+    const completed =
+      ctx.state.baseline.scripts.three_flowers_alliance?.completed === true;
+    if (!metAll || completed) return main;
+    const companions = [
+      { id: "kagari", name: "篝" },
+      { id: "kasumi", name: "霞" },
+      { id: "mio", name: "澪" },
+    ];
+    const missing = companions.find(
+      ({ id }) => switches[`befriended_${id}`] !== true,
+    );
+    let relatedActivityIds: string[] = [];
+    if (missing) {
+      const m = moduleState(ctx);
+      const available = (id: string) => activities.some(
+        (activity) => activity.id === id && activity.available,
+      );
+      if (m.companion === missing.id) {
+        relatedActivityIds = executableProgressActivityIds;
+      } else if (available(`invite:${missing.id}`)) {
+        relatedActivityIds = [`invite:${missing.id}`];
+      } else if (available(`bond:${missing.id}`)) {
+        relatedActivityIds = [`bond:${missing.id}`];
+      } else {
+        relatedActivityIds = activities
+          .filter((activity) =>
+            activity.available &&
+            (activity.id === "sell_all_loot" || activity.id.startsWith("sell_material:"))
+          )
+          .map((activity) => activity.id);
+      }
+    } else if (availableActivity(activities, "script:three_flowers_alliance")) {
+      relatedActivityIds = ["script:three_flowers_alliance"];
+    }
+    return [{
+      id: "three_flowers_alliance",
+      title: missing ? `三花の盟 — ${missing.name}と生還する` : "三花の盟を結ぶ",
+      description: "篝・霞・澪、それぞれと一度ずつ出帰りから生還する。",
+      status: "active" as const,
+      requirements: companions.map(({ id, name }) => requirement(
+        `befriended_${id}`,
+        `${name}と生還`,
+        switches[`befriended_${id}`] === true,
+        true,
+        switches[`befriended_${id}`] === true,
+      )),
+      relatedActivityIds,
+    }, ...main];
+  };
 
   if (chapter < 1) {
-    return [{
+    return withThreeFlowers([{
       id: "letter_01_dispatch",
       title: "最初の密書を待つ",
       description: `現在の御沙汰：${directive}`,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 3, raids >= 3)],
       relatedActivityIds: executableProgressActivityIds,
-    }];
+    }]);
   }
   if (chapter < 2) {
     const spectral = playerStat(ctx, "spectral");
-    return [{
+    return withThreeFlowers([{
       id: "letter_02_dispatch",
       title: "公儀の見立てを待つ",
       description: `現在の御沙汰：${directive}`,
@@ -353,17 +406,17 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         requirement("spectral", "霊体化上限", spectral, "49 以下", spectral <= 49),
       ],
       relatedActivityIds: executableProgressActivityIds,
-    }];
+    }]);
   }
   if (chapter < 3) {
-    return [{
+    return withThreeFlowers([{
       id: "letter_03_dispatch",
       title: "最後の御沙汰を待つ",
       description: `現在の御沙汰：${directive}`,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 12, raids >= 12)],
       relatedActivityIds: executableProgressActivityIds,
-    }];
+    }]);
   }
 
   const route = switches.chose_court_loyal
@@ -373,7 +426,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       : switches.chose_court_silent
         ? { id: "ending_mundane_seal", title: "妖刀を祠へ納める", variable: "pulse_mundane", label: "脈絡: 凡", target: 5 }
         : null;
-  if (!route) return [];
+  if (!route) return withThreeFlowers([]);
   const completed = ctx.state.baseline.scripts[route.id]?.completed === true;
   const current = Number(variables[route.variable] ?? 0);
   const endingActivityId = `script:${route.id}`;
@@ -384,7 +437,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const routeImbueAvailable = activities.some(
     (activity) => activity.id === routeImbueActivityId && activity.available,
   );
-  return [{
+  return withThreeFlowers([{
     id: route.id,
     title: completed ? `${route.title} — 完遂` : route.title,
     description: directive,
@@ -399,7 +452,11 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         : routeImbueAvailable
           ? [routeImbueActivityId]
           : executableProgressActivityIds,
-  }];
+  }]);
+}
+
+function availableActivity(activities: HubActivity[], id: string): boolean {
+  return activities.some((activity) => activity.id === id && activity.available);
 }
 
 function buildResourceGroups(ctx: Ctx) {
@@ -3056,6 +3113,28 @@ const raidModule: Module = {
   // the `{ replace: <beat> }` return form so the timeline still
   // advances one beat per drain.
   onBeatBefore: (ctx, scriptId, _beatIdx, beat) => {
+    if (
+      scriptId === "ending_oni_self" &&
+      ctx.state.baseline.switches.three_flowers_death_pledge === true &&
+      beat.type === "narration"
+    ) {
+      if (beat.text.startsWith("「三人とも、隣にいてくれ」。月下で口にした願いは")) {
+        return {
+          replace: {
+            ...beat,
+            text: "「お主たちと共に死ぬ覚悟を、私は持っている」。月下で口にした覚悟は、鬼の脈にも喰われず、三人に返した命の約束として残っている。",
+          },
+        };
+      }
+      if (beat.text.startsWith("門の先へ行けば、同じ隣には戻れない。それでも三名連署は")) {
+        return {
+          replace: {
+            ...beat,
+            text: "門の先へ行けば、同じ命では戻れない。それでも共に死ぬと口にした覚悟は、今ここで独りだけ先に死ぬことを許さなかった。",
+          },
+        };
+      }
+    }
     if (!scriptId.startsWith("bond_")) return;
     if (beat.type !== "dialogue") return;
     if (playerStat(ctx, "spectral") < 50) return;

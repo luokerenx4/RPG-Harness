@@ -2,6 +2,11 @@
 id: three_flowers_alliance
 title: 三花の盟
 characters: [kagari, kasumi, mio]
+requires:
+  all:
+    - { switch: { name: befriended_kagari } }
+    - { switch: { name: befriended_kasumi } }
+    - { switch: { name: befriended_mio } }
 defaultPortraits:
   - { characterId: kagari, emotion: default }
   - { characterId: mio, emotion: default }
@@ -36,9 +41,31 @@ defaultPortraits:
 
 :hide-cg
 
-? それでも、口にしたかった。
-  - 「三人とも、隣にいてくれ」 -> +kagari +kasumi +mio
-  - 「お主たちと共に死ぬ覚悟を、私は持っている」 -> +2kagari +2kasumi +2mio
+? それでも、口にしたかった。 {id: three-flowers-vow}
+  - 「三人とも、隣にいてくれ」 {id: ask-all-to-stay} -> +kagari +kasumi +mio | goto vow_stay
+  - 「お主たちと共に死ぬ覚悟を、私は持っている」 {id: vow-to-die-together} -> +2kagari +2kasumi +2mio | goto vow_death
+
+# vow_stay
+
+```yaml
+type: effects
+effects:
+  switches:
+    three_flowers_stay_pledge: true
+```
+
+:goto vow_answer
+
+# vow_death
+
+```yaml
+type: effects
+effects:
+  switches:
+    three_flowers_death_pledge: true
+```
+
+# vow_answer
 
 短い沈黙。最初に動いたのは、槍の石突きだった。土を一度、強く打った。
 

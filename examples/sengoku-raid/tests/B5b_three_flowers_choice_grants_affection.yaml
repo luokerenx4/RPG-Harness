@@ -53,6 +53,11 @@ inputs:
   - { type: next }
   - { type: next }
 assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: three-flowers-vow
+    optionId: vow-to-die-together
   - kind: state
     path: baseline.completedScripts
     includes: three_flowers_alliance
@@ -65,3 +70,6 @@ assertions:
   - kind: state
     path: baseline.characters.mio.affection
     eq: 2
+  - kind: state
+    path: baseline.switches.three_flowers_death_pledge
+    eq: true

@@ -27,7 +27,7 @@ switches:
   mio_met: false
   # Letter 02 places 澪 under an official inspection duty: unlike an
   # ordinary companion, she can be invited before affection 4. The
-  # explicit 「同行を頼む」 reply also schedules her immediately.
+  # reply to that order also schedules her immediately.
   mio_inspection_duty: false
   # Set when the pulse system has been introduced (after first victory).
   pulse_intro_seen: false
@@ -38,6 +38,10 @@ switches:
   chose_court_silent: false   # 黙して退く（隠遁）
   # 三花の盟 — 三人とも befriended なら milestone trigger 経由で誓う
   three_flowers_pledged: false
+  # Preserve which words formed the pledge. Legacy saves only have the
+  # generic flag above and intentionally fall back to the original coda.
+  three_flowers_stay_pledge: false
+  three_flowers_death_pledge: false
   # 同行道中の一幕 — 各同行者と初めて静かな新 zone に着いた時に一度だけ
   # 流れる road_<id> シーンを観たら立つ。moveHandler が switch を見て
   # 再発火を防ぐ（シーンの effects ブロック自身が立てる）。
