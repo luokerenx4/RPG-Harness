@@ -41,6 +41,12 @@ assertions:
     present: true
     textIncludes: 見つけてほしかったのかもしれない
   - kind: output
+    type: choice
+    present: true
+    choiceId: end-of-duty
+    optionId: close-the-box
+    optionAiTagsIncludes: respectful
+  - kind: output
     type: narration
     present: true
     textIncludes: 自分の手で開け直すために

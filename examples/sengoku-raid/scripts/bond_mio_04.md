@@ -64,9 +64,9 @@ requires:
 @mio だが、もう出す。役目を口実に隣にいるのは——お主にも、私自身にも、嘘だ。
 
 ? 上申書を前に、なんと言う？ {id: end-of-duty}
-  - 「出せ。明日からは、お前の勝手で隣にいろ」 {id: stay-by-choice} -> +2mio | goto duty_stay
-  - 「日付だけ今日に直せ。ひと月、隣にいた分は嘘じゃない」 {id: amend-the-date} -> +2mio | goto duty_date
-  - 何も言わず、文箱の蓋を静かに閉じる {id: close-the-box} -> +mio | goto duty_box
+  - 「出せ。明日からは、お前の勝手で隣にいろ」 {id: stay-by-choice, ai: romantic loyal blunt} -> +2mio | goto duty_stay
+  - 「日付だけ今日に直せ。ひと月、隣にいた分は嘘じゃない」 {id: amend-the-date, ai: compassionate affirming pragmatic} -> +2mio | goto duty_date
+  - 何も言わず、文箱の蓋を静かに閉じる {id: close-the-box, ai: restrained trusting respectful} -> +mio | goto duty_box
 
 # duty_stay
 

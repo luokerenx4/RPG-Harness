@@ -54,6 +54,7 @@ assertions:
     choiceId: end-of-duty
     optionId: stay-by-choice
     optionTextIncludes: 勝手で隣にいろ
+    optionAiTagsIncludes: loyal
   - kind: output
     type: dialogue
     present: true

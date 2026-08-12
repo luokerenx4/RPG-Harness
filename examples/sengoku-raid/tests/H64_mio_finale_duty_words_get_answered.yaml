@@ -31,6 +31,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: end-of-duty
+    optionId: amend-the-date
+    optionAiTagsIncludes: affirming
+  - kind: output
     type: dialogue
     present: true
     textIncludes: 間に合ってほしいと願った私の言葉
