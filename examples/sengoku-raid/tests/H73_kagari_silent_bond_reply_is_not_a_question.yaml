@@ -30,6 +30,13 @@ assertions:
     present: true
     choiceId: answer-kagari-long-night
     optionId: accept-the-flask
+    optionAiTagsIncludes: compassionate
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-kagari-long-night
+    optionId: ask-about-regret
+    optionAiTagsIncludes: blunt
   - kind: output
     type: dialogue
     present: true
@@ -38,4 +45,3 @@ assertions:
     type: dialogue
     present: false
     textIncludes: 答えは
-

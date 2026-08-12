@@ -139,6 +139,10 @@ a small tag subset, and LLM or game-specific agents can consume the rest. When
 stable choice identities are available, built-in personas submit those ids
 instead of presentation indexes, keeping authored intent invariant under UI
 reordering.
+Authors can keep ordinary branches concise with
+`- Label {id: stable-option, ai: social loyal}`; complex fenced YAML choices
+express the same contract as `ai_tags: [social, loyal]`. Both forms share the
+same stable-tag validation and produce identical engine output.
 The authored-choice inventory reports semantic coverage independently of
 runtime branch coverage. A stable multi-option choice is `complete` only when
 every stable option declares at least one tag (`neutral` is an explicit valid

@@ -312,8 +312,8 @@ Choices that should participate in durable branch coverage can stay concise:
 
 ```markdown
 ? 你怎么回应？ {id: first-reply}
-- "嗯，很美。" {id: admire-blossoms} -> +alice
-- "只是路过。" {id: passing-by} -> -alice
+- "嗯，很美。" {id: admire-blossoms, ai: social sincere} -> +alice
+- "只是路过。" {id: passing-by, ai: reserved independent} -> -alice
 ```
 
 The annotations are authoring metadata and never appear in GUI/TUI prose.
@@ -508,7 +508,8 @@ without requiring an agent to manually translate evidence into `fork` and
 the targeted stable option.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
-Fenced-YAML options may also declare open semantic `ai_tags`, such as
+Concise Markdown options may declare space-separated open semantic tags with
+`{id: ..., ai: tag1 tag2}`. Fenced-YAML options use `ai_tags`, such as
 `[social, loyal]` or `[independent]`. These tags pass through the engine to
 Headless clients without appearing in human shells. Built-in `charmer` and
 `rude` personas use recognized intent tags before their legacy positional
@@ -517,8 +518,9 @@ so rearranging buttons no longer silently changes persona behavior. Unknown
 tags remain available to LLM players and future game-specific policies.
 Meaningful branch coverage uses a stable choice `id` and stable option `id`s;
 the validator rejects duplicates and partial identities so work items survive
-copy edits and option reordering. Concise Markdown accepts `{id: ...}` on both
-the `?` prompt and each `-` option; fenced YAML accepts ordinary `id` fields.
+copy edits and option reordering. Concise Markdown accepts `{id: ...}` on the
+`?` prompt and `{id: ..., ai: ...}` on each `-` option; fenced YAML accepts
+ordinary `id` fields.
 `rpgh choices` merges this authored inventory with runtime logs, separately
 reporting choices that need ids, stable choices that have never been reached,
 stable options missing explicit semantic intent, and reached options that still

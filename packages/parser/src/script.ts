@@ -385,6 +385,7 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
     options.push({
       ...(option.id !== undefined ? { id: option.id } : {}),
       text,
+      ...(option.aiTags !== undefined ? { aiTags: option.aiTags } : {}),
       ...(effects !== undefined ? { effects } : {}),
       ...(goto !== undefined ? { goto } : {}),
     });
@@ -456,18 +457,51 @@ function parsePromptAnnotations(
 function parseChoiceOptionAnnotation(
   raw: string,
   source: string | undefined,
-): { text: string; id?: string } {
-  const match = raw.match(/^(.*?)\s*\{id:\s*([^}]*)\}\s*$/);
+): { text: string; id?: string; aiTags?: string[] } {
+  const match = raw.match(/^(.*?)\s*\{([^}]*)\}\s*$/);
   if (!match) return { text: raw };
   const text = (match[1] ?? "").trim();
-  const id = (match[2] ?? "").trim();
-  if (!isStableId(id)) {
+  const inner = (match[2] ?? "").trim();
+  let id: string | undefined;
+  let aiTags: string[] | undefined;
+  for (const pair of inner.split(",")) {
+    const colon = pair.indexOf(":");
+    if (colon < 0) {
+      throw new ScriptParseError(
+        `Choice option annotation segment "${pair.trim()}" must be \`key: value\``,
+        source,
+      );
+    }
+    const key = pair.slice(0, colon).trim();
+    const value = pair.slice(colon + 1).trim();
+    if (key === "id") {
+      if (!isStableId(value)) {
+        throw new ScriptParseError(
+          "Choice option annotation `id` must be a non-empty stable id (letters, numbers, `_` or `-`)",
+          source,
+        );
+      }
+      id = value;
+      continue;
+    }
+    if (key === "ai" || key === "aiTags" || key === "ai_tags") {
+      aiTags = parseAiTags(
+        value.length === 0 ? [] : value.split(/\s+/),
+        "Choice option annotation `ai`",
+        source,
+      );
+      continue;
+    }
     throw new ScriptParseError(
-      "Choice option annotation `id` must be a non-empty stable id (letters, numbers, `_` or `-`)",
+      `Unknown choice option annotation key "${key}"`,
       source,
     );
   }
-  return { text, id };
+  return {
+    text,
+    ...(id !== undefined ? { id } : {}),
+    ...(aiTags !== undefined ? { aiTags } : {}),
+  };
 }
 
 function isStableId(value: string): boolean {
@@ -640,24 +674,7 @@ function parseFenceChoice(
     }
     const aiTags = rawAiTags === undefined
       ? undefined
-      : rawAiTags.map((tag, tagIndex) => {
-          if (
-            typeof tag !== "string" ||
-            !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(tag)
-          ) {
-            throw new ScriptParseError(
-              `Choice option ${idx} \`aiTags[${tagIndex}]\` must be a non-empty stable tag`,
-              source,
-            );
-          }
-          return tag;
-        });
-    if (aiTags && new Set(aiTags).size !== aiTags.length) {
-      throw new ScriptParseError(
-        `Choice option ${idx} \`aiTags\` must not contain duplicates`,
-        source,
-      );
-    }
+      : parseAiTags(rawAiTags, `Choice option ${idx} \`aiTags\``, source);
     const lockedHint =
       typeof opt.lockedHint === "string"
         ? opt.lockedHint
@@ -684,6 +701,32 @@ function parseFenceChoice(
     ...(view !== undefined ? { view } : {}),
     options,
   };
+}
+
+function parseAiTags(
+  raw: unknown[],
+  label: string,
+  source?: string,
+): string[] {
+  if (raw.length === 0) {
+    throw new ScriptParseError(`${label} must contain at least one stable tag`, source);
+  }
+  const tags = raw.map((tag, tagIndex) => {
+    if (
+      typeof tag !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(tag)
+    ) {
+      throw new ScriptParseError(
+        `${label.replace(/`$/, `[${tagIndex}]\``)} must be a non-empty stable tag`,
+        source,
+      );
+    }
+    return tag;
+  });
+  if (new Set(tags).size !== tags.length) {
+    throw new ScriptParseError(`${label} must not contain duplicates`, source);
+  }
+  return tags;
 }
 
 function parseFenceEffects(

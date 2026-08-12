@@ -244,6 +244,35 @@ describe("parseScript — choice (? prompt)", () => {
     });
   });
 
+  test("inline choice options accept open AI intent tags", () => {
+    const s = parseScript(
+      source(
+        "id: x\ntitle: t",
+        "? どうする？ {id: final-answer}\n- 問う {id: ask, ai: blunt introspective}\n- 黙る {id: silent, ai_tags: compassionate restrained}",
+      ),
+    );
+    const beat = s.beats[0];
+    if (!beat || beat.type !== "choice") throw new Error();
+    expect(beat.options).toEqual([
+      { id: "ask", text: "問う", aiTags: ["blunt", "introspective"] },
+      { id: "silent", text: "黙る", aiTags: ["compassionate", "restrained"] },
+    ]);
+  });
+
+  test("inline AI intent tags reject empty, malformed, duplicate, and unknown annotations", () => {
+    for (const annotation of [
+      "{id: ask, ai: }",
+      "{id: ask, ai: bad!}",
+      "{id: ask, ai: blunt blunt}",
+      "{id: ask, intent: blunt}",
+    ]) {
+      expect(() => parseScript(source(
+        "id: x\ntitle: t",
+        `? prompt {id: answer}\n- ask ${annotation}`,
+      ))).toThrow();
+    }
+  });
+
   test("inline ids reject whitespace and empty values", () => {
     expect(() => parseScript(source(
       "id: x\ntitle: t",
