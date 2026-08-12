@@ -1,0 +1,37 @@
+name: 妖刀の覚書は反撃時の暴発率を恒久的に 10 ポイント下げる
+state:
+  baseline:
+    completedScripts: [000_intro, intel_briefing_yaodao]
+    currentMapId: kuro_swamp_ruined_hut
+    weapons:
+      ancestor_yaodao: { power: 5 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 20, intellect: 50 }
+  sengoku-raid:
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        kuro_swamp_ruined_hut:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 8
+            enemyHpMax: 8
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: attack
+    forecastMetric: fumble_chance
+    metricValue: 0
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: fumble_chance
+    metricValue: 0
+

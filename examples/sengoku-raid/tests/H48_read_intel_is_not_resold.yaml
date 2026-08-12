@@ -1,0 +1,30 @@
+name: 読み終えた情報は情報屋の購入候補から消える
+state:
+  baseline:
+    completedScripts: [000_intro, intel_briefing_loot]
+    inventory:
+      ryo: 500
+      cursed_blade_fragment: 1
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 5, intellect: 99 }
+    variables:
+      intel_active: ""
+      intel_count: 1
+  sengoku-raid:
+    raid: null
+inputs: []
+assertions:
+  - kind: activity
+    id: infoshop_basic
+    available: true
+  - kind: activity
+    id: infoshop_yaodao
+    available: true
+  - kind: activity
+    id: infoshop_hidden
+    available: true
+  - kind: activity
+    id: infoshop_loot
+    present: false
+

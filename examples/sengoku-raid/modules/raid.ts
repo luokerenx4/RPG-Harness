@@ -758,6 +758,9 @@ function buildHubMenu(ctx: Ctx): Output {
   // hasn't already bought intel that's still unread.
   if (intelActive === "") {
     for (const band of infoshopBands) {
+      if (ctx.state.baseline.scripts[`intel_briefing_${band.id.slice("infoshop_".length)}`]?.completed) {
+        continue;
+      }
       const ok =
         ryo >= band.cost &&
         intellect >= band.intellectMin &&
@@ -991,6 +994,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       inst.encounter.enemyId,
     );
     const criticalChance = roundForecastPercent(playerStat(ctx, "spectral") * 0.7);
+    const fumbleChance = fumbleChancePercent(ctx);
     const sneakChance = sneakStrikeChancePercent(ctx);
     const fleeChance = fleeSuccessChancePercent(ctx);
     const fleeFailureDamage = Math.max(
@@ -1037,6 +1041,13 @@ function buildRaidMenu(ctx: Ctx): Output {
             label: "生存時反撃（合計）",
             ...counterDamage.total,
             unit: "HP",
+            polarity: "risk",
+          },
+          {
+            id: "fumble_chance",
+            label: "妖刀暴発率（反撃 1.6 倍）",
+            value: fumbleChance,
+            unit: "percent",
             polarity: "risk",
           },
           ...(counterDamage.companion
@@ -1093,6 +1104,13 @@ function buildRaidMenu(ctx: Ctx): Output {
             label: "失敗時反撃（合計）",
             ...counterDamage.total,
             unit: "HP",
+            polarity: "risk",
+          },
+          {
+            id: "fumble_chance",
+            label: "妖刀暴発率（反撃 1.6 倍）",
+            value: fumbleChance,
+            unit: "percent",
             polarity: "risk",
           },
           ...(counterDamage.companion
@@ -1390,9 +1408,22 @@ function counterAttackDamageRange(ctx: Ctx, enemyId: string): NumericRange {
     min: Math.max(1, ordinary.min),
     max: Math.max(
       1,
-      spectral > 0 ? Math.floor(Math.max(1, ordinary.max) * 1.6) : ordinary.max,
+      fumbleChancePercent(ctx) > 0
+        ? Math.floor(Math.max(1, ordinary.max) * 1.6)
+        : ordinary.max,
     ),
   };
+}
+
+function fumbleChancePercent(ctx: Ctx): number {
+  const learnedReduction = ctx.state.baseline.scripts.intel_briefing_yaodao
+    ?.completed
+    ? 10
+    : 0;
+  return Math.max(
+    0,
+    roundForecastPercent(playerStat(ctx, "spectral") * 0.5 - learnedReduction),
+  );
 }
 
 function counterAttackDamageForecast(ctx: Ctx, enemyId: string): {
@@ -1756,7 +1787,7 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
     Math.floor(enemyPow * (0.8 + ctx.rng() * 0.4)),
   );
   const fumbleRoll = ctx.rng() * 100;
-  const isFumble = fumbleRoll < spec * 0.5;
+  const isFumble = fumbleRoll < fumbleChancePercent(ctx);
   // High spectral makes the player less coordinated defending.
 
   const finalEnemyDamage = isFumble ? Math.floor(enemyHit * 1.6) : enemyHit;
