@@ -26,21 +26,26 @@ requires:
 
 ```yaml
 type: choice
+id: sealed-blade-coda
 prompt: 麓の辻に、人影がある。
 options:
-  - text: 槍を担いだ影
+  - id: meet-kagari
+    text: 槍を担いだ影
     requires: { switch: { name: befriended_kagari } }
     locked_hint: 篝と共に戦場を生き延びていない。
     goto: seeoff_kagari
-  - text: 弓を背負った影
+  - id: meet-kasumi
+    text: 弓を背負った影
     requires: { switch: { name: befriended_kasumi } }
     locked_hint: 霞と共に戦場を生き延びていない。
     goto: seeoff_kasumi
-  - text: 藍の打掛の影
+  - id: meet-mio
+    text: 藍の打掛の影
     requires: { switch: { name: befriended_mio } }
     locked_hint: 澪と共に戦場を生き延びていない。
     goto: seeoff_mio
-  - text: 誰もいない。それでいい
+  - id: walk-alone
+    text: 誰もいない。それでいい
     goto: seeoff_none
 ```
 
@@ -56,7 +61,7 @@ options:
 
 お主は頷いた。篝の槍の石突きが、土を一度、軽く打った。いつもの拍だった。
 
-（これが、お主が選んだ結末）
+（これが、お主と篝の選んだ結末）
 
 [end]
 
@@ -72,7 +77,7 @@ options:
 
 二つの足音が、ゆっくりと山を下りていった。どちらも、もう何も追っていなかった。
 
-（これが、お主が選んだ結末）
+（これが、お主と霞の選んだ結末）
 
 [end]
 
@@ -88,7 +93,7 @@ options:
 
 水面に二つの影。どちらも揺れず、どちらも、もうどこへも急いでいなかった。
 
-（これが、お主が選んだ結末）
+（これが、お主と澪の選んだ結末）
 
 [end]
 

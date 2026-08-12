@@ -1,0 +1,64 @@
+name: retiring from the court makes the sealed-blade ending immediate and shared with Mio
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+    switches:
+      chose_court_silent: true
+      befriended_mio: true
+    variables:
+      raidsCompleted: 12
+      shogun_chapter: 3
+      pulse_mundane: 5
+    characters:
+      mio:
+        stats: { affection: 8 }
+      player:
+        stats: { hp: 30, mental: 8, spectral: 0, intellect: 10 }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [mio]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+inputs:
+  - { type: doActivity, id: script:ending_mundane_seal }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: activity
+    id: script:ending_mundane_seal
+    available: true
+  - kind: activity
+    id: depart:kuro_swamp
+    available: false
+    lockedReasonIncludes: 刀を祠へ納める
+  - kind: output
+    type: choice
+    present: true
+    choiceId: sealed-blade-coda
+    optionId: meet-mio
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: お主と澪の選んだ結末
+  - kind: output
+    type: gameEnd
+    present: true

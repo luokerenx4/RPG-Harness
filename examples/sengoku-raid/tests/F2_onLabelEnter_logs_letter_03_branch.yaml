@@ -77,9 +77,17 @@ inputs:
   - type: next
   - type: next
 assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: final-court-directive
+    optionId: retire-in-silence
   - kind: state
     path: baseline.switches.chose_court_silent
     eq: true
+  - kind: state
+    path: baseline.variables.pulse_mundane
+    gte: 5
   - kind: state
     path: sengoku-raid.achievementLog
     includes: 御沙汰：silent

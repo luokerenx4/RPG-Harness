@@ -73,6 +73,11 @@ inputs:
   - type: next
   - type: next
 assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: final-court-directive
+    optionId: draw-against-court
   - kind: state
     path: baseline.switches.chose_court_defy
     eq: true

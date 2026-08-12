@@ -40,28 +40,33 @@ requires:
 
 ```yaml
 type: choice
+id: final-court-directive
 prompt: 御沙汰を選ぶ。
 options:
-  - text: 公儀に服す——道を整える
+  - id: serve-the-court
+    text: 公儀に服す——道を整える
     effects:
       switches:
         chose_court_loyal: true
       variables:
         last_directive: "公儀の道。査問を受けつつ、刀を整えて老いる。"
     goto: end_loyal
-  - text: 公儀に刀を抜く——自らの脈を選ぶ
+  - id: draw-against-court
+    text: 公儀に刀を抜く——自らの脈を選ぶ
     effects:
       switches:
         chose_court_defy: true
       variables:
         last_directive: "公儀と袂を分かつ。刀の脈は、お主が選ぶ。"
     goto: end_defy
-  - text: 黙して退く——刀を納める
+  - id: retire-in-silence
+    text: 黙して退く——刀を納める
     effects:
       switches:
         chose_court_silent: true
       variables:
         last_directive: "遁世。刀は祠に納める。鬼は他者に任せる。"
+        pulse_mundane: 5
     goto: end_silent
 ```
 

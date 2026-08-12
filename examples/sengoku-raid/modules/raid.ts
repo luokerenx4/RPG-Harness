@@ -868,6 +868,12 @@ function buildHubMenu(ctx: Ctx): Output {
   }
 
   // Depart on raid — one entry per unlocked chain, sorted by difficulty.
+  // The silent court directive is a route commitment, not merely flavour:
+  // the blade has been surrendered and raids are no longer a legal action.
+  // Keep the entries visible-but-locked so GUI players can see why, while
+  // Headless players receive the same available=false contract.
+  const retiredFromRaids =
+    ctx.state.baseline.switches.chose_court_silent === true;
   for (const { chain, entry } of discoverableChains(ctx)) {
     const hpFull = hp >= hpMax;
     const label = chainDisplayName(chain) ?? entry.name;
@@ -880,8 +886,12 @@ function buildHubMenu(ctx: Ctx): Output {
       description: entry.description,
       category: "raid",
       cost: 0,
-      available: hpFull,
-      lockedReason: hpFull ? undefined : "体力が満たぬ。先に休め。",
+      available: !retiredFromRaids && hpFull,
+      lockedReason: retiredFromRaids
+        ? "刀を祠へ納めると決めた。もう出帰りには戻らない。"
+        : hpFull
+          ? undefined
+          : "体力が満たぬ。先に休め。",
     });
   }
 
