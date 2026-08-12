@@ -17,6 +17,7 @@ import type {
 import {
   applyOutput,
   applyUiAction,
+  formatHubCalendar,
   initialModel,
   makeErrorModel,
   type BacklogEntry,
@@ -26,6 +27,7 @@ import {
 } from "@rpg-harness/frontend-core";
 import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
+import type { WebStepEvent } from "./session";
 
 // The browser twin of packages/cli/src/components/PlayScreen.tsx. Same
 // engine pump (new Engine → run() → next(input)), same screen-model
@@ -47,7 +49,11 @@ interface Props {
   game: Game;
   assetUrls: Record<string, string>;
   initialState?: ComposedState;
-  onState?: (state: ComposedState) => void;
+  onCommit?: (
+    state: ComposedState,
+    event?: WebStepEvent,
+  ) => void | Promise<void>;
+  sessionLabel?: string;
   onExit?: () => void;
 }
 
@@ -55,7 +61,8 @@ export function WebPlayScreen({
   game,
   assetUrls,
   initialState,
-  onState,
+  onCommit,
+  sessionLabel,
   onExit,
 }: Props) {
   const [model, dispatch] = useReducer(modelReducer, initialModel);
@@ -70,16 +77,18 @@ export function WebPlayScreen({
   ).current;
 
   const commit = useCallback(
-    (res: IteratorResult<Output, void>) => {
-      if (res.done) {
-        dispatch({ kind: "apply", output: { type: "gameEnd" } });
-      } else {
-        dispatch({ kind: "apply", output: res.value });
-      }
+    async (res: IteratorResult<Output, void>, input?: Input) => {
+      const output: Output = res.done ? { type: "gameEnd" } : res.value;
+      dispatch({ kind: "apply", output });
       const engine = engineRef.current;
-      if (engine && onState) onState(engine.getState());
+      if (engine && onCommit) {
+        await onCommit(
+          engine.getState(),
+          ...(input ? [{ input, output } satisfies WebStepEvent] : []),
+        );
+      }
     },
-    [onState],
+    [onCommit],
   );
 
   useEffect(() => {
@@ -92,7 +101,7 @@ export function WebPlayScreen({
         runnerRef.current = runner;
         const res = await runner.next();
         if (cancelled) return;
-        commit(res);
+        await commit(res);
       } catch (err) {
         if (cancelled) return;
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
@@ -113,7 +122,7 @@ export function WebPlayScreen({
       if (!runner) return;
       processingRef.current = true;
       try {
-        commit(await runner.next(input));
+        await commit(await runner.next(input), input);
       } catch (err) {
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
       } finally {
@@ -153,6 +162,11 @@ export function WebPlayScreen({
         <StageView stage={model.stage} onInput={sendInput} />
       </div>
       <div className="hud">
+        {sessionLabel && (
+          <span className="hud-session" title="Headless CLI と共有される保存先">
+            ⛓ {sessionLabel}
+          </span>
+        )}
         {onExit && (
           <button className="hud-btn" onClick={onExit}>
             ← 主菜单
@@ -291,11 +305,10 @@ function StageView({
 }
 
 function StatusBar({ snapshot }: { snapshot: HubSnapshot }) {
+  const calendar = formatHubCalendar(snapshot);
   return (
     <div className="status-bar">
-      <span className="status-day">
-        Day {snapshot.day}/{snapshot.maxDay} · {snapshot.slotName}
-      </span>
+      {calendar && <span className="status-day">{calendar}</span>}
       {snapshot.stats.map((s) => (
         <span key={s.id} className="status-stat">
           {s.name} {s.value}/{s.max}

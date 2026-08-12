@@ -1,5 +1,6 @@
 import { step } from "@rpg-harness/engine";
 import type { Input } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { joinVisualState } from "../presenters/visualSummary";
 import { appendLog, loadSession, saveSession } from "../session";
@@ -13,19 +14,23 @@ interface Args {
 
 export async function stepCommand(args: Args): Promise<void> {
   const game = await loadGame(args.gameDir);
-  const state = await loadSession(args.gameDir, args.session, game);
   let input: Input;
   try {
     input = JSON.parse(args.input) as Input;
   } catch (err) {
     throw new Error(`Invalid --input JSON: ${(err as Error).message}`);
   }
-  const result = await step(game, state, input);
-  await saveSession(args.gameDir, args.session, result.state);
-  await appendLog(args.gameDir, args.session, {
-    t: Date.now(),
-    input,
-    output: result.output,
+  const result = await withSessionLock(args.gameDir, args.session, async () => {
+    const state = await loadSession(args.gameDir, args.session, game);
+    const next = await step(game, state, input);
+    await saveSession(args.gameDir, args.session, next.state);
+    await appendLog(args.gameDir, args.session, {
+      t: Date.now(),
+      source: "cli",
+      input,
+      output: next.output,
+    });
+    return next;
   });
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
   const output =

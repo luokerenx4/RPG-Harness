@@ -2,7 +2,7 @@
 // walks every condition + effect in the loaded game and verifies every
 // leaf reference resolves to a declared registry entry. This is the
 // structural payoff of Phases 1-4: every switch / variable / character /
-// stat / script / item / weapon / skill name has a declared source of
+// stat / script / item / weapon / skill / dialogue speaker name has a declared source of
 // truth, so typos become hard parse errors instead of silently always-
 // false runtime conditions.
 //
@@ -76,7 +76,15 @@ export function validateGame(game: Game): void {
   for (const s of game.scripts) {
     if (s.requires) visitCondition(s.requires, `script ${s.id}.requires`, reg, issues);
     s.beats.forEach((beat, beatIdx) => {
-      if (beat.type === "choice") {
+      if (beat.type === "dialogue" && !reg.characters.has(beat.speaker)) {
+        issues.push({
+          path: `script ${s.id}.beats[${beatIdx}].speaker`,
+          message:
+            beat.speaker === "narrator"
+              ? 'undeclared character "narrator". Plain text is narration; remove the @narrator prefix'
+              : `undeclared character "${beat.speaker}". Declared: ${listOrNone(reg.characters)}`,
+        });
+      } else if (beat.type === "choice") {
         beat.options.forEach((opt, optIdx) => {
           const where = `script ${s.id}.beats[${beatIdx}].options[${optIdx}]`;
           if (opt.requires) visitCondition(opt.requires, `${where}.requires`, reg, issues);

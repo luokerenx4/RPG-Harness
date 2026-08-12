@@ -6,6 +6,7 @@ import type {
   StatSnapshot,
   StatThreshold,
 } from "@rpg-harness/engine";
+import { formatHubCalendar } from "@rpg-harness/frontend-core";
 
 interface HubMenuProps {
   snapshot: HubSnapshot;
@@ -15,15 +16,14 @@ interface HubMenuProps {
 const BAR_WIDTH = 20;
 
 export function HubMenu({ snapshot, cursor }: HubMenuProps) {
+  const calendar = formatHubCalendar(snapshot);
   return (
     <Box flexDirection="column">
-      <Box flexDirection="row" marginBottom={1}>
-        <Text bold color="yellow">
-          Day {snapshot.day}/{snapshot.maxDay}
-        </Text>
-        <Text dimColor> · </Text>
-        <Text bold>{snapshot.slotName}</Text>
-      </Box>
+      {calendar ? (
+        <Box flexDirection="row" marginBottom={1}>
+          <Text bold color="yellow">{calendar}</Text>
+        </Box>
+      ) : null}
 
       <Box flexDirection="column" marginBottom={1}>
         {snapshot.stats.map((stat) => (

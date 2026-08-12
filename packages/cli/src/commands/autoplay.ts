@@ -1,5 +1,6 @@
 import { emptyVisualState, runLoop } from "@rpg-harness/engine";
 import type { Output, VisualState } from "@rpg-harness/engine";
+import { formatHubCalendar } from "@rpg-harness/frontend-core";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { personaDescriptions, personas } from "../test/personas";
@@ -126,6 +127,7 @@ function formatOutput(o: Output): string | null {
       }`;
     case "hubMenu": {
       const s = o.snapshot;
+      const calendar = formatHubCalendar(s);
       const stats = s.stats.map((st) => `${st.name}:${st.value}`).join(" ");
       const acts = s.activities
         .map(
@@ -133,7 +135,7 @@ function formatOutput(o: Output): string | null {
             `${i + 1}. ${a.title}${a.available ? "" : " (locked)"}`,
         )
         .join("  ");
-      return `  [Day ${s.day} · ${s.slotName}]  ${stats}\n    ${acts}`;
+      return `  ${calendar ? `[${calendar}]  ` : ""}${stats}\n    ${acts}`;
     }
     case "gameEnd":
       return `  ═══ GAME END ═══${o.reason ? ` (${o.reason})` : ""}`;

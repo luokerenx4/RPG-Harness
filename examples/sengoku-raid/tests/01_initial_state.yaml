@@ -7,6 +7,10 @@ description: |
     - intro script auto-launches (becomes first non-hub Output)
 inputs: []
 assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 慶長十年、初秋
   - kind: state
     path: sengoku-raid.raid
     eq: null

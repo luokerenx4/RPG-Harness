@@ -1,54 +1,187 @@
-import type { ComposedState } from "@rpg-harness/engine";
+import type {
+  ComposedState,
+  Input,
+  Output,
+} from "@rpg-harness/engine";
 
-// Browser twin of packages/cli/src/session.ts. The CLI persists one
-// state.json per session under the game's .rpg-harness dir; in the
-// browser there's no fs, so each game gets a single autosave slot in
-// localStorage. ComposedState is plain JSON (engine invariant), so it
-// round-trips through stringify/parse without loss — the same property
-// that lets the CLI write state.json.
-//
-// Key namespace is per-game so one bundle's many games keep independent
-// saves: rpgh:save:<gameId>.
+// Production remains a static web app with a localStorage save. In local Vite
+// development, /__rpgh/session-bridge is provided by vite.config.ts and the
+// same API transparently writes the CLI's state.json + log.jsonl session.
 
-const PREFIX = "rpgh:save:";
+const LOCAL_PREFIX = "rpgh:save:";
+const BRIDGE_ROOT = "/__rpgh/session-bridge";
+export const WEB_SESSION_NAME = "web";
 
-function key(gameId: string): string {
-  return PREFIX + gameId;
+export interface WebStepEvent {
+  input: Input;
+  output: Output;
 }
 
-export function loadState(gameId: string): ComposedState | null {
+export interface WebSessionInfo {
+  mode: "shared" | "browser";
+  session: string;
+  label: string;
+}
+
+let infoPromise: Promise<WebSessionInfo> | null = null;
+const bridgeRevisions = new Map<string, string | null>();
+
+export function getSessionInfo(): Promise<WebSessionInfo> {
+  if (!infoPromise) infoPromise = detectSessionInfo();
+  return infoPromise;
+}
+
+export async function loadState(gameId: string): Promise<ComposedState | null> {
+  const info = await getSessionInfo();
+  if (info.mode === "shared") {
+    const snapshot = await fetchBridgeSnapshot(gameId, info.session);
+    bridgeRevisions.set(gameId, snapshot.revision);
+    return snapshot.state;
+  }
   try {
-    const raw = localStorage.getItem(key(gameId));
-    if (raw === null) return null;
-    return JSON.parse(raw) as ComposedState;
+    const raw = localStorage.getItem(localKey(gameId));
+    return raw === null ? null : (JSON.parse(raw) as ComposedState);
   } catch {
-    // Corrupt or unparseable save → treat as no save rather than
-    // wedging the player on a broken slot.
     return null;
   }
 }
 
-export function saveState(gameId: string, state: ComposedState): void {
+// Returns undefined when nothing changed, null when another surface cleared
+// the session, or the new state when Headless/TUI advanced it. App polls this
+// only while a shared Web game is open; CAS remains the race-condition guard.
+export async function pollExternalState(
+  gameId: string,
+): Promise<ComposedState | null | undefined> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return undefined;
+  const previous = bridgeRevisions.get(gameId);
+  const snapshot = await fetchBridgeSnapshot(gameId, info.session);
+  if (previous === undefined) {
+    bridgeRevisions.set(gameId, snapshot.revision);
+    return undefined;
+  }
+  if (snapshot.revision === previous) return undefined;
+  bridgeRevisions.set(gameId, snapshot.revision);
+  return snapshot.state;
+}
+
+export async function saveState(
+  gameId: string,
+  state: ComposedState,
+  event?: WebStepEvent,
+): Promise<void> {
+  const info = await getSessionInfo();
+  if (info.mode === "shared") {
+    const expectedRevision = bridgeRevisions.get(gameId) ?? null;
+    const response = await fetch(bridgeEndpoint(gameId, info.session), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        state,
+        expectedRevision,
+        ...(event ? { event } : {}),
+      }),
+    });
+    if (!response.ok) throw await bridgeError(response);
+    const payload = (await response.json()) as { revision?: unknown };
+    if (typeof payload.revision !== "string") {
+      throw new Error("session bridge did not return a revision");
+    }
+    bridgeRevisions.set(gameId, payload.revision);
+    return;
+  }
   try {
-    localStorage.setItem(key(gameId), JSON.stringify(state));
+    localStorage.setItem(localKey(gameId), JSON.stringify(state));
   } catch {
-    // Quota exceeded / storage disabled (private mode). Saves are
-    // best-effort; play continues in-memory either way.
+    // Static deployments keep best-effort browser persistence. The in-memory
+    // engine can still continue when storage is disabled or out of quota.
   }
 }
 
-export function clearState(gameId: string): void {
+export async function clearState(gameId: string): Promise<void> {
+  const info = await getSessionInfo();
+  if (info.mode === "shared") {
+    const response = await fetch(bridgeEndpoint(gameId, info.session), {
+      method: "DELETE",
+    });
+    if (!response.ok) throw await bridgeError(response);
+    bridgeRevisions.set(gameId, null);
+    return;
+  }
   try {
-    localStorage.removeItem(key(gameId));
+    localStorage.removeItem(localKey(gameId));
   } catch {
     // ignore
   }
 }
 
-export function hasSave(gameId: string): boolean {
+export async function hasSave(gameId: string): Promise<boolean> {
+  return (await loadState(gameId)) !== null;
+}
+
+async function detectSessionInfo(): Promise<WebSessionInfo> {
   try {
-    return localStorage.getItem(key(gameId)) !== null;
+    const response = await fetch(BRIDGE_ROOT, {
+      headers: { Accept: "application/json" },
+    });
+    if (response.ok && response.headers.get("content-type")?.includes("application/json")) {
+      const payload = (await response.json()) as {
+        enabled?: unknown;
+        defaultSession?: unknown;
+      };
+      if (payload.enabled === true && typeof payload.defaultSession === "string") {
+        return {
+          mode: "shared",
+          session: payload.defaultSession,
+          label: `共有セッション: ${payload.defaultSession} · live`,
+        };
+      }
+    }
   } catch {
-    return false;
+    // Static host or bridge unavailable: browser-only save remains valid.
   }
+  return { mode: "browser", session: "browser", label: "ブラウザ保存" };
+}
+
+async function fetchBridgeSnapshot(
+  gameId: string,
+  session: string,
+): Promise<{ state: ComposedState | null; revision: string | null }> {
+  const response = await fetch(bridgeEndpoint(gameId, session));
+  if (!response.ok) throw await bridgeError(response);
+  const payload = (await response.json()) as {
+    state?: unknown;
+    revision?: unknown;
+  };
+  if (payload.revision !== null && typeof payload.revision !== "string") {
+    throw new Error("session bridge returned an invalid revision");
+  }
+  return {
+    state: (payload.state ?? null) as ComposedState | null,
+    revision: payload.revision ?? null,
+  };
+}
+
+function bridgeEndpoint(gameId: string, session: string): string {
+  return `${BRIDGE_ROOT}/session/${encodeURIComponent(gameId)}/${encodeURIComponent(session)}`;
+}
+
+function localKey(gameId: string): string {
+  return LOCAL_PREFIX + gameId;
+}
+
+async function bridgeError(response: Response): Promise<Error> {
+  let detail = response.statusText;
+  try {
+    const payload = (await response.json()) as { error?: unknown };
+    if (typeof payload.error === "string") detail = payload.error;
+  } catch {
+    // retain statusText
+  }
+  if (response.status === 409) {
+    return new Error(
+      `共有セッションが別の画面で進みました。古い GUI 状態は保存していません。主菜单へ戻り「続きから」で再読み込みしてください。\n${detail}`,
+    );
+  }
+  return new Error(`session bridge ${response.status}: ${detail}`);
 }

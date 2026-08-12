@@ -148,12 +148,14 @@ paths, log line, and compact latest input/output. Continue playing after a
 
 Use `rpgh reports "$GAME" --format table` for human triage or the default JSON
 form for another AI/code agent. Do not wait until the end and rely on memory.
+After a fix passes its replay/fixture and surface checks, close the loop with
+`rpgh resolve "$GAME" <report-id> --resolution "what changed and how it was verified"`.
 
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.
 - Never run `step` against a session you don't own (sessions list at `<game>/.rpg-harness/sessions/`).
-- The `rpgh` subcommands used in a playtest are **peek, step, report, reports**. (`sessions` is informational; `test` and `autoplay` are not for playing.)
+- The `rpgh` subcommands used in a playtest are **peek, step, report, reports, resolve**. (`sessions` is informational; `test` and `autoplay` are not for playing.)
 - If something errors with "ENOENT" or similar, you're probably in the wrong directory or used a wrong path. Don't keep retrying — check `pwd` and `ls`.
 
 ## Example transcript

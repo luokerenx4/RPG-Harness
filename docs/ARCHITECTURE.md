@@ -304,6 +304,15 @@ interface GameState {
 
 Saves are a single JSON file. AI playtester branching = snapshot + replay from a state. `git diff` on saves works. Hot-reload preserves state.
 
+The local Web dev server exposes a same-origin session bridge. Its default
+`web` session is the same `.rpg-harness/sessions/web/state.json` and
+`log.jsonl` consumed by `rpgh peek`, `step`, `report`, and `resolve`; GUI steps
+carry `source: "web"` in the log. The bridge uses a hash revision on every PUT,
+so the GUI can live-reload when a CLI/TUI step changes the file. A browser that
+writes inside the polling race window receives 409 instead of overwriting the
+newer step. Production Web builds do not include this middleware and continue
+to use localStorage.
+
 ## Preset layer
 
 Two bundled presets:

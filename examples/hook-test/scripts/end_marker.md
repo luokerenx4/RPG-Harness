@@ -4,6 +4,6 @@ title: end marker
 characters: []
 ---
 
-@narrator end_marker fired.
+end_marker fired.
 
 [end]

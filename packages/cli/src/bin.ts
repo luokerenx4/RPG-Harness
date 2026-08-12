@@ -10,7 +10,11 @@ import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
 import { studioCommand } from "./commands/studio";
-import { reportCommand, reportsCommand } from "./commands/report";
+import {
+  reportCommand,
+  reportsCommand,
+  resolveCommand,
+} from "./commands/report";
 import {
   PLAYTEST_AREAS,
   PLAYTEST_SEVERITIES,
@@ -54,8 +58,12 @@ COMMANDS
       save + latest input/output. Areas: narrative / gameplay / engine / ui /
       tooling. Severities: note / minor / major / blocker.
 
-  reports  <game-dir> [--session NAME] [--format json|table]
-      List structured playtest issues, across all sessions by default.
+  reports  <game-dir> [--session NAME] [--status open|resolved|all]
+           [--format json|table]
+      List structured playtest issues. Defaults to open issues across all sessions.
+
+  resolve  <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]
+      Mark a playtest issue resolved after its fix has been verified.
 
   init     <dir> [--preset vn|training] [--eject] [--force]
       Scaffold a minimal RPG-Harness game in <dir>. Creates game.yaml,
@@ -135,6 +143,8 @@ async function main(): Promise<void> {
       return runReport(rest);
     case "reports":
       return runReports(rest);
+    case "resolve":
+      return runResolve(rest);
     case "init":
       return runInit(rest);
     case "screenshot":
@@ -325,12 +335,13 @@ async function runReports(args: string[]): Promise<void> {
     options: {
       session: { type: "string" },
       format: { type: "string", default: "json" },
+      status: { type: "string", default: "open" },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh reports <game-dir> [--session NAME] [--format json|table]",
+    "rpgh reports <game-dir> [--session NAME] [--status open|resolved|all] [--format json|table]",
   );
   const format = values.format ?? "json";
   if (format !== "json" && format !== "table") {
@@ -339,10 +350,45 @@ async function runReports(args: string[]): Promise<void> {
     );
     process.exit(2);
   }
+  const status = values.status ?? "open";
+  if (status !== "open" && status !== "resolved" && status !== "all") {
+    process.stderr.write(
+      `--status must be 'open', 'resolved', or 'all' (got ${status})\n`,
+    );
+    process.exit(2);
+  }
   await reportsCommand({
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
+    status,
+  });
+}
+
+async function runResolve(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      resolution: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2 || !positionals[0] || !positionals[1]) {
+    process.stderr.write(
+      "Usage: rpgh resolve <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await resolveCommand({
+    gameDir: positionals[0],
+    id: positionals[1],
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    ...(values.resolution !== undefined
+      ? { resolution: values.resolution }
+      : {}),
+    pretty: Boolean(values.pretty),
   });
 }
 

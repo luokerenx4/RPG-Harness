@@ -102,6 +102,33 @@ describe("validateGame — undeclared references throw", () => {
     expect(() => validateGame(game)).toThrow(/ghost/);
   });
 
+  test("undeclared dialogue speaker is rejected", () => {
+    const game = baseGame({
+      scripts: [
+        {
+          id: "001",
+          title: "1",
+          beats: [{ type: "dialogue", speaker: "alcie", text: "hello" }],
+        },
+      ],
+    });
+    expect(() => validateGame(game)).toThrow(/alcie/);
+    expect(() => validateGame(game)).toThrow(/alice/);
+  });
+
+  test("@narrator misuse gets an actionable plain-text hint", () => {
+    const game = baseGame({
+      scripts: [
+        {
+          id: "001",
+          title: "1",
+          beats: [{ type: "dialogue", speaker: "narrator", text: "scene" }],
+        },
+      ],
+    });
+    expect(() => validateGame(game)).toThrow(/remove the @narrator prefix/);
+  });
+
   test("undeclared script in scriptCompleted", () => {
     const game = baseGame({
       scripts: [

@@ -6,6 +6,7 @@ import {
   formatPlaytestReports,
   listPlaytestReports,
   recordPlaytestReport,
+  resolvePlaytestReport,
 } from "./playtest-reports";
 
 const temporaryDirectories: string[] = [];
@@ -104,6 +105,62 @@ describe("playtest reports", () => {
     expect(report.evidence.captureErrors).toHaveLength(2);
   });
 
+  test("captures hub telemetry instead of reducing evidence to activity ids", async () => {
+    const gameDir = await temporaryGame();
+    const session = "hub-ui";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "log.jsonl"),
+      JSON.stringify({
+        input: { type: "next" },
+        output: {
+          type: "hubMenu",
+          snapshot: {
+            day: 0,
+            maxDay: 0,
+            slot: 0,
+            slotName: "",
+            stats: [{ id: "hp", value: 30, max: 30 }],
+            affections: [{ id: "kagari", value: 2 }],
+            activities: [
+              {
+                id: "depart:kuro_swamp",
+                title: "出立 — 黒沼地",
+                category: "raid",
+                available: true,
+              },
+            ],
+          },
+        },
+      }) + "\n",
+    );
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "ui",
+      severity: "minor",
+      title: "Non-calendar hub shows Day 0/0",
+    });
+    expect(report.evidence.lastEvent?.output).toEqual({
+      type: "hubMenu",
+      day: 0,
+      maxDay: 0,
+      slot: 0,
+      slotName: "",
+      stats: [{ id: "hp", value: 30, max: 30 }],
+      affections: [{ id: "kagari", value: 2 }],
+      activities: [
+        {
+          id: "depart:kuro_swamp",
+          title: "出立 — 黒沼地",
+          category: "raid",
+          available: true,
+        },
+      ],
+    });
+  });
+
   test("lists reports across sessions and formats a compact human view", async () => {
     const gameDir = await temporaryGame();
     await recordPlaytestReport({
@@ -125,8 +182,41 @@ describe("playtest reports", () => {
     expect(reports).toHaveLength(2);
     const table = formatPlaytestReports(reports);
     expect(table).toContain("SEVERITY");
+    expect(table).toContain("STATUS");
     expect(table).toContain("Choice text wraps awkwardly");
     expect(table).toContain("Raid pacing feels slow");
+  });
+
+  test("resolves a report by id while preserving its captured evidence", async () => {
+    const gameDir = await temporaryGame();
+    const open = await recordPlaytestReport({
+      gameDir,
+      session: "web",
+      area: "ui",
+      severity: "minor",
+      title: "Narrator label leaks",
+    });
+
+    const resolved = await resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      resolution: "Narrator beats now use narration output.",
+    });
+
+    expect(resolved.status).toBe("resolved");
+    expect(resolved.resolvedAt).toBeString();
+    expect(resolved.resolution).toBe(
+      "Narrator beats now use narration output.",
+    );
+    expect(resolved.evidence).toEqual(open.evidence);
+    expect(await listPlaytestReports(gameDir, "web")).toEqual([resolved]);
+  });
+
+  test("fails loudly when resolving an unknown report id", async () => {
+    const gameDir = await temporaryGame();
+    expect(
+      resolvePlaytestReport({ gameDir, id: "pt-missing" }),
+    ).rejects.toThrow("not found");
   });
 });
 

@@ -26,6 +26,7 @@
         "@rpg-harness/engine": "workspace:*",
         "@rpg-harness/frontend-core": "workspace:*",
         "@rpg-harness/parser": "workspace:*",
+        "@rpg-harness/session-store": "workspace:*",
         "ink": "^5.0.1",
         "react": "^18.3.1",
         "yaml": "^2.6.1",
@@ -53,6 +54,10 @@
         "gray-matter": "^4.0.3",
         "yaml": "^2.6.1",
       },
+    },
+    "packages/session-store": {
+      "name": "@rpg-harness/session-store",
+      "version": "0.0.0",
     },
     "packages/studio": {
       "name": "@rpg-harness/studio",
@@ -85,6 +90,7 @@
         "react-dom": "^18.3.1",
       },
       "devDependencies": {
+        "@rpg-harness/session-store": "workspace:*",
         "@types/react": "^18.3.12",
         "@types/react-dom": "^18.3.0",
         "@vitejs/plugin-react": "^4.3.0",
@@ -250,6 +256,8 @@
     "@rpg-harness/frontend-core": ["@rpg-harness/frontend-core@workspace:packages/frontend-core"],
 
     "@rpg-harness/parser": ["@rpg-harness/parser@workspace:packages/parser"],
+
+    "@rpg-harness/session-store": ["@rpg-harness/session-store@workspace:packages/session-store"],
 
     "@rpg-harness/studio": ["@rpg-harness/studio@workspace:packages/studio"],
 

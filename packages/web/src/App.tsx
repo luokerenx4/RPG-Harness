@@ -1,33 +1,64 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComposedState, Game } from "@rpg-harness/engine";
 import { listGames, loadWebGame } from "./loadGame";
-import { clearState, hasSave, loadState, saveState } from "./session";
+import {
+  clearState,
+  getSessionInfo,
+  hasSave,
+  loadState,
+  pollExternalState,
+  saveState,
+  type WebSessionInfo,
+} from "./session";
 import { WebPlayScreen } from "./WebPlayScreen";
 
 interface Loaded {
   id: string;
   game: Game;
   assetUrls: Record<string, string>;
+  sessionInfo: WebSessionInfo;
+  revision: number;
   initialState?: ComposedState;
 }
 
 export function App() {
-  // listGames() is build-time-constant, but hasSave() reads localStorage,
-  // so the picker re-derives save badges whenever we bump `tick`.
   const games = useMemo(() => listGames(), []);
-  const [tick, setTick] = useState(0);
+  const [savedGames, setSavedGames] = useState<Set<string> | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<WebSessionInfo | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const start = useCallback((id: string, fresh: boolean) => {
+  const refreshSessions = useCallback(async () => {
     try {
-      if (fresh) clearState(id);
-      const saved = fresh ? null : loadState(id);
+      const info = await getSessionInfo();
+      const statuses = await Promise.all(
+        games.map(async (game) => [game.id, await hasSave(game.id)] as const),
+      );
+      setSessionInfo(info);
+      setSavedGames(
+        new Set(statuses.filter(([, saved]) => saved).map(([id]) => id)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
+    }
+  }, [games]);
+
+  useEffect(() => {
+    void refreshSessions();
+  }, [refreshSessions]);
+
+  const start = useCallback(async (id: string, fresh: boolean) => {
+    try {
+      if (fresh) await clearState(id);
+      const saved = fresh ? null : await loadState(id);
       const { game, assetUrls } = loadWebGame(id);
+      const info = await getSessionInfo();
       setLoaded({
         id,
         game,
         assetUrls,
+        sessionInfo: info,
+        revision: 0,
         ...(saved ? { initialState: saved } : {}),
       });
     } catch (err) {
@@ -35,10 +66,51 @@ export function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!loaded || loaded.sessionInfo.mode !== "shared") return;
+    let cancelled = false;
+    let checking = false;
+    const poll = async () => {
+      if (checking || cancelled) return;
+      checking = true;
+      try {
+        const state = await pollExternalState(loaded.id);
+        if (cancelled || state === undefined) return;
+        if (state === null) {
+          setLoaded(null);
+          void refreshSessions();
+          return;
+        }
+        setLoaded((current) =>
+          current && current.id === loaded.id
+            ? {
+                ...current,
+                initialState: state,
+                revision: current.revision + 1,
+              }
+            : current,
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err),
+          );
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 750);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loaded?.id, loaded?.sessionInfo.mode, refreshSessions]);
+
   const exit = useCallback(() => {
     setLoaded(null);
-    setTick((t) => t + 1);
-  }, []);
+    void refreshSessions();
+  }, [refreshSessions]);
 
   if (error) {
     return <pre className="boot-error">{error}</pre>;
@@ -47,11 +119,12 @@ export function App() {
   if (loaded) {
     return (
       <WebPlayScreen
-        key={loaded.id + (loaded.initialState ? ":resume" : ":new")}
+        key={`${loaded.id}:${loaded.revision}:${loaded.initialState ? "resume" : "new"}`}
         game={loaded.game}
         assetUrls={loaded.assetUrls}
         {...(loaded.initialState ? { initialState: loaded.initialState } : {})}
-        onState={(s) => saveState(loaded.id, s)}
+        onCommit={(state, event) => saveState(loaded.id, state, event)}
+        sessionLabel={loaded.sessionInfo.label}
         onExit={exit}
       />
     );
@@ -61,12 +134,19 @@ export function App() {
     <div className="picker">
       <h1 className="picker-title">RPG-Harness</h1>
       <p className="picker-sub">headless RPG Maker — web</p>
-      <ul className="picker-list" key={tick}>
+      <p className="picker-session">
+        {sessionInfo ? `⛓ ${sessionInfo.label}` : "保存先を確認中…"}
+      </p>
+      <ul className="picker-list">
         {games.map((g) => {
-          const saved = hasSave(g.id);
+          const saved = savedGames?.has(g.id) ?? false;
           return (
             <li key={g.id} className="picker-row">
-              <button className="picker-btn" onClick={() => start(g.id, !saved)}>
+              <button
+                className="picker-btn"
+                disabled={savedGames === null}
+                onClick={() => void start(g.id, !saved)}
+              >
                 <span>{g.title}</span>
                 <span className="picker-action">{saved ? "続きから ▸" : "はじめる ▸"}</span>
               </button>
@@ -74,7 +154,7 @@ export function App() {
                 <button
                   className="picker-fresh"
                   title="セーブを消して最初から"
-                  onClick={() => start(g.id, true)}
+                  onClick={() => void start(g.id, true)}
                 >
                   最初から
                 </button>

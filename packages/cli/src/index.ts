@@ -14,6 +14,7 @@ export {
   formatPlaytestReports,
   listPlaytestReports,
   recordPlaytestReport,
+  resolvePlaytestReport,
 } from "./playtest-reports";
 export type {
   PlaytestArea,
@@ -21,4 +22,5 @@ export type {
   PlaytestReport,
   PlaytestSeverity,
   RecordPlaytestReportArgs,
+  ResolvePlaytestReportArgs,
 } from "./playtest-reports";

@@ -1,5 +1,6 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { createInitialState } from "@rpg-harness/engine";
 import type { ComposedState, Game } from "@rpg-harness/engine";
 
@@ -34,11 +35,10 @@ export async function saveSession(
 ): Promise<void> {
   const dir = sessionDir(gameDir, name);
   await mkdir(dir, { recursive: true });
-  await writeFile(
-    path.join(dir, SESSION_FILE),
-    JSON.stringify(state, null, 2),
-    "utf-8",
-  );
+  const target = path.join(dir, SESSION_FILE);
+  const temporary = path.join(dir, `.state-${randomUUID()}.tmp`);
+  await writeFile(temporary, JSON.stringify(state, null, 2), "utf-8");
+  await rename(temporary, target);
 }
 
 export async function appendLog(

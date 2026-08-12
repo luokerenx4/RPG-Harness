@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sessionDir } from "./session";
 
@@ -39,13 +39,15 @@ export interface PlaytestReport {
   schemaVersion: 1;
   id: string;
   createdAt: string;
-  status: "open";
+  status: "open" | "resolved";
   session: string;
   area: PlaytestArea;
   severity: PlaytestSeverity;
   title: string;
   details?: string;
   target?: string;
+  resolvedAt?: string;
+  resolution?: string;
   evidence: PlaytestEvidence;
 }
 
@@ -57,6 +59,13 @@ export interface RecordPlaytestReportArgs {
   title: string;
   details?: string;
   target?: string;
+}
+
+export interface ResolvePlaytestReportArgs {
+  gameDir: string;
+  id: string;
+  session?: string;
+  resolution?: string;
 }
 
 export async function recordPlaytestReport(
@@ -119,17 +128,69 @@ export async function listPlaytestReports(
   return reports.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export async function resolvePlaytestReport(
+  args: ResolvePlaytestReportArgs,
+): Promise<PlaytestReport> {
+  if (!args.id.trim()) throw new Error("Playtest report id cannot be empty");
+  if (args.session !== undefined) assertSessionName(args.session);
+  const files = await reportFiles(args.gameDir, args.session);
+  const matches: Array<{
+    file: string;
+    index: number;
+    reports: PlaytestReport[];
+  }> = [];
+  for (const file of files) {
+    const reports = await readReportFile(file);
+    const index = reports.findIndex((report) => report.id === args.id);
+    if (index >= 0) matches.push({ file, index, reports });
+  }
+  if (matches.length === 0) {
+    throw new Error(`Playtest report not found: ${args.id}`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`Duplicate playtest report id: ${args.id}`);
+  }
+
+  const match = matches[0]!;
+  const current = match.reports[match.index]!;
+  if (current.status === "resolved") return current;
+  const resolved: PlaytestReport = {
+    ...current,
+    status: "resolved",
+    resolvedAt: new Date().toISOString(),
+    ...(args.resolution?.trim() ? { resolution: args.resolution.trim() } : {}),
+  };
+  match.reports[match.index] = resolved;
+  const temporary = `${match.file}.${randomUUID()}.tmp`;
+  await writeFile(
+    temporary,
+    match.reports.map((report) => JSON.stringify(report)).join("\n") + "\n",
+    "utf-8",
+  );
+  await rename(temporary, match.file);
+  return resolved;
+}
+
 export function formatPlaytestReports(reports: PlaytestReport[]): string {
   if (reports.length === 0) return "(no playtest reports)";
   const rows = reports.map((report) => [
     report.id,
+    report.status,
     report.severity,
     report.area,
     report.session,
     report.evidence.currentScriptId ?? "—",
     report.title,
   ]);
-  const headers = ["ID", "SEVERITY", "AREA", "SESSION", "SCRIPT", "TITLE"];
+  const headers = [
+    "ID",
+    "STATUS",
+    "SEVERITY",
+    "AREA",
+    "SESSION",
+    "SCRIPT",
+    "TITLE",
+  ];
   const widths = headers.map((header, index) =>
     Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
   );
@@ -138,6 +199,25 @@ export function formatPlaytestReports(reports: PlaytestReport[]): string {
       row.map((cell, index) => cell.padEnd(widths[index] ?? 0)).join("  ").trimEnd(),
     )
     .join("\n");
+}
+
+async function reportFiles(
+  gameDir: string,
+  session?: string,
+): Promise<string[]> {
+  if (session !== undefined) {
+    return [path.join(sessionDir(gameDir, session), REPORTS_FILE)];
+  }
+  const root = path.join(gameDir, ".rpg-harness", "sessions");
+  try {
+    return (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(root, entry.name, REPORTS_FILE))
+      .sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 async function captureEvidence(
@@ -220,13 +300,45 @@ function compactOutput(output: unknown): unknown {
   if (type === "choice") return pick(obj, ["type", "prompt", "options"]);
   if (type === "hubMenu") {
     const snapshot = obj.snapshot as
-      | { activities?: Array<{ id?: unknown; available?: unknown }> }
+      | {
+          day?: unknown;
+          maxDay?: unknown;
+          slot?: unknown;
+          slotName?: unknown;
+          stats?: Array<{ id?: unknown; value?: unknown; max?: unknown }>;
+          affections?: Array<{ id?: unknown; value?: unknown }>;
+          activities?: Array<{
+            id?: unknown;
+            title?: unknown;
+            category?: unknown;
+            available?: unknown;
+            lockedReason?: unknown;
+          }>;
+        }
       | undefined;
     return {
       type,
+      day: snapshot?.day ?? null,
+      maxDay: snapshot?.maxDay ?? null,
+      slot: snapshot?.slot ?? null,
+      slotName: snapshot?.slotName ?? null,
+      stats: (snapshot?.stats ?? []).map((stat) => ({
+        id: stat.id ?? null,
+        value: stat.value ?? null,
+        max: stat.max ?? null,
+      })),
+      affections: (snapshot?.affections ?? []).map((affection) => ({
+        id: affection.id ?? null,
+        value: affection.value ?? null,
+      })),
       activities: (snapshot?.activities ?? []).map((activity) => ({
         id: activity.id ?? null,
+        title: activity.title ?? null,
+        category: activity.category ?? null,
         available: activity.available ?? null,
+        ...(activity.lockedReason !== undefined
+          ? { lockedReason: activity.lockedReason }
+          : {}),
       })),
     };
   }
