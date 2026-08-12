@@ -41,9 +41,9 @@ requires:
 @kagari それを確かめるのが怖くて、十年、誰にも訊かせなかった。
 
 ? 雨音の中で、なんと答える？ {id: answer-rainy-long-night}
-  - 「死んでない。いま隣で喋ってるのが、それだ」 {id: name-her-alive} -> +2kagari | goto alive
-  - 「なら、数え直すのは俺の前だけにしろ」 {id: count-only-before-me} -> +2kagari | goto count
-  - 黙って、篝の盃に注ぎ返す {id: pour-back} -> +kagari | goto pour
+  - 「死んでない。いま隣で喋ってるのが、それだ」 {id: name-her-alive, ai: blunt affirming} -> +2kagari | goto alive
+  - 「なら、数え直すのは俺の前だけにしろ」 {id: count-only-before-me, ai: romantic loyal} -> +2kagari | goto count
+  - 黙って、篝の盃に注ぎ返す {id: pour-back, ai: compassionate restrained} -> +kagari | goto pour
 
 # alive
 

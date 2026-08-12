@@ -36,6 +36,7 @@ assertions:
     choiceId: answer-rainy-long-night
     optionId: count-only-before-me
     optionTextIncludes: 俺の前だけにしろ
+    optionAiTagsIncludes: romantic
   - kind: output
     type: dialogue
     speaker: kagari
@@ -44,4 +45,3 @@ assertions:
   - kind: state
     path: baseline.variables.kagari_rain_reply
     eq: count-before-me
-

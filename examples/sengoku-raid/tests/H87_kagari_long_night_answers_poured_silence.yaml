@@ -32,6 +32,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-rainy-long-night
+    optionId: pour-back
+    optionAiTagsIncludes: restrained
+  - kind: output
     type: narration
     present: true
     textIncludes: お主の盃へもう一度だけ返した

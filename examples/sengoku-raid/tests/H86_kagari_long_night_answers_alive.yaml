@@ -31,6 +31,12 @@ inputs:
   - { type: choose, index: 0 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-rainy-long-night
+    optionId: name-her-alive
+    optionAiTagsIncludes: blunt
+  - kind: output
     type: dialogue
     speaker: kagari
     present: true
@@ -43,4 +49,3 @@ assertions:
   - kind: state
     path: baseline.variables.kagari_rain_reply
     eq: alive
-
