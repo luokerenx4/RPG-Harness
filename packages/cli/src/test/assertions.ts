@@ -274,6 +274,24 @@ function checkOutput(
       ) {
         return false;
       }
+      if (
+        a.optionAvailable !== undefined &&
+        option.available !== a.optionAvailable
+      ) {
+        return false;
+      }
+      if (
+        a.optionLockedReasonIncludes !== undefined &&
+        !option.lockedReason?.includes(a.optionLockedReasonIncludes)
+      ) {
+        return false;
+      }
+      if (
+        a.optionRequires !== undefined &&
+        JSON.stringify(option.requires) !== JSON.stringify(a.optionRequires)
+      ) {
+        return false;
+      }
     }
     return true;
   });
@@ -283,7 +301,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
         : ""
     }`;
   }
@@ -292,7 +310,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
         : ""
     }, but found ${matches.length}`;
   }

@@ -35,6 +35,9 @@ export interface OutputAssertion {
   optionId?: string;
   optionTextIncludes?: string;
   optionAiPriority?: number;
+  optionAvailable?: boolean;
+  optionLockedReasonIncludes?: string;
+  optionRequires?: unknown;
 }
 
 // Inspect the most recent hubMenu Output for a specific activity by id.
