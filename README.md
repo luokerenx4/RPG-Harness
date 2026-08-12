@@ -453,6 +453,11 @@ after three identical cycles (up to 20 visible outputs per cycle). Its summary
 and playtest report carry the shortest repeated input/output cycle as structured
 `stall` evidence, turning persona oscillation and gameplay deadlocks into a
 reproducible coding issue before the whole decision budget is burned.
+If the public behavior repeats while counters or other state still change, the
+run is not stopped early; a `max-steps` summary instead carries a
+`behaviorCycle` candidate plus the changing state paths. That distinction keeps
+legitimate grinding observable while exposing counters that mask an otherwise
+stuck policy.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
 `cover` is the execution half of that contract: it consumes an available branch

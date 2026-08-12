@@ -9,7 +9,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import type { ComposedState, StallDiagnostic } from "@rpg-harness/engine";
+import type {
+  BehaviorCycleDiagnostic,
+  ComposedState,
+  StallDiagnostic,
+} from "@rpg-harness/engine";
 import {
   appendCheckpointedSessionEvent,
   assertSessionName,
@@ -61,6 +65,7 @@ export interface PlaytestEvidence {
   };
   checkpoint?: PlaytestCheckpointRef;
   stall?: StallDiagnostic;
+  behaviorCycle?: BehaviorCycleDiagnostic;
   captureErrors?: string[];
 }
 
@@ -89,6 +94,7 @@ export interface RecordPlaytestReportArgs {
   details?: string;
   target?: string;
   stall?: StallDiagnostic;
+  behaviorCycle?: BehaviorCycleDiagnostic;
 }
 
 export interface ResolvePlaytestReportArgs {
@@ -126,6 +132,7 @@ export async function recordPlaytestReport(
       evidence: {
         ...await captureEvidence(args.gameDir, args.session),
         ...(args.stall ? { stall: args.stall } : {}),
+        ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
       },
     };
 

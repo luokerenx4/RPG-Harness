@@ -104,6 +104,12 @@ step, finds the shortest repeated suffix, and stops after three repetitions.
 The detector is caller-controlled and off for fixtures/ordinary `runLoop`
 consumers. A `stalled` result includes the cycle's inputs and compact outputs,
 which `--report-on-stop` persists as coding-issue evidence.
+At a decision-budget stop, the same bounded suffix window is also checked with
+state excluded from the behavioral fingerprint. If inputs and outputs repeat
+while state differs, the result keeps `reason: max-steps` but attaches a
+`behaviorCycle` and the changed state paths. This separates true fixed-point
+deadlocks from pseudo-progress such as a turn counter increasing during a map
+oscillation.
 
 ## Standard resources (the database)
 

@@ -140,13 +140,35 @@ export const personas: Record<string, Persona> = {
     return { type: "next" };
   },
 
-  charmer: async (output) => {
+  charmer: async (output, state) => {
     if (output.type === "choice") return pickLastAvailableChoice(output);
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const available = output.snapshot.activities.filter((activity) => activity.available);
+      const recommended = available.filter((activity) => activity.recommended);
+      if (recommended.length > 0) {
+        return { type: "doActivity", id: recommended.at(-1)!.id };
+      }
+      const objective = pickObjectiveActivity(output);
+      if (objective) return objective;
+      const raid = (state as Record<string, unknown>)["sengoku-raid"] as
+        | { raid?: { visited?: Record<string, { visited?: boolean }> } }
+        | undefined;
+      const visited = raid?.raid?.visited;
+      if (visited) {
+        const unvisitedMoves = available.filter((activity) => {
+          if (!activity.id.startsWith("move:")) return false;
+          return visited[activity.id.slice("move:".length)]?.visited !== true;
+        });
+        if (unvisitedMoves.length > 0) {
+          return { type: "doActivity", id: unvisitedMoves.at(-1)!.id };
+        }
+        const extract = available.find((activity) => activity.id === "extract");
+        if (extract) return { type: "doActivity", id: extract.id };
+      }
       return pickActivity(output, (acts) => acts[acts.length - 1]!.idx);
     }
     if (output.type === "gameEnd") return null;

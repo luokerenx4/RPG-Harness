@@ -82,6 +82,50 @@ describe("greedy persona progress tie-breaker", () => {
   });
 });
 
+describe("charmer persona exploration", () => {
+  test("takes a recommended public action before its usual last activity", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities[0]!.recommended = true;
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
+  test("prefers the last unvisited map target over a visited back edge", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "move:burnt_temple", kind: "action", title: "Temple", cost: 0, available: true },
+      { id: "move:foothills", kind: "action", title: "Foothills", cost: 0, available: true },
+    ];
+    const state = {
+      "sengoku-raid": {
+        raid: {
+          visited: {
+            burnt_temple: { visited: false },
+            foothills: { visited: true },
+          },
+        },
+      },
+    } as unknown as ComposedState;
+    await expect(personas.charmer!(output, state, 0)).resolves.toEqual({
+      type: "doActivity",
+      id: "move:burnt_temple",
+    });
+  });
+
+  test("follows a public objective before a reversible final hub toggle", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "depart:kuro_swamp", kind: "action", title: "Depart", cost: 0, available: true },
+      { id: "invite:mio", kind: "action", title: "Invite", cost: 0, available: true },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = ["depart:kuro_swamp"];
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
+  });
+});
+
 function objectiveHub(): Extract<Output, { type: "hubMenu" }> {
   return {
     type: "hubMenu",

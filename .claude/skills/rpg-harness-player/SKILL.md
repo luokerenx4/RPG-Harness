@@ -187,6 +187,14 @@ persona, objective links, gameplay action, or engine contract that prevents
 progress, then rerun from a fresh branch and resolve the report. Do not merely
 raise `--max-steps`; that discards the coding signal.
 
+A `max-steps` result may instead include `behaviorCycle`. This means the public
+input/output sequence repeated but one or more engine state paths kept changing,
+so it was not safe to stop early as a strict stall. Inspect
+`behaviorCycle.changingStatePaths`: monotonically increasing counters such as
+turn counts often reveal pseudo-progress masking navigation or action
+oscillation. Treat the cycle as the reproduction and the listed paths as the
+reason exact stall detection did not fire.
+
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.

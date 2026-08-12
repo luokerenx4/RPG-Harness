@@ -1,5 +1,6 @@
 import { emptyVisualState, runLoop } from "@rpg-harness/engine";
 import type {
+  BehaviorCycleDiagnostic,
   LoopReason,
   Output,
   StallDiagnostic,
@@ -62,6 +63,7 @@ export interface AutoplaySummary {
   reason: LoopReason;
   error?: string;
   stall?: StallDiagnostic;
+  behaviorCycle?: BehaviorCycleDiagnostic;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -282,6 +284,11 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
               `Detected an exact ${result.stall.cycleLength}-output cycle repeated ${result.stall.repetitions} times across trace indexes ${result.stall.firstTraceIndex}–${result.stall.lastTraceIndex}: ${formatStallCycle(result.stall)}.`,
             ]
           : []),
+        ...(result.behaviorCycle
+          ? [
+              `The final budget window contains a repeated ${result.behaviorCycle.cycleLength}-output behavior cycle (${formatStallCycle(result.behaviorCycle)}) while only these state paths kept changing: ${result.behaviorCycle.changingStatePaths.join(", ")}.`,
+            ]
+          : []),
         ...(result.error ? [`Engine error: ${result.error}`] : []),
         ...(fork
           ? [
@@ -291,6 +298,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
         "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
+      ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
     });
   }
 
@@ -302,6 +310,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     reason: result.reason,
     ...(result.error ? { error: result.error } : {}),
     ...(result.stall ? { stall: result.stall } : {}),
+    ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,

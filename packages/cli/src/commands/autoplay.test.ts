@@ -58,6 +58,28 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.report?.details).toContain("exact 2-output cycle");
   });
 
+  test("reports repeated behavior whose state counter masks an exact stall", async () => {
+    const gameDir = await temporaryChangingCycleGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 6,
+      session: "ai-changing-cycle",
+      reportOnStop: true,
+    });
+
+    expect(summary.reason).toBe("max-steps");
+    expect(summary.stall).toBeUndefined();
+    expect(summary.behaviorCycle).toMatchObject({
+      cycleLength: 2,
+      repetitions: 3,
+      changingStatePaths: ["baseline.inventory.turns"],
+    });
+    expect(summary.report?.evidence.behaviorCycle).toEqual(summary.behaviorCycle);
+    expect(summary.report?.details).toContain("while only these state paths kept changing");
+  });
+
   test("forks a player save before moving and reports a checkpointed stop", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
@@ -211,6 +233,30 @@ async function temporaryToggleGame(): Promise<string> {
     "  while (true) {",
     '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true }] } };',
     '    yield { type: "narration", text: "Nothing changes." };',
+    "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryChangingCycleGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-changing-cycle-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay changing cycle test",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    "  while (true) {",
+    "    ctx.state.baseline.inventory.turns = (ctx.state.baseline.inventory.turns ?? 0) + 1;",
+    '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true }] } };',
+    '    yield { type: "narration", text: "Still circling." };',
     "  }",
     "};",
     "export default run;",

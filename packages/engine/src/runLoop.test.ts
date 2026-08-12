@@ -194,5 +194,13 @@ describe("runLoop stall diagnostics", () => {
     );
     expect(result.reason).toBe("max-steps");
     expect(result.finalState.baseline.characters.player?.stats.progress).toBe(9);
+    expect(result.behaviorCycle).toEqual({
+      cycleLength: 1,
+      repetitions: 3,
+      firstTraceIndex: 6,
+      lastTraceIndex: 8,
+      cycle: [{ traceIndex: 8, input: { type: "next" }, output: "narration: Grinding..." }],
+      changingStatePaths: ["baseline.characters.player.stats.progress"],
+    });
   });
 });
