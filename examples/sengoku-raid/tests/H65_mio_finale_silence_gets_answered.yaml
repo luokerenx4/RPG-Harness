@@ -33,6 +33,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: letter-under-lamplight
+    optionId: touch-crest
+    optionAiTagsIncludes: intimate
+  - kind: output
     type: narration
     present: true
     textIncludes: 指先の下で、朱の家紋は乾いていた

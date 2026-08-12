@@ -44,6 +44,7 @@ assertions:
     choiceId: letter-under-lamplight
     optionId: why-warn-me
     optionTextIncludes: なぜ忠告を
+    optionAiTagsIncludes: probing
   - kind: output
     type: dialogue
     present: true

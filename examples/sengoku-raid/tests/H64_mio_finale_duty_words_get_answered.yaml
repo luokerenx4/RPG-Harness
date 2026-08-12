@@ -33,6 +33,12 @@ assertions:
   - kind: output
     type: choice
     present: true
+    choiceId: letter-under-lamplight
+    optionId: beyond-duty
+    optionAiTagsIncludes: affirming
+  - kind: output
+    type: choice
+    present: true
     choiceId: end-of-duty
     optionId: amend-the-date
     optionAiTagsIncludes: affirming

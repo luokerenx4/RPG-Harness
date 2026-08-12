@@ -23,9 +23,9 @@ requires:
 @mio 公儀の沙汰書は別にある。あれは、私が名を伏せて勝手に出した——ただの、忠告だった。
 
 ? 灯の下で、何を訊く？ {id: letter-under-lamplight}
-  - 「会ってもいない俺に、なぜ忠告を」 {id: why-warn-me} -> +mio | goto letter_why
-  - 「『気を確かに』——あれは役目の言葉ではなかったんだな」 {id: beyond-duty} -> +2mio | goto letter_duty
-  - 何も訊かず、家紋に指先で触れる {id: touch-crest} -> +mio | goto letter_crest
+  - 「会ってもいない俺に、なぜ忠告を」 {id: why-warn-me, ai: probing vulnerable} -> +mio | goto letter_why
+  - 「『気を確かに』——あれは役目の言葉ではなかったんだな」 {id: beyond-duty, ai: compassionate affirming} -> +2mio | goto letter_duty
+  - 何も訊かず、家紋に指先で触れる {id: touch-crest, ai: restrained trusting intimate} -> +mio | goto letter_crest
 
 # letter_why
 
