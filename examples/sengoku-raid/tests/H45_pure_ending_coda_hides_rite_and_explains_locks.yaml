@@ -55,3 +55,7 @@ assertions:
   - kind: output
     type: choice
     present: true
+    choiceId: pure-rite-coda
+    optionId: walk-to-mio
+    optionTextIncludes: 澪
+    optionAiTagsIncludes: social

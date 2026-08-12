@@ -144,6 +144,7 @@ export async function* runScript(
             ...(opt.aiPriority !== undefined
               ? { aiPriority: opt.aiPriority }
               : {}),
+            ...(opt.aiTags !== undefined ? { aiTags: [...opt.aiTags] } : {}),
             ...(r.ok
               ? {}
               : { lockedReason: opt.lockedHint ?? r.reason }),

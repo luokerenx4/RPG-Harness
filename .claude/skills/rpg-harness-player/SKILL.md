@@ -78,7 +78,9 @@ Even when output is just narration or dialogue, **read the text**. The story is 
 When the output is a `choice`, before sending input:
 
 1. State your interpretation of the situation in 1 sentence.
-2. List the options and what each one signals.
+2. List the options and what each one signals. Treat optional `aiTags` as
+   authored semantic evidence (`social`, `independent`, `defiant`, etc.), not
+   player-facing prose or a command that overrides the requested persona.
 3. Pick one and say why.
 
 Example:
@@ -106,6 +108,12 @@ option has no stable id.
 ## Choosing in character
 
 If the user gave you a persona ("play as a cautious introvert" / "play as someone trying to reach the bea-good ending"), every choice should follow that persona. Don't break character to optimize.
+
+Prefer an available option whose authored `aiTags`, text, consequences and
+current gates jointly fit that persona. Tags form an open vocabulary, so explain
+unknown tags from context rather than assuming the built-in persona meanings.
+If tags conflict with the actual prose or consequences, call out the likely
+authoring issue instead of silently obeying them.
 
 If the user said "just play your way", reveal your taste in the choices. Don't fake.
 
@@ -208,8 +216,11 @@ rpgh audit "$GAME" --from-session "$SESSION" \
   --session-prefix "${SESSION}-matrix" --max-steps 500
 ```
 
-Read the compact `lanes`, `totals`, and `endings` matrix first, then open or
-transcribe only anomalous named lanes. The source is never mutated and all
+Read the compact `lanes`, `totals`, `endings`, and `diversity` matrix first.
+`diversity.classification` distinguishes identical paths, convergent paths,
+divergent endings, and incomplete sweeps; `choiceDivergences` names the stable
+options selected by each persona. Then open or transcribe only anomalous named
+lanes. The source is never mutated and all
 target names are preflighted before the first fork. Use a fresh prefix for each
 audit. If `random` is included in `--personas`, always provide `--seed`.
 

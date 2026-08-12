@@ -387,6 +387,42 @@ describe("parseScript — fenced YAML choice", () => {
     });
   });
 
+  test("accepts open renderer-neutral AI intent tags", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "id: route-finale",
+      "options:",
+      "  - id: stay",
+      "    text: 隣に残る",
+      "    ai_tags: [social, romance/mio]",
+      "```",
+    ].join("\n");
+    const s = parseScript(source("id: x\ntitle: t", body));
+    expect(s.beats[0]).toMatchObject({
+      type: "choice",
+      options: [{ id: "stay", aiTags: ["social", "romance/mio"] }],
+    });
+  });
+
+  test("rejects malformed or duplicate AI intent tags", () => {
+    const malformed = [
+      "```yaml",
+      "type: choice",
+      "options:",
+      "  - text: 壊れた指定",
+      "    aiTags: [social, 'not stable']",
+      "```",
+    ].join("\n");
+    expect(() => parseScript(source("id: x\ntitle: t", malformed))).toThrow(
+      /aiTags\[1\].*stable tag/,
+    );
+    const duplicate = malformed.replace("[social, 'not stable']", "[social, social]");
+    expect(() => parseScript(source("id: x\ntitle: t", duplicate))).toThrow(
+      /aiTags.*duplicates/,
+    );
+  });
+
   test("rejects an empty choice id", () => {
     const body = [
       "```yaml",

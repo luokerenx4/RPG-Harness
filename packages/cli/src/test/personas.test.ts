@@ -83,6 +83,22 @@ describe("greedy persona progress tie-breaker", () => {
 });
 
 describe("charmer persona exploration", () => {
+  test("uses authored social intent instead of presentation position", async () => {
+    const output: Output = {
+      type: "choice",
+      scriptId: "ending",
+      choiceId: "coda",
+      options: [
+        { id: "alone", text: "Alone", available: true, aiTags: ["independent"] },
+        { id: "friend", text: "Friend", available: true, aiTags: ["social"] },
+        { id: "wait", text: "Wait", available: true },
+      ],
+    };
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "choose", choiceId: "coda", optionId: "friend" });
+  });
+
   test("takes a recommended public action before its usual last activity", async () => {
     const output = objectiveHub();
     output.snapshot.activities[0]!.recommended = true;
@@ -127,6 +143,22 @@ describe("charmer persona exploration", () => {
 });
 
 describe("rude persona progression", () => {
+  test("uses authored defiant intent instead of presentation position", async () => {
+    const output: Output = {
+      type: "choice",
+      scriptId: "ending",
+      choiceId: "coda",
+      options: [
+        { id: "friend", text: "Friend", available: true, aiTags: ["social"] },
+        { id: "wait", text: "Wait", available: true },
+        { id: "alone", text: "Alone", available: true, aiTags: ["independent"] },
+      ],
+    };
+    await expect(
+      personas.rude!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "choose", choiceId: "coda", optionId: "alone" });
+  });
+
   test("keeps second-choice dialogue behavior but follows the hub objective", async () => {
     const output = objectiveHub();
     await expect(

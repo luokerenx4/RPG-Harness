@@ -9,7 +9,40 @@ export type Persona = (
 function pickFirstAvailableChoice(output: Output): Input | null {
   if (output.type !== "choice") return null;
   const i = output.options.findIndex((o) => o.available);
-  return i >= 0 ? { type: "choose", index: i } : { type: "quit" };
+  return i >= 0 ? chooseOption(output, i) : { type: "quit" };
+}
+
+function chooseOption(
+  output: Extract<Output, { type: "choice" }>,
+  index: number,
+): Input {
+  const option = output.options[index];
+  return output.choiceId !== undefined && option?.id !== undefined
+    ? { type: "choose", choiceId: output.choiceId, optionId: option.id }
+    : { type: "choose", index };
+}
+
+function pickTaggedChoice(
+  output: Extract<Output, { type: "choice" }>,
+  preferredTags: readonly string[],
+): Input | null {
+  const weights = new Map(
+    preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
+  );
+  let bestIndex = -1;
+  let bestScore = 0;
+  for (const [index, option] of output.options.entries()) {
+    if (!option.available) continue;
+    const score = (option.aiTags ?? []).reduce(
+      (sum, tag) => sum + (weights.get(tag) ?? 0),
+      0,
+    );
+    if (score > bestScore) {
+      bestIndex = index;
+      bestScore = score;
+    }
+  }
+  return bestIndex >= 0 ? chooseOption(output, bestIndex) : null;
 }
 
 function pickHighestPriorityChoice(output: Output): Input | null {
@@ -25,7 +58,7 @@ function pickHighestPriorityChoice(output: Output): Input | null {
     }
   }
   return bestIndex >= 0
-    ? { type: "choose", index: bestIndex }
+    ? chooseOption(output, bestIndex)
     : { type: "quit" };
 }
 
@@ -35,7 +68,7 @@ function pickLastAvailableChoice(output: Output): Input | null {
     .map((o, i) => ({ o, i }))
     .reverse()
     .find(({ o }) => o.available);
-  return found ? { type: "choose", index: found.i } : { type: "quit" };
+  return found ? chooseOption(output, found.i) : { type: "quit" };
 }
 
 function pickActivity(
@@ -141,7 +174,12 @@ export const personas: Record<string, Persona> = {
   },
 
   charmer: async (output, state) => {
-    if (output.type === "choice") return pickLastAvailableChoice(output);
+    if (output.type === "choice") {
+      return pickTaggedChoice(
+        output,
+        ["social", "compassionate", "romantic", "loyal"],
+      ) ?? pickLastAvailableChoice(output);
+    }
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -177,8 +215,13 @@ export const personas: Record<string, Persona> = {
 
   rude: async (output) => {
     if (output.type === "choice") {
+      const semantic = pickTaggedChoice(
+        output,
+        ["defiant", "blunt", "independent", "selfish"],
+      );
+      if (semantic) return semantic;
       const second = output.options[1];
-      if (second?.available) return { type: "choose", index: 1 };
+      if (second?.available) return chooseOption(output, 1);
       return pickFirstAvailableChoice(output);
     }
     if (output.type === "scriptComplete") {
@@ -204,7 +247,7 @@ export const personas: Record<string, Persona> = {
         .filter(({ o }) => o.available);
       if (available.length === 0) return { type: "quit" };
       const pick = available[Math.floor(Math.random() * available.length)]!;
-      return { type: "choose", index: pick.i };
+      return chooseOption(output, pick.i);
     }
     if (output.type === "scriptComplete") {
       if (output.nextAvailable.length === 0) return null;

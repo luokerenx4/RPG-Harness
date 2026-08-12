@@ -27,7 +27,7 @@ describe("session transcript", () => {
           prompt: "Who remains?",
           options: [
             { id: "alone", text: "Alone", available: true, consequence: { goto: "alone" } },
-            { id: "friend", text: "Friend", available: false, lockedReason: "bond too low", aiPriority: 20 },
+            { id: "friend", text: "Friend", available: false, lockedReason: "bond too low", aiPriority: 20, aiTags: ["social"] },
           ],
           visualState: { bg: "huge.png", portraits: {} },
         },
@@ -87,7 +87,7 @@ describe("session transcript", () => {
       prompt: "Who remains?",
       options: [
         { index: 0, id: "alone", text: "Alone", available: true },
-        { index: 1, id: "friend", text: "Friend", available: false, lockedReason: "bond too low", aiPriority: 20 },
+        { index: 1, id: "friend", text: "Friend", available: false, lockedReason: "bond too low", aiPriority: 20, aiTags: ["social"] },
       ],
     });
     expect(transcript.events[2]).toMatchObject({

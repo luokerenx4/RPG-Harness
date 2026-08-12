@@ -188,6 +188,11 @@ function compactOutput(value: unknown): Record<string, unknown> | null {
               ...(typeof option.aiPriority === "number"
                 ? { aiPriority: option.aiPriority }
                 : {}),
+              ...(Array.isArray(option.aiTags) && option.aiTags.every(
+                  (tag) => typeof tag === "string"
+                )
+                ? { aiTags: option.aiTags }
+                : {}),
             }))
           : [],
       };

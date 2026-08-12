@@ -275,6 +275,12 @@ function checkOutput(
         return false;
       }
       if (
+        a.optionAiTagsIncludes !== undefined &&
+        !option.aiTags?.includes(a.optionAiTagsIncludes)
+      ) {
+        return false;
+      }
+      if (
         a.optionAvailable !== undefined &&
         option.available !== a.optionAvailable
       ) {
@@ -301,7 +307,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAiTagsIncludes=${String(a.optionAiTagsIncludes)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
         : ""
     }`;
   }
@@ -310,7 +316,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)} optionAiTagsIncludes=${String(a.optionAiTagsIncludes)} optionAvailable=${String(a.optionAvailable)} optionLockedReasonIncludes=${String(a.optionLockedReasonIncludes)} optionRequires=${JSON.stringify(a.optionRequires)}`
         : ""
     }, but found ${matches.length}`;
   }

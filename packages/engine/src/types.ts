@@ -744,6 +744,9 @@ export interface ChoiceOption {
   // Renderer-neutral preference for deterministic AI players. Higher wins;
   // human shells need not expose this authoring hint. Unset is equivalent to 0.
   aiPriority?: number;
+  // Open semantic vocabulary for AI players and authoring tools. The engine
+  // passes tags through without assigning game-specific meaning to them.
+  aiTags?: string[];
   requires?: Condition;
   // Player-facing explanation for an unavailable choice. The underlying
   // condition remains available to headless/tooling clients through
@@ -1114,6 +1117,9 @@ export interface RenderedChoice {
   available: boolean;
   // Authored machine preference, passed through without affecting humans.
   aiPriority?: number;
+  // Authored semantic intent, kept renderer-neutral and visible to Headless
+  // clients. Human shells may leave it visually hidden.
+  aiTags?: string[];
   lockedReason?: string;
   // Exact authored gate for AI players, inspectors and executable issues.
   // Human shells normally render lockedReason instead of this DSL object.

@@ -41,21 +41,25 @@ prompt: 最初に、誰のところへ歩く？
 options:
   - id: walk-to-kagari
     text: 篝のところへ
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kagari } }
     locked_hint: 篝と共に戦場を生き延びていない。
     goto: coda_kagari
   - id: walk-to-kasumi
     text: 霞のところへ
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kasumi } }
     locked_hint: 霞と共に戦場を生き延びていない。
     goto: coda_kasumi
   - id: walk-to-mio
     text: 澪のところへ
+    ai_tags: [social, loyal]
     requires: { switch: { name: befriended_mio } }
     locked_hint: 澪と共に戦場を生き延びていない。
     goto: coda_mio
   - id: walk-alone
     text: 一人で、白む空を見に行く
+    ai_tags: [independent]
     goto: coda_alone
 ```
 

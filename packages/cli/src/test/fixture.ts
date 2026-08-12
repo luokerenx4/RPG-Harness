@@ -35,6 +35,7 @@ export interface OutputAssertion {
   optionId?: string;
   optionTextIncludes?: string;
   optionAiPriority?: number;
+  optionAiTagsIncludes?: string;
   optionAvailable?: boolean;
   optionLockedReasonIncludes?: string;
   optionRequires?: unknown;

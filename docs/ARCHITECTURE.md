@@ -132,6 +132,13 @@ content-addresses the accepted semantic inputs (`choose` by authored identity,
 unique path and ending counts plus persona-grouped stable-choice divergences.
 This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.
+Choice options may expose open `aiTags` alongside gates, consequences, and the
+numeric objective priority. The engine treats this vocabulary as data rather
+than policy: human renderers need not display it, generic personas can recognize
+a small tag subset, and LLM or game-specific agents can consume the rest. When
+stable choice identities are available, built-in personas submit those ids
+instead of presentation indexes, keeping authored intent invariant under UI
+reordering.
 
 ## Standard resources (the database)
 

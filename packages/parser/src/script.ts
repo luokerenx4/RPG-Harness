@@ -631,6 +631,33 @@ function parseFenceChoice(
       );
     }
     const aiPriority = rawAiPriority as number | undefined;
+    const rawAiTags = opt.aiTags ?? opt.ai_tags;
+    if (rawAiTags !== undefined && !Array.isArray(rawAiTags)) {
+      throw new ScriptParseError(
+        `Choice option ${idx} \`aiTags\` must be an array of stable tag strings`,
+        source,
+      );
+    }
+    const aiTags = rawAiTags === undefined
+      ? undefined
+      : rawAiTags.map((tag, tagIndex) => {
+          if (
+            typeof tag !== "string" ||
+            !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(tag)
+          ) {
+            throw new ScriptParseError(
+              `Choice option ${idx} \`aiTags[${tagIndex}]\` must be a non-empty stable tag`,
+              source,
+            );
+          }
+          return tag;
+        });
+    if (aiTags && new Set(aiTags).size !== aiTags.length) {
+      throw new ScriptParseError(
+        `Choice option ${idx} \`aiTags\` must not contain duplicates`,
+        source,
+      );
+    }
     const lockedHint =
       typeof opt.lockedHint === "string"
         ? opt.lockedHint
@@ -643,6 +670,7 @@ function parseFenceChoice(
       ...(optionId !== undefined ? { id: optionId } : {}),
       text: opt.text,
       ...(aiPriority !== undefined ? { aiPriority } : {}),
+      ...(aiTags !== undefined ? { aiTags } : {}),
       ...(requires !== undefined ? { requires } : {}),
       ...(lockedHint !== undefined ? { lockedHint } : {}),
       ...(effects !== undefined ? { effects } : {}),

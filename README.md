@@ -498,6 +498,13 @@ without requiring an agent to manually translate evidence into `fork` and
 the targeted stable option.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
+Fenced-YAML options may also declare open semantic `ai_tags`, such as
+`[social, loyal]` or `[independent]`. These tags pass through the engine to
+Headless clients without appearing in human shells. Built-in `charmer` and
+`rude` personas use recognized intent tags before their legacy positional
+fallbacks, and emit stable choice/option ids whenever the author supplied them,
+so rearranging buttons no longer silently changes persona behavior. Unknown
+tags remain available to LLM players and future game-specific policies.
 Meaningful branch coverage uses a stable choice `id` and stable option `id`s;
 the validator rejects duplicates and partial identities so work items survive
 copy edits and option reordering. Concise Markdown accepts `{id: ...}` on both
