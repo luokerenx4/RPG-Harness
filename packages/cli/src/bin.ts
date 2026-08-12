@@ -5,6 +5,7 @@ import { stepCommand } from "./commands/step";
 import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
+import { worklistCommand } from "./commands/worklist";
 import { transcriptCommand } from "./commands/transcript";
 import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
@@ -62,6 +63,11 @@ COMMANDS
       Aggregate stable choice/option ids from recoverable session logs. Pending
       options include exact fork checkpoints and executable choose inputs;
       authoring work also identifies missing stable ids and semantic AI intent.
+
+  worklist <game-dir> [--session NAME] [--format table|json]
+      Merge open playtest reports, unreadable sessions, story gaps, executable
+      choice branches, and authoring debt into one prioritized AI development
+      queue. Every item carries structured coordinates and its next operation.
 
   transcript <game-dir> --session NAME [--tail N] [--format text|json]
       Print a compact player-visible history across the session's exact fork
@@ -207,6 +213,8 @@ async function main(): Promise<void> {
       return runCoverage(rest);
     case "choices":
       return runChoiceCoverage(rest);
+    case "worklist":
+      return runWorklist(rest);
     case "transcript":
       return runTranscript(rest);
     case "fork":
@@ -382,6 +390,31 @@ async function runChoiceCoverage(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     status: status as (typeof allowed)[number],
+    format,
+  });
+}
+
+async function runWorklist(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      format: { type: "string", default: "table" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh worklist <game-dir> [--session NAME] [--format table|json]",
+  );
+  const format = values.format ?? "table";
+  if (format !== "table" && format !== "json") {
+    process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
+    process.exit(2);
+  }
+  await worklistCommand({
+    gameDir,
+    ...(values.session !== undefined ? { session: values.session } : {}),
     format,
   });
 }

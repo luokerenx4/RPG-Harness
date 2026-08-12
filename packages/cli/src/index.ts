@@ -16,6 +16,19 @@ export {
   collectChoiceCoverage,
   formatChoiceCoverage,
 } from "./commands/choice-coverage";
+export {
+  analyzeDevelopmentWorklist,
+  collectDevelopmentWorklist,
+  formatDevelopmentWorklist,
+} from "./commands/worklist";
+export type {
+  DevelopmentOperation,
+  DevelopmentWorkItem,
+  DevelopmentWorkKind,
+  DevelopmentWorklist,
+  DevelopmentWorklistArgs,
+  DevelopmentWorkPriority,
+} from "./commands/worklist";
 export { runChoiceCoverageWorkItem } from "./commands/cover-choice";
 export type {
   CoverChoiceArgs,

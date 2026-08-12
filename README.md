@@ -192,6 +192,7 @@ rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
+rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
 rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
 rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] # find unseen choice
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
@@ -216,6 +217,15 @@ at the immutable checkpoint, verifies the edited game still presents the same
 stable choice and option, selects by option id rather than stale array position,
 then continues with a built-in persona. Use `--source-session` to constrain the
 worklist to one GUI/headless lineage and `--key` to select a specific branch.
+`worklist` is the project-level orchestration view: it merges open playtest
+reports, unreadable session state/logs, story coverage gaps, executable choice
+branches, and authored choice debt into one deterministic priority order. JSON
+items classify their actionability as `executable`, `diagnostic`, or `authoring`,
+retain the source coordinates, and expose a structured next operation such
+as `reproduce`, `transcript`, `cover`, `reach`, `inspect-script`, or `edit`;
+the queue does not claim generic autoplay can reach a specific script when no
+exact reachability executor exists. Placeholders such as
+`<new-session>` remain explicit so an AI never silently overwrites player state.
 Checkpoint state includes the engine PRNG cursor, so random combat, loot and
 encounter results replay identically on Headless and GUI forks. Older saves get
 a deterministic cursor derived from their checkpoint before their next draw.

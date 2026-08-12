@@ -149,6 +149,13 @@ responses, or incomplete `aiTags`. For `annotate-choice-intent`, inspect the
 named source and `missingOptionIds`; use an explicit `neutral` tag when an
 option truly has no stronger semantic intent rather than leaving it ambiguous.
 
+At the start of an autonomous development pass, prefer
+`rpgh worklist "$GAME" --format json` over manually polling each subsystem. It
+prioritizes open reports and broken sessions ahead of coverage and authoring
+debt, while preserving the exact operation and coordinates needed by the
+specialized command. Use `--session "$SESSION"` when the task must stay scoped
+to one player/GUI lineage; omit it only for a deliberate project-wide audit.
+
 `cover` forks the exact immutable checkpoint, verifies that live edits still
 present the same stable choice and option, selects by option id, and continues
 on the new session. Never copy a live session directory: that can race GUI or
