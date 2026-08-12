@@ -275,6 +275,155 @@ describe("choice state-space search", () => {
     expect(result.state.baseline.variables.churn).toBe(0);
   });
 
+  test("remembers an authored gate while preparation moves to another surface", async () => {
+    const game = makeGame({
+      scripts: [makeScript("target", {
+        ai: { relatedActivityIds: ["buy:intel"] },
+      })],
+      runFn: async function* (ctx) {
+        while (ctx.state.baseline.scripts.target?.completed !== true) {
+          const away = ctx.state.baseline.switches.away === true;
+          const coins = ctx.state.baseline.inventory.coin ?? 0;
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: away
+                ? ctx.state.baseline.switches.carrying === true
+                  ? [{ id: "return", kind: "action" as const, title: "Return", cost: 0, available: true }]
+                  : [
+                      { id: "churn", kind: "action" as const, title: "Churn", cost: 0, available: true },
+                      {
+                        id: "work",
+                        kind: "action" as const,
+                        title: "Work",
+                        cost: 0,
+                        available: true,
+                        forecast: {
+                          metrics: [{ id: "coin", label: "Coin", value: 1 }],
+                          effects: { inventory: { coin: 1 } },
+                        },
+                      },
+                    ]
+                : [
+                    { id: "depart", kind: "action" as const, title: "Depart", cost: 0, available: true },
+                    {
+                      id: "buy:intel",
+                      kind: "action" as const,
+                      title: "Buy",
+                      cost: 0,
+                      available: coins >= 1,
+                      requires: { inventory: { itemId: "coin", min: 1 } },
+                    },
+                  ],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "depart") ctx.state.baseline.switches.away = true;
+          if (input.id === "work") {
+            ctx.state.baseline.switches.carrying = true;
+          }
+          if (input.id === "return") {
+            ctx.state.baseline.inventory.coin = 1;
+            ctx.state.baseline.switches.away = false;
+          }
+          if (input.id === "churn") {
+            ctx.state.baseline.variables.churn =
+              Number(ctx.state.baseline.variables.churn ?? 0) + 1;
+          }
+          if (input.id === "buy:intel" && coins >= 1) {
+            ctx.state.baseline.scripts.target = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 5, maxSteps: 10 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "doActivity", id: "depart" },
+      { type: "doActivity", id: "work" },
+      { type: "doActivity", id: "return" },
+      { type: "doActivity", id: "buy:intel" },
+    ]);
+    expect(result.state.baseline.variables.churn ?? 0).toBe(0);
+  });
+
+  test("keeps breadcrumb progress monotonic across repeated earlier activities", async () => {
+    const game = makeGame({
+      scripts: [makeScript("target", {
+        ai: { relatedActivityIds: ["depart", "cross", "collect", "buy"] },
+      })],
+      runFn: async function* (ctx) {
+        while (ctx.state.baseline.scripts.target?.completed !== true) {
+          const phase = Number(ctx.state.baseline.variables.phase ?? 0);
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: phase === 0
+                ? [{ id: "depart", kind: "action" as const, title: "Depart", cost: 0, available: true }]
+                : phase === 1
+                  ? [{ id: "cross", kind: "action" as const, title: "Cross", cost: 0, available: true }]
+                  : phase === 2
+                    ? [
+                        { id: "depart", kind: "action" as const, title: "Old depart", cost: 0, available: true },
+                        { id: "collect", kind: "action" as const, title: "Collect", cost: 0, available: true },
+                      ]
+                    : [{ id: "buy", kind: "action" as const, title: "Buy", cost: 0, available: true }],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "depart" && phase === 0) ctx.state.baseline.variables.phase = 1;
+          if (input.id === "cross") ctx.state.baseline.variables.phase = 2;
+          if (input.id === "collect") ctx.state.baseline.variables.phase = 3;
+          if (input.id === "buy") {
+            ctx.state.baseline.scripts.target = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 5, maxSteps: 10 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "doActivity", id: "depart" },
+      { type: "doActivity", id: "cross" },
+      { type: "doActivity", id: "collect" },
+      { type: "doActivity", id: "buy" },
+    ]);
+  });
+
   test("reports a bounded miss without mutating the source state", async () => {
     const game = makeGame({
       characters: [makeCharacter("alice")],

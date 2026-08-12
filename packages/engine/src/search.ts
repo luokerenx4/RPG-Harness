@@ -1,7 +1,14 @@
 import { cloneState } from "./state";
 import { peek, step } from "./step";
 import { evaluateCondition } from "./condition";
-import type { ComposedState, Condition, Game, Input, Output } from "./types";
+import type {
+  ComposedState,
+  Condition,
+  Game,
+  Input,
+  Output,
+  StateDelta,
+} from "./types";
 
 export interface ChoiceSearchTarget {
   scriptId: string;
@@ -67,6 +74,8 @@ export interface ChoiceSearchClosest {
     satisfiedRequirements: number;
     totalRequirements: number;
     regressionsFromSource: number;
+    /** Requirements acquired and then lost on this candidate path. */
+    regressionsFromPath?: number;
   };
 }
 
@@ -75,6 +84,10 @@ interface SearchNode {
   output: Output | null;
   done: boolean;
   inputs: Input[];
+  guidanceGates: Map<string, Condition>;
+  /** Gate leaves satisfied at any point on this path, used to avoid trading
+   * away a newly acquired prerequisite for a superficially closer one. */
+  satisfiedGuidanceLeaves: Set<string>;
 }
 
 type SearchTarget =
@@ -141,6 +154,8 @@ async function searchForTarget(
     maxSteps,
   );
   const queue: SearchNode[] = [start];
+  rememberGuidanceGates(start.output, target, start.guidanceGates);
+  rememberSatisfiedGuidanceLeaves(start, target);
   const visited = new Set<string>();
   let exploredNodes = 0;
   let deepestSteps = start.inputs.length;
@@ -157,7 +172,7 @@ async function searchForTarget(
     );
     const node = queue.shift()!;
     deepestSteps = Math.max(deepestSteps, node.inputs.length);
-    const fingerprint = stateFingerprint(node.state);
+    const fingerprint = stateFingerprint(node, target);
     if (visited.has(fingerprint)) continue;
     visited.add(fingerprint);
     exploredNodes += 1;
@@ -210,7 +225,13 @@ async function searchForTarget(
       continue;
     }
 
-    for (const input of candidateInputs(node.output, target)) {
+    for (const input of candidateInputs(
+      node.output,
+      target,
+      rememberedGuidanceCondition(node.inputs, target, node.guidanceGates),
+      node.state,
+      nextGuidanceActivityId(node.inputs, target),
+    )) {
       if (node.inputs.length + 1 > maxSteps) continue;
       try {
         const transitioned = await step(game, cloneState(node.state), input);
@@ -222,7 +243,11 @@ async function searchForTarget(
           maxSteps,
           transitioned.output,
           transitioned.done,
+          node.satisfiedGuidanceLeaves,
+          node.guidanceGates,
         );
+        rememberGuidanceGates(child.output, target, child.guidanceGates);
+        rememberSatisfiedGuidanceLeaves(child, target);
         queue.push(child);
       } catch {
         // One malformed or module-rejected edge must not abort exploration of
@@ -253,11 +278,15 @@ async function settleForced(
   maxSteps: number,
   initialOutput?: Output | null,
   initialDone?: boolean,
+  inheritedGuidanceLeaves: ReadonlySet<string> = new Set(),
+  inheritedGuidanceGates: ReadonlyMap<string, Condition> = new Map(),
 ): Promise<SearchNode> {
   let state = initialState;
   let output = initialOutput;
   let done = initialDone ?? false;
   const inputs = [...initialInputs];
+  const satisfiedGuidanceLeaves = new Set(inheritedGuidanceLeaves);
+  const guidanceGates = new Map(inheritedGuidanceGates);
   if (output === undefined) {
     const current = await peek(game, state);
     state = current.state;
@@ -280,12 +309,22 @@ async function settleForced(
     output = next.output;
     done = next.done;
   }
-  return { state, output, done, inputs };
+  return {
+    state,
+    output,
+    done,
+    inputs,
+    guidanceGates,
+    satisfiedGuidanceLeaves,
+  };
 }
 
 function candidateInputs(
   output: Output,
   target: SearchTarget,
+  guidanceCondition?: Condition,
+  state?: ComposedState,
+  nextGuidanceId?: string,
 ): Input[] {
   switch (output.type) {
     case "narration":
@@ -325,9 +364,20 @@ function candidateInputs(
             Number(right.id === `script:${target.scriptId}`) -
             Number(left.id === `script:${target.scriptId}`);
           if (targetDifference !== 0) return targetDifference;
+          const guidanceDifference =
+            Number(right.id === nextGuidanceId) -
+            Number(left.id === nextGuidanceId);
+          if (guidanceDifference !== 0) return guidanceDifference;
           const leftAuthoredRank = authoredActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
           const rightAuthoredRank = authoredActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
           if (leftAuthoredRank !== rightAuthoredRank) return leftAuthoredRank - rightAuthoredRank;
+          const leftForecast = guidanceCondition && state
+            ? forecastMatches(left.forecast?.effects, guidanceCondition, state)
+            : 0;
+          const rightForecast = guidanceCondition && state
+            ? forecastMatches(right.forecast?.effects, guidanceCondition, state)
+            : 0;
+          if (leftForecast !== rightForecast) return rightForecast - leftForecast;
           // A rest action commonly advances the gameplay cycle and restores
           // access to departures. Prefer it over unrelated economy/social
           // churn only while none of the authored route is currently open.
@@ -367,11 +417,21 @@ function isScriptTarget(target: SearchTarget): target is Extract<SearchTarget, {
   return target.kind === "script";
 }
 
-function stateFingerprint(state: ComposedState): string {
+function stateFingerprint(node: SearchNode, target: SearchTarget): string {
   // Keep the engine browser-compatible: search is also usable by Web/Studio,
   // so it must not depend on node:crypto. Full JSON avoids hash collisions;
   // the caller's node budget bounds memory.
-  return JSON.stringify(state);
+  return JSON.stringify({
+    state: node.state,
+    guidanceProgress: orderedGuidanceProgress(
+      node.inputs,
+      target.relatedActivityIds,
+    ),
+    guidanceGates: [...node.guidanceGates.entries()].sort(([left], [right]) =>
+      left.localeCompare(right)
+    ),
+    satisfiedGuidanceLeaves: [...node.satisfiedGuidanceLeaves].sort(),
+  });
 }
 
 function assessNode(
@@ -401,12 +461,12 @@ function assessNode(
     target.relatedActivityIds,
   );
   const nextGuidanceActivityId = target.relatedActivityIds[guidanceProgress];
-  const nextGuidanceActivity = node.output?.type === "hubMenu" && nextGuidanceActivityId
-    ? node.output.snapshot.activities.find(({ id }) => id === nextGuidanceActivityId)
+  const guidanceCondition = nextGuidanceActivityId
+    ? node.guidanceGates.get(nextGuidanceActivityId)
     : undefined;
-  const guidanceRequirement = nextGuidanceActivity?.requires
+  const guidanceRequirement = guidanceCondition
     ? summarizeGuidanceRequirement(
-        nextGuidanceActivity.requires,
+        guidanceCondition,
         initialState,
         node.state,
       )
@@ -427,6 +487,12 @@ function assessNode(
           guidanceRequirement: {
             activityId: nextGuidanceActivityId,
             ...guidanceRequirement,
+            regressionsFromPath: topLevelRequirements(guidanceCondition).filter(
+              (leaf) =>
+                node.satisfiedGuidanceLeaves.has(
+                  guidanceLeafKey(nextGuidanceActivityId, leaf),
+                ) && !evaluateCondition(leaf, node.state).ok,
+            ).length,
           },
         }
       : {}),
@@ -436,6 +502,38 @@ function assessNode(
       ? 1
       : 0,
   };
+}
+
+function rememberGuidanceGates(
+  output: Output | null,
+  target: SearchTarget,
+  gates: Map<string, Condition>,
+): void {
+  if (output?.type !== "hubMenu") return;
+  for (const activity of output.snapshot.activities) {
+    if (activity.requires && target.relatedActivityIds.includes(activity.id)) {
+      gates.set(activity.id, activity.requires);
+    }
+  }
+}
+
+function rememberSatisfiedGuidanceLeaves(
+  node: SearchNode,
+  target: SearchTarget,
+): void {
+  const progress = orderedGuidanceProgress(node.inputs, target.relatedActivityIds);
+  const activityId = target.relatedActivityIds[progress];
+  const condition = activityId ? node.guidanceGates.get(activityId) : undefined;
+  if (!activityId || !condition) return;
+  for (const leaf of topLevelRequirements(condition)) {
+    if (evaluateCondition(leaf, node.state).ok) {
+      node.satisfiedGuidanceLeaves.add(guidanceLeafKey(activityId, leaf));
+    }
+  }
+}
+
+function guidanceLeafKey(activityId: string, condition: Condition): string {
+  return `${activityId}:${JSON.stringify(condition)}`;
 }
 
 export function compareChoiceSearchAssessment(
@@ -459,9 +557,11 @@ export function compareChoiceSearchAssessment(
   const leftGuidanceRequirement = left.guidanceRequirement?.progress ?? 0;
   const rightGuidanceRequirement = right.guidanceRequirement?.progress ?? 0;
   const leftGuidanceRegressions =
-    left.guidanceRequirement?.regressionsFromSource ?? 0;
+    left.guidanceRequirement?.regressionsFromPath ??
+      left.guidanceRequirement?.regressionsFromSource ?? 0;
   const rightGuidanceRegressions =
-    right.guidanceRequirement?.regressionsFromSource ?? 0;
+    right.guidanceRequirement?.regressionsFromPath ??
+      right.guidanceRequirement?.regressionsFromSource ?? 0;
   if (leftGuidanceRegressions !== rightGuidanceRegressions) {
     return rightGuidanceRegressions - leftGuidanceRegressions;
   }
@@ -489,6 +589,51 @@ export function compareChoiceSearchAssessment(
   return left.totalRequirements > 0
     ? left.steps - right.steps
     : right.steps - left.steps;
+}
+
+function rememberedGuidanceCondition(
+  inputs: Input[],
+  target: SearchTarget,
+  gates: ReadonlyMap<string, Condition>,
+): Condition | undefined {
+  const progress = orderedGuidanceProgress(inputs, target.relatedActivityIds);
+  const activityId = target.relatedActivityIds[progress];
+  return activityId ? gates.get(activityId) : undefined;
+}
+
+function nextGuidanceActivityId(
+  inputs: Input[],
+  target: SearchTarget,
+): string | undefined {
+  return target.relatedActivityIds[
+    orderedGuidanceProgress(inputs, target.relatedActivityIds)
+  ];
+}
+
+function forecastMatches(
+  effects: StateDelta | undefined,
+  condition: Condition,
+  state: ComposedState,
+): number {
+  if (!effects) return 0;
+  return topLevelRequirements(condition).filter((leaf) => {
+    if (evaluateCondition(leaf, state).ok) return false;
+    if ("inventory" in leaf) {
+      return (effects.inventory?.[leaf.inventory.itemId] ?? 0) > 0;
+    }
+    if ("characterStat" in leaf) {
+      return (effects.characterStats?.[leaf.characterStat.character]
+        ?.[leaf.characterStat.name] ?? 0) > 0;
+    }
+    if ("variable" in leaf && typeof leaf.variable.min === "number") {
+      return typeof effects.variables?.[leaf.variable.name] === "number" &&
+        (effects.variables[leaf.variable.name] as number) > 0;
+    }
+    if ("switch" in leaf) {
+      return effects.switches?.[leaf.switch.name] === true;
+    }
+    return false;
+  }).length;
 }
 
 function summarizeGuidanceRequirement(
@@ -546,9 +691,9 @@ function orderedGuidanceProgress(inputs: Input[], relatedActivityIds: string[]):
       if (progress === relatedActivityIds.length) return progress;
       continue;
     }
-    if (relatedActivityIds.includes(input.id)) {
-      progress = input.id === relatedActivityIds[0] ? 1 : 0;
-    }
+    // Breadcrumbs are a monotonic subsequence, not a macro. Repeating an
+    // earlier traversal while preparing a later gate must not erase progress;
+    // only the next authored activity advances the route.
   }
   return progress;
 }

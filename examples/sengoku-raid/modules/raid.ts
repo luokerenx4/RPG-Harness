@@ -1368,6 +1368,15 @@ function buildRaidMenu(ctx: Ctx): Output {
     }
   } else {
     if (!inst.searched && Object.keys(inst.pendingLoot).length > 0) {
+      const lootMetrics = Object.entries(inst.pendingLoot)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([itemId, quantity]) => ({
+          id: `inventory:${itemId}`,
+          label: itemName(ctx, itemId),
+          value: quantity,
+          unit: "item",
+          polarity: "benefit" as const,
+        }));
       activities.push({
         id: "search",
         kind: "action",
@@ -1377,6 +1386,11 @@ function buildRaidMenu(ctx: Ctx): Output {
         cost: 0,
         available: true,
         recommended: true,
+        forecast: {
+          summary: "この区域で確定済みの探索成果",
+          metrics: lootMetrics,
+          effects: { inventory: { ...inst.pendingLoot } },
+        },
       });
     }
     if (map.isExtract) {

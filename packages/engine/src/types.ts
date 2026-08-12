@@ -1236,6 +1236,11 @@ export interface ActivityForecastMetric {
 export interface ActivityForecast {
   summary?: string;
   metrics: ActivityForecastMetric[];
+  // Exact or expected state delta exposed for machine planning. This does not
+  // apply the effect; the eventual activity handler remains authoritative.
+  // Keep uncertain ranges in metrics and use this only when the module can
+  // name a useful outcome without guessing.
+  effects?: StateDelta;
 }
 
 export interface StatSnapshot {

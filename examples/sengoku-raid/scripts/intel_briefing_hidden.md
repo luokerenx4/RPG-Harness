@@ -4,6 +4,12 @@ title: 情報屋の覚書（隠し zone）
 characters: []
 ai:
   relatedActivityIds:
+    - depart:mt_houkyou
+    - move:mt_houkyou_stone_paths
+    - move:mt_houkyou_lava_vent
+    - move:mt_houkyou_caldera
+    - search
+    - extract
     - infoshop_hidden
     - script:intel_briefing
 ---
