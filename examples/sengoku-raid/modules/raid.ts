@@ -3107,6 +3107,12 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.kagari_sleep_reply = reply;
       return;
     }
+    if (scriptId === "bond_kagari_04") {
+      const replies = ["alive", "count-before-me", "poured-back"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kagari_rain_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3183,6 +3189,21 @@ const raidModule: Module = {
           ? "「鎮魂法で、毎晩二十押し返す」と答えた宿の月夜。"
           : reply === "sleepless"
             ? "「眠らない」と答え、それは答えじゃないと斬られた宿の月夜。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
+    }
+    if (
+      scriptId === "ending_oni_self" &&
+      beat.type === "narration" &&
+      beat.text.startsWith("門の先へ行けば、その隣へ同じ足では戻れない。")
+    ) {
+      const reply = ctx.state.baseline.variables.kagari_rain_reply;
+      const memory = reply === "alive"
+        ? "「死んでない」と言い切った雨夜。"
+        : reply === "count-before-me"
+          ? "数え直すなら自分の前だけにしろと告げた雨夜。"
+          : reply === "poured-back"
+            ? "言葉の代わりに篝の盃へ注ぎ返した雨夜。"
             : null;
       if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
     }

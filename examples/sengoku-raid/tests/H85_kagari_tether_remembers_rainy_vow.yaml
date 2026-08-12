@@ -1,0 +1,51 @@
+name: Kagari's oni tether remembers the promise made on the rainy long night
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - bond_kagari_03
+      - bond_kagari_04
+    switches:
+      chose_court_defy: true
+      befriended_kagari: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+      kagari_rain_reply: count-before-me
+    characters:
+      kagari:
+        stats: { affection: 12 }
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+inputs:
+  - { type: doActivity, id: script:ending_oni_self }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 自分の前だけにしろと告げた雨夜
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 同じ足では戻れない

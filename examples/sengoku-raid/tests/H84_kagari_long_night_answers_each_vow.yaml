@@ -1,0 +1,47 @@
+name: Kagari answers the promise to count only before the player
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kagari_03]
+    characters:
+      kagari:
+        stats: { affection: 8 }
+    switches:
+      befriended_kagari: true
+      road_kagari_2_seen: true
+  sengoku-raid:
+    metCharacters: [kagari]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kagari_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-rainy-long-night
+    optionId: count-only-before-me
+    optionTextIncludes: 俺の前だけにしろ
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: true
+    textIncludes: お主も最初から付き合え
+  - kind: state
+    path: baseline.variables.kagari_rain_reply
+    eq: count-before-me
+

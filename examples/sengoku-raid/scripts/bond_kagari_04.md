@@ -40,10 +40,30 @@ requires:
 
 @kagari それを確かめるのが怖くて、十年、誰にも訊かせなかった。
 
-? 雨音の中で、なんと答える？
-  - 「死んでない。いま隣で喋ってるのが、それだ」 -> +2kagari
-  - 「なら、数え直すのは俺の前だけにしろ」 -> +2kagari
-  - 黙って、篝の盃に注ぎ返す -> +kagari
+? 雨音の中で、なんと答える？ {id: answer-rainy-long-night}
+  - 「死んでない。いま隣で喋ってるのが、それだ」 {id: name-her-alive} -> +2kagari | goto alive
+  - 「なら、数え直すのは俺の前だけにしろ」 {id: count-only-before-me} -> +2kagari | goto count
+  - 黙って、篝の盃に注ぎ返す {id: pour-back} -> +kagari | goto pour
+
+# alive
+
+@kagari ……そうか。こいつが、まだ生きてるあたしか。随分、口の悪い証人を見つけたな。
+
+:goto after_answer
+
+# count
+
+@kagari 勝手を言う。……だが、数え間違えた時は、お主も最初から付き合え。
+
+:goto after_answer
+
+# pour
+
+篝は注ぎ返された盃を見て、それから、お主の盃へもう一度だけ返した。
+
+@kagari ……言葉にしない答えほど、あとで効くんだぞ。
+
+# after_answer
 
 篝は長いこと黙っていた。それから、笑った。いつもの高い声じゃない。低い、年相応の笑い方だった。
 

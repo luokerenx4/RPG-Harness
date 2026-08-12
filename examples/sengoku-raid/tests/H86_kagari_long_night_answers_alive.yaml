@@ -1,0 +1,46 @@
+name: Kagari accepts the player naming her as still alive
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kagari_03]
+    characters:
+      kagari:
+        stats: { affection: 8 }
+    switches:
+      befriended_kagari: true
+      road_kagari_2_seen: true
+  sengoku-raid:
+    metCharacters: [kagari]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kagari_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: true
+    textIncludes: まだ生きてるあたし
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: true
+    textIncludes: 口の悪い証人
+  - kind: state
+    path: baseline.variables.kagari_rain_reply
+    eq: alive
+
