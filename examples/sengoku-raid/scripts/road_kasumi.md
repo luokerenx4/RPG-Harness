@@ -21,9 +21,49 @@ characters: [kasumi]
 @kasumi 跡を読むなら、後ろも見な。鬼が「どこから来たか」は、「次どこへ行くか」と同じ顔してる。
 
 ? どうする？
-  - 振り返って、来た道の跡を読んでみる -> +2kasumi
-  - 「お前が見ててくれ。俺は前を持つ」 -> +kasumi
-  - 「猟師の目は、借り物じゃ身につかないな」 -> +kasumi
+  - 振り返って、来た道の跡を読んでみる -> +2kasumi | goto learn
+  - 「お前が見ててくれ。俺は前を持つ」 -> +kasumi | goto split_roles
+  - 「猟師の目は、借り物じゃ身につかないな」 -> +kasumi | goto honest
+
+# learn
+
+@kasumi そう、それ。踏んだ草じゃなくて、起き上がろうとしてる草を見な。時間まで読める。
+
+霞は鼻歌を一つ。鹿の蹄の跡を辿るその足取りは、鬼の通り道を綺麗に避けていた。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kasumi: 1
+  switches:
+    road_kasumi_seen: true
+```
+
+[end]
+
+# split_roles
+
+@kasumi 役割分担か。悪くない。でも時々は振り返りな——あたしがまだいるか、確かめるくらいには。
+
+霞は鼻歌を一つ。鹿の蹄の跡を辿るその足取りは、鬼の通り道を綺麗に避けていた。
+
+:hide-cg
+
+```yaml
+type: effects
+effects:
+  affection:
+    kasumi: 1
+  switches:
+    road_kasumi_seen: true
+```
+
+[end]
+
+# honest
 
 @kasumi ははっ、正直でよろしい。まあ、隣で何度も見てりゃ、そのうち移る。
 

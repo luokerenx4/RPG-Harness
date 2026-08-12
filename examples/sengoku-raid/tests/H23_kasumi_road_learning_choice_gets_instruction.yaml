@@ -1,0 +1,27 @@
+name: 霞の足跡を読む選択が具体的な手ほどきへ分岐する
+description: |
+  Choosing to turn around and attempt trail reading in road_kasumi must receive
+  active instruction, not the response written for admitting the skill cannot
+  be borrowed.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: road_kasumi
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    speaker: kasumi
+    textIncludes: 起き上がろうとしてる草
+  - kind: state
+    path: baseline.characters.kasumi.stats.affection
+    eq: 2
