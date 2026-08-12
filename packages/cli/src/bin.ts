@@ -10,6 +10,7 @@ import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
+import { coverChoiceCommand } from "./commands/cover-choice";
 import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
@@ -73,7 +74,8 @@ COMMANDS
       Run all fixtures under <game-dir>/tests/*.yaml. Exits 1 on failure.
 
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
-           [--session NAME] [--from-session PLAYER] [--report-on-stop] [--pretty]
+           [--session NAME] [--from-session PLAYER] [--from-at N]
+           [--report-on-stop] [--pretty]
       Have a built-in AI persona play through the game and report the ending.
       Personas: objective / greedy / charmer / rude / random / extractor /
       delver / hunter. Use an unknown name to print their descriptions.
@@ -84,6 +86,12 @@ COMMANDS
       --report-on-stop turns a non-terminal stop into a checkpointed coding issue.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
+
+  cover    <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY]
+           [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
+      Execute one pending stable choice branch. Forks its exact checkpoint,
+      verifies the stable choice/option after live edits, selects by option id
+      (not array position), then lets the persona continue on the AI branch.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
@@ -184,6 +192,8 @@ async function main(): Promise<void> {
       return runTest(rest);
     case "autoplay":
       return runAutoplay(rest);
+    case "cover":
+      return runCoverChoice(rest);
     case "report":
       return runReport(rest);
     case "reports":
@@ -446,6 +456,7 @@ async function runAutoplay(args: string[]): Promise<void> {
       seed: { type: "string" },
       session: { type: "string" },
       "from-session": { type: "string" },
+      "from-at": { type: "string" },
       "report-on-stop": { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
     },
@@ -453,7 +464,7 @@ async function runAutoplay(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--report-on-stop] [--pretty]",
+    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--from-at N] [--report-on-stop] [--pretty]",
   );
   await autoplayCommand({
     gameDir,
@@ -465,7 +476,46 @@ async function runAutoplay(args: string[]): Promise<void> {
     ...(values["from-session"] !== undefined
       ? { fromSession: values["from-session"] }
       : {}),
+    ...(values["from-at"] !== undefined
+      ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
     reportOnStop: Boolean(values["report-on-stop"]),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runCoverChoice(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      "source-session": { type: "string" },
+      key: { type: "string" },
+      persona: { type: "string", default: "objective" },
+      verbose: { type: "boolean", short: "v", default: false },
+      "max-steps": { type: "string", default: "1000" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh cover <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY] [--persona NAME] [-v] [--max-steps N] [--pretty]",
+  );
+  if (!values.session) {
+    process.stderr.write("Missing required flag: --session NAME\n");
+    process.exit(2);
+  }
+  await coverChoiceCommand({
+    gameDir,
+    session: values.session,
+    ...(values["source-session"] !== undefined
+      ? { sourceSession: values["source-session"] }
+      : {}),
+    ...(values.key !== undefined ? { key: values.key } : {}),
+    persona: values.persona ?? "objective",
+    verbose: Boolean(values.verbose),
+    maxSteps: Number(values["max-steps"] ?? "1000"),
     pretty: Boolean(values.pretty),
   });
 }

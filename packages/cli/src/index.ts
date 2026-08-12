@@ -16,6 +16,11 @@ export {
   collectChoiceCoverage,
   formatChoiceCoverage,
 } from "./commands/choice-coverage";
+export { runChoiceCoverageWorkItem } from "./commands/cover-choice";
+export type {
+  CoverChoiceArgs,
+  CoverChoiceSummary,
+} from "./commands/cover-choice";
 export {
   buildTranscriptEvents,
   collectSessionTranscript,

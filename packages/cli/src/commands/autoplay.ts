@@ -31,12 +31,31 @@ export interface AutoplayArgs {
   seed?: number;
   session?: string;
   fromSession?: string;
+  fromLogEntry?: number;
   reportOnStop?: boolean;
   pretty?: boolean;
+  // Internal execution target used by `rpgh cover`. The first decision is
+  // only submitted after the recoverable checkpoint still presents this
+  // exact stable choice and option; option array indexes may safely change.
+  targetChoice?: TargetChoice;
+}
+
+export interface TargetChoice {
+  key: string;
+  scriptId: string;
+  choiceId: string;
+  optionId: string;
+  optionText: string;
+}
+
+export interface TargetChoiceResult extends TargetChoice {
+  status: "selected" | "not-selected";
+  index?: number;
 }
 
 export interface AutoplaySummary {
   reason: LoopReason;
+  error?: string;
   decisions: number;
   steps: number;
   finalState: Awaited<ReturnType<typeof runLoop>>["finalState"];
@@ -49,6 +68,7 @@ export interface AutoplaySummary {
     summary: ChoiceCoverageReport["summary"];
     pendingBranches: ChoiceCoverageWorkItem[];
   };
+  targetChoice?: TargetChoiceResult;
 }
 
 export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
@@ -65,6 +85,15 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   }
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
+  }
+  if (args.fromLogEntry !== undefined && !args.fromSession) {
+    throw new Error("--from-at requires --from-session");
+  }
+  if (
+    args.fromLogEntry !== undefined &&
+    (!Number.isInteger(args.fromLogEntry) || args.fromLogEntry < 0)
+  ) {
+    throw new Error("--from-at must be a non-negative integer");
   }
   if (args.reportOnStop && !args.session) {
     throw new Error("--report-on-stop requires a persisted --session");
@@ -95,6 +124,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       gameDir: args.gameDir,
       from: args.fromSession,
       to: args.session,
+      ...(args.fromLogEntry !== undefined ? { at: args.fromLogEntry } : {}),
       pretty: false,
     });
   }
@@ -115,12 +145,57 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   // lines on *changes* — without this every dialogue/narration that
   // carries an unchanged visualState would re-print the same banner.
   let prevVisuals: VisualState = emptyVisualState();
+  let targetChoiceResult: TargetChoiceResult | undefined = args.targetChoice
+    ? { ...args.targetChoice, status: "not-selected" }
+    : undefined;
+  let awaitingTarget = args.targetChoice !== undefined;
+
+  const targetedPersona = async (
+    output: Output,
+    state: Parameters<typeof persona>[1],
+    step: number,
+  ) => {
+    if (!awaitingTarget) return persona(output, state, step);
+    if (output.type !== "choice") {
+      throw new Error(
+        `Choice coverage checkpoint mismatch: expected ${args.targetChoice!.scriptId}/${args.targetChoice!.choiceId}, got ${output.type}`,
+      );
+    }
+    if (
+      output.scriptId !== args.targetChoice!.scriptId ||
+      output.choiceId !== args.targetChoice!.choiceId
+    ) {
+      throw new Error(
+        `Choice coverage checkpoint mismatch: expected ${args.targetChoice!.scriptId}/${args.targetChoice!.choiceId}, got ${output.scriptId ?? "<legacy>"}/${output.choiceId ?? "<legacy>"}`,
+      );
+    }
+    const index = output.options.findIndex(
+      (option) => option.id === args.targetChoice!.optionId,
+    );
+    if (index < 0) {
+      throw new Error(
+        `Choice coverage option is stale: ${args.targetChoice!.optionId} no longer exists on ${args.targetChoice!.key}`,
+      );
+    }
+    if (!output.options[index]!.available) {
+      throw new Error(
+        `Choice coverage option is now locked: ${args.targetChoice!.optionId} on ${args.targetChoice!.key}`,
+      );
+    }
+    awaitingTarget = false;
+    targetChoiceResult = {
+      ...args.targetChoice!,
+      status: "selected",
+      index,
+    };
+    return { type: "choose" as const, index };
+  };
 
   const play = async () => {
     const initialState = args.session
       ? await loadSession(args.gameDir, args.session, game)
       : undefined;
-    const result = await runLoop(game, initialState, persona, {
+    const result = await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,
       onStep: async (entry, state) => {
         if (args.session && entry.input) {
@@ -206,6 +281,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
 
   return {
     reason: result.reason,
+    ...(result.error ? { error: result.error } : {}),
     decisions: countDecisions(result.trace),
     steps: result.trace.length,
     finalState: result.finalState,
@@ -226,6 +302,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
           },
         }
       : {}),
+    ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
   };
 }
 

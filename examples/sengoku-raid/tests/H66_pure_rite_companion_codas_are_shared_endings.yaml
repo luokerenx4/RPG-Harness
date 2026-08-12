@@ -1,0 +1,68 @@
+name: pure rite companion codas name both people while the lone coda stays singular
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - three_flowers_alliance
+    switches:
+      chose_court_loyal: true
+      befriended_kagari: true
+      befriended_kasumi: true
+      befriended_mio: true
+    variables:
+      pulse_pure: 5
+      raidsCompleted: 14
+      shogun_chapter: 3
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 0, intellect: 30 }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+  runtime:
+    firedTriggers:
+      - letter_01_dispatch
+      - letter_02_dispatch
+      - letter_03_dispatch
+      - three_flowers_alliance
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    raid: null
+    companion: null
+    companionHp: 0
+    pulsePending: null
+inputs:
+  - { type: doActivity, id: script:ending_pure_rite }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: お主と澪の選んだ結末
+  - kind: output
+    type: narration
+    present: false
+    textIncludes: これが、お主が選んだ結末
+  - kind: output
+    type: gameEnd
+    present: true

@@ -187,6 +187,7 @@ rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
+rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
@@ -204,6 +205,11 @@ prints its `/?session=...` path), making the coding issue directly executable.
 `choices` reads stable `choice.id` / `option.id` values from the same recoverable
 session log and emits pending branches with an exact `fork --at` checkpoint plus
 the `choose` input. This catches route gaps hidden by 100% script coverage.
+`cover` consumes one of those work items end to end: it creates a new AI session
+at the immutable checkpoint, verifies the edited game still presents the same
+stable choice and option, selects by option id rather than stale array position,
+then continues with a built-in persona. Use `--source-session` to constrain the
+worklist to one GUI/headless lineage and `--key` to select a specific branch.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually
@@ -398,6 +404,8 @@ rpgh autoplay ./examples/sengoku-raid --persona delver    -v   # always attack /
 rpgh autoplay ./examples/sengoku-raid --persona objective --session ai-run
 rpgh autoplay ./examples/sengoku-raid --persona objective \
   --from-session player-main --session ai-objective-audit --report-on-stop
+rpgh cover ./examples/sengoku-raid --source-session player-main \
+  --session ai-cover-branch --key SCRIPT/CHOICE/OPTION
 ```
 
 `objective` follows only renderer-neutral `HubSnapshot.objectives` links and can
@@ -418,6 +426,10 @@ coding agent. `max-steps` is an exact AI-decision budget: the summary reports
 those decisions separately from visible `steps`, including the initial output.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
+`cover` is the execution half of that contract: it consumes an available branch
+without requiring an agent to manually translate evidence into `fork` and
+`step` commands, and fails closed if live authoring removed, locked, or replaced
+the targeted stable option.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Meaningful branch coverage uses a stable choice `id` and stable option `id`s;

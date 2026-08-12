@@ -117,14 +117,18 @@ The final state's `baseline.completedScripts[-1]` is the ending you reached. Tel
 
 ## Fork your save
 
-A session is a directory. To branch and try a different choice:
+Use the checkpoint-aware CLI to branch and try a different choice:
 
 ```bash
-cp -r "$GAME/.rpg-harness/sessions/$SESSION" "$GAME/.rpg-harness/sessions/${SESSION}-fork"
-# Continue with --session "${SESSION}-fork" from a previous state
+rpgh choices "$GAME" --session "$SESSION" --status pending
+rpgh cover "$GAME" --source-session "$SESSION" \
+  --session "${SESSION}-cover" --key SCRIPT/CHOICE/OPTION
 ```
 
-You can't go "back" within a single session (engine is forward-only), but you can fork before a key decision and play both branches.
+`cover` forks the exact immutable checkpoint, verifies that live edits still
+present the same stable choice and option, selects by option id, and continues
+on the new session. Never copy a live session directory: that can race GUI or
+Headless writes and loses explicit fork lineage.
 
 ## Turn playtest findings into coding issues
 
@@ -155,7 +159,9 @@ After a fix passes its replay/fixture and surface checks, close the loop with
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.
 - Never run `step` against a session you don't own (sessions list at `<game>/.rpg-harness/sessions/`).
-- The `rpgh` subcommands used in a playtest are **peek, step, report, reports, resolve**. (`sessions` is informational; `test` and `autoplay` are not for playing.)
+- Interactive play uses **peek, step, report, reports, resolve**. For explicit
+  branch coverage work, **choices, cover, transcript** are also valid;
+  `autoplay` remains a development/fuzzing lane rather than ordinary play.
 - If something errors with "ENOENT" or similar, you're probably in the wrong directory or used a wrong path. Don't keep retrying — check `pwd` and `ls`.
 
 ## Example transcript
