@@ -1,0 +1,34 @@
+name: 篝の同道支線が CG 後も宿の縁側を保つ
+description: |
+  bond_kagari_03 starts from the Edo-castle hub but takes place at the inn.
+  Its authored background must already be the inn veranda so hiding the CG
+  cannot reveal the inherited castle hall.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - encounter_kagari_first
+    characters:
+      kagari:
+        affection: 6
+        custom: {}
+    switches:
+      befriended_kagari: true
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kagari
+inputs:
+  - type: doActivity
+    id: script:bond_kagari_03
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-veranda-night
+  - kind: state
+    path: baseline.visuals.cg
+    eq: assets/cgs/bond-kagari-03

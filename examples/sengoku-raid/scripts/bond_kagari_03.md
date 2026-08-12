@@ -2,6 +2,7 @@
 id: bond_kagari_03
 title: 同道の槍
 characters: [kagari]
+bg: assets/backgrounds/inn-veranda-night
 requires:
   all:
     - { affection: { character: kagari, min: 6 } }
