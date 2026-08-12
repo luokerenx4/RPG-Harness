@@ -1,0 +1,18 @@
+kind: bg
+description: |
+  隅田河の淀みに半ば沈んだ古社。黒い水が石段と床下へ入り込み、
+  傾いた鳥居、切れた注連縄、濡れた軒下が夜明け前の霧に沈む。
+prompt: |
+  A half-drowned abandoned Shinto shrine in a flooded Sumida River
+  backwater, early Edo Japan. Black water over the stone steps, a
+  leaning faded-vermilion torii, broken shimenawa, reeds and deep
+  shadow beneath weathered eaves. Wide hand-painted anime game
+  background, pre-sunrise blue-grey light, mist and wet reflections.
+placeholder: "[隅田河・水没した社] 黒い水に沈む石段、傾いた鳥居と濡れた軒下"
+refs:
+  location: sumida-river
+  time: 夜明け前
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-1, raid-zone, shrine, flooded]

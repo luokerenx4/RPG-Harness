@@ -1,0 +1,53 @@
+name: 隅田河の水没社と軒下が橋の背景を継承しない
+description: |
+  Both the drowned-shrine zone and its extract area under the shrine eaves
+  share the authored flooded-shrine background rather than leaking the entry
+  bridge visual.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_reed_marsh
+    visuals:
+      bg: assets/backgrounds/sumida-bridge
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        sumida_river_reed_marsh:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          encounterRolled: true
+          pendingLoot: {}
+        sumida_river_drowned_shrine:
+          visited: false
+          searched: false
+          encounter: null
+          encounterCleared: false
+          encounterRolled: true
+          pendingLoot: {}
+        sumida_river_under_eaves:
+          visited: false
+          searched: false
+          encounter: null
+          encounterCleared: false
+          encounterRolled: true
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:sumida_river_drowned_shrine" }
+  - { type: next }
+  - { type: doActivity, id: "move:sumida_river_under_eaves" }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: sumida_river_under_eaves
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-drowned-shrine

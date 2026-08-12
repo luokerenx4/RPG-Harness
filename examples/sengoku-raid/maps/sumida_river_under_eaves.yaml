@@ -2,6 +2,7 @@ id: sumida_river_under_eaves
 name: 軒下の闇
 chain: sumida_river
 difficulty: 2
+bg: assets/backgrounds/sumida-drowned-shrine
 is_extract: true
 connections:
   - { dir: 戻る, target: sumida_river_drowned_shrine }
