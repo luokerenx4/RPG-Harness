@@ -91,7 +91,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     throw new ManifestParseError("`ai_audit` must be an object");
   }
   const obj = raw as Record<string, unknown>;
-  const known = new Set(["min_unique_endings", "min_unique_decision_paths"]);
+  const known = new Set(["personas", "min_unique_endings", "min_unique_decision_paths"]);
   const unknown = Object.keys(obj).filter((key) => !known.has(key));
   if (unknown.length > 0) {
     throw new ManifestParseError(
@@ -99,6 +99,20 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     );
   }
   const config: AiAuditConfig = {};
+  if (obj.personas !== undefined) {
+    if (
+      !Array.isArray(obj.personas) ||
+      obj.personas.length === 0 ||
+      obj.personas.some((persona) => typeof persona !== "string" || persona.trim().length === 0)
+    ) {
+      throw new ManifestParseError("ai_audit.personas must be a non-empty array of strings");
+    }
+    const personas = obj.personas.map((persona) => (persona as string).trim());
+    if (new Set(personas).size !== personas.length) {
+      throw new ManifestParseError("ai_audit.personas must not contain duplicates");
+    }
+    config.personas = personas;
+  }
   for (const [source, target] of [
     ["min_unique_endings", "minUniqueEndings"],
     ["min_unique_decision_paths", "minUniqueDecisionPaths"],
@@ -110,7 +124,20 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     }
     config[target] = value as number;
   }
-  if (Object.keys(config).length === 0) {
+  if (config.personas) {
+    const impossible = [
+      ["min_unique_endings", config.minUniqueEndings],
+      ["min_unique_decision_paths", config.minUniqueDecisionPaths],
+    ] as const;
+    for (const [field, value] of impossible) {
+      if (value !== undefined && value > config.personas.length) {
+        throw new ManifestParseError(
+          `ai_audit.${field} cannot exceed the ${config.personas.length} declared personas`,
+        );
+      }
+    }
+  }
+  if (config.minUniqueEndings === undefined && config.minUniqueDecisionPaths === undefined) {
     throw new ManifestParseError(
       "`ai_audit` must declare min_unique_endings and/or min_unique_decision_paths",
     );

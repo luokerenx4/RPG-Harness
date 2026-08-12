@@ -552,12 +552,18 @@ Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
 
 ```yaml
 ai_audit:
+  personas: [objective, charmer, rude, extractor, delver]
   min_unique_endings: 2
   min_unique_decision_paths: 3
 ```
 
-The gate is evaluated only when every lane reaches a terminal ending. Passing
-matrices stay silent. A completed matrix below either threshold creates one
+Projects may declare the acceptance `personas` beside their thresholds. With no
+`--personas` override, `audit` runs that project-owned matrix; an explicit
+diagnostic subset remains runnable but is `not-evaluated` against the project
+gate, so an impossible subset cannot create false quality debt. Thresholds may
+not exceed the declared matrix size. The gate is evaluated only when every lane
+reaches a terminal ending. Passing matrices stay silent. A completed matrix
+below either threshold creates one
 major gameplay report at a frozen copy of the audit source, including every
 lane's GUI path, ending, semantic path revision, and choice divergences. The
 report immediately appears as executable `verify-audit` work in `rpgh worklist`,
@@ -568,9 +574,12 @@ Running their `work` item with a fresh `--new-session` prefix reconstructs the
 immutable source, preflights and reruns every lane against the live game, and
 closes the issue only when both the current quality gate and the original
 finding's thresholds pass, so lowering or removing a threshold cannot erase
-existing quality debt. A failed recheck
-stays open and leaves every new lane GUI-readable; a passing recheck records its
+existing quality debt. A failed recheck stays open and leaves every new lane
+GUI-readable; a passing recheck records its
 policy, ending/path counts, lane sessions, and revisions as resolution evidence.
+If a project later replaces its acceptance persona set, an older issue continues
+to verify against its retained original lanes and thresholds; the replacement
+matrix is judged by a fresh project audit.
 Older reports without deterministic replay parameters keep the ordinary
 `reproduce` workflow.
 Each lane also receives a content-addressed semantic decision-path revision

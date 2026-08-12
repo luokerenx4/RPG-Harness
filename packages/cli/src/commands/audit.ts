@@ -146,6 +146,8 @@ export async function runAudit(
   await assertSourceExists(args.gameDir, args.fromSession);
   const game = await loadGame(args.gameDir);
   const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
+  const acceptanceMatrixMatches = qualityPolicy?.personas === undefined ||
+    samePersonaSet(args.personas, qualityPolicy.personas);
 
   const targets = args.personas.map((persona) => ({
     persona,
@@ -155,7 +157,8 @@ export async function runAudit(
     assertSessionName(target.session);
     await assertTargetEmpty(args.gameDir, target.session);
   }
-  const qualityEvidenceSession = qualityPolicy && args.reportOnQualityFailure !== false
+  const qualityEvidenceSession = qualityPolicy && acceptanceMatrixMatches &&
+    args.reportOnQualityFailure !== false
     ? `${args.sessionPrefix}-quality-gate`
     : undefined;
   if (qualityEvidenceSession) {
@@ -262,6 +265,7 @@ export async function runAudit(
   const quality = qualityPolicy
     ? evaluateQualityGate(
         qualityPolicy,
+        acceptanceMatrixMatches,
         allTerminal,
         uniqueEndings,
         uniqueDecisionPaths,
@@ -369,20 +373,33 @@ export async function runAudit(
   };
 }
 
+function samePersonaSet(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length &&
+    actual.every((persona) => expected.includes(persona));
+}
+
 function mergeQualityPolicies(
   current: AiAuditConfig | undefined,
   floor: AiAuditConfig | undefined,
 ): AiAuditConfig | undefined {
   if (!current && !floor) return undefined;
+  const matricesCompatible = current?.personas === undefined ||
+    floor?.personas === undefined ||
+    samePersonaSet(current.personas, floor.personas);
   const minUniqueEndings = maxDefined(
-    current?.minUniqueEndings,
+    matricesCompatible ? current?.minUniqueEndings : undefined,
     floor?.minUniqueEndings,
   );
   const minUniqueDecisionPaths = maxDefined(
-    current?.minUniqueDecisionPaths,
+    matricesCompatible ? current?.minUniqueDecisionPaths : undefined,
     floor?.minUniqueDecisionPaths,
   );
   return {
+    ...(floor?.personas !== undefined
+      ? { personas: [...floor.personas] }
+      : current?.personas !== undefined
+        ? { personas: [...current.personas] }
+        : {}),
     ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
     ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
   };
@@ -396,11 +413,21 @@ function maxDefined(left: number | undefined, right: number | undefined): number
 
 function evaluateQualityGate(
   policy: AiAuditConfig,
+  acceptanceMatrixMatches: boolean,
   allTerminal: boolean,
   uniqueEndings: number,
   uniqueDecisionPaths: number,
 ): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
   const observed = { uniqueEndings, uniqueDecisionPaths };
+  if (!acceptanceMatrixMatches) {
+    return {
+      status: "not-evaluated",
+      observed,
+      violations: [
+        `project acceptance requires personas [${policy.personas?.join(", ") ?? ""}]`,
+      ],
+    };
+  }
   if (!allTerminal) {
     return {
       status: "not-evaluated",

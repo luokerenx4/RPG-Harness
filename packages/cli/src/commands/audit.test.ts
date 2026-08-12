@@ -356,6 +356,52 @@ describe("autoplay audit matrix", () => {
     });
   });
 
+  test("CLI defaults to the project-owned acceptance personas", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit choice test",
+      "ai_audit:",
+      "  personas: [charmer, rude]",
+      "  min_unique_endings: 1",
+      "  min_unique_decision_paths: 2",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "audit",
+      gameDir,
+      "--from-session",
+      "player",
+      "--session-prefix",
+      "project-personas",
+      "--max-steps",
+      "10",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [exitCode, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      lanes: [
+        { persona: "charmer", reason: "completed" },
+        { persona: "rude", reason: "completed" },
+      ],
+      qualityGate: {
+        policy: {
+          personas: ["charmer", "rude"],
+          minUniqueEndings: 1,
+          minUniqueDecisionPaths: 2,
+        },
+        status: "passed",
+      },
+    });
+  });
+
   test("does not judge diversity or file matrix noise before every lane ends", async () => {
     const gameDir = await temporaryGame();
     await writeFile(path.join(gameDir, "game.yaml"), [
@@ -383,6 +429,43 @@ describe("autoplay audit matrix", () => {
       violations: ["not every audit lane reached a terminal ending"],
     });
     expect(summary.totals.openReports).toBe(0);
+    expect(await listPlaytestReports(gameDir)).toEqual([]);
+  });
+
+  test("treats an explicit persona subset as diagnosis, not project acceptance", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit choice test",
+      "ai_audit:",
+      "  personas: [objective, greedy, charmer, rude]",
+      "  min_unique_endings: 2",
+      "  min_unique_decision_paths: 3",
+    ].join("\n") + "\n", "utf-8");
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "diagnostic-subset",
+      personas: ["charmer", "rude"],
+      maxSteps: 10,
+      reportOnStop: false,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toEqual({
+      policy: {
+        personas: ["objective", "greedy", "charmer", "rude"],
+        minUniqueEndings: 2,
+        minUniqueDecisionPaths: 3,
+      },
+      status: "not-evaluated",
+      observed: { uniqueEndings: 1, uniqueDecisionPaths: 2 },
+      violations: [
+        "project acceptance requires personas [objective, greedy, charmer, rude]",
+      ],
+    });
     expect(await listPlaytestReports(gameDir)).toEqual([]);
   });
 });

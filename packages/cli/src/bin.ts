@@ -39,6 +39,7 @@ import {
   type PlaytestArea,
   type PlaytestSeverity,
 } from "./playtest-reports";
+import { loadGame } from "./loader";
 
 const HELP = `rpgh — RPG-Harness: the AI-native RPG Maker runtime and playtest CLI
 
@@ -135,8 +136,9 @@ COMMANDS
       Preflights every target before running, then summarizes endings, stalls,
       masked behavior cycles, semantic path diversity, choice divergences,
       budget checkpoints, reports, and Web paths.
-      Default personas: objective,greedy,charmer,rude,hunter. Including random
-      requires --seed so the audit can be reproduced exactly.
+      Defaults to game.yaml ai_audit.personas, or the built-in
+      objective,greedy,charmer,rude,hunter fallback. Including random requires
+      --seed so the audit can be reproduced exactly.
 
   cover    <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY]
            [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
@@ -740,7 +742,7 @@ async function runAuditCommand(args: string[]): Promise<void> {
       "from-session": { type: "string" },
       "from-at": { type: "string" },
       "session-prefix": { type: "string" },
-      personas: { type: "string", default: DEFAULT_AUDIT_PERSONAS.join(",") },
+      personas: { type: "string" },
       "max-steps": { type: "string", default: "1000" },
       seed: { type: "string" },
       "no-report-on-stop": { type: "boolean", default: false },
@@ -756,6 +758,13 @@ async function runAuditCommand(args: string[]): Promise<void> {
     process.stderr.write("Missing required flags: --from-session PLAYER --session-prefix PREFIX\n");
     process.exit(2);
   }
+  const game = await loadGame(gameDir);
+  const requestedPersonas = values.personas === undefined
+    ? game.aiAudit?.personas ?? [...DEFAULT_AUDIT_PERSONAS]
+    : String(values.personas)
+      .split(",")
+      .map((persona) => persona.trim())
+      .filter(Boolean);
   await auditCommand({
     gameDir,
     fromSession: values["from-session"],
@@ -763,10 +772,7 @@ async function runAuditCommand(args: string[]): Promise<void> {
       ? { fromLogEntry: Number(values["from-at"]) }
       : {}),
     sessionPrefix: values["session-prefix"],
-    personas: String(values.personas ?? "")
-      .split(",")
-      .map((persona) => persona.trim())
-      .filter(Boolean),
+    personas: requestedPersonas,
     maxSteps: Number(values["max-steps"] ?? "1000"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
     reportOnStop: !Boolean(values["no-report-on-stop"]),

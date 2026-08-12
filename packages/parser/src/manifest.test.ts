@@ -145,11 +145,13 @@ describe("parseManifest — AI audit quality gate", () => {
     const manifest = parseManifest([
       "title: t",
       "ai_audit:",
+      "  personas: [objective, charmer, rude]",
       "  min_unique_endings: 2",
       "  min_unique_decision_paths: 3",
     ].join("\n"));
 
     expect(manifest.aiAudit).toEqual({
+      personas: ["objective", "charmer", "rude"],
       minUniqueEndings: 2,
       minUniqueDecisionPaths: 3,
     });
@@ -164,5 +166,14 @@ describe("parseManifest — AI audit quality gate", () => {
     expect(() => parseManifest(
       "title: t\nai_audit:\n  mystery: 2\n",
     )).toThrow(/unknown field/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  personas: []\n  min_unique_endings: 2\n",
+    )).toThrow(/non-empty array/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  personas: [rude, rude]\n  min_unique_endings: 2\n",
+    )).toThrow(/duplicates/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  personas: [charmer, rude]\n  min_unique_decision_paths: 3\n",
+    )).toThrow(/cannot exceed/);
   });
 });

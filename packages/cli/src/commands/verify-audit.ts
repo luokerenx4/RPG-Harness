@@ -81,7 +81,10 @@ export async function verifyAuditReport(
     ...(evidence.seed !== undefined ? { seed: evidence.seed } : {}),
     reportOnStop: false,
     reportOnQualityFailure: false,
-    qualityFloor: evidence.policy,
+    qualityFloor: {
+      ...evidence.policy,
+      personas: evidence.policy.personas ?? personas,
+    },
     pretty: false,
   });
   const sourceRevisionMatches = audit.source.stateRevision === evidence.sourceRevision;

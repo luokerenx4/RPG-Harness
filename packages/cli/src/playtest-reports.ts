@@ -77,6 +77,7 @@ export interface PlaytestAuditMatrixEvidence {
   maxSteps?: number;
   seed?: number;
   policy: {
+    personas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
   };
@@ -129,6 +130,7 @@ export interface PlaytestVerification {
   sessionPrefix: string;
   sourceRevision: string;
   policy: {
+    personas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
   };

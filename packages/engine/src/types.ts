@@ -23,6 +23,8 @@ export interface VariableDef {
 
 /** Author-owned acceptance thresholds for a deterministic persona matrix. */
 export interface AiAuditConfig {
+  /** Project-owned acceptance matrix. CLI defaults are only a fallback. */
+  personas?: string[];
   minUniqueEndings?: number;
   minUniqueDecisionPaths?: number;
 }
