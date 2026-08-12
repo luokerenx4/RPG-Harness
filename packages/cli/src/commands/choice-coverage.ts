@@ -16,7 +16,7 @@ export interface ChoiceCoverageEvidence {
   session: string;
   logEntry: number;
   checkpoint: { schemaVersion: 1; file: string; revision: string };
-  input: { type: "choose"; index: number };
+  input: { type: "choose"; choiceId: string; optionId: string };
   fork: { from: string; at: number };
   webPathTemplate: "/?session=<new-session>";
 }
@@ -350,7 +350,11 @@ export function analyzeChoiceCoverage(
               session,
               logEntry: offset + 1,
               checkpoint: entry.checkpoint,
-              input: { type: "choose", index },
+              input: {
+                type: "choose",
+                choiceId: stable.choiceId,
+                optionId: option.id,
+              },
               fork: { from: session, at: offset + 1 },
               webPathTemplate: "/?session=<new-session>",
             };
@@ -622,7 +626,7 @@ export function formatChoiceCoverage(
     for (const option of choice.options) {
       const marker = option.status === "selected" ? "✓" : option.status === "pending" ? "○" : "×";
       const replay = option.evidence
-        ? `fork ${option.evidence.session}@${option.evidence.logEntry}, then choose ${option.evidence.input.index}`
+        ? `fork ${option.evidence.session}@${option.evidence.logEntry}, then choose ${option.evidence.input.choiceId}/${option.evidence.input.optionId}`
         : "no executable checkpoint";
       lines.push(`  ${marker} ${option.id}: ${option.text}  [${option.status}; ${replay}]`);
     }

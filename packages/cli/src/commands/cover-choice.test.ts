@@ -18,9 +18,10 @@ afterEach(async () => {
 });
 
 describe("coverage-driven autoplay", () => {
-  test("forks the exact checkpoint and selects a pending option by stable id", async () => {
+  test("forks the exact checkpoint and selects a pending option after authoring order changes", async () => {
     const gameDir = await temporaryChoiceGame();
     await seedFirstBranch(gameDir);
+    await writeScript(gameDir, "beta", "target-first");
 
     const summary = await runChoiceCoverageWorkItem({
       gameDir,
@@ -36,6 +37,9 @@ describe("coverage-driven autoplay", () => {
     expect(summary.workItem).toMatchObject({
       key: "intro/opening/beta",
       optionId: "beta",
+      evidence: {
+        input: { type: "choose", choiceId: "opening", optionId: "beta" },
+      },
     });
     expect(summary.fork).toMatchObject({
       fromSession: "seed-alpha",
@@ -48,7 +52,7 @@ describe("coverage-driven autoplay", () => {
       optionId: "beta",
       optionText: "Beta",
       status: "selected",
-      index: 1,
+      index: 0,
     });
     expect(summary.reason).toBe("completed");
     // The branch lineage intentionally excludes the source's later alpha
@@ -92,7 +96,15 @@ async function temporaryChoiceGame(): Promise<string> {
   return dir;
 }
 
-async function writeScript(gameDir: string, secondOptionId: string): Promise<void> {
+async function writeScript(
+  gameDir: string,
+  secondOptionId: string,
+  order: "alpha-first" | "target-first" = "alpha-first",
+): Promise<void> {
+  const target = `- ${secondOptionId === "beta" ? "Beta" : "Gamma"} {id: ${secondOptionId}}`;
+  const options = order === "target-first"
+    ? [target, "- Alpha {id: alpha}"]
+    : ["- Alpha {id: alpha}", target];
   await writeFile(
     path.join(gameDir, "scripts", "intro.md"),
     [
@@ -105,8 +117,7 @@ async function writeScript(gameDir: string, secondOptionId: string): Promise<voi
       "Before the choice.",
       "",
       "? Pick one. {id: opening}",
-      "- Alpha {id: alpha}",
-      `- ${secondOptionId === "beta" ? "Beta" : "Gamma"} {id: ${secondOptionId}}`,
+      ...options,
       "",
       "After the choice.",
       "",

@@ -157,13 +157,17 @@ describe("choice branch coverage", () => {
         session: "ai-run",
         logEntry: 1,
         checkpoint: checkpoint(revision),
-        input: { type: "choose", index: 1 },
+        input: {
+          type: "choose",
+          choiceId: "final-tether",
+          optionId: "friends",
+        },
         fork: { from: "ai-run", at: 1 },
         webPathTemplate: "/?session=<new-session>",
       },
     }]);
     expect(formatChoiceCoverage(report, "pending")).toContain(
-      "fork ai-run@1, then choose 1",
+      "fork ai-run@1, then choose final-tether/friends",
     );
   });
 
