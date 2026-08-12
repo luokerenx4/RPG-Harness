@@ -40,6 +40,10 @@ export interface AutoplayArgs {
   fromLogEntry?: number;
   reportOnStop?: boolean;
   pretty?: boolean;
+  // Internal orchestration hook for callers that already created an exact
+  // branch. Keeping the provenance here preserves ordinary reports/summaries
+  // without making the runner reread a live source session.
+  preparedFork?: Awaited<ReturnType<typeof forkSession>>;
   // Internal execution target used by `rpgh cover`. The first decision is
   // only submitted after the recoverable checkpoint still presents this
   // exact stable choice and option; option array indexes may safely change.
@@ -113,6 +117,17 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
   }
+  if (args.preparedFork && !args.session) {
+    throw new Error("A prepared fork requires a persisted --session");
+  }
+  if (args.preparedFork && (args.fromSession || args.fromLogEntry !== undefined)) {
+    throw new Error("A prepared fork cannot be combined with --from-session or --from-at");
+  }
+  if (args.preparedFork && args.preparedFork.session !== args.session) {
+    throw new Error(
+      `Prepared fork session ${args.preparedFork.session} does not match autoplay session ${args.session}`,
+    );
+  }
   if (args.fromLogEntry !== undefined && !args.fromSession) {
     throw new Error("--from-at requires --from-session");
   }
@@ -137,7 +152,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     );
   }
 
-  let fork: Awaited<ReturnType<typeof forkSession>> | undefined;
+  let fork: Awaited<ReturnType<typeof forkSession>> | undefined = args.preparedFork;
   if (args.fromSession && args.session) {
     try {
       await access(path.join(sessionDir(args.gameDir, args.fromSession), "state.json"));

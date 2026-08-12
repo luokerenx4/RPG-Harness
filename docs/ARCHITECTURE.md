@@ -118,11 +118,14 @@ oscillation.
 
 `rpgh audit` is a CLI orchestration layer over this contract, not another game
 runner. It validates a source checkpoint and all `${prefix}-${persona}` target
-sessions up front, then calls persisted `runAutoplay` lanes sequentially. Each
+sessions up front, captures the source state once under its session lock, then
+creates every branch from that in-memory content-addressed snapshot before
+calling persisted `runAutoplay` lanes sequentially. Each
 lane retains ordinary fork provenance, checkpoints, reports, transcript, and
 Web query path; the command returns only a compact cross-lane matrix. This keeps
-the player/GUI branch immutable while making regression sweeps executable by a
-later coding agent without bespoke shell loops.
+the audit start point stable even if the player/GUI branch advances concurrently,
+while making regression sweeps executable by a later coding agent without
+bespoke shell loops.
 
 ## Standard resources (the database)
 

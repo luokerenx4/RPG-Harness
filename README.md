@@ -474,11 +474,15 @@ their stronger severity.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
 `audit` productizes the multi-persona development lane. It preflights the source
-and every target name before writing anything, then forks one protected player
-checkpoint into `${prefix}-${persona}` sessions and runs each through the same
+and every target name before writing anything, captures the protected player
+checkpoint once, then forks that frozen snapshot into `${prefix}-${persona}`
+sessions and runs each through the same
 autoplay/report contract. Its compact matrix summarizes endings, strict stalls,
 masked behavior cycles, progressing budget checkpoints, rejected inputs,
 reports, and GUI-ready Web paths without embedding five full save states.
+The player can keep advancing the source session while the sequential matrix
+runs: every lane reports the same audit-time `source.stateRevision` and cannot
+drift onto a later GUI/TUI state.
 Completed lanes remain individually replayable if the command is interrupted;
 rerun with a fresh prefix after inspecting them. Add `random` explicitly with
 `--personas ...random --seed N` so the matrix remains reproducible.

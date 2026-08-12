@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import { saveSession, sessionDir } from "../session";
+import { loadSession, saveSession, sessionDir } from "../session";
 import { runAudit } from "./audit";
+import { readSessionLog } from "./fork";
 
 const temporaryDirectories: string[] = [];
 
@@ -83,6 +84,50 @@ describe("autoplay audit matrix", () => {
     await expect(readFile(
       path.join(sessionDir(gameDir, "matrix-objective"), "state.json"),
     )).rejects.toThrow();
+  });
+
+  test("pins one source snapshot even when the player advances between lanes", async () => {
+    const gameDir = await temporaryGame();
+    const game = await loadGame(gameDir);
+    const auditStart = createInitialState(game);
+    await saveSession(gameDir, "player", auditStart);
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "concurrent-matrix",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    }, {
+      onLaneComplete: async (_lane, index) => {
+        if (index !== 0) return;
+        const playerAdvanced = structuredClone(auditStart);
+        playerAdvanced.baseline.inventory.player_moved_during_audit = 1;
+        await saveSession(gameDir, "player", playerAdvanced);
+      },
+    });
+
+    const laneLogs = await Promise.all(
+      ["concurrent-matrix-objective", "concurrent-matrix-greedy"]
+        .map((session) => readSessionLog(gameDir, session)),
+    );
+    const revisions = laneLogs.map((entries) => {
+      const checkpoint = entries[0]?.checkpoint as { revision?: string } | undefined;
+      return checkpoint?.revision;
+    });
+    expect(revisions).toEqual([summary.source.stateRevision, summary.source.stateRevision]);
+    expect(summary.source).toMatchObject({
+      session: "player",
+      at: 0,
+      entries: 0,
+      mode: "current-state",
+    });
+    expect((await loadSession(gameDir, "player", game)).baseline.inventory)
+      .toEqual({ player_moved_during_audit: 1 });
+    expect((await loadSession(gameDir, "concurrent-matrix-greedy", game)).baseline.inventory)
+      .toEqual({});
   });
 
   test("requires a seed when random is part of a reproducible matrix", async () => {

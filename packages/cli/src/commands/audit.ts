@@ -1,9 +1,14 @@
 import { access } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { assertSessionName } from "@rpg-harness/session-store";
 import { sessionDir } from "../session";
 import { personaDescriptions, personas } from "../test/personas";
-import { assertTargetEmpty } from "./fork";
+import {
+  assertTargetEmpty,
+  createForkFromSource,
+  loadForkSource,
+} from "./fork";
 import {
   runAutoplay,
   type AutoplayProgress,
@@ -50,7 +55,13 @@ export interface AuditLaneSummary {
 }
 
 export interface AuditSummary {
-  source: { session: string; at?: number };
+  source: {
+    session: string;
+    at: number;
+    entries: number;
+    mode: "checkpoint" | "initial-state" | "current-state";
+    stateRevision: string;
+  };
   sessionPrefix: string;
   maxSteps: number;
   lanes: AuditLaneSummary[];
@@ -67,6 +78,12 @@ export interface AuditSummary {
   endings: Record<string, number>;
 }
 
+export interface AuditHooks {
+  // A narrow lifecycle seam for concurrency regression tests and embedding.
+  // Production CLI callers do not need it.
+  onLaneComplete?: (lane: AuditLaneSummary, index: number) => void | Promise<void>;
+}
+
 export async function auditCommand(args: AuditArgs): Promise<void> {
   const summary = await runAudit(args);
   process.stdout.write(
@@ -74,7 +91,10 @@ export async function auditCommand(args: AuditArgs): Promise<void> {
   );
 }
 
-export async function runAudit(args: AuditArgs): Promise<AuditSummary> {
+export async function runAudit(
+  args: AuditArgs,
+  hooks: AuditHooks = {},
+): Promise<AuditSummary> {
   validateAuditArgs(args);
   assertSessionName(args.fromSession);
   await assertSourceExists(args.gameDir, args.fromSession);
@@ -88,20 +108,38 @@ export async function runAudit(args: AuditArgs): Promise<AuditSummary> {
     await assertTargetEmpty(args.gameDir, target.session);
   }
 
+  // Capture the live player branch exactly once. The player may keep using
+  // GUI/TUI while this matrix runs; every AI lane must still start from this
+  // same audit-time state rather than whatever state happens to be current
+  // when its sequential turn begins.
+  const source = await loadForkSource(
+    args.gameDir,
+    args.fromSession,
+    args.fromLogEntry,
+  );
+  const stateRevision = createHash("sha256")
+    .update(JSON.stringify(source.state))
+    .digest("hex");
+
   const lanes: AuditLaneSummary[] = [];
   for (const [index, target] of targets.entries()) {
+    const preparedFork = await createForkFromSource({
+      gameDir: args.gameDir,
+      from: args.fromSession,
+      to: target.session,
+      pretty: false,
+    }, source);
     const summary = await runAutoplay({
       gameDir: args.gameDir,
       persona: target.persona,
       verbose: false,
       maxSteps: args.maxSteps,
-      fromSession: args.fromSession,
-      ...(args.fromLogEntry !== undefined ? { fromLogEntry: args.fromLogEntry } : {}),
       session: target.session,
+      preparedFork,
       reportOnStop: args.reportOnStop,
       ...(args.seed !== undefined ? { seed: args.seed + index } : {}),
     });
-    lanes.push({
+    const lane: AuditLaneSummary = {
       persona: target.persona,
       session: target.session,
       webPath: summary.webPath!,
@@ -122,7 +160,9 @@ export async function runAudit(args: AuditArgs): Promise<AuditSummary> {
             },
           }
         : {}),
-    });
+    };
+    lanes.push(lane);
+    await hooks.onLaneComplete?.(lane, index);
   }
 
   const endings: Record<string, number> = {};
@@ -132,7 +172,10 @@ export async function runAudit(args: AuditArgs): Promise<AuditSummary> {
   return {
     source: {
       session: args.fromSession,
-      ...(args.fromLogEntry !== undefined ? { at: args.fromLogEntry } : {}),
+      at: source.selectedEntry,
+      entries: source.sourceEntries,
+      mode: source.mode,
+      stateRevision,
     },
     sessionPrefix: args.sessionPrefix,
     maxSteps: args.maxSteps,
