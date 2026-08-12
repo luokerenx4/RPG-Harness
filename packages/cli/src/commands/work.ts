@@ -71,6 +71,16 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
     };
   }
 
+  return executeDevelopmentWorkItem(args, item);
+}
+
+/** Execute an already selected/frozen item without re-ranking the live queue. */
+export async function executeDevelopmentWorkItem(
+  args: WorkArgs,
+  item: DevelopmentWorkItem,
+): Promise<WorkResult> {
+  validateLimits(args);
+
   const selection = {
     key: item.key,
     priority: item.priority,

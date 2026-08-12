@@ -7,6 +7,7 @@ import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { worklistCommand } from "./commands/worklist";
 import { workCommand } from "./commands/work";
+import { sweepCommand } from "./commands/sweep";
 import { inspectScriptCommand } from "./commands/inspect-script";
 import { inspectSessionCommand } from "./commands/inspect-session";
 import {
@@ -87,6 +88,14 @@ COMMANDS
       requires an explicit fresh --new-session; edits return authoring context.
       Branch results return compact evidence plus the named GUI session, not
       full saves or pending queues. An unreachable target exits non-zero.
+
+  sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N]
+        [--from-key WORK-KEY] [--snapshot-revision SHA256]
+        [--persona NAME] [--max-steps N] [--max-nodes N]
+        [--max-total-nodes N] [--pretty]
+      Execute a bounded frozen snapshot of the prioritized development queue.
+      Preflights every isolated target before writing, stops on failures or
+      authoring judgment, and returns completed plus remaining work for resume.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,
@@ -265,6 +274,8 @@ async function main(): Promise<void> {
       return runWorklist(rest);
     case "work":
       return runWork(rest);
+    case "sweep":
+      return runSweep(rest);
     case "inspect-script":
       return runInspectScript(rest);
     case "inspect-session":
@@ -510,6 +521,54 @@ async function runWork(args: string[]): Promise<void> {
       : {}),
     ...(values["max-nodes"] !== undefined
       ? { maxNodes: Number(values["max-nodes"]) }
+      : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runSweep(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      "session-prefix": { type: "string" },
+      limit: { type: "string", default: "5" },
+      "from-key": { type: "string" },
+      "snapshot-revision": { type: "string" },
+      persona: { type: "string", default: "objective" },
+      "max-steps": { type: "string" },
+      "max-nodes": { type: "string" },
+      "max-total-nodes": { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N] [--from-key WORK-KEY] [--snapshot-revision SHA256] [--persona NAME] [--max-steps N] [--max-nodes N] [--max-total-nodes N] [--pretty]",
+  );
+  if (!values.session) throw new Error("sweep requires --session SOURCE");
+  if (!values["session-prefix"]) {
+    throw new Error("sweep requires --session-prefix PREFIX");
+  }
+  await sweepCommand({
+    gameDir,
+    session: values.session,
+    sessionPrefix: values["session-prefix"],
+    limit: Number(values.limit),
+    ...(values["from-key"] !== undefined ? { fromKey: values["from-key"] } : {}),
+    ...(values["snapshot-revision"] !== undefined
+      ? { snapshotRevision: values["snapshot-revision"] }
+      : {}),
+    ...(values.persona !== undefined ? { persona: values.persona } : {}),
+    ...(values["max-steps"] !== undefined
+      ? { maxSteps: Number(values["max-steps"]) }
+      : {}),
+    ...(values["max-nodes"] !== undefined
+      ? { maxNodes: Number(values["max-nodes"]) }
+      : {}),
+    ...(values["max-total-nodes"] !== undefined
+      ? { maxTotalNodes: Number(values["max-total-nodes"]) }
       : {}),
     pretty: Boolean(values.pretty),
   });

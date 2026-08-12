@@ -194,6 +194,7 @@ rpgh coverage <game-dir> [--status pending|all]                # real-session st
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
 rpgh work     <game-dir> [--key KEY] [--new-session NAME]     # safely execute one structured work item
+rpgh sweep    <game-dir> --session NAME --session-prefix RUN  # bounded resumable lineage exploration batch
 rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
 rpgh inspect-session <game-dir> --session NAME               # read-only state/log/checkpoint diagnosis
 rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
@@ -249,6 +250,14 @@ If an executable item cannot reach its declared target, `work` returns
 Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.
+`sweep` executes a bounded snapshot of that same queue for one player lineage.
+It preflights every generated branch before its first write, shares one total
+search-node budget across the batch, and pauses normally when that budget is
+spent. The result carries the frozen SHA-256 revision and exact next work key;
+resume with both `--from-key` and `--snapshot-revision`, so a changed queue is
+re-read instead of silently continuing at the wrong item. Diagnostics and
+checkpoint-backed branch coverage cost no search nodes, while unreachable
+searches return their closest requirements as development evidence.
 Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
 detailed artifacts are actually needed.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
