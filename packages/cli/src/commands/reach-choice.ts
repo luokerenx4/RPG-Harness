@@ -4,12 +4,17 @@ import {
   searchForChoice,
   step,
   type ComposedState,
+  type ChoiceSearchClosest,
   type Input,
   type Output,
 } from "@rpg-harness/engine";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
+import {
+  recordPlaytestReport,
+  type PlaytestReport,
+} from "../playtest-reports";
 import {
   collectChoiceCoverage,
   type ChoiceAuthoringWorkItem,
@@ -29,6 +34,7 @@ export interface ReachChoiceArgs {
   key?: string;
   maxNodes: number;
   maxSteps: number;
+  reportOnMiss?: boolean;
   pretty: boolean;
 }
 
@@ -47,6 +53,8 @@ export interface ReachChoiceSummary {
   fork?: Awaited<ReturnType<typeof forkSession>>;
   output: Output | null;
   replayVerified: boolean;
+  closest: ChoiceSearchClosest;
+  report?: PlaytestReport;
 }
 
 export async function reachChoiceCommand(args: ReachChoiceArgs): Promise<void> {
@@ -90,6 +98,7 @@ export async function runReachChoice(
   let replayVerified = false;
   let output = search.output;
   let fork: Awaited<ReturnType<typeof forkSession>> | undefined;
+  let report: PlaytestReport | undefined;
   if (search.found) {
     fork = await createForkFromSource({
       gameDir: args.gameDir,
@@ -117,6 +126,37 @@ export async function runReachChoice(
       );
     }
     replayVerified = true;
+  } else if (args.reportOnMiss) {
+    fork = await createForkFromSource({
+      gameDir: args.gameDir,
+      from: args.fromSession,
+      to: args.session,
+      ...(args.fromLogEntry !== undefined ? { at: args.fromLogEntry } : {}),
+      pretty: false,
+    }, source);
+    const replay = await replayPath(
+      args.gameDir,
+      args.session,
+      game,
+      search.closest.inputs,
+    );
+    output = replay.output;
+    if (canonicalJson(replay.state) !== canonicalJson(search.state)) {
+      const difference = firstDifference(search.state, replay.state);
+      throw new Error(
+        `Reach miss replay diverged from closest search state for ${target.key} at ${difference}`,
+      );
+    }
+    replayVerified = true;
+    report = await recordPlaytestReport({
+      gameDir: args.gameDir,
+      session: args.session,
+      area: "gameplay",
+      severity: "note",
+      title: `Stable choice not reached: ${target.key} (${search.reason})`,
+      details: formatMissDetails(search.closest, search, args),
+      ...(target.source ? { target: target.source } : {}),
+    });
   }
 
   return {
@@ -129,7 +169,7 @@ export async function runReachChoice(
     visitedStates: search.visitedStates,
     deepestSteps: search.deepestSteps,
     requestedSession: args.session,
-    ...(search.found
+    ...(fork
       ? {
           session: args.session,
           webPath: `/?session=${encodeURIComponent(args.session)}`,
@@ -138,6 +178,8 @@ export async function runReachChoice(
     ...(fork ? { fork } : {}),
     output,
     replayVerified,
+    closest: search.closest,
+    ...(report ? { report } : {}),
   };
 }
 
@@ -169,12 +211,38 @@ async function replayPath(
       await saveSession(gameDir, session, state);
       await appendLog(gameDir, session, {
         t: Date.now(),
-        source: "reach-choice:target",
+        source: "reach-choice:checkpoint",
         output: current.output,
       }, state);
     }
     return { output: current.output, state };
   });
+}
+
+function formatMissDetails(
+  closest: ChoiceSearchClosest,
+  search: {
+    reason: string;
+    exploredNodes: number;
+    visitedStates: number;
+    deepestSteps: number;
+  },
+  args: ReachChoiceArgs,
+): string {
+  const requirements = closest.requirements.length === 0
+    ? ["Target script has no declared top-level requirements; inspect route control flow."]
+    : closest.requirements.map((item, index) =>
+        `${index + 1}. ${item.satisfied ? "satisfied" : "blocked"}: ${
+          item.reason ?? JSON.stringify(item.condition)
+        } (progress ${item.progress.toFixed(3)})`
+      );
+  return [
+    `Bounded Headless search stopped with \`${search.reason}\` after ${search.exploredNodes} explored nodes (${search.visitedStates} unique states; deepest path ${search.deepestSteps} inputs).`,
+    `Closest recoverable state is ${closest.steps} public inputs from \`${args.fromSession}\`; ${closest.satisfiedRequirements}/${closest.totalRequirements} target requirements are satisfied.`,
+    ...requirements,
+    `Closest input path: ${closest.inputs.length === 0 ? "(source checkpoint)" : JSON.stringify(closest.inputs)}.`,
+    "Reproduce this report to inspect the closest state in GUI or Headless, then decide whether the route is intentionally exclusive, needs author guidance, or contains a progression defect.",
+  ].join(" ");
 }
 
 function selectTarget(

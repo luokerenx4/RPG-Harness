@@ -897,6 +897,50 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(0);
   });
 
+  test("resumes an old save when a legacy choice gains stable ids", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        { type: "narration", text: "before" },
+        {
+          type: "choice",
+          prompt: "Choose",
+          options: [{ text: "Alpha" }, { text: "Beta" }],
+        },
+        { type: "endScript" },
+      ] })],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const runner = runScript(oldCtx, oldGame.scripts[0]!);
+    await runner.next();
+    await runner.next({ type: "next" });
+
+    const editedGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        { type: "narration", text: "before" },
+        {
+          type: "choice",
+          id: "stable-choice",
+          prompt: "Choose",
+          options: [
+            { id: "alpha", text: "Alpha", lockedHint: "New human hint" },
+            { id: "beta", text: "Beta" },
+          ],
+        },
+        { type: "endScript" },
+      ] })],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(editedCtx, editedGame.scripts[0]!).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "choice",
+      choiceId: "stable-choice",
+      options: [{ id: "alpha" }, { id: "beta" }],
+    });
+    expect(editedCtx.state.baseline.scriptCursor?.choiceId).toBe("stable-choice");
+  });
+
   test("rejects same-type prose replacement when adjacent structure also changed", async () => {
     const oldGame = makeGame({
       scripts: [makeScript("s1", { beats: [

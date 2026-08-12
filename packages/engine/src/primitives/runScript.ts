@@ -572,6 +572,39 @@ function reconcileScriptCursor(
     return;
   }
 
+  // Stabilizing a legacy choice adds only authoring identity. Old saves do
+  // not know that new id yet, but can still prove which choice they were on
+  // from the complete legacy presentation (prompt/options/gates/targets).
+  // Match after stripping ids on the authored candidates, and require a
+  // unique result so a repeated legacy prompt cannot silently relocate.
+  const legacyChoiceAnchor = legacyChoiceAnchorFromSerialized(cursor.beatAnchor);
+  const stabilizedLegacyIndexes = legacyChoiceAnchor === undefined
+    ? []
+    : script.beats.flatMap((beat, index) =>
+        legacyChoiceAnchorForBeat(beat) === legacyChoiceAnchor ? [index] : []
+      );
+  if (stabilizedLegacyIndexes.length === 1) {
+    const target = stabilizedLegacyIndexes[0]!;
+    const beat = script.beats[target]!;
+    baseline.beatIndex = target;
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+    } else {
+      replayVisualSetupBefore(ctx, script, target);
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      ...(beat.type === "choice" && beat.id !== undefined
+        ? { choiceId: beat.id }
+        : {}),
+      beatAnchor: anchorBeat(beat),
+      scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, target),
+    };
+    return;
+  }
+
   if (
     isSafeInPlaceContentEdit(cursor, current) &&
     cursor.scriptBeatCount === script.beats.length &&
@@ -649,6 +682,31 @@ function choiceIdFromSerialized(serialized: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function legacyChoiceAnchorFromSerialized(
+  serialized: string,
+): string | undefined {
+  try {
+    const beat = JSON.parse(serialized) as Beat;
+    if (beat?.type !== "choice" || beat.id !== undefined) return undefined;
+    return legacyChoiceAnchorForBeat(beat);
+  } catch {
+    return undefined;
+  }
+}
+
+function legacyChoiceAnchorForBeat(beat: Beat): string | undefined {
+  if (beat.type !== "choice") return undefined;
+  const { id: _choiceId, options, ...choice } = beat;
+  return JSON.stringify({
+    ...choice,
+    options: options.map(({
+      id: _optionId,
+      lockedHint: _lockedHint,
+      ...option
+    }) => option),
+  });
 }
 
 function presentationStableChoiceAnchor(beat: Beat): string | undefined {

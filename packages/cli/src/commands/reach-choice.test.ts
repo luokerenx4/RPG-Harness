@@ -6,6 +6,7 @@ import { createInitialState } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { saveSession, sessionDir } from "../session";
 import { runReachChoice } from "./reach-choice";
+import { listPlaytestReports } from "../playtest-reports";
 
 const temporaryDirectories: string[] = [];
 
@@ -105,6 +106,40 @@ describe("reach-choice", () => {
       sourceLogEntry: 0,
       mode: "current-state",
     });
+  });
+
+  test("can persist the closest miss as a reproducible coding issue", async () => {
+    const gameDir = await temporaryGame(true);
+    await seedSession(gameDir, "source");
+
+    const result = await runReachChoice({
+      gameDir,
+      fromSession: "source",
+      session: "ai-miss-report",
+      key: "target/crossroads",
+      maxNodes: 20,
+      maxSteps: 20,
+      reportOnMiss: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      found: false,
+      replayVerified: true,
+      session: "ai-miss-report",
+      webPath: "/?session=ai-miss-report",
+      report: {
+        status: "open",
+        area: "gameplay",
+        severity: "note",
+        session: "ai-miss-report",
+        target: "scripts/target.md",
+      },
+    });
+    expect(result.report?.details).toContain("switch.impossible");
+    expect(result.report?.details).toContain("Closest input path");
+    expect(result.report?.evidence.checkpoint).toBeDefined();
+    expect(await listPlaytestReports(gameDir, "ai-miss-report")).toHaveLength(1);
   });
 });
 

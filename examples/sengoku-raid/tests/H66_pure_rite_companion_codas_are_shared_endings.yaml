@@ -56,6 +56,11 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: pure-rite-coda
+    optionId: walk-to-mio
+  - kind: output
     type: narration
     present: true
     textIncludes: お主と澪の選んだ結末

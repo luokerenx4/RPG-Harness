@@ -140,6 +140,10 @@ rpgh reach "$GAME" --from-session "$SESSION" \
 
 It explores public inputs without touching the source, persists only a found
 path, and verifies the replayed GUI-compatible state against the search result.
+If a bounded search misses, inspect its `closest.requirements`. Use
+`--report-on-miss` only when the nearest state should become a reproducible
+coding issue; intentional route exclusivity should be reviewed and resolved so
+automated playtesting does not accumulate false-positive work.
 
 ## Turn playtest findings into coding issues
 

@@ -67,4 +67,51 @@ describe("choice state-space search", () => {
     expect(result.reason).toBe("exhausted");
     expect(state).toEqual(before);
   });
+
+  test("explains the closest state's satisfied and blocked requirements", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      variables: [{ id: "pulse", type: "number", initial: 2 }],
+      scripts: [makeScript("target", {
+        requires: {
+          all: [
+            { variable: { name: "pulse", min: 5 } },
+            { switch: { name: "loyal" } },
+          ],
+        },
+        beats: [{
+          type: "choice",
+          id: "crossroads",
+          options: [{ id: "only", text: "Only" }],
+        }],
+      })],
+    });
+    const state = makeState(game);
+    state.baseline.switches.loyal = false;
+    const result = await searchForChoice(
+      game,
+      state,
+      { scriptId: "target", choiceId: "crossroads" },
+      { maxNodes: 1, maxSteps: 10 },
+    );
+
+    expect(result.found).toBe(false);
+    expect(result.closest).toMatchObject({
+      satisfiedRequirements: 0,
+      totalRequirements: 2,
+      targetScriptActive: false,
+      requirements: [
+        {
+          satisfied: false,
+          progress: 0.25,
+          reason: "pulse ≥ 5 が要る (現在 2)",
+        },
+        {
+          satisfied: false,
+          progress: 0,
+          reason: "switch.loyal が要る",
+        },
+      ],
+    });
+  });
 });

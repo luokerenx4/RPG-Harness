@@ -219,6 +219,10 @@ from a source checkpoint, stops on the stable target id, and replays the found
 path into a named session usable by Web/TUI/Headless. It then compares the full
 searched and replayed states, so an apparently successful but non-reproducible
 route fails loudly instead of becoming misleading coverage evidence.
+On a bounded miss, `closest` reports the best path plus each satisfied/blocked
+target requirement. Add `--report-on-miss` to persist that closest state and
+turn the diagnosis into a reproducible playtest issue; without it, a miss stays
+strictly read-only and creates no session.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually
