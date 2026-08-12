@@ -44,6 +44,10 @@ inputs:
     id: negotiate_release
   - type: next
 assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 大名府へ戻れば、この鬼が残した記憶を辿れる
   - kind: state
     path: baseline.scripts.zone_haunt_oni_lesser.selfSwitches.A
     eq: true

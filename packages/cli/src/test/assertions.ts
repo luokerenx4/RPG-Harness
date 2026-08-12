@@ -66,6 +66,12 @@ function checkObjective(
     return `objective ${a.id}: expected title to include "${a.titleIncludes}", got "${objective.title}"`;
   }
   if (
+    a.descriptionIncludes !== undefined &&
+    !(objective.description ?? "").includes(a.descriptionIncludes)
+  ) {
+    return `objective ${a.id}: expected description to include "${a.descriptionIncludes}", got "${objective.description ?? ""}"`;
+  }
+  if (
     a.relatedActivityIncludes !== undefined &&
     !(objective.relatedActivityIds ?? []).includes(a.relatedActivityIncludes)
   ) {
@@ -157,6 +163,18 @@ function checkActivity(
     if (!act.title.includes(a.titleIncludes)) {
       return `activity ${a.id}: expected title to include "${a.titleIncludes}", got "${act.title}"`;
     }
+  }
+  if (
+    a.descriptionIncludes !== undefined &&
+    !(act.description ?? "").includes(a.descriptionIncludes)
+  ) {
+    return `activity ${a.id}: expected description to include "${a.descriptionIncludes}", got "${act.description ?? ""}"`;
+  }
+  if (
+    a.effectsHintIncludes !== undefined &&
+    !(act.effectsHint ?? "").includes(a.effectsHintIncludes)
+  ) {
+    return `activity ${a.id}: expected effectsHint to include "${a.effectsHintIncludes}", got "${act.effectsHint ?? ""}"`;
   }
   if (a.forecastMetric !== undefined) {
     const metric = act.forecast?.metrics.find(

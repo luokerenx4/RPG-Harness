@@ -1,0 +1,39 @@
+name: 鬼を逃がす前に回想の出現場所が分かる
+description: |
+  A negotiable enemy must advertise the complete consequence through the
+  public activity contract: the memory appears only after extracting to hub.
+  This keeps GUI and Headless agents from mistaking an internal zone_haunt
+  unlock for an immediately visible route.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: kuro_swamp_ruined_hut
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 30, intellect: 5 }
+  sengoku-raid:
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        kuro_swamp_ruined_hut:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 2
+            enemyHpMax: 8
+            negotiable: true
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: negotiate_release
+    available: true
+    descriptionIncludes: 撤退して大名府へ戻ると、その鬼種の回想が現れる

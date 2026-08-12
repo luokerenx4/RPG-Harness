@@ -53,6 +53,8 @@ export interface ActivityAssertion {
   available?: boolean;
   lockedReasonIncludes?: string;
   titleIncludes?: string;
+  descriptionIncludes?: string;
+  effectsHintIncludes?: string;
   forecastMetric?: string;
   metricValue?: number;
   metricMin?: number;
@@ -88,6 +90,7 @@ export interface ObjectiveAssertion {
   present?: boolean;
   status?: "active" | "completed" | "blocked";
   titleIncludes?: string;
+  descriptionIncludes?: string;
   relatedActivityIncludes?: string;
   relatedActivityExcludes?: string;
   requirementId?: string;

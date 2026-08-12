@@ -1316,7 +1316,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         kind: "action",
         actionKind: "negotiate_release",
         title: `逃がす — ${enemyName(ctx, inst.encounter.enemyId)}`,
-        description: "霊体化 -2、戦利品なし、その鬼種の zone_haunt 解錠",
+        description: "霊体化 -2、戦利品なし。撤退して大名府へ戻ると、その鬼種の回想が現れる",
         category: "combat",
         cost: 0,
         available: true,
@@ -2593,7 +2593,7 @@ const negotiateReleaseHandler: ActionHandler = (ctx) => {
       },
     },
     narrations: [
-      `お主は刀を引いた。${enemyTitle}は霧に滲んでいく——その目に、礼に似たものが浮かんだ気がした。霊体化 -2。`,
+      `お主は刀を引いた。${enemyTitle}は霧に滲んでいく——その目に、礼に似たものが浮かんだ気がした。霊体化 -2。大名府へ戻れば、この鬼が残した記憶を辿れるだろう。`,
     ],
   };
 };
