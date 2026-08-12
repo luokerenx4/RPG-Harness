@@ -40,7 +40,8 @@ describe("choice branch coverage", () => {
         title: "Story",
         source: "/game/scripts/story.md",
         beats: [
-          { type: "choice", prompt: "Legacy?", options: [{ text: "old" }] },
+          { type: "choice", prompt: "Continue?", options: [{ text: "Continue" }] },
+          { type: "choice", prompt: "Legacy?", options: [{ text: "old" }, { text: "other" }] },
           {
             type: "choice",
             id: "stable",
@@ -57,7 +58,7 @@ describe("choice branch coverage", () => {
       choices: 2,
       stableChoices: 1,
       legacyChoices: 1,
-      options: 3,
+      options: 4,
       stableOptions: 2,
       observedStableChoices: 0,
       unseenStableChoices: 1,
@@ -65,13 +66,13 @@ describe("choice branch coverage", () => {
     expect(report.authoring.workItems).toEqual([
       expect.objectContaining({
         kind: "stabilize-choice",
-        key: "story/beat-0",
+        key: "story/beat-1",
         source: "scripts/story.md",
       }),
       expect.objectContaining({ kind: "reach-choice", key: "story/stable" }),
     ]);
     expect(formatChoiceCoverage(report, "pending")).toContain("1/2 choices stable");
-    expect(formatChoiceCoverage(report, "pending")).toContain("stabilize story/beat-0");
+    expect(formatChoiceCoverage(report, "pending")).toContain("stabilize story/beat-1");
     expect(formatChoiceCoverage(report, "covered")).not.toContain("AUTHORING WORK");
   });
 
@@ -154,13 +155,44 @@ describe("choice branch coverage", () => {
       session: "legacy",
       entries: [{
         input: { type: "next" },
-        output: { type: "choice", options: [{ text: "old", available: true }] },
+        output: {
+          type: "choice",
+          options: [
+            { text: "old", available: true },
+            { text: "other", available: true },
+          ],
+        },
       }],
     }]);
 
     expect(report.summary.untrackedChoiceEvents).toBe(1);
     expect(report.choices).toEqual([]);
     expect(report.workItems).toEqual([]);
+  });
+
+  test("ignores one-button pacing prompts in runtime and authored branch debt", () => {
+    const game = {
+      title: "Pacing",
+      characters: [],
+      scripts: [{
+        id: "story",
+        title: "Story",
+        beats: [{ type: "choice", prompt: "Continue?", options: [{ text: "Continue" }] }],
+      }],
+    } as const;
+    const authored = collectAuthoredChoices(game as never);
+    const report = analyzeChoiceCoverage([{
+      session: "pacing",
+      entries: [{
+        input: { type: "next" },
+        output: { type: "choice", prompt: "Continue?", options: [{ text: "Continue", available: true }] },
+      }],
+    }], [], authored);
+
+    expect(authored).toEqual([]);
+    expect(report.summary.choices).toBe(0);
+    expect(report.summary.untrackedChoiceEvents).toBe(0);
+    expect(report.authoring.workItems).toEqual([]);
   });
 
   test("counts an explicit decision after a checkpoint fork", () => {

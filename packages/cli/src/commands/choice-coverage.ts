@@ -249,6 +249,10 @@ export function analyzeChoiceCoverage(
 
       const output = asChoiceOutput(entry.output);
       if (!output) continue;
+      // A one-button choice is authored pacing/acknowledgement, not a branch.
+      // It remains an interactive engine output, but must not create coverage
+      // debt or a coding work item for an AI author.
+      if ((output.options as RuntimeChoiceOption[]).length < 2) continue;
       const stable = stableChoice(output);
       if (!stable) {
         untrackedChoiceEvents += 1;
@@ -401,7 +405,7 @@ export function analyzeChoiceCoverage(
 
 export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredChoiceRow[] {
   return game.scripts.flatMap((script) => script.beats.flatMap((beat, beatIndex) => {
-    if (beat.type !== "choice") return [];
+    if (beat.type !== "choice" || beat.options.length < 2) return [];
     const source = script.source === undefined
       ? undefined
       : gameDir === undefined
