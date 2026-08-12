@@ -3095,6 +3095,12 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.kasumi_bond_reply = reply;
       return;
     }
+    if (scriptId === "bond_kasumi_03") {
+      const replies = ["why-walk", "hunter-blade", "learn-path"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kasumi_deer_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3244,6 +3250,27 @@ const raidModule: Module = {
           text: "「夜が長いうちに、いつか話す」——そう言って逃げた。覚えてるか。",
         },
       };
+    }
+    if (
+      scriptId === "bond_kasumi_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "言ったよね、あたし。あんたが鹿の道を歩けるようになったら、役目は終わりだって。"
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_deer_reply;
+      const memory = reply === "why-walk"
+        ? "言ったよね。鹿の道を歩けるようになって、役目が終わっても、隣を歩きたいって。"
+        : reply === "hunter-blade"
+          ? "言ったよね。あんたの足跡が逃げ道に残った時、あたしは刀を持つって。"
+          : null;
+      if (memory) return { replace: { ...beat, text: memory } };
+    }
+    if (
+      scriptId === "bond_kasumi_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "終わっちゃった。たった今。" &&
+      ctx.state.baseline.variables.kasumi_deer_reply === "hunter-blade"
+    ) {
+      return { replace: { ...beat, text: "教える役目は、終わっちゃった。たった今。" } };
     }
     if (
       scriptId === "bond_kasumi_04" &&

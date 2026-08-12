@@ -69,6 +69,7 @@ variables:
   kasumi_first_reply: { type: string, initial: "" }
   kagari_bond_reply: { type: string, initial: "" }
   kasumi_bond_reply: { type: string, initial: "" }
+  kasumi_deer_reply: { type: string, initial: "" }
   # 情報屋 — intel_active is the briefing text injected at raid start;
   # consumed (cleared) once the raid begins.
   intel_active:    { type: string, initial: "" }

@@ -1,0 +1,33 @@
+name: Kasumi's finale remembers that she chose to walk beside the player
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kasumi_03]
+    currentScriptId: bond_kasumi_04
+    variables: { kasumi_deer_reply: why-walk }
+    switches:
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 役目が終わっても、隣を歩きたい
+  - kind: output
+    type: dialogue
+    present: false
+    textIncludes: 鹿の道を歩けるようになったら、役目は終わり
+

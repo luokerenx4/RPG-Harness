@@ -54,6 +54,12 @@ effects:
     three_flowers_stay_pledge: true
 ```
 
+@kagari 残れと言われて、背を向けるほど薄情ではない。
+
+@kasumi じゃあ、生きて帰る場所を三人分、ちゃんと空けといて。
+
+@mio ……個人の願いとして受理する。公儀の期限は付けぬ。
+
 :goto vow_answer
 
 # vow_death
@@ -64,6 +70,12 @@ effects:
   switches:
     three_flowers_death_pledge: true
 ```
+
+@kagari 覚悟を、先に死ぬ許しと取り違えるな。私たちは許さん。
+
+@kasumi 共に死ぬ、じゃなくて、共に帰る。そこは言い直してもらうよ。
+
+@mio ……供述を訂正する。四名とも生還する覚悟を持つ、と。
 
 # vow_answer
 

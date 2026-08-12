@@ -1,0 +1,41 @@
+name: The three companions challenge a death vow instead of accepting it silently
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    switches:
+      befriended_kagari: true
+      befriended_kasumi: true
+      befriended_mio: true
+    variables:
+      raidsCompleted: 6
+      shogun_chapter: 1
+  runtime:
+    firedTriggers: [letter_01_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    companion: null
+    companionHp: 0
+    raid: null
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 先に死ぬ許しと取り違えるな
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 共に帰る

@@ -1,0 +1,36 @@
+name: Kasumi directly answers why she walks with the player
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      kasumi:
+        stats: { affection: 6 }
+    switches: { befriended_kasumi: true }
+  sengoku-raid:
+    raid: null
+    metCharacters: [kasumi]
+inputs:
+  - { type: doActivity, id: script:bond_kasumi_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: question-on-deer-path
+    optionId: ask-why-she-walks
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 隣を歩きたいから
+  - kind: state
+    path: baseline.variables.kasumi_deer_reply
+    eq: why-walk
+

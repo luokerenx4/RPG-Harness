@@ -30,16 +30,36 @@ requires:
 
 :cg assets/cgs/bond-kasumi-03
 
-? それでも、聞きたかった。
-  - 「あんたは、なぜ私と歩く」 -> +kasumi
-  - 「猟師は、いつ刀を持つ」 -> +kasumi
-  - 「鹿の道を、私にも教えてくれ」 -> +2kasumi
+? それでも、聞きたかった。 {id: question-on-deer-path}
+  - 「あんたは、なぜ私と歩く」 {id: ask-why-she-walks} -> +kasumi | goto why_walk
+  - 「猟師は、いつ刀を持つ」 {id: ask-when-hunter-draws} -> +kasumi | goto hunter_blade
+  - 「鹿の道を、私にも教えてくれ」 {id: ask-to-learn-deer-path} -> +2kasumi | goto learn_path
 
 :hide-cg
+
+# why_walk
+
+@kasumi 最初は、あんたが死に急いでるように見えたから。今は——あたしが、隣を歩きたいから。
+
+@kasumi あんたが鹿の道を歩けるようになっても、それは変わらない。
+
+:goto after_answer
+
+# hunter_blade
+
+@kasumi 逃げ道に、自分以外の足跡が残った時。その人を逃がすために、猟師は刀を持つ。
+
+@kasumi 今のあたしなら、あんたの足跡が残った時。
+
+:goto after_answer
+
+# learn_path
 
 @kasumi あんたが鹿の道を歩けるようになったら、私の役目は終わる。
 
 @kasumi それまでは——隣にいる。
+
+# after_answer
 
 :hide-cg
 

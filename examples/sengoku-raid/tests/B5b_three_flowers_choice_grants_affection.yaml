@@ -52,6 +52,9 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
 assertions:
   - kind: output
     type: choice
