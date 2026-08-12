@@ -1,0 +1,59 @@
+name: companion counter forecast exposes player and companion damage split
+description: |
+  Counter damage is not all paid by the player while a companion can
+  intercept it. The structured forecast must expose the same ceil-half split
+  and current companion-HP cap used by tryCompanionAbsorb.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_under_eaves
+    weapons:
+      ancestor_yaodao: { power: 8 }
+    characters:
+      player:
+        stats: { hp: 26, mental: 8, spectral: 2, intellect: 0 }
+        custom: {}
+      kagari:
+        stats: { affection: 7 }
+        custom: {}
+  sengoku-raid:
+    metCharacters: [kagari]
+    companion: kagari
+    companionHp: 5
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 3
+      pendingLoot: { ryo: 8, oni_horn: 1 }
+      visited:
+        sumida_river_under_eaves:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 12
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: { oni_horn: 1 }
+inputs: []
+assertions:
+  - kind: activity
+    id: attack
+    forecastMetric: counter_damage
+    metricMin: 4
+    metricMax: 8
+  - kind: activity
+    id: attack
+    forecastMetric: player_counter_damage
+    metricMin: 2
+    metricMax: 4
+  - kind: activity
+    id: attack
+    forecastMetric: companion_counter_damage
+    metricMin: 2
+    metricMax: 4
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: player_counter_damage
+    metricMin: 2
+    metricMax: 4

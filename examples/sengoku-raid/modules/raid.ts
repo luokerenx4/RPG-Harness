@@ -831,7 +831,7 @@ function buildRaidMenu(ctx: Ctx): Output {
     const normalDamage = normalAttackDamageRange(ctx);
     const criticalDamage = criticalAttackDamageRange(ctx);
     const sneakDamage = sneakAttackDamageRange(ctx);
-    const counterDamage = counterAttackDamageRange(
+    const counterDamage = counterAttackDamageForecast(
       ctx,
       inst.encounter.enemyId,
     );
@@ -852,7 +852,9 @@ function buildRaidMenu(ctx: Ctx): Output {
       cost: 0,
       available: true,
       forecast: {
-        summary: "敵が生き残れば反撃を受ける",
+        summary: counterDamage.companion
+          ? "敵が生き残れば反撃。同行者が一部を引き受ける"
+          : "敵が生き残れば反撃を受ける",
         metrics: [
           {
             id: "damage",
@@ -877,11 +879,29 @@ function buildRaidMenu(ctx: Ctx): Output {
           },
           {
             id: "counter_damage",
-            label: "生存時反撃",
-            ...counterDamage,
+            label: "生存時反撃（合計）",
+            ...counterDamage.total,
             unit: "HP",
             polarity: "risk",
           },
+          ...(counterDamage.companion
+            ? [
+                {
+                  id: "player_counter_damage",
+                  label: "プレイヤー承傷",
+                  ...counterDamage.player,
+                  unit: "HP",
+                  polarity: "risk" as const,
+                },
+                {
+                  id: "companion_counter_damage",
+                  label: `${counterDamage.companionName}承傷`,
+                  ...counterDamage.companion,
+                  unit: "HP",
+                  polarity: "risk" as const,
+                },
+              ]
+            : []),
         ],
       },
     });
@@ -895,7 +915,9 @@ function buildRaidMenu(ctx: Ctx): Output {
       cost: 0,
       available: true,
       forecast: {
-        summary: "失敗時はダメージを与えず反撃を受ける",
+        summary: counterDamage.companion
+          ? "失敗時は反撃。同行者が一部を引き受ける"
+          : "失敗時はダメージを与えず反撃を受ける",
         metrics: [
           {
             id: "success_chance",
@@ -913,11 +935,29 @@ function buildRaidMenu(ctx: Ctx): Output {
           },
           {
             id: "failure_counter_damage",
-            label: "失敗時反撃",
-            ...counterDamage,
+            label: "失敗時反撃（合計）",
+            ...counterDamage.total,
             unit: "HP",
             polarity: "risk",
           },
+          ...(counterDamage.companion
+            ? [
+                {
+                  id: "player_counter_damage",
+                  label: "プレイヤー承傷",
+                  ...counterDamage.player,
+                  unit: "HP",
+                  polarity: "risk" as const,
+                },
+                {
+                  id: "companion_counter_damage",
+                  label: `${counterDamage.companionName}承傷`,
+                  ...counterDamage.companion,
+                  unit: "HP",
+                  polarity: "risk" as const,
+                },
+              ]
+            : []),
         ],
       },
     });
@@ -1195,6 +1235,33 @@ function counterAttackDamageRange(ctx: Ctx, enemyId: string): NumericRange {
       1,
       spectral > 0 ? Math.floor(Math.max(1, ordinary.max) * 1.6) : ordinary.max,
     ),
+  };
+}
+
+function counterAttackDamageForecast(ctx: Ctx, enemyId: string): {
+  total: NumericRange;
+  player: NumericRange;
+  companion?: NumericRange;
+  companionName?: string;
+} {
+  const total = counterAttackDamageRange(ctx, enemyId);
+  const m = moduleState(ctx);
+  if (!m.companion || m.companionHp <= 0 || !m.raid) {
+    return { total, player: total };
+  }
+  const split = (raw: number) => {
+    const companion = Math.min(m.companionHp, Math.ceil(raw / 2));
+    return { player: raw - companion, companion };
+  };
+  const atMin = split(total.min);
+  const atMax = split(total.max);
+  return {
+    total,
+    player: { min: atMin.player, max: atMax.player },
+    companion: { min: atMin.companion, max: atMax.companion },
+    companionName:
+      ctx.game.characters.find((character) => character.id === m.companion)
+        ?.name ?? m.companion,
   };
 }
 
