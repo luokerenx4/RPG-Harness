@@ -959,12 +959,17 @@ export interface Module {
     options: RenderedChoice[],
   ): RenderedChoice[] | void;
 
-  /** observer: fires after the player's choose input is processed. */
+  /**
+   * observer: fires after the player's choose input is processed.
+   * Persisted consequences should use resolution.optionId when present;
+   * choiceIdx only identifies the option's position in this presentation.
+   */
   onChoiceResolved?(
     ctx: PresetContext,
     scriptId: string,
     beatIdx: number,
     choiceIdx: number,
+    resolution: ChoiceResolution,
   ): void;
 
   /** observer: fires when runScript jumps into a label. */
@@ -1121,6 +1126,17 @@ export interface RenderedChoice {
     effects?: StateDelta;
     goto?: string;
   };
+}
+
+// Stable semantic identity for an accepted choice input. `choiceIdx` remains
+// on the hook for legacy modules and presentation-local bookkeeping, while
+// modules that persist narrative consequences should key off these ids so an
+// author can reorder options without silently changing remembered intent.
+export interface ChoiceResolution {
+  choiceId?: string;
+  optionId?: string;
+  prompt: string | null;
+  optionText: string;
 }
 
 export interface HubActivity {

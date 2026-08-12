@@ -192,7 +192,7 @@ interface Module {
   onScriptComplete?(ctx, scriptId): void;
   onBeatEnter?(ctx, beat): BeatOverride | void;
   onChoicePresented?(ctx, choices): Choice[] | void;
-  onChoiceSelected?(ctx, choice): void;
+  onChoiceResolved?(ctx, scriptId, beatIdx, choiceIdx, resolution): void;
   onActionDispatch?(ctx, action): "cancel" | void;
   onActionComplete?(ctx, action, result): void;
   onStateMutated?(ctx, delta, source): void;
@@ -204,6 +204,12 @@ interface Module {
   onLoad?(ctx, snapshot): void;
 }
 ```
+
+`onChoiceResolved` keeps `choiceIdx` for presentation-local and legacy module
+logic, but `resolution.choiceId` / `resolution.optionId` are the durable
+semantic keys. Any module that writes narrative memory or another persisted
+consequence must prefer the stable ids: option order is authoring presentation
+and may change during live AI edits without changing the player's intent.
 
 ### Compose strategies
 

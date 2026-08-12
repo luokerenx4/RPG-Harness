@@ -140,8 +140,8 @@ export function trackerModule(id = "tracker"): {
     onBeatAfter: (_ctx, scriptId, beatIdx, beat) => {
       push({ hook: "onBeatAfter", scriptId, beatIdx, beatType: beat.type });
     },
-    onChoiceResolved: (_ctx, scriptId, beatIdx, choiceIdx) => {
-      push({ hook: "onChoiceResolved", scriptId, beatIdx, choiceIdx });
+    onChoiceResolved: (_ctx, scriptId, beatIdx, choiceIdx, resolution) => {
+      push({ hook: "onChoiceResolved", scriptId, beatIdx, choiceIdx, resolution });
     },
     onLabelEnter: (_ctx, scriptId, labelName) => {
       push({ hook: "onLabelEnter", scriptId, labelName });
@@ -171,6 +171,7 @@ export type HookEvent =
       scriptId: string;
       beatIdx: number;
       choiceIdx: number;
+      resolution: import("../types").ChoiceResolution;
     }
   | { hook: "onLabelEnter"; scriptId: string; labelName: string }
   | { hook: "onNarrationDrain"; text: string }

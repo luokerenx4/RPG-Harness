@@ -2,6 +2,7 @@ import type {
   Action,
   ActionResult,
   Beat,
+  ChoiceResolution,
   EndConditionSpec,
   Output,
   PresetContext,
@@ -68,9 +69,10 @@ export function fireOnChoiceResolved(
   scriptId: string,
   beatIdx: number,
   choiceIdx: number,
+  resolution: ChoiceResolution,
 ): void {
   for (const mod of ctx.modules) {
-    mod.onChoiceResolved?.(ctx, scriptId, beatIdx, choiceIdx);
+    mod.onChoiceResolved?.(ctx, scriptId, beatIdx, choiceIdx, resolution);
   }
 }
 

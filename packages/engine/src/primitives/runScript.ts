@@ -196,7 +196,12 @@ export async function* runScript(
             optionText: chosen.text,
           },
         };
-        fireOnChoiceResolved(ctx, script.id, beatIdx, input.index);
+        fireOnChoiceResolved(ctx, script.id, beatIdx, input.index, {
+          ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
+          ...(chosen.id !== undefined ? { optionId: chosen.id } : {}),
+          prompt: beat.prompt ?? null,
+          optionText: chosen.text,
+        });
         if (chosen.effects) mutateState(ctx, chosen.effects, "choice");
         if (chosen.goto !== undefined) {
           if (chosen.goto === END_LABEL) {

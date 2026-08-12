@@ -25,6 +25,48 @@ async function drive<I, O>(
 }
 
 describe("runScript — narration / dialogue input protocol", () => {
+  test("choice resolution exposes stable ids alongside the legacy index", async () => {
+    const seen: unknown[] = [];
+    const game = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "trust-test",
+          prompt: "Whom do you trust?",
+          options: [
+            { id: "stranger", text: "The stranger", goto: "done" },
+            { id: "friend", text: "The friend", goto: "done" },
+          ],
+        },
+        { type: "label", name: "done" },
+        { type: "endScript" },
+      ] })],
+    });
+    const ctx = makeCtx(game);
+    ctx.modules.push({
+      id: "resolution-observer",
+      onChoiceResolved: (_ctx, scriptId, beatIdx, choiceIdx, resolution) => {
+        seen.push({ scriptId, beatIdx, choiceIdx, resolution });
+      },
+    });
+    ctx.state.baseline.currentScriptId = "s1";
+    const run = runScript(ctx, game.scripts[0]!);
+    await run.next();
+    await run.next({ type: "choose", index: 1 });
+
+    expect(seen).toEqual([{
+      scriptId: "s1",
+      beatIdx: 0,
+      choiceIdx: 1,
+      resolution: {
+        choiceId: "trust-test",
+        optionId: "friend",
+        prompt: "Whom do you trust?",
+        optionText: "The friend",
+      },
+    }]);
+  });
+
   test("silent goto converges a branch without yielding a fake choice", async () => {
     const beats: Beat[] = [
       { type: "narration", text: "branch reply" },
