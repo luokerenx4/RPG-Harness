@@ -941,6 +941,106 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.scriptCursor?.choiceId).toBe("stable-choice");
   });
 
+  test("resumes an unresolved legacy choice when stable response branches are authored", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          prompt: "How do you sleep?",
+          options: [
+            { text: "Avoid dreams", effects: { variables: { trust: 1 } } },
+            { text: "Do not sleep", effects: { variables: { trust: 2 } } },
+          ],
+        },
+        { type: "dialogue", speaker: "a", text: "old shared response" },
+        { type: "endScript" },
+      ] })],
+      characters: [makeCharacter("a")],
+      variables: [{ id: "trust", type: "number", initial: 0 }],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    expect((await runScript(oldCtx, oldGame.scripts[0]!).next()).value).toMatchObject({
+      type: "choice",
+      prompt: "How do you sleep?",
+    });
+
+    const editedGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "sleep",
+          prompt: "How do you sleep?",
+          options: [
+            {
+              id: "dreamless",
+              text: "Avoid dreams",
+              effects: { variables: { trust: 1 } },
+              goto: "dreamless",
+            },
+            {
+              id: "awake",
+              text: "Do not sleep",
+              effects: { variables: { trust: 2 } },
+              goto: "awake",
+            },
+          ],
+        },
+        { type: "label", name: "dreamless" },
+        { type: "dialogue", speaker: "a", text: "Then dream less." },
+        { type: "endScript" },
+        { type: "label", name: "awake" },
+        { type: "dialogue", speaker: "a", text: "Then sleep tonight." },
+        { type: "endScript" },
+      ] })],
+      characters: [makeCharacter("a")],
+      variables: [{ id: "trust", type: "number", initial: 0 }],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(editedCtx, editedGame.scripts[0]!).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "choice",
+      choiceId: "sleep",
+      options: [{ id: "dreamless" }, { id: "awake" }],
+    });
+    expect(editedCtx.state.baseline.scriptCursor?.choiceId).toBe("sleep");
+  });
+
+  test("rejects legacy branch authoring when an unresolved option effect also changes", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [{
+        type: "choice",
+        prompt: "Choose",
+        options: [
+          { text: "Alpha", effects: { variables: { trust: 1 } } },
+          { text: "Beta" },
+        ],
+      }, { type: "endScript" }] })],
+      variables: [{ id: "trust", type: "number", initial: 0 }],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    await runScript(oldCtx, oldGame.scripts[0]!).next();
+
+    const editedGame = makeGame({
+      scripts: [makeScript("s1", { beats: [{
+        type: "choice",
+        id: "stable",
+        prompt: "Choose",
+        options: [
+          { id: "alpha", text: "Alpha", effects: { variables: { trust: 9 } }, goto: "done" },
+          { id: "beta", text: "Beta", goto: "done" },
+        ],
+      }, { type: "label", name: "done" }, { type: "endScript" }] })],
+      variables: [{ id: "trust", type: "number", initial: 0 }],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    expect(runScript(editedCtx, editedGame.scripts[0]!).next()).rejects.toThrow(
+      "script migration required",
+    );
+  });
+
   test("rejects same-type prose replacement when adjacent structure also changed", async () => {
     const oldGame = makeGame({
       scripts: [makeScript("s1", { beats: [

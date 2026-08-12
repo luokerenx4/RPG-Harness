@@ -605,6 +605,44 @@ function reconcileScriptCursor(
     return;
   }
 
+  // A legacy save may be paused on an unresolved choice just as an author
+  // gives that choice stable ids and splits its formerly shared continuation
+  // into per-option branches. No player intent exists yet, so following the
+  // newly authored target after the future choose input is safe — but only if
+  // prompt, option order/copy, conditions, effects and AI priority are still
+  // identical. Existing branch targets are deliberately excluded: changing a
+  // legacy choice that was already branched remains too ambiguous without ids.
+  const forwardBranchChoiceAnchor =
+    forwardBranchChoiceAnchorFromSerialized(cursor.beatAnchor);
+  const forwardBranchedLegacyIndexes = forwardBranchChoiceAnchor === undefined
+    ? []
+    : script.beats.flatMap((beat, index) =>
+        forwardBranchChoiceAnchorForBeat(beat) === forwardBranchChoiceAnchor
+          ? [index]
+          : []
+      );
+  if (forwardBranchedLegacyIndexes.length === 1) {
+    const target = forwardBranchedLegacyIndexes[0]!;
+    const beat = script.beats[target]!;
+    baseline.beatIndex = target;
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+    } else {
+      replayVisualSetupBefore(ctx, script, target);
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      ...(beat.type === "choice" && beat.id !== undefined
+        ? { choiceId: beat.id }
+        : {}),
+      beatAnchor: anchorBeat(beat),
+      scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, target),
+    };
+    return;
+  }
+
   if (
     isSafeInPlaceContentEdit(cursor, current) &&
     cursor.scriptBeatCount === script.beats.length &&
@@ -704,6 +742,45 @@ function legacyChoiceAnchorForBeat(beat: Beat): string | undefined {
     options: options.map(({
       id: _optionId,
       lockedHint: _lockedHint,
+      ...option
+    }) => option),
+  });
+}
+
+function forwardBranchChoiceAnchorFromSerialized(
+  serialized: string,
+): string | undefined {
+  try {
+    const beat = JSON.parse(serialized) as Beat;
+    if (
+      beat?.type !== "choice" ||
+      beat.id !== undefined ||
+      beat.options.some((option) => option.goto !== undefined)
+    ) return undefined;
+    return normalizedForwardBranchChoiceAnchor(beat);
+  } catch {
+    return undefined;
+  }
+}
+
+function forwardBranchChoiceAnchorForBeat(beat: Beat): string | undefined {
+  if (
+    beat.type !== "choice" ||
+    beat.id === undefined ||
+    beat.options.some((option) => option.id === undefined || option.goto === undefined)
+  ) return undefined;
+  return normalizedForwardBranchChoiceAnchor(beat);
+}
+
+function normalizedForwardBranchChoiceAnchor(beat: Beat): string | undefined {
+  if (beat.type !== "choice") return undefined;
+  const { id: _choiceId, options, ...choice } = beat;
+  return JSON.stringify({
+    ...choice,
+    options: options.map(({
+      id: _optionId,
+      lockedHint: _lockedHint,
+      goto: _goto,
       ...option
     }) => option),
   });
