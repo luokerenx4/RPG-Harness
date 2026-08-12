@@ -249,8 +249,16 @@ function StageView({
       );
     case "hubMenu": {
       const hubView = buildHubView(stage.snapshot);
+      const opportunityByCategory = new Map(
+        hubView.opportunityGroups.map((group) => [group.category, group]),
+      );
       return (
         <div className="hub-panel">
+          {hubView.strategyDecisionRequired && (
+            <div className="hub-strategy">
+              STRATEGY · {hubView.opportunityGroups.length} PATHS AVAILABLE
+            </div>
+          )}
           {(stage.snapshot.resourceGroups ?? []).map((group) => (
             <section className="resource-group" key={group.id}>
               <div className="resource-group-title">{group.title}</div>
@@ -271,8 +279,7 @@ function StageView({
               <div className="activity-section-head">
                 <span>{section.label}</span>
                 <span>
-                  {hubView.decisionRequired &&
-                    section.category === hubView.focusCategory &&
+                  {opportunityByCategory.get(section.category)?.decisionRequired &&
                     "CHOICE · "}
                   {section.availableCount}/{section.activities.length}
                 </span>

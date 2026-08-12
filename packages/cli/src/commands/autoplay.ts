@@ -132,6 +132,9 @@ function formatOutput(o: Output): string | null {
     case "hubMenu": {
       const s = o.snapshot;
       const view = buildHubView(s);
+      const opportunityByCategory = new Map(
+        view.opportunityGroups.map((group) => [group.category, group]),
+      );
       const calendar = formatHubCalendar(s);
       const stats = s.stats.map((st) => `${st.name}:${st.value}`).join(" ");
       const resources = (s.resourceGroups ?? [])
@@ -159,7 +162,7 @@ function formatOutput(o: Output): string | null {
           return `    [${section.category} ${section.availableCount}/${
             section.activities.length
           }${
-            view.decisionRequired && section.category === view.focusCategory
+            opportunityByCategory.get(section.category)?.decisionRequired
               ? " choice"
               : ""
           }] ${acts}`;
@@ -167,6 +170,10 @@ function formatOutput(o: Output): string | null {
         .join("\n");
       return `  ${calendar ? `[${calendar}]  ` : ""}${stats}${
         resources ? `\n${resources}` : ""
+      }${
+        view.strategyDecisionRequired
+          ? `\n  [strategy ${view.opportunityGroups.length} paths]`
+          : ""
       }\n${sections}`;
     }
     case "gameEnd":

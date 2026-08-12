@@ -6,19 +6,35 @@ import type {
 import { buildHubView } from "@rpg-harness/frontend-core";
 import { joinVisualState, type JoinedVisualState } from "./visualSummary";
 
+interface HeadlessActivityCandidate {
+  activityId: string;
+  input: { type: "doActivity"; id: string };
+  title: string;
+  description?: string;
+  forecast?: ActivityForecast;
+}
+
 export interface HeadlessHubView {
   heuristic: true;
   selectionRule: "authored_recommendation_or_only_candidate";
   focusCategory: string | null;
+  strategyDecisionRequired: boolean;
+  candidateScope: "authored_recommendations" | "focus_section";
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
-  candidates: Array<{
-    activityId: string;
-    input: { type: "doActivity"; id: string };
-    title: string;
-    description?: string;
-    forecast?: ActivityForecast;
+  candidates: HeadlessActivityCandidate[];
+  opportunityGroups: Array<{
+    category: string;
+    label: string;
+    decisionRequired: boolean;
+    candidates: HeadlessActivityCandidate[];
+    primaryActivityId: string | null;
+    primaryInput: { type: "doActivity"; id: string } | null;
+    primaryReason:
+      | "authored_recommendation"
+      | "only_available_in_opportunity_group"
+      | null;
   }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
@@ -76,26 +92,21 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
     heuristic: true,
     selectionRule: view.selectionRule,
     focusCategory: view.focusCategory,
+    strategyDecisionRequired: view.strategyDecisionRequired,
+    candidateScope: view.candidateScope,
     decisionRequired: view.decisionRequired,
     candidateActivityIds: view.candidateActivityIds,
     candidateInputs: view.candidateInputs,
-    candidates: view.candidateActivityIds.flatMap((activityId) => {
-      const activity = activityById.get(activityId);
-      if (!activity) return [];
-      return [
-        {
-          activityId,
-          input: { type: "doActivity" as const, id: activityId },
-          title: activity.title,
-          ...(activity.description !== undefined
-            ? { description: activity.description }
-            : {}),
-          ...(activity.forecast !== undefined
-            ? { forecast: activity.forecast }
-            : {}),
-        },
-      ];
-    }),
+    candidates: summarizeCandidates(view.candidateActivityIds, activityById),
+    opportunityGroups: view.opportunityGroups.map((group) => ({
+      category: group.category,
+      label: group.label,
+      decisionRequired: group.decisionRequired,
+      candidates: summarizeCandidates(group.candidateActivityIds, activityById),
+      primaryActivityId: group.primaryActivityId,
+      primaryInput: group.primaryInput,
+      primaryReason: group.primaryReason,
+    })),
     primaryActivityId: view.primaryActivityId,
     primaryInput: view.primaryInput,
     primaryReason: view.primaryReason,
@@ -111,4 +122,30 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
         .map(({ activity }) => activity.id),
     })),
   };
+}
+
+function summarizeCandidates(
+  activityIds: string[],
+  activityById: Map<
+    string,
+    Extract<Output, { type: "hubMenu" }>["snapshot"]["activities"][number]
+  >,
+): HeadlessActivityCandidate[] {
+  return activityIds.flatMap((activityId) => {
+    const activity = activityById.get(activityId);
+    if (!activity) return [];
+    return [
+      {
+        activityId,
+        input: { type: "doActivity" as const, id: activityId },
+        title: activity.title,
+        ...(activity.description !== undefined
+          ? { description: activity.description }
+          : {}),
+        ...(activity.forecast !== undefined
+          ? { forecast: activity.forecast }
+          : {}),
+      },
+    ];
+  });
 }

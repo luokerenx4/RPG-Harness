@@ -22,6 +22,9 @@ const BAR_WIDTH = 20;
 export function HubMenu({ snapshot, cursor }: HubMenuProps) {
   const calendar = formatHubCalendar(snapshot);
   const hubView = buildHubView(snapshot);
+  const opportunityByCategory = new Map(
+    hubView.opportunityGroups.map((group) => [group.category, group]),
+  );
   return (
     <Box flexDirection="column">
       {calendar ? (
@@ -62,6 +65,11 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
 
       <Box flexDirection="column" marginTop={1}>
         <Text bold>这一段时间你要做什么？</Text>
+        {hubView.strategyDecisionRequired ? (
+          <Text bold color="magenta">
+            STRATEGY · {hubView.opportunityGroups.length} PATHS AVAILABLE
+          </Text>
+        ) : null}
         <Box flexDirection="column" marginTop={1}>
           {snapshot.activities.length === 0 ? (
             <Text dimColor>（没有可用活动 — 时间会自动推进）</Text>
@@ -70,8 +78,7 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
               <Box key={section.category} flexDirection="column" marginBottom={1}>
                 <Text bold color={section.availableCount > 0 ? "yellow" : "gray"}>
                   {section.label} · {section.availableCount}/{section.activities.length}
-                  {hubView.decisionRequired &&
-                  section.category === hubView.focusCategory
+                  {opportunityByCategory.get(section.category)?.decisionRequired
                     ? " · CHOICE"
                     : ""}
                 </Text>

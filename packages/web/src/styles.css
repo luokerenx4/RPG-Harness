@@ -259,6 +259,17 @@ body {
 .activity-section + .activity-section {
   margin-top: 18px;
 }
+.hub-strategy {
+  margin-bottom: 16px;
+  padding: 9px 12px;
+  border: 1px solid #67562c;
+  border-radius: 8px;
+  background: #211e15;
+  color: #e5ca7a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
 .resource-group {
   margin-bottom: 18px;
   padding: 12px 14px;

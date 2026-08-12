@@ -35,12 +35,33 @@ export interface HubSectionView {
   recommendedCount: number;
 }
 
+export interface HubOpportunityGroupView {
+  category: string;
+  label: string;
+  activities: HubActivityView[];
+  decisionRequired: boolean;
+  candidateActivityIds: string[];
+  candidateInputs: Array<{ type: "doActivity"; id: string }>;
+  primaryActivityId: string | null;
+  primaryInput: { type: "doActivity"; id: string } | null;
+  primaryReason:
+    | "authored_recommendation"
+    | "only_available_in_opportunity_group"
+    | null;
+}
+
 export interface HubView {
   sections: HubSectionView[];
   // Flattened presentation order. ScreenModel installs this order so keyboard
   // cursor movement and visible rows never disagree.
   activities: HubActivity[];
   focusCategory: string | null;
+  // True when actionable categories compete for the next move. This is a
+  // strategic decision; decisionRequired below describes only the narrowed
+  // candidate set selected by candidateScope.
+  strategyDecisionRequired: boolean;
+  opportunityGroups: HubOpportunityGroupView[];
+  candidateScope: "authored_recommendations" | "focus_section";
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
@@ -154,12 +175,21 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     focusSection?.activities
       .map(({ activity }) => activity)
       .filter((activity) => activity.available) ?? [];
+  const actionableSectionCount = sections.filter(
+    (section) => section.availableCount > 0,
+  ).length;
   const candidates =
     availableRecommended.length > 0 ? availableRecommended : focusCandidates;
+  const candidateScope =
+    availableRecommended.length > 0
+      ? "authored_recommendations"
+      : "focus_section";
   const primary =
     availableRecommended.length === 1
       ? availableRecommended[0]!
-      : availableRecommended.length === 0 && focusCandidates.length === 1
+      : availableRecommended.length === 0 &&
+          actionableSectionCount === 1 &&
+          focusCandidates.length === 1
         ? focusCandidates[0]!
         : null;
   const primaryReason = primary
@@ -167,10 +197,60 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
       ? "authored_recommendation"
       : "only_available_in_focus_section"
     : null;
+  const opportunityGroups = sections.flatMap((section) => {
+    const available = section.activities.filter(
+      ({ activity }) => activity.available,
+    );
+    if (available.length === 0) return [];
+    const recommended = available.filter(
+      ({ activity }) => activity.recommended === true,
+    );
+    const groupCandidates = recommended.length > 0 ? recommended : available;
+    const groupPrimary =
+      recommended.length === 1
+        ? recommended[0]!.activity
+        : recommended.length === 0 && available.length === 1
+          ? available[0]!.activity
+          : null;
+    return [
+      {
+        category: section.category,
+        label: section.label,
+        activities: available,
+        decisionRequired: groupPrimary === null && groupCandidates.length > 1,
+        candidateActivityIds: groupCandidates.map(({ activity }) => activity.id),
+        candidateInputs: groupCandidates.map(({ activity }) => ({
+          type: "doActivity" as const,
+          id: activity.id,
+        })),
+        primaryActivityId: groupPrimary?.id ?? null,
+        primaryInput: groupPrimary
+          ? { type: "doActivity" as const, id: groupPrimary.id }
+          : null,
+        primaryReason: groupPrimary
+          ? groupPrimary.recommended === true
+            ? ("authored_recommendation" as const)
+            : ("only_available_in_opportunity_group" as const)
+          : null,
+      },
+    ];
+  });
+  const strategicActivities =
+    availableRecommended.length > 0
+      ? availableRecommended
+      : opportunityGroups.flatMap((group) =>
+          group.activities.map(({ activity }) => activity),
+        );
+  const strategicCategories = new Set(
+    strategicActivities.map((activity) => normalizeCategory(activity.category)),
+  );
   return {
     sections,
     activities,
     focusCategory: focusSection?.category ?? null,
+    strategyDecisionRequired: strategicCategories.size > 1,
+    opportunityGroups,
+    candidateScope,
     decisionRequired: primary === null && candidates.length > 1,
     candidateActivityIds: candidates.map((activity) => activity.id),
     candidateInputs: candidates.map((activity) => ({

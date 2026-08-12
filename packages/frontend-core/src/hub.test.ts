@@ -64,9 +64,18 @@ describe("buildHubView", () => {
       "buy",
       "upgrade",
     ]);
-    expect(view.primaryActivityId).toBe("intel");
-    expect(view.primaryInput).toEqual({ type: "doActivity", id: "intel" });
+    expect(view.primaryActivityId).toBeNull();
+    expect(view.primaryInput).toBeNull();
     expect(view.sections[2]).toMatchObject({ availableCount: 1, lockedCount: 1 });
+    expect(view).toMatchObject({
+      strategyDecisionRequired: true,
+      candidateScope: "focus_section",
+    });
+    expect(view.opportunityGroups.map((group) => group.category)).toEqual([
+      "story",
+      "raid",
+      "shop",
+    ]);
   });
 
   test("moves fully locked sections behind actionable sections", () => {
@@ -120,6 +129,8 @@ describe("buildHubView", () => {
       }),
     );
     expect(view).toMatchObject({
+      strategyDecisionRequired: false,
+      candidateScope: "authored_recommendations",
       decisionRequired: false,
       candidateActivityIds: ["continue"],
       primaryActivityId: "continue",
@@ -129,6 +140,47 @@ describe("buildHubView", () => {
     expect(view.activities.map((item) => item.id)).toEqual([
       "continue",
       "extract",
+    ]);
+  });
+
+  test("exposes every actionable category as a self-contained opportunity group", () => {
+    const view = buildHubView(
+      snapshot({
+        activities: [
+          activity("depart-one", "raid", true),
+          activity("depart-two", "raid", true),
+          activity("bond", "social", true),
+          activity("intel", "shop", true),
+          activity("upgrade", "shop", false),
+        ],
+      }),
+    );
+
+    expect(view).toMatchObject({
+      focusCategory: "raid",
+      strategyDecisionRequired: true,
+      candidateScope: "focus_section",
+      candidateActivityIds: ["depart-one", "depart-two"],
+    });
+    expect(view.opportunityGroups).toMatchObject([
+      {
+        category: "raid",
+        decisionRequired: true,
+        candidateActivityIds: ["depart-one", "depart-two"],
+        primaryInput: null,
+      },
+      {
+        category: "social",
+        decisionRequired: false,
+        candidateInputs: [{ type: "doActivity", id: "bond" }],
+        primaryInput: { type: "doActivity", id: "bond" },
+      },
+      {
+        category: "shop",
+        decisionRequired: false,
+        candidateActivityIds: ["intel"],
+        primaryReason: "only_available_in_opportunity_group",
+      },
     ]);
   });
 
