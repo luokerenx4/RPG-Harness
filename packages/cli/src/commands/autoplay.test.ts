@@ -40,6 +40,24 @@ describe("autoplay ending summary", () => {
 });
 
 describe("autoplay autonomous development lane", () => {
+  test("files structured cycle evidence when a persona stalls", async () => {
+    const gameDir = await temporaryToggleGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 100,
+      session: "ai-stalled",
+      reportOnStop: true,
+    });
+
+    expect(summary.reason).toBe("stalled");
+    expect(summary.decisions).toBeLessThan(100);
+    expect(summary.stall).toMatchObject({ cycleLength: 2, repetitions: 3 });
+    expect(summary.report?.evidence.stall).toEqual(summary.stall);
+    expect(summary.report?.details).toContain("exact 2-output cycle");
+  });
+
   test("forks a player save before moving and reports a checkpointed stop", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
@@ -175,6 +193,29 @@ async function temporaryGame(): Promise<string> {
     ].join("\n"),
     "utf-8",
   );
+  return dir;
+}
+
+async function temporaryToggleGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-stall-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay stall test",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    "  while (true) {",
+    '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true }] } };',
+    '    yield { type: "narration", text: "Nothing changes." };',
+    "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
   return dir;
 }
 

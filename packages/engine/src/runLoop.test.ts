@@ -113,3 +113,86 @@ describe("runLoop input diagnostics", () => {
     expect(result.reason).toBe("completed");
   });
 });
+
+describe("runLoop stall diagnostics", () => {
+  test("stops on the shortest exact state/output cycle when explicitly enabled", async () => {
+    const game: Game = {
+      ...terminalGame,
+      runFn: async function* () {
+        while (true) {
+          yield { type: "hubMenu" as const, snapshot: {
+            day: 1,
+            maxDay: 1,
+            slot: 0,
+            slotName: "day",
+            slotsPerDay: 1,
+            stats: [],
+            affections: [],
+            activities: [{ id: "toggle", kind: "action" as const, title: "Toggle", cost: 0, available: true }],
+          } };
+          yield { type: "narration" as const, text: "Nothing changes." };
+        }
+      },
+    };
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async (output) => output.type === "hubMenu"
+        ? { type: "doActivity", id: "toggle" }
+        : { type: "next" },
+      { maxSteps: 100, stallDetection: { repetitions: 3, maxCycleLength: 5 } },
+    );
+
+    expect(result.reason).toBe("stalled");
+    expect(result.trace).toHaveLength(6);
+    expect(result.stall).toEqual({
+      cycleLength: 2,
+      repetitions: 3,
+      firstTraceIndex: 0,
+      lastTraceIndex: 5,
+      cycle: [
+        { traceIndex: 4, input: { type: "next" }, output: "hub available=[toggle]" },
+        { traceIndex: 5, input: { type: "doActivity", id: "toggle" }, output: "narration: Nothing changes." },
+      ],
+    });
+  });
+
+  test("does not detect cycles unless the caller opts in", async () => {
+    const game: Game = {
+      ...terminalGame,
+      runFn: async function* () {
+        while (true) yield { type: "narration" as const, text: "Again" };
+      },
+    };
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async () => ({ type: "next" }),
+      { maxSteps: 4 },
+    );
+    expect(result.reason).toBe("max-steps");
+    expect(result.stall).toBeUndefined();
+  });
+
+  test("does not call repeated public prose a stall while engine state progresses", async () => {
+    const game: Game = {
+      ...terminalGame,
+      runFn: async function* (ctx) {
+        while (true) {
+          ctx.state.baseline.characters.player!.stats.progress =
+            (ctx.state.baseline.characters.player!.stats.progress ?? 0) + 1;
+          yield { type: "narration" as const, text: "Grinding..." };
+        }
+      },
+    };
+    game.characters = [{ id: "player", name: "Player", stats: { progress: { initial: 0 } } }];
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async () => ({ type: "next" }),
+      { maxSteps: 8, stallDetection: { repetitions: 3, maxCycleLength: 4 } },
+    );
+    expect(result.reason).toBe("max-steps");
+    expect(result.finalState.baseline.characters.player?.stats.progress).toBe(9);
+  });
+});

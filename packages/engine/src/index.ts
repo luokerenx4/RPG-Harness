@@ -42,6 +42,8 @@ export type {
   TraceEntry,
   LoopReason,
   LoopResult,
+  StallCycleStep,
+  StallDiagnostic,
   InputSource,
   RunLoopOptions,
 } from "./runLoop";

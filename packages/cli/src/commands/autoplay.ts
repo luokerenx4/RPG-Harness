@@ -1,5 +1,10 @@
 import { emptyVisualState, runLoop } from "@rpg-harness/engine";
-import type { LoopReason, Output, VisualState } from "@rpg-harness/engine";
+import type {
+  LoopReason,
+  Output,
+  StallDiagnostic,
+  VisualState,
+} from "@rpg-harness/engine";
 import {
   buildHubView,
   formatActivityForecast,
@@ -56,6 +61,7 @@ export interface TargetChoiceResult extends TargetChoice {
 export interface AutoplaySummary {
   reason: LoopReason;
   error?: string;
+  stall?: StallDiagnostic;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -202,6 +208,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       : undefined;
     const result = await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,
+      stallDetection: { repetitions: 3, maxCycleLength: 20 },
       onStep: async (entry, state) => {
         if (args.session && entry.input) {
           await saveSession(args.gameDir, args.session, state);
@@ -270,6 +277,11 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       details: [
         `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
+        ...(result.stall
+          ? [
+              `Detected an exact ${result.stall.cycleLength}-output cycle repeated ${result.stall.repetitions} times across trace indexes ${result.stall.firstTraceIndex}–${result.stall.lastTraceIndex}: ${formatStallCycle(result.stall)}.`,
+            ]
+          : []),
         ...(result.error ? [`Engine error: ${result.error}`] : []),
         ...(fork
           ? [
@@ -278,6 +290,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
           : []),
         "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
       ].join(" "),
+      ...(result.stall ? { stall: result.stall } : {}),
     });
   }
 
@@ -288,6 +301,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   return {
     reason: result.reason,
     ...(result.error ? { error: result.error } : {}),
+    ...(result.stall ? { stall: result.stall } : {}),
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
@@ -311,6 +325,15 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
   };
+}
+
+function formatStallCycle(stall: StallDiagnostic): string {
+  return stall.cycle.map((step) => {
+    const input = step.input?.type === "doActivity"
+      ? `doActivity:${step.input.id}`
+      : step.input?.type ?? "initial";
+    return `${input} -> ${step.output}`;
+  }).join(" | ");
 }
 
 function countDecisions(trace: Array<{ input: unknown | null }>): number {

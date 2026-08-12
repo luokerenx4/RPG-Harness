@@ -98,6 +98,13 @@ Both modes go through the same engine, but they wrap it differently:
 
 `step` mode is why **ActionHandlers must resolve atomically** (see "Invariants" below) — if a handler yielded mid-resolution, the second call would create a fresh generator and lose the in-flight state.
 
+Autoplay opts into `runLoop`'s exact stall detector. It fingerprints the full
+composed engine state together with the public `Output` after each visible
+step, finds the shortest repeated suffix, and stops after three repetitions.
+The detector is caller-controlled and off for fixtures/ordinary `runLoop`
+consumers. A `stalled` result includes the cycle's inputs and compact outputs,
+which `--report-on-stop` persists as coding-issue evidence.
+
 ## Standard resources (the database)
 
 The engine owns six typed resource schemas. Each has: a `*Def` type, a directory the loader scans, a slot in `BaselineState`, optional `StateDelta` integration, optional `Condition` operators, and primitives for read/write.

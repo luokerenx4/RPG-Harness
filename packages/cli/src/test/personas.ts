@@ -121,6 +121,19 @@ export const personas: Record<string, Persona> = {
           bestScore = s;
         }
       }
+      // Preserve greed as the primary policy, but let the public objective
+      // break score ties. This avoids reversible zero-value toggles winning
+      // forever merely because they appear earlier in the Hub.
+      const objectiveInput = pickObjectiveActivity(output);
+      if (objectiveInput?.type === "doActivity") {
+        const objectiveActivity = available.find(
+          (activity) => activity.id === objectiveInput.id,
+        );
+        if (
+          objectiveActivity &&
+          activityScore(objectiveActivity.effectsHint) === bestScore
+        ) return objectiveInput;
+      }
       return { type: "doActivity", id: best.id };
     }
     if (output.type === "gameEnd") return null;

@@ -64,3 +64,45 @@ describe("hunter persona progress fallback", () => {
     ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
   });
 });
+
+describe("greedy persona progress tie-breaker", () => {
+  test("uses the public objective when zero-value activities tie", async () => {
+    const output = objectiveHub();
+    await expect(
+      personas.greedy!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
+  });
+
+  test("keeps a higher numeric reward ahead of the objective", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities[0]!.effectsHint = "affection+1";
+    await expect(
+      personas.greedy!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+});
+
+function objectiveHub(): Extract<Output, { type: "hubMenu" }> {
+  return {
+    type: "hubMenu",
+    snapshot: {
+      day: 1,
+      maxDay: 10,
+      slot: 0,
+      slotName: "day",
+      slotsPerDay: 2,
+      stats: [],
+      affections: [],
+      activities: [
+        { id: "invite:kagari", kind: "action", title: "Invite", cost: 0, available: true },
+        { id: "depart:kuro_swamp", kind: "action", title: "Depart", cost: 0, available: true },
+      ],
+      objectives: [{
+        id: "raid",
+        title: "Complete a raid",
+        status: "active",
+        relatedActivityIds: ["depart:kuro_swamp"],
+      }],
+    },
+  };
+}

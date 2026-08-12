@@ -442,12 +442,17 @@ personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/
 For an autonomous development lane, combine `--from-session`, `--session`, and
 `--report-on-stop`. The source GUI/player save is locked and checkpoint-forked
 before the first AI input; the target must not already exist. A normal game end
-returns the ending without filing noise. Any `quit`, `max-steps`, input
+returns the ending without filing noise. Any `quit`, detected `stalled` loop, `max-steps`, input
 exhaustion, or engine error freezes the AI branch's exact final state into the
 same structured playtest-report format used by `report`/`reproduce`, and the
 JSON response includes the branch's `webPath` plus report evidence for the next
 coding agent. `max-steps` is an exact AI-decision budget: the summary reports
 those decisions separately from visible `steps`, including the initial output.
+Autoplay also compares exact engine-state/public-output fingerprints and stops
+after three identical cycles (up to 20 visible outputs per cycle). Its summary
+and playtest report carry the shortest repeated input/output cycle as structured
+`stall` evidence, turning persona oscillation and gameplay deadlocks into a
+reproducible coding issue before the whole decision budget is burned.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
 `cover` is the execution half of that contract: it consumes an available branch

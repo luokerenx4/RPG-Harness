@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import type { ComposedState } from "@rpg-harness/engine";
+import type { ComposedState, StallDiagnostic } from "@rpg-harness/engine";
 import {
   appendCheckpointedSessionEvent,
   assertSessionName,
@@ -60,6 +60,7 @@ export interface PlaytestEvidence {
     cg: string | null;
   };
   checkpoint?: PlaytestCheckpointRef;
+  stall?: StallDiagnostic;
   captureErrors?: string[];
 }
 
@@ -87,6 +88,7 @@ export interface RecordPlaytestReportArgs {
   title: string;
   details?: string;
   target?: string;
+  stall?: StallDiagnostic;
 }
 
 export interface ResolvePlaytestReportArgs {
@@ -121,7 +123,10 @@ export async function recordPlaytestReport(
       title: args.title.trim(),
       ...(args.details?.trim() ? { details: args.details.trim() } : {}),
       ...(args.target?.trim() ? { target: args.target.trim() } : {}),
-      evidence: await captureEvidence(args.gameDir, args.session),
+      evidence: {
+        ...await captureEvidence(args.gameDir, args.session),
+        ...(args.stall ? { stall: args.stall } : {}),
+      },
     };
 
     const dir = sessionDir(args.gameDir, args.session);

@@ -179,6 +179,14 @@ form for another AI/code agent. Do not wait until the end and rely on memory.
 After a fix passes its replay/fixture and surface checks, close the loop with
 `rpgh resolve "$GAME" <report-id> --resolution "what changed and how it was verified"`.
 
+Persisted `autoplay --report-on-stop` runs may stop with `reason: "stalled"`.
+Read `stall.cycleLength`, `stall.repetitions`, and `stall.cycle` before changing
+content: they are an exact repeated engine-state/public-output cycle, including
+the responsible inputs. Reproduce from the report checkpoint, repair the
+persona, objective links, gameplay action, or engine contract that prevents
+progress, then rerun from a fresh branch and resolve the report. Do not merely
+raise `--max-steps`; that discards the coding signal.
+
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.
