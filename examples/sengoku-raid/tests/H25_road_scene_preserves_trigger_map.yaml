@@ -1,0 +1,58 @@
+name: 地図非依存の同行事件は現在地を立绘の舞台にする
+description: |
+  road_kasumi_2 can trigger in any quiet raid zone. When it launches at the
+  Sumida ferry landing, it must preserve the ferry background, clear any
+  inherited CG, and stage Kasumi as a portrait rather than force a mountain
+  trail over the authoritative current map.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+    switches:
+      companion_kasumi: true
+      befriended_kasumi: true
+      road_kasumi_seen: true
+    currentMapId: sumida_river_bridge_foot
+    visuals:
+      bg: assets/backgrounds/sumida-bridge
+      portraits: {}
+      cg: assets/cgs/road-kasumi
+  sengoku-raid:
+    metCharacters: [kagari, kasumi]
+    companion: kasumi
+    companionHp: 10
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 0
+      pendingLoot: {}
+      visited:
+        sumida_river_bridge_foot:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+        sumida_river_ferry_landing:
+          visited: false
+          searched: false
+          encounter: null
+          encounterRolled: true
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - type: doActivity
+    id: move:sumida_river_ferry_landing
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-ferry
+  - kind: state
+    path: baseline.visuals.cg
+    eq: null
+  - kind: state
+    path: baseline.visuals.portraits.center
+    eq: assets/portraits/kasumi-smile

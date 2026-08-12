@@ -4,7 +4,9 @@ title: 道中 ・ 篝 ・ 二
 characters: [kagari]
 ---
 
-:cg assets/cgs/road-kagari
+:hide-cg
+
+:portrait center assets/portraits/kagari-smile
 
 一度、二人で死地を抜けてからの道は、また少し違って聞こえる。篝は槍を杖のように突いて、ゆっくり歩く。
 
@@ -33,7 +35,7 @@ characters: [kagari]
 
 篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -52,7 +54,7 @@ effects:
 
 篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -71,7 +73,7 @@ effects:
 
 篝は槍を土から引き抜いた。歩き出す足取りは、来た時より軽い。背負っていたものを、半分だけ、お主に預けた顔だった。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects

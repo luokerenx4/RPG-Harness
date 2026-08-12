@@ -4,7 +4,9 @@ title: 道中 ・ 霞 ・ 二
 characters: [kasumi]
 ---
 
-:cg assets/cgs/road-kasumi
+:hide-cg
+
+:portrait center assets/portraits/kasumi-smile
 
 共に生きて帰った後、霞は跡を読む手を止めて、お主の歩き方を読むようになった。
 
@@ -27,7 +29,7 @@ characters: [kasumi]
 
 霞は立ち上がり、弓を背負い直した。鼻歌は無かった。代わりに、お主の歩幅に、自分のを合わせてきた。今度は霞の方から。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects

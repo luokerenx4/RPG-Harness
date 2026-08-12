@@ -4,7 +4,9 @@ title: 道中 ・ 篝
 characters: [kagari]
 ---
 
-:cg assets/cgs/road-kagari
+:hide-cg
+
+:portrait center assets/portraits/kagari-smile
 
 二人で歩く道は、一人より静かだった。篝は槍を肩に担ぎ、半歩だけ前を行く。
 
@@ -31,7 +33,7 @@ characters: [kagari]
 
 篝は前を向いたまま、口の端だけ上げた。槍を担ぎ直す手が、ほんの少し緩んでいた。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -50,7 +52,7 @@ effects:
 
 篝は前を向いたまま、口の端だけ上げた。槍を担ぎ直す手が、ほんの少し緩んでいた。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -69,7 +71,7 @@ effects:
 
 二人ぶんの足音は、もう一つにしか聞こえなかった。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects

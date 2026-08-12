@@ -4,7 +4,9 @@ title: 道中 ・ 澪 ・ 二
 characters: [mio]
 ---
 
-:cg assets/cgs/road-mio
+:hide-cg
+
+:portrait center assets/portraits/mio-default
 
 一度、共に生きて帰った後の水辺で、澪は刀身を水に重ねなかった。ただ、流れを見ていた。
 
@@ -29,7 +31,7 @@ characters: [mio]
 
 澪は刀身を鞘に納め、今度は水を覗かなかった。覗かずとも、隣に誰がいるかは分かる、という顔だった。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects

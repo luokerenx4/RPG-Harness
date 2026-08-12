@@ -4,7 +4,9 @@ title: 道中 ・ 霞
 characters: [kasumi]
 ---
 
-:cg assets/cgs/road-kasumi
+:hide-cg
+
+:portrait center assets/portraits/kasumi-smile
 
 霞は途中で何度も立ち止まる。地面を見て、草の折れ方を見て、また歩く。
 
@@ -31,7 +33,7 @@ characters: [kasumi]
 
 霞は鼻歌を一つ。鹿の蹄の跡を辿るその足取りは、鬼の通り道を綺麗に避けていた。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -50,7 +52,7 @@ effects:
 
 霞は鼻歌を一つ。鹿の蹄の跡を辿るその足取りは、鬼の通り道を綺麗に避けていた。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
@@ -69,7 +71,7 @@ effects:
 
 霞は鼻歌を一つ。鹿の蹄の跡を辿るその足取りは、鬼の通り道を綺麗に避けていた。
 
-:hide-cg
+:portrait center
 
 ```yaml
 type: effects
