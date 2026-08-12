@@ -24,9 +24,9 @@ requires:
 @kasumi 馬鹿げてる、って自分でも思うんだけど。
 
 ? なんと答える？ {id: answer-kasumi-lost-father}
-- 「馬鹿げてはいない」 {id: deny-it-is-foolish} -> +kasumi
-- 「俺も同じだ」 {id: admit-the-same-loss} -> +2kasumi
-- 黙って隣に座る {id: sit-beside-her} -> +kasumi
+- 「馬鹿げてはいない」 {id: deny-it-is-foolish, ai: compassionate affirming} -> +kasumi
+- 「俺も同じだ」 {id: admit-the-same-loss, ai: blunt vulnerable solidarity} -> +2kasumi
+- 黙って隣に座る {id: sit-beside-her, ai: social compassionate restrained} -> +kasumi
 
 @kasumi ……ありがとう。
 

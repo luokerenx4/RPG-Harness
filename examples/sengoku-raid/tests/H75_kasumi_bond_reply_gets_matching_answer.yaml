@@ -24,8 +24,8 @@ assertions:
     present: true
     choiceId: answer-kasumi-lost-father
     optionId: admit-the-same-loss
+    optionAiTagsIncludes: blunt
   - kind: output
     type: dialogue
     present: true
     textIncludes: 一人じゃない
-
