@@ -65,6 +65,12 @@ narration line.          # plain text is narration
 
 她笑了。
 
+:goto shared_reply         # silent unconditional jump; useful for converging branches
+
+:label shared_reply
+
+我们继续向前。
+
 :cg assets/cgs/handshake   # full-screen CG overlay
 @alice 别说什么了。
 :hide-cg                    # back to bg + portraits

@@ -53,6 +53,9 @@ export interface ScriptState {
 export interface ScriptCursor {
   scriptId: string;
   beatAnchor: string;
+  // Stable identity of the choice currently being presented. Kept outside
+  // `choice` because no option has been selected yet at presentation time.
+  choiceId?: string;
   // Compact fingerprint of the authored beat list last used to render this
   // cursor. Optional so saves created before revision tracking still hydrate.
   scriptRevision?: string;
@@ -66,6 +69,8 @@ export interface ScriptCursor {
   // so a hot edit can rebuild visuals even when an old directive was deleted.
   entryVisuals?: VisualState;
   choice?: {
+    choiceId?: string;
+    optionId?: string;
     prompt: string | null;
     optionText: string;
   };
@@ -697,6 +702,9 @@ export type Beat =
   | { type: "effects"; effects: StateDelta }
   | { type: "clear" }
   | { type: "label"; name: string }
+  // Silent unconditional control-flow jump. Useful for branching replies
+  // that converge without presenting a fake one-option choice.
+  | { type: "goto"; target: string }
   | { type: "endScript" }
   // Silent visual-state beats. None of these yield an Output by
   // themselves; they mutate state.baseline.visuals and the next

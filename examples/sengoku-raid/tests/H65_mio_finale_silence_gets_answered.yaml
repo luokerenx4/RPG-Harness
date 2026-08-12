@@ -1,0 +1,53 @@
+name: Mio recognizes both of the player's silent finale choices
+state:
+  baseline:
+    completedScripts: [000_intro, letter_02_rival, bond_mio_03, road_mio_2]
+    switches: { befriended_mio: true, road_mio_2_seen: true }
+    characters: { mio: { affection: 10 } }
+    variables: { shogun_chapter: 2 }
+  sengoku-raid: { raid: null, metCharacters: [mio] }
+inputs:
+  - { type: doActivity, id: script:bond_mio_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 指先の下で、朱の家紋は乾いていた
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 見つけてほしかったのかもしれない
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 自分の手で開け直すために
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 私の意志で出す
+  - kind: state
+    path: baseline.scripts.bond_mio_04.completed
+    eq: true

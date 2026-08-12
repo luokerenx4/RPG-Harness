@@ -75,6 +75,9 @@ export function validateGame(game: Game): void {
 
   for (const s of game.scripts) {
     const seenChoiceIds = new Set<string>();
+    const labels = new Set(s.beats.flatMap((beat) =>
+      beat.type === "label" ? [beat.name] : []
+    ));
     if (s.requires) visitCondition(s.requires, `script ${s.id}.requires`, reg, issues);
     s.beats.forEach((beat, beatIdx) => {
       if (beat.type === "dialogue" && !reg.characters.has(beat.speaker)) {
@@ -122,10 +125,21 @@ export function validateGame(game: Game): void {
           if (opt.requires) visitCondition(opt.requires, `${where}.requires`, reg, issues);
           if (opt.effects) visitDelta(opt.effects, `${where}.effects`, reg, issues);
           if (opt.goto && opt.goto !== "$end") {
-            // goto refers to a label in the same script — validated by the
-            // run-script layer, not here.
+            if (!labels.has(opt.goto)) {
+              issues.push({
+                path: `${where}.goto`,
+                message: `unknown label \`${opt.goto}\` in script ${s.id}`,
+              });
+            }
           }
         });
+      } else if (beat.type === "goto") {
+        if (!labels.has(beat.target)) {
+          issues.push({
+            path: `script ${s.id}.beats[${beatIdx}].target`,
+            message: `unknown label \`${beat.target}\` in script ${s.id}`,
+          });
+        }
       } else if (beat.type === "effects") {
         visitDelta(beat.effects, `script ${s.id}.beats[${beatIdx}].effects`, reg, issues);
       }

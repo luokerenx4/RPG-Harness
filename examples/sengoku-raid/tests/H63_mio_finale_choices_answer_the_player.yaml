@@ -1,0 +1,63 @@
+name: Mio's finale gives every stable choice its own reply before converging
+state:
+  baseline:
+    completedScripts: [000_intro, letter_02_rival, bond_mio_03, road_mio_2]
+    switches:
+      befriended_mio: true
+      road_mio_2_seen: true
+      mio_inspection_duty: true
+    characters:
+      mio: { affection: 10 }
+    variables:
+      shogun_chapter: 2
+      last_directive: "澪と共に出帰り、見立てを受けよ。"
+  sengoku-raid:
+    raid: null
+    metCharacters: [mio]
+inputs:
+  - { type: doActivity, id: script:bond_mio_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: letter-under-lamplight
+    optionId: why-warn-me
+    optionTextIncludes: なぜ忠告を
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 会っていなかったからだ
+  - kind: output
+    type: choice
+    present: true
+    choiceId: end-of-duty
+    optionId: stay-by-choice
+    optionTextIncludes: 勝手で隣にいろ
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 私自身の名で隣に立つ
+  - kind: state
+    path: baseline.scripts.bond_mio_04.completed
+    eq: true

@@ -43,6 +43,19 @@ describe("validateGame — clean games pass", () => {
 });
 
 describe("validateGame — choice coverage ids", () => {
+  test("rejects missing labels for choice and silent goto branches", () => {
+    expect(() => validateGame(baseGame({
+      scripts: [{
+        id: "story",
+        title: "Story",
+        beats: [
+          { type: "choice", options: [{ text: "go", goto: "missing-choice" }] },
+          { type: "goto", target: "missing-silent" },
+        ],
+      }],
+    }))).toThrow(/unknown label `missing-choice`[\s\S]*unknown label `missing-silent`/);
+  });
+
   test("rejects duplicate choice ids within one script", () => {
     const game = baseGame({
       scripts: [{

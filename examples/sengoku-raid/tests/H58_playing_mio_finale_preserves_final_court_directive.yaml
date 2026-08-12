@@ -41,7 +41,9 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
+  - { type: next }
   - { type: choose, index: 0 }
+  - { type: next }
   - { type: next }
   - { type: next }
   - { type: next }

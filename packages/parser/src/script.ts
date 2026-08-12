@@ -280,6 +280,7 @@ function parseDialogueBlock(block: BlockSpan, source?: string): Beat[] {
 //   :hide-cg             → hideCg
 //   :portrait <slot> <path?>  → setPortrait (empty path clears the slot)
 //   :clear-visuals       → clearVisuals
+//   :goto <label>        → silent unconditional branch
 //
 // The block must be a single line — multi-line `:` blocks are an
 // authoring error because every directive's semantics fit on one
@@ -333,6 +334,12 @@ function parseDirectiveBlock(block: BlockSpan, source?: string): Beat {
         );
       }
       return { type: "clearVisuals" };
+    case ":goto": {
+      if (rest.length !== 1 || !rest[0]) {
+        throw new ScriptParseError(":goto requires exactly one label", source);
+      }
+      return { type: "goto", target: rest[0] };
+    }
     default:
       throw new ScriptParseError(`Unknown directive: ${head}`, source);
   }

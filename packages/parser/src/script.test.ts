@@ -777,6 +777,20 @@ describe("parseScript — visual directives", () => {
     expect(s.beats[0]).toEqual({ type: "clearVisuals" });
   });
 
+  test(":goto <label> → silent unconditional branch", () => {
+    const s = parseScript(source("id: x\ntitle: t", ":goto shared"));
+    expect(s.beats[0]).toEqual({ type: "goto", target: "shared" });
+  });
+
+  test(":goto requires exactly one label", () => {
+    expect(() => parseScript(source("id: x\ntitle: t", ":goto"))).toThrow(
+      /requires exactly one label/,
+    );
+    expect(() => parseScript(source("id: x\ntitle: t", ":goto two words"))).toThrow(
+      /requires exactly one label/,
+    );
+  });
+
   test("multiple directives separated by blank lines produce separate beats", () => {
     const s = parseScript(
       source(

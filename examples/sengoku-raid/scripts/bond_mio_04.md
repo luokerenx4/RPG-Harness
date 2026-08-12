@@ -23,9 +23,31 @@ requires:
 @mio 公儀の沙汰書は別にある。あれは、私が名を伏せて勝手に出した——ただの、忠告だった。
 
 ? 灯の下で、何を訊く？ {id: letter-under-lamplight}
-  - 「会ってもいない俺に、なぜ忠告を」 {id: why-warn-me} -> +mio
-  - 「『気を確かに』——あれは役目の言葉ではなかったんだな」 {id: beyond-duty} -> +2mio
-  - 何も訊かず、家紋に指先で触れる {id: touch-crest} -> +mio
+  - 「会ってもいない俺に、なぜ忠告を」 {id: why-warn-me} -> +mio | goto letter_why
+  - 「『気を確かに』——あれは役目の言葉ではなかったんだな」 {id: beyond-duty} -> +2mio | goto letter_duty
+  - 何も訊かず、家紋に指先で触れる {id: touch-crest} -> +mio | goto letter_crest
+
+# letter_why
+
+@mio 会っていなかったからだ。沙汰書の名だけで、お主を二人目と同じにしたくなかった。
+
+:goto letter_explanation
+
+# letter_duty
+
+@mio ……そうだ。役目なら、会って見立ててから書けば足りた。あれは、間に合ってほしいと願った私の言葉だ。
+
+:goto letter_explanation
+
+# letter_crest
+
+指先の下で、朱の家紋は乾いていた。澪はその指を退けず、しばらく見つめた。
+
+@mio 名を伏せても、紋だけは消せなかった。見つけてほしかったのかもしれない。
+
+:goto letter_explanation
+
+# letter_explanation
 
 @mio 査問した十一人のうち、二人を斬った話はしたな。
 
@@ -42,9 +64,31 @@ requires:
 @mio だが、もう出す。役目を口実に隣にいるのは——お主にも、私自身にも、嘘だ。
 
 ? 上申書を前に、なんと言う？ {id: end-of-duty}
-  - 「出せ。明日からは、お前の勝手で隣にいろ」 {id: stay-by-choice} -> +2mio
-  - 「日付だけ今日に直せ。ひと月、隣にいた分は嘘じゃない」 {id: amend-the-date} -> +2mio
-  - 何も言わず、文箱の蓋を静かに閉じる {id: close-the-box} -> +mio
+  - 「出せ。明日からは、お前の勝手で隣にいろ」 {id: stay-by-choice} -> +2mio | goto duty_stay
+  - 「日付だけ今日に直せ。ひと月、隣にいた分は嘘じゃない」 {id: amend-the-date} -> +2mio | goto duty_date
+  - 何も言わず、文箱の蓋を静かに閉じる {id: close-the-box} -> +mio | goto duty_box
+
+# duty_stay
+
+@mio ……勝手でよいのか。ならば明日から、命令書ではなく私自身の名で隣に立つ。
+
+:goto duty_shared
+
+# duty_date
+
+@mio 嘘にはしない。ただ、終わった役目を今日までの真実として書き直す。それなら出せる。
+
+:goto duty_shared
+
+# duty_box
+
+文箱の蓋に、澪の手が重なった。閉じたまま終わらせるためではない——自分の手で開け直すために。
+
+@mio 今夜は預ける。明朝、私が開け、私の意志で出す。
+
+:goto duty_shared
+
+# duty_shared
 
 澪は文を畳み、家紋の印をもう一度——今度は表に、はっきりと押した。
 

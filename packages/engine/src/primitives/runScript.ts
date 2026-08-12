@@ -182,6 +182,7 @@ export async function* runScript(
         state.baseline.scriptCursor = {
           scriptId: script.id,
           beatAnchor: anchorBeat(beat),
+          ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
           scriptRevision: revisionOf(script),
           scriptBeatCount: script.beats.length,
           ...neighborAnchors(script, beatIdx),
@@ -189,6 +190,8 @@ export async function* runScript(
             ? { entryVisuals: state.baseline.scriptCursor.entryVisuals }
             : {}),
           choice: {
+            ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
+            ...(chosen.id !== undefined ? { optionId: chosen.id } : {}),
             prompt: beat.prompt ?? null,
             optionText: chosen.text,
           },
@@ -220,6 +223,18 @@ export async function* runScript(
       case "label": {
         fireOnLabelEnter(ctx, script.id, beat.name);
         break;
+      }
+      case "goto": {
+        const target = labelMap.get(beat.target);
+        if (target === undefined) {
+          throw new Error(
+            `runScript: goto target not found in script "${script.id}": ${beat.target}`,
+          );
+        }
+        state.baseline.beatIndex = target;
+        fireOnLabelEnter(ctx, script.id, beat.target);
+        fireOnBeatAfter(ctx, script.id, beatIdx, beat);
+        continue;
       }
       case "endScript": {
         fireOnBeatAfter(ctx, script.id, beatIdx, beat);
@@ -357,6 +372,9 @@ function setScriptCursor(
   ctx.state.baseline.scriptCursor = {
     scriptId: script.id,
     beatAnchor: anchorBeat(beat),
+    ...(beat.type === "choice" && beat.id !== undefined
+      ? { choiceId: beat.id }
+      : {}),
     scriptRevision: revisionOf(script),
     scriptBeatCount: script.beats.length,
     ...neighborAnchors(script, beatIndex),
@@ -409,6 +427,9 @@ function reconcileScriptCursor(
     baseline.scriptCursor = {
       scriptId: script.id,
       beatAnchor: anchorBeat(current),
+      ...(current.type === "choice" && current.id !== undefined
+        ? { choiceId: current.id }
+        : {}),
       scriptRevision,
       scriptBeatCount: script.beats.length,
       ...neighborAnchors(script, baseline.beatIndex),
@@ -432,6 +453,12 @@ function reconcileScriptCursor(
             ? [index]
             : [],
         );
+  const stableChoiceId = cursor.choiceId ?? choiceIdFromSerialized(cursor.beatAnchor);
+  const stableChoiceIndexes = stableChoiceId === undefined
+    ? []
+    : script.beats.flatMap((beat, index) =>
+        beat.type === "choice" && beat.id === stableChoiceId ? [index] : []
+      );
 
   // A hot edit may split a formerly shared reply into per-option branches
   // while retaining the old reply for one of the *other* options. In that
@@ -523,6 +550,28 @@ function reconcileScriptCursor(
     return;
   }
 
+  // Stable authored identity survives edits to copy, conditions, effects and
+  // branch targets. This is the durable replay path used by executable choice
+  // work items after an AI repairs the selected branch.
+  if (stableChoiceIndexes.length === 1) {
+    const target = stableChoiceIndexes[0]!;
+    baseline.beatIndex = target;
+    if (visualsNeedReplay) {
+      replayVisualStateBefore(ctx, script, labelMap, target, cursor);
+    } else {
+      replayVisualSetupBefore(ctx, script, target);
+    }
+    baseline.scriptCursor = {
+      ...cursor,
+      choiceId: stableChoiceId,
+      beatAnchor: anchorBeat(script.beats[target]!),
+      scriptRevision,
+      scriptBeatCount: script.beats.length,
+      ...neighborAnchors(script, target),
+    };
+    return;
+  }
+
   if (
     isSafeInPlaceContentEdit(cursor, current) &&
     cursor.scriptBeatCount === script.beats.length &&
@@ -550,10 +599,11 @@ function reconcileScriptCursor(
   if (cursor.choice) {
     const matchingOptions = script.beats.flatMap((beat) => {
       if (beat.type !== "choice") return [];
-      if ((beat.prompt ?? null) !== cursor.choice!.prompt) return [];
-      return beat.options.filter(
-        (option) => option.text === cursor.choice!.optionText,
-      );
+      if (cursor.choice!.choiceId !== undefined
+        ? beat.id !== cursor.choice!.choiceId
+        : (beat.prompt ?? null) !== cursor.choice!.prompt) return [];
+      const selected = selectedChoiceOption(cursor.choice!, beat);
+      return selected ? [selected] : [];
     });
     if (matchingOptions.length === 1) {
       const targetName = matchingOptions[0]!.goto;
@@ -585,6 +635,17 @@ function presentationStableChoiceAnchorFromSerialized(
 ): string | undefined {
   try {
     return presentationStableChoiceAnchor(JSON.parse(serialized) as Beat);
+  } catch {
+    return undefined;
+  }
+}
+
+function choiceIdFromSerialized(serialized: string): string | undefined {
+  try {
+    const beat = JSON.parse(serialized) as Beat;
+    return beat?.type === "choice" && typeof beat.id === "string"
+      ? beat.id
+      : undefined;
   } catch {
     return undefined;
   }
@@ -685,7 +746,7 @@ function replayVisualStateBefore(
 
     if (beat.type === "choice") {
       let selected = choiceMatchesBeat(cursor.choice, beat)
-        ? beat.options.find((option) => option.text === cursor.choice!.optionText)
+        ? selectedChoiceOption(cursor.choice!, beat)
         : undefined;
       if (!selected) {
         const targets = beat.options.flatMap((option) => {
@@ -708,6 +769,13 @@ function replayVisualStateBefore(
           index = target;
           continue;
         }
+      }
+    }
+    if (beat.type === "goto") {
+      const target = labelMap.get(beat.target);
+      if (target !== undefined && target <= targetIndex) {
+        index = target;
+        continue;
       }
     }
     if (beat.type === "endScript") return;
@@ -733,9 +801,20 @@ function choiceMatchesBeat(
 ): boolean {
   return (
     choice !== undefined &&
-    (beat.prompt ?? null) === choice.prompt &&
-    beat.options.some((option) => option.text === choice.optionText)
+    (choice.choiceId !== undefined
+      ? beat.id === choice.choiceId
+      : (beat.prompt ?? null) === choice.prompt) &&
+    selectedChoiceOption(choice, beat) !== undefined
   );
+}
+
+function selectedChoiceOption(
+  choice: NonNullable<NonNullable<PresetContext["state"]["baseline"]["scriptCursor"]>["choice"]>,
+  beat: Extract<Beat, { type: "choice" }>,
+) {
+  return choice.optionId !== undefined
+    ? beat.options.find((option) => option.id === choice.optionId)
+    : beat.options.find((option) => option.text === choice.optionText);
 }
 
 function choiceBranchTarget(
@@ -745,8 +824,11 @@ function choiceBranchTarget(
 ): number | undefined {
   const matchingOptions = script.beats.flatMap((beat) => {
     if (beat.type !== "choice") return [];
-    if ((beat.prompt ?? null) !== choice.prompt) return [];
-    return beat.options.filter((option) => option.text === choice.optionText);
+    if (choice.choiceId !== undefined
+      ? beat.id !== choice.choiceId
+      : (beat.prompt ?? null) !== choice.prompt) return [];
+    const option = selectedChoiceOption(choice, beat);
+    return option ? [option] : [];
   });
   if (matchingOptions.length !== 1) return undefined;
   const targetName = matchingOptions[0]!.goto;
@@ -762,7 +844,9 @@ function indexBelongsToChoiceBranch(
 ): boolean {
   const siblingTargets = script.beats.flatMap((beat) => {
     if (beat.type !== "choice") return [];
-    if ((beat.prompt ?? null) !== choice.prompt) return [];
+    if (choice.choiceId !== undefined
+      ? beat.id !== choice.choiceId
+      : (beat.prompt ?? null) !== choice.prompt) return [];
     return beat.options.flatMap((option) => {
       const optionTarget = option.goto ? labelMap.get(option.goto) : undefined;
       return optionTarget === undefined ? [] : [optionTarget];

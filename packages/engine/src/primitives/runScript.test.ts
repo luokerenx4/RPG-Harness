@@ -25,6 +25,37 @@ async function drive<I, O>(
 }
 
 describe("runScript — narration / dialogue input protocol", () => {
+  test("silent goto converges a branch without yielding a fake choice", async () => {
+    const beats: Beat[] = [
+      { type: "narration", text: "branch reply" },
+      { type: "goto", target: "shared" },
+      { type: "narration", text: "must skip" },
+      { type: "label", name: "shared" },
+      { type: "narration", text: "shared continuation" },
+      { type: "endScript" },
+    ];
+    const ctx = makeCtx(makeGame({ scripts: [makeScript("s1", { beats })] }));
+    ctx.state.baseline.currentScriptId = "s1";
+    const { outputs, finished } = await drive(runScript(ctx, ctx.scriptMap.get("s1")!), [
+      { type: "next" },
+      { type: "next" },
+    ]);
+    expect(finished).toBe(true);
+    expect(outputs.map((output) => output.type === "narration" ? output.text : output.type)).toEqual([
+      "branch reply",
+      "shared continuation",
+    ]);
+  });
+
+  test("silent goto fails loudly when its label is missing", async () => {
+    const beats: Beat[] = [{ type: "goto", target: "missing" }];
+    const ctx = makeCtx(makeGame({ scripts: [makeScript("s1", { beats })] }));
+    ctx.state.baseline.currentScriptId = "s1";
+    await expect(runScript(ctx, ctx.scriptMap.get("s1")!).next()).rejects.toThrow(
+      /goto target not found.*missing/,
+    );
+  });
+
   test("narration advances only on `next`", async () => {
     const beats: Beat[] = [
       { type: "narration", text: "line one" },
@@ -563,6 +594,106 @@ describe("runScript — semantic cursor migration after hot edits", () => {
       visualState: { cg: null },
     });
     expect(editedCtx.state.baseline.beatIndex).toBe(3);
+  });
+
+  test("stable choice id relocates an old checkpoint after branch targets are authored", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "reply",
+          prompt: "Reply?",
+          options: [
+            { id: "yes", text: "Yes" },
+            { id: "no", text: "No" },
+          ],
+        },
+        { type: "narration", text: "old shared reply" },
+        { type: "endScript" },
+      ] })],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    expect((await runScript(oldCtx, oldGame.scripts[0]!).next()).value).toMatchObject({
+      type: "choice",
+      choiceId: "reply",
+    });
+    // Simulate a save created before ScriptCursor.choiceId was introduced;
+    // its serialized beat anchor still contains the stable authored id.
+    delete oldCtx.state.baseline.scriptCursor?.choiceId;
+
+    const editedGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "reply",
+          prompt: "A better prompt?",
+          options: [
+            { id: "yes", text: "Absolutely", goto: "yes_reply" },
+            { id: "no", text: "Never", goto: "no_reply" },
+          ],
+        },
+        { type: "label", name: "yes_reply" },
+        { type: "narration", text: "yes branch" },
+        { type: "endScript" },
+        { type: "label", name: "no_reply" },
+        { type: "narration", text: "no branch" },
+        { type: "endScript" },
+      ] })],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(editedCtx, editedGame.scripts[0]!).next();
+    expect(resumed.value).toMatchObject({
+      type: "choice",
+      choiceId: "reply",
+      prompt: "A better prompt?",
+    });
+  });
+
+  test("stable option id preserves the selected branch across option copy edits", async () => {
+    const oldGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "reply",
+          prompt: "Reply?",
+          options: [{ id: "silent", text: "Stay silent", goto: "silent" }],
+        },
+        { type: "label", name: "silent" },
+        { type: "narration", text: "old branch line" },
+        { type: "endScript" },
+      ] })],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    const oldRun = runScript(oldCtx, oldGame.scripts[0]!);
+    await oldRun.next();
+    expect((await oldRun.next({ type: "choose", index: 0 })).value).toMatchObject({
+      text: "old branch line",
+    });
+    expect(oldCtx.state.baseline.scriptCursor?.choice).toMatchObject({
+      choiceId: "reply",
+      optionId: "silent",
+    });
+
+    const editedGame = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "reply",
+          prompt: "New prompt?",
+          options: [{ id: "silent", text: "Say nothing", goto: "silent_new" }],
+        },
+        { type: "label", name: "silent_new" },
+        { type: "narration", text: "new branch line" },
+        { type: "endScript" },
+      ] })],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    expect((await runScript(editedCtx, editedGame.scripts[0]!).next()).value).toMatchObject({
+      type: "narration",
+      text: "new branch line",
+    });
   });
 
   test("removes a deleted visual directive by replaying from the entry stage", async () => {

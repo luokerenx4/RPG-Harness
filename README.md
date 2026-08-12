@@ -261,6 +261,12 @@ characters: [alice]
 
 她笑了。
 
+:goto reply                             ← silent unconditional jump (no player choice)
+
+:label reply
+
+我们沿着同一条路继续走。
+
 [end]                                    ← end script here (skip remaining beats)
 
 # leave                                  ← label
@@ -277,6 +283,9 @@ Choices that should participate in durable branch coverage can stay concise:
 ```
 
 The annotations are authoring metadata and never appear in GUI/TUI prose.
+Use `:goto <label>` after option-specific replies to converge branches without
+showing the player a fake choice. Both choice targets and silent goto targets
+are validated when the game loads.
 
 For complex choices (requires, flags, multiple effects), use a YAML fenced block:
 
