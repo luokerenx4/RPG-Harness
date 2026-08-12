@@ -1,7 +1,8 @@
 name: bond_kagari_04 — affection 8 + bond_03 完了 + road_2 既読で「長い夜の答え」が解放される
 description: |
-  bond_kagari_01 で篝が逃げた問い（「伯母を斬って後悔したのか」）の
-  回収シーン。requires は affection>=8 / scriptCompleted bond_kagari_03 /
+  bond_kagari_01 で篝が先送りにした答えの回収シーン。最初の選択で
+  問いを口にしなかった履歴とも矛盾しない語りであることを固定する。
+  requires は affection>=8 / scriptCompleted bond_kagari_03 /
   road_kagari_2_seen の三点 AND。完走すると affection は 8 +2(選択肢)
   +1(effects) = 11 になる。
 state:
@@ -9,12 +10,11 @@ state:
     completedScripts:
       - 000_intro
       - encounter_kagari_first
-      - bond_kagari_01
       - bond_kagari_02
       - bond_kagari_03
     characters:
       kagari:
-        affection: 8
+        affection: 7
         custom: {}
     switches:
       befriended_kagari: true
@@ -26,6 +26,26 @@ state:
       - kagari
 maxSteps: 60
 inputs:
+  # Replay the actual non-question branch from bond_kagari_01 instead of
+  # pretending that scene was completed in the seed state.
+  - type: doActivity
+    id: script:bond_kagari_01
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: choose
+    index: 1
+  - type: next
+  - type: next
   - type: doActivity
     id: script:bond_kagari_04
   - type: next
@@ -51,6 +71,16 @@ inputs:
   - type: next
   - type: next
 assertions:
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: true
+    textIncludes: 答えを一つ、徳利の底に置いてきた
+  - kind: output
+    type: dialogue
+    speaker: kagari
+    present: false
+    textIncludes: お主、あたしに訊いたな
   - kind: state
     path: baseline.completedScripts
     includes: bond_kagari_04

@@ -4,11 +4,12 @@ A headless RPG Maker — an AI-first coding harness for GalGame-shaped games.
 
 The engine owns the universal pieces (characters, items, enemies, weapons, skills, scripts, actions, a Condition DSL, 15 lifecycle hooks, reactive triggers, one write path). Everything game-specific — the combat math, the hub layout, the raid loop, the ending semantics — is yours to write as `modules/*.ts` and, if you want, an ejected `preset/run.ts`. Pure visual novels can stay in markdown; anything more interesting drops into TypeScript without touching the engine.
 
-A game is a folder. You play it in your terminal — from a main menu, with save slots and an in-game pause menu. An AI can read the same folder and play through it from the shell, by reading stdout and writing stdin, with no SDK required. The same AI can also extend the game: write new scripts, design new mechanics, ship new modules.
+A game is a folder. A human can play that same folder in the terminal or the Web shell; an AI plays it headlessly by reading stdout and writing stdin, with no SDK required. The same AI can turn findings into evidence-backed coding issues, then extend the game: fix scripts, design mechanics, ship modules, and lock the result down as a replayable fixture.
 
 ```bash
 bun install
 bun run play              # boot 妖刀奇譚 — the bundled flagship game
+bun run dev:web           # play the same game in the browser
 bun run autoplay          # watch a built-in AI persona play through
 ```
 
@@ -79,7 +80,7 @@ rpg-harness/
 │   ├── engine/         Pure state-machine runtime. No DOM, no Node-specific APIs.
 │   ├── parser/         Markdown + frontmatter + YAML fence → engine AST.
 │   ├── frontend-core/  Renderer-agnostic Output→ScreenModel reducer, shared by every shell.
-│   ├── cli/            The `rpgh` binary: init / play / step / peek / autoplay / test / sessions / assets / studio.
+│   ├── cli/            The `rpgh` binary: play / step / report / test / authoring tools.
 │   ├── web/            Browser (React DOM) shell — engine bundled in-tab, games baked at build time, saves in localStorage. Static; deployable to any host.
 │   └── studio/         Browser-based asset workbench (chafa render loop, spec editor).
 ├── examples/
@@ -150,7 +151,7 @@ RPG-Harness · headless RPG Maker
 
 Saves live at `<game-dir>/.rpg-harness/sessions/<name>/state.json` — plain JSON, `git diff`-able, copyable between machines.
 
-## The nine modes
+## The eleven modes
 
 ```bash
 rpgh init     <dir> [--force]                                  # scaffold a new game
@@ -158,6 +159,8 @@ rpgh play     <game-dir>                                       # interactive TUI
 rpgh step     <game-dir> --input <json> [--session NAME]       # headless, stateless step
 rpgh peek     <game-dir> [--session NAME]                      # inspect current state
 rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays through
+rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
+rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
@@ -168,6 +171,8 @@ Every mode runs on the same engine and the same content. `step` and `play` produ
 identical state files. `autoplay` is just `step` with a built-in persona deciding
 the input. `test` is `step` with assertions on the resulting trace. An AI agent
 playing via the `rpg-harness-player` skill is just `step` with the LLM deciding the input.
+`report` turns an observation made during that loop into a structured coding issue,
+automatically pointing at the current script, save, log line, and latest input/output.
 `assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
 visual art for the spec.yaml entries scripts reference.
 

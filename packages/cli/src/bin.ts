@@ -10,8 +10,15 @@ import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
 import { studioCommand } from "./commands/studio";
+import { reportCommand, reportsCommand } from "./commands/report";
+import {
+  PLAYTEST_AREAS,
+  PLAYTEST_SEVERITIES,
+  type PlaytestArea,
+  type PlaytestSeverity,
+} from "./playtest-reports";
 
-const HELP = `rpgh — RPG-Harness (the RH engine): a headless RPG Maker for the terminal
+const HELP = `rpgh — RPG-Harness: the AI-native RPG Maker runtime and playtest CLI
 
 USAGE
   rpgh <command> [args]
@@ -40,6 +47,15 @@ COMMANDS
       Have a built-in AI persona play through the game and report the ending.
       Personas: greedy / charmer / rude / random
       Without -v, only prints the final JSON summary to stdout.
+
+  report   <game-dir> --title TEXT [--session NAME] [--area AREA]
+           [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
+      Record an actionable playtest issue and attach evidence from the current
+      save + latest input/output. Areas: narrative / gameplay / engine / ui /
+      tooling. Severities: note / minor / major / blocker.
+
+  reports  <game-dir> [--session NAME] [--format json|table]
+      List structured playtest issues, across all sessions by default.
 
   init     <dir> [--preset vn|training] [--eject] [--force]
       Scaffold a minimal RPG-Harness game in <dir>. Creates game.yaml,
@@ -115,6 +131,10 @@ async function main(): Promise<void> {
       return runTest(rest);
     case "autoplay":
       return runAutoplay(rest);
+    case "report":
+      return runReport(rest);
+    case "reports":
+      return runReports(rest);
     case "init":
       return runInit(rest);
     case "screenshot":
@@ -248,6 +268,81 @@ async function runAutoplay(args: string[]): Promise<void> {
     verbose: Boolean(values.verbose),
     maxSteps: Number(values["max-steps"] ?? "1000"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
+  });
+}
+
+async function runReport(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string", default: "default" },
+      area: { type: "string", default: "narrative" },
+      severity: { type: "string", default: "minor" },
+      title: { type: "string" },
+      details: { type: "string" },
+      target: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh report <game-dir> --title TEXT [--session NAME] [--area AREA] [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]",
+  );
+  if (!values.title) {
+    process.stderr.write("Missing required flag: --title\n");
+    process.exit(2);
+  }
+  const area = values.area ?? "narrative";
+  if (!PLAYTEST_AREAS.includes(area as PlaytestArea)) {
+    process.stderr.write(
+      `--area must be one of: ${PLAYTEST_AREAS.join(", ")} (got ${area})\n`,
+    );
+    process.exit(2);
+  }
+  const severity = values.severity ?? "minor";
+  if (!PLAYTEST_SEVERITIES.includes(severity as PlaytestSeverity)) {
+    process.stderr.write(
+      `--severity must be one of: ${PLAYTEST_SEVERITIES.join(", ")} (got ${severity})\n`,
+    );
+    process.exit(2);
+  }
+  await reportCommand({
+    gameDir,
+    session: values.session ?? "default",
+    area: area as PlaytestArea,
+    severity: severity as PlaytestSeverity,
+    title: values.title,
+    ...(values.details !== undefined ? { details: values.details } : {}),
+    ...(values.target !== undefined ? { target: values.target } : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runReports(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      format: { type: "string", default: "json" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh reports <game-dir> [--session NAME] [--format json|table]",
+  );
+  const format = values.format ?? "json";
+  if (format !== "json" && format !== "table") {
+    process.stderr.write(
+      `--format must be 'json' or 'table' (got ${format})\n`,
+    );
+    process.exit(2);
+  }
+  await reportsCommand({
+    gameDir,
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    format,
   });
 }
 

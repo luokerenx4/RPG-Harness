@@ -126,11 +126,34 @@ cp -r "$GAME/.rpg-harness/sessions/$SESSION" "$GAME/.rpg-harness/sessions/${SESS
 
 You can't go "back" within a single session (engine is forward-only), but you can fork before a key decision and play both branches.
 
+## Turn playtest findings into coding issues
+
+When the story contradicts an earlier choice, progression feels stuck, an engine
+output is invalid, or the UI makes the next action unclear, record it immediately:
+
+```bash
+rpgh report "$GAME" --session "$SESSION" \
+  --area narrative --severity major \
+  --title "Later scene remembers a question I never asked" \
+  --details "I chose the silent option in bond_kagari_01, but bond_kagari_04 quotes me asking it." \
+  --target scripts/bond_kagari_04.md
+```
+
+Areas are `narrative`, `gameplay`, `engine`, `ui`, and `tooling`. Severities are
+`note`, `minor`, `major`, and `blocker`. The command stores an open issue in the
+session's `issues.jsonl` and automatically attaches the current script, save/log
+paths, log line, and compact latest input/output. Continue playing after a
+`note`, `minor`, or `major` finding when possible; stop only when it is truly a
+`blocker`.
+
+Use `rpgh reports "$GAME" --format table` for human triage or the default JSON
+form for another AI/code agent. Do not wait until the end and rely on memory.
+
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.
 - Never run `step` against a session you don't own (sessions list at `<game>/.rpg-harness/sessions/`).
-- The only `rpgh` subcommands you should use for play: **peek, step**. (`sessions` is informational; `test` and `autoplay` are not for playing.)
+- The `rpgh` subcommands used in a playtest are **peek, step, report, reports**. (`sessions` is informational; `test` and `autoplay` are not for playing.)
 - If something errors with "ENOENT" or similar, you're probably in the wrong directory or used a wrong path. Don't keep retrying — check `pwd` and `ls`.
 
 ## Example transcript
