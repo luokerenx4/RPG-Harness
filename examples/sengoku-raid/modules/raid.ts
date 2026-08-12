@@ -2858,6 +2858,25 @@ const raidModule: Module = {
       ) {
         ctx.state.baseline.variables.last_directive =
           "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。";
+      } else if (
+        Number(ctx.state.baseline.variables.shogun_chapter ?? 0) >= 3 &&
+        ctx.state.baseline.variables.last_directive ===
+          "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。"
+      ) {
+        // bond_mio_04 used to write the chapter-2 waiting directive
+        // unconditionally, even after the player had already chosen the
+        // final court order. Recover those live saves from the authoritative
+        // mutually-exclusive choice switches.
+        if (ctx.state.baseline.switches.chose_court_loyal === true) {
+          ctx.state.baseline.variables.last_directive =
+            "公儀の道。査問を受けつつ、刀を整えて老いる。";
+        } else if (ctx.state.baseline.switches.chose_court_defy === true) {
+          ctx.state.baseline.variables.last_directive =
+            "公儀と袂を分かつ。刀の脈は、お主が選ぶ。";
+        } else if (ctx.state.baseline.switches.chose_court_silent === true) {
+          ctx.state.baseline.variables.last_directive =
+            "遁世。刀は祠に納める。鬼は他者に任せる。";
+        }
       }
     } else if (
       ctx.state.baseline.scripts.letter_02_rival?.completed === true &&

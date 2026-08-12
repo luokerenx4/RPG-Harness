@@ -1,0 +1,37 @@
+name: Mio's finale cannot roll a completed final court order back to chapter two
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - bond_mio_03
+      - bond_mio_04
+    switches:
+      chose_court_defy: true
+      mio_inspection_duty: false
+      road_mio_2_seen: true
+    characters:
+      mio: { affection: 12 }
+    variables:
+      shogun_chapter: 3
+      last_directive: "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。"
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    raid: null
+    metCharacters: [mio]
+    companion: null
+    companionHp: 0
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.switches.mio_inspection_duty
+    eq: false
+  - kind: state
+    path: baseline.variables.last_directive
+    eq: "公儀と袂を分かつ。刀の脈は、お主が選ぶ。"
+  - kind: objective
+    id: ending_oni_self
+    descriptionIncludes: "公儀と袂を分かつ"
