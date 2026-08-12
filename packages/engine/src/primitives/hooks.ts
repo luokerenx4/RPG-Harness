@@ -133,6 +133,14 @@ export function fireOnScriptSelect(
 }
 
 export function fireOnHubBuild(ctx: PresetContext): Output | undefined {
+  // A script may temporarily stage itself somewhere other than the logical
+  // current map. Returning to the hub ends that scene: when the current map
+  // declares a bg, restore it before any module constructs the menu. Maps
+  // without a bg intentionally keep inheritance semantics.
+  const currentMapId = ctx.state.baseline.currentMapId;
+  const currentMap = currentMapId ? ctx.mapMap.get(currentMapId) : undefined;
+  if (currentMap?.bg) ctx.state.baseline.visuals.bg = currentMap.bg;
+
   let winner: Output | undefined;
   for (const mod of ctx.modules) {
     const r = mod.onHubBuild?.(ctx);

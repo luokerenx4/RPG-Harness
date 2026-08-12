@@ -3,7 +3,8 @@ description: |
   Pre-seeds metCharacters with kagari + affection=4 + intro completed.
   Hub menu should surface bond_kagari_02 as eligible. Dispatching it
   walks through the scene; the script's effects block learns the
-  chinkonho skill.
+  chinkonho skill. Once the scene completes and control returns to the
+  Edo-castle hub, the map background is authoritative again.
 state:
   baseline:
     completedScripts:
@@ -35,7 +36,7 @@ inputs:
 assertions:
   - kind: state
     path: baseline.visuals.bg
-    eq: assets/backgrounds/inn-garden-dawn
+    eq: assets/backgrounds/edo-castle
   - kind: state
     path: baseline.knownSkills
     includes: chinkonho
