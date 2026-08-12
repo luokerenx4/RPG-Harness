@@ -1,5 +1,6 @@
 import {
   formatPlaytestReports,
+  getPlaytestReport,
   listPlaytestReports,
   recordPlaytestReport,
   reproducePlaytestReport,
@@ -42,6 +43,13 @@ interface ReproduceArgs {
   pretty: boolean;
 }
 
+interface InspectReportArgs {
+  gameDir: string;
+  id: string;
+  session?: string;
+  pretty: boolean;
+}
+
 export async function reportCommand(args: ReportArgs): Promise<void> {
   const report = await recordPlaytestReport(args);
   process.stdout.write(
@@ -60,6 +68,13 @@ export async function reportsCommand(args: ReportsArgs): Promise<void> {
     args.format === "json"
       ? JSON.stringify(reports, null, 2) + "\n"
       : formatPlaytestReports(reports) + "\n",
+  );
+}
+
+export async function inspectReportCommand(args: InspectReportArgs): Promise<void> {
+  const report = await getPlaytestReport(args.gameDir, args.id, args.session);
+  process.stdout.write(
+    (args.pretty ? JSON.stringify(report, null, 2) : JSON.stringify(report)) + "\n",
   );
 }
 

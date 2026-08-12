@@ -20,7 +20,7 @@ export type DevelopmentWorkKind =
 
 export type DevelopmentOperation =
   | {
-      command: "repair-session";
+      command: "inspect-session";
       args: { session: string; surfaces: Array<"state" | "log"> };
     }
   | {
@@ -159,7 +159,7 @@ export function analyzeDevelopmentWorklist(input: {
       actionability: "diagnostic",
       title: `Session ${session} cannot be analyzed`,
       detail: errors.join("; "),
-      operation: { command: "repair-session", args: { session, surfaces } },
+      operation: { command: "inspect-session", args: { session, surfaces } },
       coordinates: { session, surfaces, errors },
     });
   }

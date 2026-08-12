@@ -45,7 +45,7 @@ describe("AI development worklist", () => {
       "choice-authoring/ending/coda/ai-intent",
     ]);
     expect(report.items[0]?.operation).toEqual({
-      command: "repair-session",
+      command: "inspect-session",
       args: { session: "broken", surfaces: ["log", "state"] },
     });
     expect(report.items[0]?.actionability).toBe("diagnostic");

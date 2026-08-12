@@ -167,6 +167,9 @@ ids and AI intent. Supplying the relevant session also evaluates availability
 and lists state-dependent `onBeatBefore` replacements or skips, so do not infer
 a narrative bug from a static placeholder line before checking `transforms`.
 Inspection uses isolated state clones and never advances or persists the save.
+Likewise, execute diagnostic `inspect-report` and `inspect-session` worklist
+operations instead of manually scraping issue or save files. Session inspection
+verifies recovery evidence but deliberately never overwrites a damaged save.
 
 `cover` forks the exact immutable checkpoint, verifies that live edits still
 present the same stable choice and option, selects by option id, and continues

@@ -194,6 +194,8 @@ rpgh coverage <game-dir> [--status pending|all]                # real-session st
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
 rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
+rpgh inspect-session <game-dir> --session NAME               # read-only state/log/checkpoint diagnosis
+rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
 rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
 rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] # find unseen choice
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
@@ -232,6 +234,10 @@ it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports
 only the beats changed or skipped by `onBeatBefore` hooks, each on an isolated
 state clone; it never advances or persists the inspected save.
+`inspect-report` makes diagnostic findings without a reproduction checkpoint
+directly consumable. `inspect-session` replaces unsafe generic "repair" advice:
+it validates state JSON and log JSONL independently, verifies the latest usable
+checkpoint, and suggests a recovery lane without modifying either surface.
 Checkpoint state includes the engine PRNG cursor, so random combat, loot and
 encounter results replay identically on Headless and GUI forks. Older saves get
 a deterministic cursor derived from their checkpoint before their next draw.

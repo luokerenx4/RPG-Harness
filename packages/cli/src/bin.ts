@@ -7,6 +7,7 @@ import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { worklistCommand } from "./commands/worklist";
 import { inspectScriptCommand } from "./commands/inspect-script";
+import { inspectSessionCommand } from "./commands/inspect-session";
 import {
   DEFAULT_CHOICE_PROBE_PERSONAS,
   probeChoiceCommand,
@@ -26,6 +27,7 @@ import { studioCommand } from "./commands/studio";
 import {
   reportCommand,
   reportsCommand,
+  inspectReportCommand,
   reproduceCommand,
   resolveCommand,
 } from "./commands/report";
@@ -78,6 +80,10 @@ COMMANDS
       Inspect one authored script, including requirements, source coordinates,
       stable choices and AI intent. With --session, evaluate availability and
       state-dependent onBeatBefore replacements on an isolated read-only clone.
+
+  inspect-session <game-dir> --session NAME [--surfaces state,log] [--pretty]
+      Diagnose state JSON, log JSONL, and the latest verifiable checkpoint.
+      Strictly read-only: reports recovery evidence without overwriting a save.
 
   probe-choice <game-dir> --session NAME --at N [--personas CSV] [--pretty]
       Re-evaluate one historical choice with the live game and explain each
@@ -146,6 +152,9 @@ COMMANDS
   reports  <game-dir> [--session NAME] [--status open|resolved|all]
            [--format json|table]
       List structured playtest issues. Defaults to open issues across all sessions.
+
+  inspect-report <game-dir> <report-id> [--session NAME] [--pretty]
+      Print one complete playtest finding with its captured evidence and checkpoint.
 
   resolve  <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]
       Mark a playtest issue resolved after its fix has been verified.
@@ -232,6 +241,8 @@ async function main(): Promise<void> {
       return runWorklist(rest);
     case "inspect-script":
       return runInspectScript(rest);
+    case "inspect-session":
+      return runInspectSession(rest);
     case "probe-choice":
       return runProbeChoice(rest);
     case "transcript":
@@ -252,6 +263,8 @@ async function main(): Promise<void> {
       return runReport(rest);
     case "reports":
       return runReports(rest);
+    case "inspect-report":
+      return runInspectReport(rest);
     case "resolve":
       return runResolve(rest);
     case "reproduce":
@@ -457,6 +470,44 @@ async function runInspectScript(args: string[]): Promise<void> {
     gameDir: positionals[0],
     scriptId: positionals[1],
     ...(values.session !== undefined ? { session: values.session } : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runInspectSession(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      surfaces: { type: "string", default: "state,log" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh inspect-session <game-dir> --session NAME [--surfaces state,log] [--pretty]",
+  );
+  if (!values.session) {
+    process.stderr.write("Missing required flag: --session NAME\n");
+    process.exit(2);
+  }
+  const surfaces = String(values.surfaces ?? "")
+    .split(",")
+    .map((surface) => surface.trim())
+    .filter(Boolean);
+  if (
+    surfaces.length === 0 ||
+    new Set(surfaces).size !== surfaces.length ||
+    surfaces.some((surface) => surface !== "state" && surface !== "log")
+  ) {
+    process.stderr.write("--surfaces must be a unique CSV subset of: state,log\n");
+    process.exit(2);
+  }
+  await inspectSessionCommand({
+    gameDir,
+    session: values.session,
+    surfaces: surfaces as Array<"state" | "log">,
     pretty: Boolean(values.pretty),
   });
 }
@@ -818,6 +869,29 @@ async function runReports(args: string[]): Promise<void> {
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
     status,
+  });
+}
+
+async function runInspectReport(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2 || !positionals[0] || !positionals[1]) {
+    process.stderr.write(
+      "Usage: rpgh inspect-report <game-dir> <report-id> [--session NAME] [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await inspectReportCommand({
+    gameDir: positionals[0],
+    id: positionals[1],
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    pretty: Boolean(values.pretty),
   });
 }
 
