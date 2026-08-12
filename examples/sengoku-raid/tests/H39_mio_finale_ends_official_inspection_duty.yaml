@@ -1,0 +1,22 @@
+name: 澪の終章後は公務でなく親密度を同行理由にする
+state:
+  baseline:
+    completedScripts: [000_intro, letter_02_rival, bond_mio_03, bond_mio_04]
+    switches:
+      mio_inspection_duty: true
+      road_mio_2_seen: true
+    characters:
+      mio: { affection: 8 }
+  sengoku-raid:
+    raid: null
+    metCharacters: [mio]
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.switches.mio_inspection_duty
+    eq: false
+  - kind: activity
+    id: invite:mio
+    present: true
+    available: true
+    descriptionIncludes: 親密度 4 以上

@@ -5,12 +5,16 @@ description: |
 prompt: |
   Cinematic anime visual novel CG, simplified colors, bold cel shading,
   high contrast, large readable silhouettes for chafa/TUI conversion.
-  A daimyo residence courtyard after a raid, wet stone and lantern light.
+  An intact, orderly daimyo residence courtyard at quiet early evening after
+  the protagonist returns from a raid: clean wet stone, undamaged plaster and
+  timber walls, closed gates, warm lantern light. This is an official visit,
+  not the site of a battle.
   Mio, a young inspector from Kyoto, kneels on one knee in a deep indigo
   uchikake with a family wakizashi at her waist. She raises her face
   toward the unseen protagonist with cold, calm, professional eyes. Use
   broad indigo, gray stone, and warm lantern shapes, minimal textile detail,
-  16:9.
+  16:9. No other people, corpses, blood, rubble, broken walls, torn screens,
+  discarded weapons, combat, text or watermark.
 placeholder: "[CG] 深い藍の打掛の澪が、中庭で査問のため顔を上げる"
 refs:
   characters: [ mio, player ]

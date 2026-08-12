@@ -1,0 +1,35 @@
+name: 進行中の旧保存も currentMapId の新背景へ自動移行する
+description: |
+  An AI can add a missing map background while the shared save is already in
+  that zone. On the next run, the authoritative currentMapId must repair the
+  stale visual background without forcing the player to leave and re-enter.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: sumida_river_reed_marsh
+    visuals:
+      bg: assets/backgrounds/sumida-bridge
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        sumida_river_reed_marsh:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: sumida_river_reed_marsh
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-reed-marsh

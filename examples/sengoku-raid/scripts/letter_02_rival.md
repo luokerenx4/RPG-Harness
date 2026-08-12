@@ -55,6 +55,7 @@ effects:
     last_directive: "澪と共に出帰り、見立てを受けよ。"
   switches:
     mio_met: true
+    mio_inspection_duty: true
 ```
 
 [end]

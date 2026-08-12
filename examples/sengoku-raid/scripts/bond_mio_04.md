@@ -2,6 +2,7 @@
 id: bond_mio_04
 title: 見知らぬ家紋
 characters: [mio]
+bg: assets/backgrounds/inn-veranda-night
 requires:
   all:
     - { affection: { character: mio, min: 8 } }
@@ -58,6 +59,8 @@ type: effects
 effects:
   affection:
     mio: 1
+  switches:
+    mio_inspection_duty: false
 ```
 
 [end]

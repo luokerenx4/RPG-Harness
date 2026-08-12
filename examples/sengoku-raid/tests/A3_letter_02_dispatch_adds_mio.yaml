@@ -3,7 +3,8 @@ description: |
   Seed raidsCompleted=6, shogun_chapter=1, spectral=20. Extract — trigger
   fires, letter_02 launches. Drain the letter's beats, pick option 0,
   drain trailing narrations. onScriptComplete hook adds "mio" to
-  metCharacters.
+  metCharacters. The explicit 「同行を頼む」 answer must also schedule her
+  for the next raid immediately, before the ordinary affection-4 gate.
 state:
   baseline:
     completedScripts: [000_intro, letter_01_suspicion]
@@ -78,3 +79,15 @@ assertions:
   - kind: state
     path: baseline.characters.mio.affection
     eq: 1
+  - kind: state
+    path: baseline.switches.mio_inspection_duty
+    eq: true
+  - kind: state
+    path: baseline.switches.companion_mio
+    eq: true
+  - kind: state
+    path: sengoku-raid.companion
+    eq: mio
+  - kind: state
+    path: sengoku-raid.companionHp
+    eq: 10

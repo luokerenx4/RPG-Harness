@@ -25,6 +25,10 @@ switches:
   # metCharacters; this switch exists so trigger `when:` conditions
   # can compose against `switch:` predicates uniformly.
   mio_met: false
+  # Letter 02 places 澪 under an official inspection duty: unlike an
+  # ordinary companion, she can be invited before affection 4. The
+  # explicit 「同行を頼む」 reply also schedules her immediately.
+  mio_inspection_duty: false
   # Set when the pulse system has been introduced (after first victory).
   pulse_intro_seen: false
   # 第三章「最後の御沙汰」での三択。一つだけ true になる。

@@ -1,0 +1,20 @@
+name: 澪の水鏡伝授は江戸城でなく夜明け前の浅瀬に立つ
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio: { affection: 4 }
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+inputs:
+  - { type: doActivity, id: "script:bond_mio_02" }
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-shallows-predawn
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 夜明け前

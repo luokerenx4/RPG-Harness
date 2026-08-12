@@ -233,32 +233,14 @@ function getMap(ctx: Ctx, mapId: string): MapDef | undefined {
   return ctx.game.maps?.find((m) => m.id === mapId);
 }
 
-// Chain → entry map id. Each chain's expedition starts at its
-// entry map (the first map the player lands on when they "depart"
-// for that chain). Hard-coded because every chain has a distinct
-// natural entry; a schema flag would just push this lookup into yaml.
-const CHAIN_ENTRY: Record<string, string> = {
-  kuro_swamp: "kuro_swamp_edge",
-  mt_houkyou: "mt_houkyou_foothills",
-  sumida_river: "sumida_river_bridge_foot",
-  hell_gate: "hell_gate_mouth",
-};
-
 // Sorted list of (chain, entry-map) pairs the player can currently
 // depart to. Hub menu uses this to emit depart activities.
 function discoverableChains(ctx: Ctx): { chain: string; entry: MapDef }[] {
-  const seen = new Set<string>();
   const out: { chain: string; entry: MapDef; difficulty: number }[] = [];
   for (const m of ctx.game.maps ?? []) {
-    if (!m.chain) continue;
-    if (seen.has(m.chain)) continue;
-    seen.add(m.chain);
-    const entryId = CHAIN_ENTRY[m.chain];
-    if (!entryId) continue;
-    const entry = getMap(ctx, entryId);
-    if (!entry) continue;
+    if (!m.chain || m.isEntry !== true) continue;
     if (!chainUnlocked(ctx, m.chain)) continue;
-    out.push({ chain: m.chain, entry, difficulty: entry.difficulty ?? 1 });
+    out.push({ chain: m.chain, entry: m, difficulty: m.difficulty ?? 1 });
   }
   out.sort((a, b) => a.difficulty - b.difficulty);
   return out.map(({ chain, entry }) => ({ chain, entry }));
@@ -731,6 +713,9 @@ function buildHubMenu(ctx: Ctx): Output {
   }
 
   // 同行者システム — invite a met character with affection >= 4.
+  // 澪's official inspection duty is deliberately different: letter 02
+  // promises she will accompany the player before intimacy is established,
+  // so that authored contract exempts her from the social gate.
   // Only one companion at a time. Flipping a companion_<id> switch
   // is what onChoicePresented / onBeatBefore key on; m.companion is
   // the runtime mirror.
@@ -739,7 +724,10 @@ function buildHubMenu(ctx: Ctx): Output {
     if (!char) continue;
     const affection =
       ctx.state.baseline.characters[charId]?.stats.affection ?? 0;
-    if (affection < 4) continue;
+    const officialDuty =
+      charId === "mio" &&
+      ctx.state.baseline.switches.mio_inspection_duty === true;
+    if (affection < 4 && !officialDuty) continue;
     const alreadyInvited = m.companion === charId;
     activities.push({
       id: `invite:${charId}`,
@@ -751,7 +739,9 @@ function buildHubMenu(ctx: Ctx): Output {
         : `${char.name}を次の出帰りに誘う`,
       description: alreadyInvited
         ? "同行を解く（次の出立では一人）"
-        : "親密度 4 以上で同行可。他者を誘うと自動的に交代",
+        : officialDuty
+          ? "公儀の見立てが済むまで同行可。他者を誘うと自動的に交代"
+          : "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
       cost: 0,
       available: true,
@@ -766,7 +756,7 @@ function buildHubMenu(ctx: Ctx): Output {
       id: `depart:${chain}`,
       kind: "action",
       actionKind: "depart",
-      payload: { chain },
+      payload: { chain, mapId: entry.id },
       title: `出立 — ${label}（難度 ${entry.difficulty ?? 1}）`,
       description: entry.description,
       category: "raid",
@@ -831,7 +821,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       id: "imbue:oni",
       kind: "action",
       actionKind: "imbue_oni",
-      title: `鬼の脈に流す（威力 +${Math.max(3, Math.floor(absorb / 2))}、灵体化 +3）`,
+      title: `鬼の脈に流す（威力 +${Math.max(3, Math.floor(absorb / 2))}、霊体化 +3）`,
       description: `「喰らう」の脈絡。刀が跳ね上がる代償に、お主の身体も鬼に近づく`,
       category: "spirit",
       cost: 0,
@@ -1361,11 +1351,11 @@ function combatBlock(ctx: Ctx): string | null {
 // updates currentMapId + bg via enterMap), initializes RaidInstance,
 // rolls the entry map's loot (encounter table on entry maps is always
 // trivial — null-only — so no encounter to roll).
-function startRaid(ctx: Ctx, chain: string): void {
-  const entryId = CHAIN_ENTRY[chain];
-  if (!entryId) throw new Error(`${MODULE_ID}: unknown chain ${chain}`);
+function startRaid(ctx: Ctx, chain: string, entryId: string): void {
   const entry = getMap(ctx, entryId);
-  if (!entry) throw new Error(`${MODULE_ID}: chain ${chain} entry "${entryId}" missing`);
+  if (!entry || entry.chain !== chain || entry.isEntry !== true) {
+    throw new Error(`${MODULE_ID}: chain ${chain} entry "${entryId}" invalid`);
+  }
   const m = moduleState(ctx);
 
   enterMap(ctx.state, ctx.game, entryId);
@@ -1632,19 +1622,24 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
     const enemyId = zone.encounter.enemyId;
     const hpMax = zone.encounter.enemyHpMax;
     const absorb = Math.floor(hpMax / 2);
+    const spectralBeforeAbsorb = playerStat(ctx, "spectral");
+    const spectralAfterAbsorb = Math.max(0, spectralBeforeAbsorb - absorb);
+    const absorbedSpectral = spectralBeforeAbsorb - spectralAfterAbsorb;
     const tmpl = getEnemyNarration(ctx, enemyId, "victory");
     if (tmpl) {
       ctx.state.runtime.pendingNarrations.push(
         fillTemplate(tmpl, {
           name: enemyName(ctx, enemyId),
           hp: hpMax,
-          absorb,
+          absorb: absorbedSpectral,
+          spectralBefore: spectralBeforeAbsorb,
+          spectralAfter: spectralAfterAbsorb,
           swordGain: 0, // placeholder; actual gain decided by imbue choice
           damage,
         }),
       );
     }
-    setPlayerStat(ctx, "spectral", Math.max(0, playerStat(ctx, "spectral") - absorb));
+    setPlayerStat(ctx, "spectral", spectralAfterAbsorb);
     zone.encounter = null;
     zone.encounterCleared = true;
     // Queue the imbue choice. yaodao_voice already handled this
@@ -1743,17 +1738,19 @@ function denial(message: string): ActionResult {
 
 const departHandler: ActionHandler = (ctx) => {
   const chain = ctx.action.payload?.chain as string | undefined;
+  const entryId = ctx.action.payload?.mapId as string | undefined;
   if (!chain) return denial(`出立先が指定されていない。`);
   if (playerStat(ctx, "hp") < playerStatMax(ctx, "hp")) {
     return denial("体力が満たぬ。先に宿で休め。");
   }
-  if (!CHAIN_ENTRY[chain]) {
+  const entry = entryId ? getMap(ctx, entryId) : undefined;
+  if (!entry || entry.chain !== chain || entry.isEntry !== true) {
     return denial(`その地は地図にない（${chain}）。`);
   }
   if (!chainUnlocked(ctx, chain)) {
     return denial(`まだ${chainDisplayName(chain) ?? chain}には踏み入れない。`);
   }
-  startRaid(ctx, chain);
+  startRaid(ctx, chain, entryId!);
   return {};
 };
 
@@ -2342,7 +2339,10 @@ const inviteHandler: ActionHandler = (ctx) => {
   }
   const affection =
     ctx.state.baseline.characters[charId]?.stats.affection ?? 0;
-  if (affection < 4 && m.companion !== charId) {
+  const officialDuty =
+    charId === "mio" &&
+    ctx.state.baseline.switches.mio_inspection_duty === true;
+  if (affection < 4 && !officialDuty && m.companion !== charId) {
     return denial("まだ同行を頼める仲ではない（親密度 4 が要る）。");
   }
   const charName =
@@ -2574,6 +2574,39 @@ const raidModule: Module = {
     if (ctx.state.baseline.inventory.ryo === undefined) {
       ctx.state.baseline.inventory.ryo = 100;
     }
+    // Content may gain or change a map background while an AI is paused in
+    // that zone. Reconcile the authoritative currentMapId on the next shared
+    // Headless/GUI step, but never clobber an active script's own staging.
+    // This turns map edits into live-save migrations instead of requiring the
+    // player to walk away and back (or restart the game).
+    if (ctx.state.baseline.currentScriptId === null) {
+      const map = currentMap(ctx);
+      if (map?.bg && ctx.state.baseline.visuals.bg !== map.bg) {
+        ctx.state.baseline.visuals.bg = map.bg;
+      }
+    }
+    // One-time migration for saves that completed letter 02 before the
+    // inspection-duty contract existed. Option 0 was the only reply that
+    // granted affection, so affection > 0 safely recovers an explicit
+    // 「同行を頼む」 and schedules 澪 exactly once.
+    if (ctx.state.baseline.scripts.bond_mio_04?.completed === true) {
+      // Her final report explicitly ends the official inspection. This also
+      // migrates live saves completed before the script carried the switch.
+      ctx.state.baseline.switches.mio_inspection_duty = false;
+    } else if (
+      ctx.state.baseline.scripts.letter_02_rival?.completed === true &&
+      ctx.state.baseline.switches.mio_inspection_duty !== true
+    ) {
+      ctx.state.baseline.switches.mio_inspection_duty = true;
+      const mioAffection =
+        ctx.state.baseline.characters.mio?.stats.affection ?? 0;
+      const m = moduleState(ctx);
+      if (mioAffection > 0 && m.raid === null && m.companion === null) {
+        m.companion = "mio";
+        m.companionHp = 10;
+        ctx.state.baseline.switches.companion_mio = true;
+      }
+    }
     // Establish the starting location. Fresh sessions land in the hub
     // (大名府 / edo_castle); seeded fixtures that have already entered a
     // raid map keep their currentMapId. The hub menu / raid menu split
@@ -2680,6 +2713,21 @@ const raidModule: Module = {
     if (scriptId.startsWith("intel_briefing_")) {
       ctx.state.baseline.variables.intel_active = "";
     }
+  },
+
+  // Letter 02 already contains the promise to accompany the player. When
+  // they explicitly answer 「同行を頼む」, make that choice operational
+  // immediately instead of sending them back to a contradictory affinity
+  // gate in the hub.
+  onChoiceResolved: (ctx, scriptId, _beatIdx, choiceIdx) => {
+    if (scriptId !== "letter_02_rival" || choiceIdx !== 0) return;
+    const m = moduleState(ctx);
+    if (m.companion) {
+      ctx.state.baseline.switches[`companion_${m.companion}`] = false;
+    }
+    m.companion = "mio";
+    m.companionHp = 10;
+    ctx.state.baseline.switches.companion_mio = true;
   },
 
   // ============== Companion-aware reducers ==============

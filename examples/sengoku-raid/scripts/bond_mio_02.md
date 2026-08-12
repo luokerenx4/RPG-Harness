@@ -2,6 +2,7 @@
 id: bond_mio_02
 title: 水鏡を授ける
 characters: [mio]
+bg: assets/backgrounds/sumida-shallows-predawn
 requires:
   affection: { character: mio, min: 4 }
 ---

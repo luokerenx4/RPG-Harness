@@ -2,6 +2,7 @@
 id: bond_mio_01
 title: 査問する者
 characters: [mio]
+bg: assets/backgrounds/sumida-bank-sunset
 requires:
   affection: { character: mio, min: 2 }
 ---
@@ -33,9 +34,9 @@ requires:
 @mio 査問する者の霊体化は、誰が見立てる。
 
 ? なんと答える？
-  - 「お前の鏡に、お前を映せばいい」 +2mio
-  - 「斬った二人目を、まだ数えているのか」 +mio
-  - 黙って、流れに小石を一つ落とす +mio
+  - 「お前の鏡に、お前を映せばいい」 -> +2mio
+  - 「斬った二人目を、まだ数えているのか」 -> +mio
+  - 黙って、流れに小石を一つ落とす -> +mio
 
 @mio ……そうだな。
 

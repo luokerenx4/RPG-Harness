@@ -1,0 +1,20 @@
+name: 澪の査問場面は江戸城でなく隅田河の夕照岸に立つ
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio: { affection: 2 }
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+inputs:
+  - { type: doActivity, id: "script:bond_mio_01" }
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-bank-sunset
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 隅田河の岸

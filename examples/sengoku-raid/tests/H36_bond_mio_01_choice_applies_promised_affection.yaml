@@ -1,0 +1,26 @@
+name: 澪の査問選択肢は表示した好感度を実際に付与する
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      mio: { affection: 2 }
+inputs:
+  - { type: doActivity, id: "script:bond_mio_01" }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+assertions:
+  - kind: state
+    path: baseline.characters.mio.affection
+    eq: 4

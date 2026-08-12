@@ -2,6 +2,7 @@
 id: bond_mio_03
 title: 鏡を見る
 characters: [mio]
+bg: assets/backgrounds/sumida-bank-sunset
 requires:
   all:
     - { affection: { character: mio, min: 6 } }

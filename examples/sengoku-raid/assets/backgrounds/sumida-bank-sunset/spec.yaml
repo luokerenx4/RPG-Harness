@@ -1,0 +1,21 @@
+kind: bg
+description: |
+  隅田河の静かな岸。低い草と石の先に広い水面が開け、対岸の町並みが
+  黒く沈む。夕日が水を赤く長く染め、二人が並んで座れる土の余白がある。
+prompt: |
+  Quiet open bank of the Sumida River in the early Edo period at late sunset.
+  Low grass and stones at the waterline, broad calm water, sparse reeds at the
+  edges, distant wooden houses and pine silhouettes. A deep crimson-orange
+  reflection stretches across the river under a rose-to-indigo dusk sky.
+  Open sitting area in the lower middle for an intimate conversation.
+  Painterly cinematic 16:9 visual-novel background, no people, silhouettes,
+  bridge, pier, shrine, castle interior, modern objects, text or watermark.
+placeholder: "[隅田河・夕照の岸] 赤く伸びる水面と、二人分の土の余白"
+refs:
+  location: sumida-river
+  time: 夕暮れ
+  variant_of: assets/backgrounds/sumida-bridge
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-2, bond-scene, mio, river, sunset]

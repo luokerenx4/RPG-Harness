@@ -1,0 +1,21 @@
+kind: bg
+description: |
+  夜明け前の隅田河の浅瀬。砂利と泥の洲から、風のない水面が暗い鏡の
+  ように広がる。対岸の家並みと松が薄霧の中で水に映る。
+prompt: |
+  Shallow quiet reach of the Sumida River just before dawn in the early Edo
+  period. A narrow gravel-and-mud shoal, ankle-deep glass-still water acting
+  as a dark mirror, sparse reeds, distant low wooden roofs and pine silhouettes
+  under mist. Cold indigo and blue-gray with a thin pale-gold horizon; open
+  reflective water in the middle. Painterly cinematic 16:9 visual-novel
+  background, no people, silhouettes, bridge, pier, shrine, castle interior,
+  modern objects, text or watermark.
+placeholder: "[隅田河・夜明け前の浅瀬] 風のない水鏡と薄金の地平"
+refs:
+  location: sumida-river
+  time: 夜明け前
+  variant_of: assets/backgrounds/sumida-bridge
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-2, bond-scene, mio, river, predawn]

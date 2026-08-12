@@ -1,0 +1,21 @@
+name: 澪の上申書場面は江戸城でなく夜の宿に立つ
+state:
+  baseline:
+    completedScripts: [000_intro, bond_mio_03]
+    switches: { road_mio_2_seen: true }
+    characters:
+      mio: { affection: 8 }
+    visuals:
+      bg: assets/backgrounds/edo-castle
+      portraits: {}
+      cg: null
+inputs:
+  - { type: doActivity, id: "script:bond_mio_04" }
+assertions:
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/inn-veranda-night
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 宿の灯

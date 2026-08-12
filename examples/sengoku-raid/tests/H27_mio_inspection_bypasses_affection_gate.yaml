@@ -1,0 +1,40 @@
+name: 澪の査問任務は親密度門檻より先に同行契約を開く
+description: |
+  After letter 02, 澪 is an official inspector who promised to accompany the
+  player until her judgment. Even at affection 0, the hub must expose her
+  invite action with the authored duty explanation, and dispatch must accept
+  it rather than applying the ordinary affection-4 social gate.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_02_rival
+    characters:
+      mio:
+        stats: { affection: 0 }
+    switches:
+      mio_met: true
+      mio_inspection_duty: true
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+    companion: null
+    companionHp: 0
+inputs:
+  - { type: doActivity, id: "invite:mio" }
+  - { type: next }
+assertions:
+  - kind: activity
+    id: invite:mio
+    present: true
+    available: true
+    titleIncludes: 同行から外す
+  - kind: state
+    path: baseline.switches.companion_mio
+    eq: true
+  - kind: state
+    path: sengoku-raid.companion
+    eq: mio
+  - kind: state
+    path: sengoku-raid.companionHp
+    eq: 10
