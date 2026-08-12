@@ -451,7 +451,13 @@ copy edits and option reordering. Concise Markdown accepts `{id: ...}` on both
 the `?` prompt and each `-` option; fenced YAML accepts ordinary `id` fields.
 `rpgh choices` merges this authored inventory with runtime logs, separately
 reporting choices that need ids, stable choices that have never been reached,
-and reached options that still need an exact checkpoint fork.
+and reached options that still need an exact checkpoint fork. Once every
+executable option has a stable, replayed decision, it also compares each
+option's complete narrative response trace up to the next interactive output.
+If distinct options produce the same trace, the authoring worklist asks an AI
+to review the convergence instead of declaring it a bug: shared staging is
+fine, while an unanswered question or ignored vow can now become an explicit,
+evidence-backed coding task.
 
 ## Architecture in one paragraph
 

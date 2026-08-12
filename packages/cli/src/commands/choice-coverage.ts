@@ -74,6 +74,7 @@ export interface ChoiceCoverageReport {
       stableOptions: number;
       observedStableChoices: number;
       unseenStableChoices: number;
+      convergedResponses: number;
     };
     choices: AuthoredChoiceRow[];
     workItems: ChoiceAuthoringWorkItem[];
@@ -115,7 +116,25 @@ export type ChoiceAuthoringWorkItem =
       prompt: string | null;
       requires?: Condition;
       action: "reach this authored choice in a recoverable session";
+    }
+  | {
+      kind: "review-converged-response";
+      key: string;
+      scriptId: string;
+      choiceId: string;
+      source?: string;
+      beatIndex: number;
+      prompt: string | null;
+      optionIds: string[];
+      responseTrace: NarrativeResponse[];
+      action: "review whether distinct options should share the same narrative response trace";
     };
+
+export interface NarrativeResponse {
+  type: "dialogue" | "narration";
+  text: string;
+  speakerId?: string;
+}
 
 interface RuntimeChoiceOption {
   id?: unknown;
@@ -174,6 +193,7 @@ interface MutableOption {
   index: number;
   everAvailable: boolean;
   selectedSessions: Set<string>;
+  responseTraces: Map<string, NarrativeResponse[]>;
   evidence?: ChoiceCoverageEvidence;
 }
 
@@ -226,16 +246,32 @@ export function analyzeChoiceCoverage(
     scriptId: string;
     choiceId: string;
     optionId: string;
+    responseTrace: NarrativeResponse[];
   }> = [];
   let untrackedChoiceEvents = 0;
 
   for (const { session, entries } of logs) {
     let pending: { choice: MutableChoice; options: RuntimeChoiceOption[] } | null = null;
+    let activeSelection: typeof explicitSelections[number] | null = null;
     for (let offset = 0; offset < entries.length; offset += 1) {
       const entry = entries[offset]!;
       const explicitDecision = asStableDecision(entry.decision);
       if (explicitDecision) {
-        explicitSelections.push({ session, ...explicitDecision });
+        const selection = {
+          session,
+          ...explicitDecision,
+          responseTrace: [] as NarrativeResponse[],
+        };
+        explicitSelections.push(selection);
+        activeSelection = selection;
+      }
+      if (activeSelection) {
+        const response = asNarrativeResponse(entry.output);
+        if (response) {
+          activeSelection.responseTrace.push(response);
+        } else {
+          activeSelection = null;
+        }
       }
       const input = asChooseInput(entry.input);
       if (!explicitDecision && input && pending) {
@@ -279,6 +315,7 @@ export function analyzeChoiceCoverage(
             index,
             everAvailable: false,
             selectedSessions: new Set(),
+            responseTraces: new Map(),
           };
           choice!.options.set(option.id, row);
         }
@@ -303,10 +340,16 @@ export function analyzeChoiceCoverage(
   }
 
   for (const selection of explicitSelections) {
-    choices
+    const option = choices
       .get(`${selection.scriptId}/${selection.choiceId}`)
-      ?.options.get(selection.optionId)
-      ?.selectedSessions.add(selection.session);
+      ?.options.get(selection.optionId);
+    option?.selectedSessions.add(selection.session);
+    if (option && selection.responseTrace.length > 0) {
+      option.responseTraces.set(
+        narrativeResponseTraceKey(selection.responseTrace),
+        selection.responseTrace,
+      );
+    }
   }
 
   const rows = [...choices.values()]
@@ -366,6 +409,37 @@ export function analyzeChoiceCoverage(
       });
     }
   }
+  const authoredByKey = new Map(
+    authoringChoices.map((choice) => [`${choice.scriptId}/${choice.choiceId ?? ""}`, choice]),
+  );
+  for (const choice of choices.values()) {
+    const executable = [...choice.options.values()].filter((option) => option.everAvailable);
+    if (executable.length < 2 || executable.some((option) =>
+      option.selectedSessions.size === 0 || option.responseTraces.size !== 1
+    )) continue;
+    const responseKeys = new Set(executable.flatMap((option) => [...option.responseTraces.keys()]));
+    if (responseKeys.size !== 1) continue;
+    const responseTrace = executable[0]?.responseTraces.values().next().value as
+      | NarrativeResponse[]
+      | undefined;
+    if (!responseTrace) continue;
+    const authored = authoredByKey.get(choice.key);
+    authoringWorkItems.push({
+      kind: "review-converged-response",
+      key: `${choice.key}/shared-response`,
+      scriptId: choice.scriptId,
+      choiceId: choice.choiceId,
+      ...(authored?.source ? { source: authored.source } : {}),
+      beatIndex: authored?.beatIndex ?? -1,
+      prompt: choice.prompt,
+      optionIds: executable.map((option) => option.id),
+      responseTrace,
+      action: "review whether distinct options should share the same narrative response trace",
+    });
+  }
+  const convergedResponses = authoringWorkItems.filter((item) =>
+    item.kind === "review-converged-response"
+  ).length;
   const countChoice = (status: ChoiceCoverageStatus) =>
     rows.filter((choice) => choice.status === status).length;
   const countOption = (status: ChoiceCoverageOptionRow["status"]) =>
@@ -396,6 +470,7 @@ export function analyzeChoiceCoverage(
         stableOptions: authoringChoices.reduce((sum, choice) => sum + choice.optionIds.length, 0),
         observedStableChoices: stableChoices.filter((choice) => choice.status === "observed").length,
         unseenStableChoices: stableChoices.filter((choice) => choice.status === "unseen").length,
+        convergedResponses,
       },
       choices: authoringChoices,
       workItems: authoringWorkItems,
@@ -460,7 +535,7 @@ export function formatChoiceCoverage(
   );
   const lines = [
     `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.untrackedChoiceEvents} legacy log events`,
-    `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids`,
+    `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids · ${report.authoring.summary.convergedResponses} converged responses need review`,
   ];
   if (rows.length === 0) lines.push("(no matching runtime choices)");
   for (const choice of rows) {
@@ -484,17 +559,45 @@ export function formatChoiceCoverage(
     lines.push("", `AUTHORING WORK (${authoringItems.length})`);
     for (const item of authoringItems.slice(0, 20)) {
       const location = `${item.source ?? item.scriptId}:beat-${item.beatIndex}`;
-      lines.push(
-        item.kind === "stabilize-choice"
-          ? `  ○ stabilize ${item.key} · ${location} · ${item.optionCount} options · ${item.prompt ?? "—"}`
-          : `  ○ reach ${item.key} · ${location} · ${item.prompt ?? "—"}`,
-      );
+      lines.push(item.kind === "stabilize-choice"
+        ? `  ○ stabilize ${item.key} · ${location} · ${item.optionCount} options · ${item.prompt ?? "—"}`
+        : item.kind === "reach-choice"
+          ? `  ○ reach ${item.key} · ${location} · ${item.prompt ?? "—"}`
+          : `  △ review shared response ${item.key} · ${location} · ${item.optionIds.length} options share ${formatNarrativeResponseTrace(item.responseTrace)}`);
     }
     if (authoringItems.length > 20) {
       lines.push(`  … ${authoringItems.length - 20} more (use --format json for the complete worklist)`);
     }
   }
   return lines.join("\n") + "\n";
+}
+
+function asNarrativeResponse(value: unknown): NarrativeResponse | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const output = value as Record<string, unknown>;
+  if ((output.type !== "dialogue" && output.type !== "narration") ||
+    typeof output.text !== "string") return null;
+  return {
+    type: output.type,
+    text: output.text,
+    ...(typeof output.speakerId === "string" ? { speakerId: output.speakerId } : {}),
+  };
+}
+
+function narrativeResponseTraceKey(trace: NarrativeResponse[]): string {
+  return JSON.stringify(trace.map((response) => [
+    response.type,
+    response.speakerId ?? null,
+    response.text,
+  ]));
+}
+
+function formatNarrativeResponseTrace(trace: NarrativeResponse[]): string {
+  const preview = trace.slice(0, 2).map((response) => {
+    const speaker = response.speakerId ? `${response.speakerId}: ` : "";
+    return `${response.type} ${speaker}${JSON.stringify(response.text)}`;
+  }).join(" → ");
+  return `${trace.length}-beat trace ${preview}${trace.length > 2 ? " → …" : ""}`;
 }
 
 function finalizeChoice(choice: MutableChoice): ChoiceCoverageRow {

@@ -62,6 +62,7 @@ describe("choice branch coverage", () => {
       stableOptions: 2,
       observedStableChoices: 0,
       unseenStableChoices: 1,
+      convergedResponses: 0,
     });
     expect(report.authoring.workItems).toEqual([
       expect.objectContaining({
@@ -214,6 +215,110 @@ describe("choice branch coverage", () => {
       expect.objectContaining({ id: "friends", status: "selected", selectedSessions: ["branch"] }),
       expect.objectContaining({ id: "secret", status: "locked" }),
     ]);
+  });
+
+  test("turns identical covered branch responses into an author review item", () => {
+    const authored = [{
+      key: "ending/final-tether",
+      scriptId: "ending",
+      scriptTitle: "Ending",
+      source: "scripts/ending.md",
+      beatIndex: 4,
+      prompt: "Who remains?",
+      choiceId: "final-tether",
+      optionCount: 2,
+      optionIds: ["alone", "friends"],
+      status: "unseen" as const,
+    }];
+    const report = analyzeChoiceCoverage([{
+      session: "seed",
+      entries: [{ input: { type: "next" }, output: choice, checkpoint: checkpoint("e".repeat(64)) }],
+    }, {
+      session: "alone",
+      entries: [{
+        input: { type: "choose", index: 0 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "alone" },
+        output: { type: "dialogue", speakerId: "mio", text: "I understand." },
+      }],
+    }, {
+      session: "friends",
+      entries: [{
+        input: { type: "choose", index: 1 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "friends" },
+        output: { type: "dialogue", speakerId: "mio", text: "I understand." },
+      }],
+    }], [], authored);
+
+    expect(report.authoring.summary.convergedResponses).toBe(1);
+    expect(report.authoring.workItems).toContainEqual({
+      kind: "review-converged-response",
+      key: "ending/final-tether/shared-response",
+      scriptId: "ending",
+      choiceId: "final-tether",
+      source: "scripts/ending.md",
+      beatIndex: 4,
+      prompt: "Who remains?",
+      optionIds: ["alone", "friends"],
+      responseTrace: [{ type: "dialogue", speakerId: "mio", text: "I understand." }],
+      action: "review whether distinct options should share the same narrative response trace",
+    });
+    expect(formatChoiceCoverage(report, "pending")).toContain("review shared response");
+  });
+
+  test("does not flag a choice whose covered options receive distinct responses", () => {
+    const report = analyzeChoiceCoverage([{
+      session: "seed",
+      entries: [{ input: { type: "next" }, output: choice, checkpoint: checkpoint("f".repeat(64)) }],
+    }, {
+      session: "alone",
+      entries: [{
+        input: { type: "choose", index: 0 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "alone" },
+        output: { type: "narration", text: "You walk alone." },
+      }],
+    }, {
+      session: "friends",
+      entries: [{
+        input: { type: "choose", index: 1 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "friends" },
+        output: { type: "narration", text: "They walk with you." },
+      }],
+    }]);
+
+    expect(report.authoring.summary.convergedResponses).toBe(0);
+    expect(report.authoring.workItems).toEqual([]);
+  });
+
+  test("does not flag branches that share staging but diverge one beat later", () => {
+    const report = analyzeChoiceCoverage([{
+      session: "seed",
+      entries: [{ input: { type: "next" }, output: choice, checkpoint: checkpoint("1".repeat(64)) }],
+    }, {
+      session: "alone",
+      entries: [{
+        input: { type: "choose", index: 0 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "alone" },
+        output: { type: "narration", text: "A long silence." },
+      }, {
+        input: { type: "next" },
+        output: { type: "dialogue", speakerId: "mio", text: "Then go alone." },
+      }, {
+        input: { type: "next" },
+        output: { type: "hubMenu", snapshot: {} },
+      }],
+    }, {
+      session: "friends",
+      entries: [{
+        input: { type: "choose", index: 1 },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: "friends" },
+        output: { type: "narration", text: "A long silence." },
+      }, {
+        input: { type: "next" },
+        output: { type: "dialogue", speakerId: "mio", text: "Then we go together." },
+      }],
+    }]);
+
+    expect(report.authoring.summary.convergedResponses).toBe(0);
   });
 
   test("a single branch report follows fork ancestry only to its checkpoint", async () => {
