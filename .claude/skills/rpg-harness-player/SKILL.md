@@ -130,6 +130,17 @@ present the same stable choice and option, selects by option id, and continues
 on the new session. Never copy a live session directory: that can race GUI or
 Headless writes and loses explicit fork lineage.
 
+For an authored stable choice that this lineage has never reached, use the
+bounded Headless search lane:
+
+```bash
+rpgh reach "$GAME" --from-session "$SESSION" \
+  --session "${SESSION}-reach" --key SCRIPT/CHOICE
+```
+
+It explores public inputs without touching the source, persists only a found
+path, and verifies the replayed GUI-compatible state against the search result.
+
 ## Turn playtest findings into coding issues
 
 When the story contradicts an earlier choice, progression feels stuck, an engine
@@ -160,7 +171,7 @@ After a fix passes its replay/fixture and surface checks, close the loop with
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.
 - Never run `step` against a session you don't own (sessions list at `<game>/.rpg-harness/sessions/`).
 - Interactive play uses **peek, step, report, reports, resolve**. For explicit
-  branch coverage work, **choices, cover, transcript** are also valid;
+  branch coverage work, **choices, cover, reach, transcript** are also valid;
   `autoplay` remains a development/fuzzing lane rather than ordinary play.
 - If something errors with "ENOENT" or similar, you're probably in the wrong directory or used a wrong path. Don't keep retrying — check `pwd` and `ls`.
 

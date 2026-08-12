@@ -21,6 +21,11 @@ export type {
   CoverChoiceArgs,
   CoverChoiceSummary,
 } from "./commands/cover-choice";
+export { runReachChoice } from "./commands/reach-choice";
+export type {
+  ReachChoiceArgs,
+  ReachChoiceSummary,
+} from "./commands/reach-choice";
 export {
   buildTranscriptEvents,
   collectSessionTranscript,

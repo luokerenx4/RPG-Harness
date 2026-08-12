@@ -188,6 +188,7 @@ rpgh sessions <game-dir>                                       # list save sessi
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
+rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] # find unseen choice
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
@@ -210,6 +211,14 @@ at the immutable checkpoint, verifies the edited game still presents the same
 stable choice and option, selects by option id rather than stale array position,
 then continues with a built-in persona. Use `--source-session` to constrain the
 worklist to one GUI/headless lineage and `--key` to select a specific branch.
+Checkpoint state includes the engine PRNG cursor, so random combat, loot and
+encounter results replay identically on Headless and GUI forks. Older saves get
+a deterministic cursor derived from their checkpoint before their next draw.
+`reach` consumes authored `reach-choice` work: it explores only public inputs
+from a source checkpoint, stops on the stable target id, and replays the found
+path into a named session usable by Web/TUI/Headless. It then compares the full
+searched and replayed states, so an apparently successful but non-reproducible
+route fails loudly instead of becoming misleading coverage evidence.
 `transcript` follows the exact fork lineage and reduces large save/log payloads to
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually

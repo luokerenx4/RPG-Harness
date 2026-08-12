@@ -29,6 +29,13 @@ export interface LoggedStep {
   fork?: unknown;
 }
 
+export interface ForkSource {
+  state: ComposedState;
+  selectedEntry: number;
+  sourceEntries: number;
+  mode: "checkpoint" | "initial-state" | "current-state";
+}
+
 export async function forkCommand(args: ForkArgs): Promise<void> {
   const result = await forkSession(args);
   process.stdout.write(
@@ -40,17 +47,40 @@ export async function forkSession(args: ForkArgs) {
   assertSessionName(args.from);
   assertSessionName(args.to);
   if (args.from === args.to) throw new Error("Source and target sessions must differ");
-  if (args.at !== undefined && (!Number.isInteger(args.at) || args.at < 0)) {
+  const prepared = await loadForkSource(args.gameDir, args.from, args.at);
+  return createForkFromSource(args, prepared);
+}
+
+export async function loadForkSource(
+  gameDir: string,
+  from: string,
+  at?: number,
+): Promise<ForkSource> {
+  assertSessionName(from);
+  if (at !== undefined && (!Number.isInteger(at) || at < 0)) {
     throw new Error("--at must be a non-negative 1-based log entry number");
   }
-  const game = await loadGame(args.gameDir);
-  const prepared = await withSessionLock(args.gameDir, args.from, async () => {
-    const entries = await readSessionLog(args.gameDir, args.from);
-    const selectedEntry = args.at ?? entries.length;
+  const game = await loadGame(gameDir);
+  return withSessionLock(gameDir, from, async () => {
+    const entries = await readSessionLog(gameDir, from);
+    const selectedEntry = at ?? entries.length;
     if (selectedEntry > entries.length) {
       throw new Error(
         `--at ${selectedEntry} exceeds source log length ${entries.length}`,
       );
+    }
+
+    // No log does not mean no save: GUI/TUI may have persisted state before
+    // their first checkpointed input. With no explicit --at, fork that current
+    // state. Only `--at 0` means "start from a fresh initial state".
+    if (selectedEntry === 0 && at === undefined) {
+      const state = await loadSession(gameDir, from, game);
+      return {
+        state,
+        selectedEntry,
+        sourceEntries: entries.length,
+        mode: "current-state" as const,
+      };
     }
 
     if (selectedEntry === 0) {
@@ -64,8 +94,8 @@ export async function forkSession(args: ForkArgs) {
     const checkpoint = entries[selectedEntry - 1]?.checkpoint;
     if (isSessionCheckpointRef(checkpoint)) {
       const state = (await loadSessionCheckpoint(
-        args.gameDir,
-        args.from,
+        gameDir,
+        from,
         checkpoint,
       )) as ComposedState;
       return {
@@ -76,8 +106,8 @@ export async function forkSession(args: ForkArgs) {
       };
     }
 
-    if (args.at === undefined) {
-      const state = await loadSession(args.gameDir, args.from, game);
+    if (at === undefined) {
+      const state = await loadSession(gameDir, from, game);
       return {
         state,
         selectedEntry,
@@ -89,7 +119,16 @@ export async function forkSession(args: ForkArgs) {
       `Log entry ${selectedEntry} has no recoverable checkpoint; legacy logs cannot be replayed exactly because RNG state was not recorded`,
     );
   });
-  return createFork({ ...args, ...prepared });
+}
+
+export async function createForkFromSource(
+  args: ForkArgs,
+  source: ForkSource,
+) {
+  assertSessionName(args.from);
+  assertSessionName(args.to);
+  if (args.from === args.to) throw new Error("Source and target sessions must differ");
+  return createFork({ ...args, ...source });
 }
 
 async function createFork(args: ForkArgs & {
@@ -145,7 +184,7 @@ export async function readSessionLog(
   }
 }
 
-async function assertTargetEmpty(gameDir: string, session: string): Promise<void> {
+export async function assertTargetEmpty(gameDir: string, session: string): Promise<void> {
   for (const file of ["state.json", "log.jsonl", "fork.json", "checkpoints"]) {
     try {
       await access(path.join(sessionDir(gameDir, session), file));

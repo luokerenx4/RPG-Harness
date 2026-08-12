@@ -142,6 +142,14 @@ export interface TrainingState {
 // boundaries. (Previously this was on TrainingState, which made it
 // unreachable for non-training presets.)
 export interface RuntimeState {
+  // Persisted PRNG cursor. Every random draw advances this value inside the
+  // save, so two forks of one checkpoint replay the same stochastic result.
+  // Optional only for saves written before deterministic RNG was introduced;
+  // Engine backfills those from a stable hash of the checkpoint state.
+  rng?: {
+    algorithm: "mulberry32";
+    state: number;
+  };
   pendingNarrations: string[];
   // Trigger ids whose `when` condition is currently satisfied. Used by
   // checkTriggers to detect rising-edge transitions (was false, now

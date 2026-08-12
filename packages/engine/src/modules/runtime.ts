@@ -7,6 +7,10 @@ export const RUNTIME_NAMESPACE = "runtime";
 // once-fired set).
 export function createRuntimeState(): RuntimeState {
   return {
+    rng: {
+      algorithm: "mulberry32",
+      state: Math.floor(Math.random() * 0x1_0000_0000) >>> 0,
+    },
     pendingNarrations: [],
     activeTriggers: [],
     firedTriggers: [],

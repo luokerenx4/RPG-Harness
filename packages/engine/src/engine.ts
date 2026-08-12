@@ -13,6 +13,7 @@
 
 import { evaluateCondition } from "./condition";
 import { cloneState, createInitialState, resolveModules, resolveRunFn } from "./state";
+import { ensurePersistedRng, persistedRng } from "./rng";
 import type {
   ActionHandler,
   ComposedState,
@@ -155,7 +156,8 @@ export class Engine {
     if (rt) {
       if (rt.firedScriptStarts === undefined) rt.firedScriptStarts = [];
     }
-    this.ctx = buildPresetContext(game, this.state);
+    ensurePersistedRng(this.state);
+    this.ctx = buildPresetContext(game, this.state, persistedRng(this.state.runtime));
     this.runFn = resolveRunFn(game);
   }
 

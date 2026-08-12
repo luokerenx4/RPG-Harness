@@ -11,6 +11,7 @@ import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
 import { coverChoiceCommand } from "./commands/cover-choice";
+import { reachChoiceCommand } from "./commands/reach-choice";
 import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
@@ -92,6 +93,13 @@ COMMANDS
       Execute one pending stable choice branch. Forks its exact checkpoint,
       verifies the stable choice/option after live edits, selects by option id
       (not array position), then lets the persona continue on the AI branch.
+
+  reach    <game-dir> --from-session NAME --session AI [--from-at N]
+           [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--pretty]
+      Search the public Headless state space for an unseen stable authored
+      choice, then replay the discovered inputs into a GUI-compatible AI fork.
+      Search is read-only; a found path is accepted only when replay reaches
+      the same stable choice and produces the identical persisted state.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
@@ -194,6 +202,8 @@ async function main(): Promise<void> {
       return runAutoplay(rest);
     case "cover":
       return runCoverChoice(rest);
+    case "reach":
+      return runReachChoice(rest);
     case "report":
       return runReport(rest);
     case "reports":
@@ -516,6 +526,44 @@ async function runCoverChoice(args: string[]): Promise<void> {
     persona: values.persona ?? "objective",
     verbose: Boolean(values.verbose),
     maxSteps: Number(values["max-steps"] ?? "1000"),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runReachChoice(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      "from-session": { type: "string" },
+      "from-at": { type: "string" },
+      session: { type: "string" },
+      key: { type: "string" },
+      "max-nodes": { type: "string", default: "5000" },
+      "max-steps": { type: "string", default: "250" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh reach <game-dir> --from-session NAME --session AI [--from-at N] [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--pretty]",
+  );
+  if (!values["from-session"] || !values.session) {
+    process.stderr.write(
+      "Missing required flags: --from-session NAME --session AI\n",
+    );
+    process.exit(2);
+  }
+  await reachChoiceCommand({
+    gameDir,
+    fromSession: values["from-session"],
+    ...(values["from-at"] !== undefined
+      ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
+    session: values.session,
+    ...(values.key !== undefined ? { key: values.key } : {}),
+    maxNodes: Number(values["max-nodes"] ?? "5000"),
+    maxSteps: Number(values["max-steps"] ?? "250"),
     pretty: Boolean(values.pretty),
   });
 }

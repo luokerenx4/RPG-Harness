@@ -1,6 +1,7 @@
 export { Engine, buildPresetContext } from "./engine";
 export { evaluateCondition } from "./condition";
 export { choiceDecisionContext } from "./decision";
+export { ensurePersistedRng, persistedRng } from "./rng";
 export type { ChoiceDecisionContext } from "./decision";
 export {
   createInitialState,
@@ -24,6 +25,12 @@ export {
 } from "./presets/training";
 export { vnRun } from "./presets/vn/run";
 export { step, peek } from "./step";
+export { searchForChoice } from "./search";
+export type {
+  ChoiceSearchOptions,
+  ChoiceSearchResult,
+  ChoiceSearchTarget,
+} from "./search";
 export { runLoop } from "./runLoop";
 export type { StepResult } from "./step";
 export type {
