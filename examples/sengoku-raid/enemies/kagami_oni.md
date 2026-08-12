@@ -8,7 +8,7 @@ stats:
   cunning: 6
 narrations:
   intro: "映し井戸の水面が盛り上がり、こちら側へ這い出てくる——お主と同じ背丈、同じ構え。顔だけが黒く滲んだ、HP {hp} の{name}。"
-  victory: "鏡鬼が砕けると、無数の破片の一つ一つに、お主の顔が映っていた。やがて水に還る——霊体化 -{absorb}。"
+  victory: "鏡鬼が砕けると、無数の破片の一つ一つに、お主の顔が映っていた。やがて水に還る——霊体化 {spectralBefore}→{spectralAfter}。"
   escape: "鏡鬼はお主と同じ太刀筋で斬りつけてきた。読めるはずの一手が、読めない——体力 -{damage}, 霊体化 +{spectralGain}。"
 negotiate_lore: "鏡鬼はお主の声で囁いた。「お前が井戸を覗くたび、俺は濃くなる。俺はお前が見ないことにした半分だ。」その言葉に、嘘の響きは無かった。"
 negotiate_drop: cursed_blade_fragment

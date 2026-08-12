@@ -1,0 +1,46 @@
+name: 勝利文は理論吸収量でなく霊体化の実際の前後値を示す
+description: |
+  A normal strike raises spectral from 0 to 1 before a lesser oni's absorb-4
+  victory clamp returns it to 0. The narration must report 1→0 rather than
+  falsely claiming a -4 delta that never happened.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: sumida_river_reed_marsh
+    weapons:
+      ancestor_yaodao: { power: 20 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 0 }
+    visuals:
+      bg: assets/backgrounds/sumida-reed-marsh
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        sumida_river_reed_marsh:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 8
+            enemyHpMax: 8
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: attack }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 霊体化 1→0
+  - kind: state
+    path: baseline.characters.player.stats.spectral
+    eq: 0

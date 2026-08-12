@@ -1,0 +1,34 @@
+name: 下級の鬼の共通登場文は野外に存在しない灯具を作らない
+description: |
+  Enemy narration is reused across marsh, river, mountain and other zones.
+  Its public output must retain the supernatural warning without assuming
+  indoor lamps or another location-specific prop.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: sumida_river_drowned_shrine
+    visuals:
+      bg: assets/backgrounds/sumida-drowned-shrine
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        sumida_river_drowned_shrine:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:sumida_river_drift_pier" }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 風が途切れ、足元の影だけがこちらへ伸びる
