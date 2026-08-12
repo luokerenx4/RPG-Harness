@@ -1,0 +1,24 @@
+name: 動詞で書いた接続方向に「へ進む」を重ねない
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_foothills
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 0
+      pendingLoot: {}
+      visited:
+        mt_houkyou_foothills:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: move:mt_houkyou_stone_paths
+    titleIncludes: 登る — 石畳の道
+

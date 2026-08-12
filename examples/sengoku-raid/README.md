@@ -46,7 +46,7 @@ rpgh test .                                  # fixture 回帰
 | `hp` | 0–30 | 30 | 戦闘血量。0 で raid 失敗、hub `rest` で全回 |
 | `mental` | 0–10 | 10 | 戦闘で削れる。intel_briefing_yaodao で +2 |
 | `spectral` | 0–100 | 5 | 攻撃で +1 creep、勝斬で吸入 -absorb。crit 率 = `spec × 0.7%`、fumble 率 = `spec × 0.5%`。≥100 → BAD END |
-| `intellect` | 0–99 | 0 | 偷襲 DC + 情報屋の解錠条件 |
+| `intellect` | 0–99 | 0 | 新しい区域の探索で難度×5を得る。偷襲 DC + 情報屋の解錠条件 |
 | `ryo` | 0–∞ | 100 | 通貨 |
 
 **妖刀**：basePower 4。三本道の鍛え方：

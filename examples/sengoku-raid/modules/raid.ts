@@ -1215,7 +1215,9 @@ function buildRaidMenu(ctx: Ctx): Output {
       const targetInst = m.raid.visited[conn.target];
       const visitedNote = targetInst?.visited ? "（既訪）" : "";
       const extractNote = targetMap?.isExtract ? "（撤退可）" : "";
-      const direction = conn.dir === "戻る" ? conn.dir : `${conn.dir}へ進む`;
+      const direction = /[るうくぐすつぬぶむ]$/.test(conn.dir)
+        ? conn.dir
+        : `${conn.dir}へ進む`;
       activities.push({
         id: `move:${conn.target}`,
         kind: "action",
@@ -2280,12 +2282,31 @@ const searchHandler: ActionHandler = (ctx) => {
     m.raid.pendingLoot[itemId] = (m.raid.pendingLoot[itemId] ?? 0) + count;
     lines.push(`${itemName(ctx, itemId)} ×${count}`);
   }
+  const intellectBefore = playerStat(ctx, "intellect");
+  const intellectGain = Math.max(
+    0,
+    Math.min(
+      playerStatMax(ctx, "intellect"),
+      intellectBefore + Math.max(1, Math.floor(map.difficulty ?? 1)) * 5,
+    ) - intellectBefore,
+  );
+  const discovery =
+    lines.length > 0
+      ? `${map.name}を探った。見つけたもの：${lines.join("、")}。`
+      : `${map.name}は何もなかった。`;
   return {
     narrations: [
-      lines.length > 0
-        ? `${map.name}を探った。見つけたもの：${lines.join("、")}。`
-        : `${map.name}は何もなかった。`,
+      intellectGain > 0
+        ? `${discovery}地勢と痕跡を読み、学識 +${intellectGain}。`
+        : `${discovery}学識は既に極みにある。`,
     ],
+    ...(intellectGain > 0
+      ? {
+          deltas: {
+            characterStats: { player: { intellect: intellectGain } },
+          },
+        }
+      : {}),
   };
 };
 

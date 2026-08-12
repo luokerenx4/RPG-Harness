@@ -1,0 +1,46 @@
+name: 新しい区域を探ると難度に応じて学識が増える
+description: |
+  Information-shop tiers depend on intellect, so ordinary exploration must
+  provide a public, repeatable path to that stat. A difficulty-3 search grants
+  15 intellect and says so in the same narration as the discovered loot.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_stone_paths
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 5, intellect: 20 }
+    visuals:
+      bg: assets/backgrounds/mountain-path
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot:
+            soul_shard: 1
+inputs:
+  - { type: doActivity, id: search }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 学識 +15
+  - kind: state
+    path: baseline.characters.player.stats.intellect
+    eq: 35
+  - kind: state
+    path: sengoku-raid.raid.visited.mt_houkyou_stone_paths.searched
+    eq: true
+  - kind: state
+    path: sengoku-raid.raid.pendingLoot.soul_shard
+    eq: 1
