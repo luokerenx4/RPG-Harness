@@ -554,6 +554,7 @@ function compactOutput(output: unknown): unknown {
             category?: unknown;
             available?: unknown;
             lockedReason?: unknown;
+            requires?: unknown;
             forecast?: unknown;
           }>;
         }
@@ -609,6 +610,9 @@ function compactOutput(output: unknown): unknown {
           : {}),
         ...(activity.lockedReason !== undefined
           ? { lockedReason: activity.lockedReason }
+          : {}),
+        ...(activity.requires !== undefined
+          ? { requires: activity.requires }
           : {}),
       })),
     };

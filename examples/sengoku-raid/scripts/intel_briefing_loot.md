@@ -2,6 +2,10 @@
 id: intel_briefing_loot
 title: 情報屋の覚書（収穫）
 characters: []
+ai:
+  relatedActivityIds:
+    - infoshop_loot
+    - script:intel_briefing
 ---
 
 折り紙の中身は丁寧な絵地図だった。

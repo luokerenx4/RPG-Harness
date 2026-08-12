@@ -67,8 +67,9 @@ export async function reachScriptCommand(args: ReachScriptArgs): Promise<void> {
   const summary = await runReachScript({
     ...args,
     onProgress: (progress) => {
+      const requirement = progress.closest.guidanceRequirement;
       process.stderr.write(
-        `search: ${progress.exploredNodes} explored · ${progress.frontierNodes} frontier · depth ${progress.deepestSteps} · best ${progress.closest.satisfiedRequirements}/${progress.closest.totalRequirements} requirements\n`,
+        `search: ${progress.exploredNodes} explored · ${progress.frontierNodes} frontier · depth ${progress.deepestSteps} · best ${requirement ? `${requirement.activityId} ${requirement.satisfiedRequirements}/${requirement.totalRequirements}` : `${progress.closest.satisfiedRequirements}/${progress.closest.totalRequirements} requirements`}\n`,
       );
     },
   });

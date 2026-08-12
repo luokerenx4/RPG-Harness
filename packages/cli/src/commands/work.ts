@@ -339,6 +339,9 @@ function compactClosest(closest: ReachChoiceSummary["closest"]) {
     ...(closest.guidancePreparation !== undefined
       ? { guidancePreparation: closest.guidancePreparation }
       : {}),
+    ...(closest.guidanceRequirement
+      ? { guidanceRequirement: closest.guidanceRequirement }
+      : {}),
   };
 }
 

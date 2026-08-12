@@ -1167,6 +1167,10 @@ export interface HubActivity {
   effectsHint?: string;
   available: boolean;
   lockedReason?: string;
+  // Exact runtime gate for headless players, inspectors and goal-directed
+  // search. Human shells may keep rendering lockedReason; this is the
+  // machine-readable counterpart for dynamic module-authored activities.
+  requires?: Condition;
   // Author-owned guidance for shells and AI players. This is intentionally
   // distinct from array order: use it only when the game genuinely recommends
   // an activity, not merely to choose a default for a meaningful decision.

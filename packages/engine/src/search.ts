@@ -61,6 +61,13 @@ export interface ChoiceSearchClosest {
   guidanceProgress?: number;
   /** Low-risk cycle recovery taken while the next authored activity is closed. */
   guidancePreparation?: number;
+  /** Progress toward the exact gate on the next authored hub activity. */
+  guidanceRequirement?: ChoiceSearchRequirement & {
+    activityId: string;
+    satisfiedRequirements: number;
+    totalRequirements: number;
+    regressionsFromSource: number;
+  };
 }
 
 interface SearchNode {
@@ -137,14 +144,14 @@ async function searchForTarget(
   const visited = new Set<string>();
   let exploredNodes = 0;
   let deepestSteps = start.inputs.length;
-  let closest = assessNode(game, target, start);
+  let closest = assessNode(game, target, start, initialState);
   let closestNode = start;
 
   while (queue.length > 0) {
     queue.sort((left, right) =>
       compareChoiceSearchAssessment(
-        assessNode(game, target, right),
-        assessNode(game, target, left),
+        assessNode(game, target, right, initialState),
+        assessNode(game, target, left, initialState),
         isScriptTarget(target),
       )
     );
@@ -154,7 +161,7 @@ async function searchForTarget(
     if (visited.has(fingerprint)) continue;
     visited.add(fingerprint);
     exploredNodes += 1;
-    const assessment = assessNode(game, target, node);
+    const assessment = assessNode(game, target, node, initialState);
     if (compareChoiceSearchAssessment(
       assessment,
       closest,
@@ -371,6 +378,7 @@ function assessNode(
   game: Game,
   target: SearchTarget,
   node: SearchNode,
+  initialState: ComposedState,
 ): ChoiceSearchClosest {
   const script = game.scripts.find((candidate) => candidate.id === target.scriptId);
   const conditions = topLevelRequirements(script?.requires);
@@ -392,6 +400,17 @@ function assessNode(
     node.inputs,
     target.relatedActivityIds,
   );
+  const nextGuidanceActivityId = target.relatedActivityIds[guidanceProgress];
+  const nextGuidanceActivity = node.output?.type === "hubMenu" && nextGuidanceActivityId
+    ? node.output.snapshot.activities.find(({ id }) => id === nextGuidanceActivityId)
+    : undefined;
+  const guidanceRequirement = nextGuidanceActivity?.requires
+    ? summarizeGuidanceRequirement(
+        nextGuidanceActivity.requires,
+        initialState,
+        node.state,
+      )
+    : undefined;
   return {
     inputs: node.inputs,
     steps: node.inputs.length,
@@ -403,6 +422,14 @@ function assessNode(
     requirements,
     outputType: node.output?.type ?? null,
     guidanceProgress,
+    ...(guidanceRequirement && nextGuidanceActivityId
+      ? {
+          guidanceRequirement: {
+            activityId: nextGuidanceActivityId,
+            ...guidanceRequirement,
+          },
+        }
+      : {}),
     guidancePreparation: guidanceProgress === 0 &&
         target.relatedActivityIds.length > 0 &&
         latestActivityId(node.inputs) === "rest"
@@ -429,6 +456,25 @@ export function compareChoiceSearchAssessment(
   if ((left.guidanceProgress ?? 0) !== (right.guidanceProgress ?? 0)) {
     return (left.guidanceProgress ?? 0) - (right.guidanceProgress ?? 0);
   }
+  const leftGuidanceRequirement = left.guidanceRequirement?.progress ?? 0;
+  const rightGuidanceRequirement = right.guidanceRequirement?.progress ?? 0;
+  const leftGuidanceRegressions =
+    left.guidanceRequirement?.regressionsFromSource ?? 0;
+  const rightGuidanceRegressions =
+    right.guidanceRequirement?.regressionsFromSource ?? 0;
+  if (leftGuidanceRegressions !== rightGuidanceRegressions) {
+    return rightGuidanceRegressions - leftGuidanceRegressions;
+  }
+  const leftGuidanceSatisfied =
+    left.guidanceRequirement?.satisfiedRequirements ?? 0;
+  const rightGuidanceSatisfied =
+    right.guidanceRequirement?.satisfiedRequirements ?? 0;
+  if (leftGuidanceSatisfied !== rightGuidanceSatisfied) {
+    return leftGuidanceSatisfied - rightGuidanceSatisfied;
+  }
+  if (leftGuidanceRequirement !== rightGuidanceRequirement) {
+    return leftGuidanceRequirement - rightGuidanceRequirement;
+  }
   if ((left.guidancePreparation ?? 0) !== (right.guidancePreparation ?? 0)) {
     return (left.guidancePreparation ?? 0) - (right.guidancePreparation ?? 0);
   }
@@ -443,6 +489,43 @@ export function compareChoiceSearchAssessment(
   return left.totalRequirements > 0
     ? left.steps - right.steps
     : right.steps - left.steps;
+}
+
+function summarizeGuidanceRequirement(
+  condition: Condition,
+  initialState: ComposedState,
+  state: ComposedState,
+): ChoiceSearchRequirement & {
+  satisfiedRequirements: number;
+  totalRequirements: number;
+  regressionsFromSource: number;
+} {
+  const leaves = topLevelRequirements(condition);
+  const summary = evaluateSearchRequirement(condition, state);
+  return {
+    ...summary,
+    satisfiedRequirements: leaves.filter((leaf) =>
+      evaluateCondition(leaf, state).ok
+    ).length,
+    totalRequirements: leaves.length,
+    regressionsFromSource: leaves.filter((leaf) =>
+      evaluateCondition(leaf, initialState).ok &&
+      !evaluateCondition(leaf, state).ok
+    ).length,
+  };
+}
+
+function evaluateSearchRequirement(
+  condition: Condition,
+  state: ComposedState,
+): ChoiceSearchRequirement {
+  const evaluated = evaluateCondition(condition, state);
+  return {
+    condition,
+    satisfied: evaluated.ok,
+    progress: conditionProgress(condition, state),
+    ...(evaluated.reason ? { reason: evaluated.reason } : {}),
+  };
 }
 
 function latestActivityId(inputs: Input[]): string | null {

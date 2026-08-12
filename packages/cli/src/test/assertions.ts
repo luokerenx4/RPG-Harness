@@ -176,6 +176,9 @@ function checkActivity(
   ) {
     return `activity ${a.id}: expected effectsHint to include "${a.effectsHintIncludes}", got "${act.effectsHint ?? ""}"`;
   }
+  if (a.requires !== undefined && !deepEqual(act.requires, a.requires)) {
+    return `activity ${a.id}: expected requires=${JSON.stringify(a.requires)}, got ${JSON.stringify(act.requires)}`;
+  }
   if (a.forecastMetric !== undefined) {
     const metric = act.forecast?.metrics.find(
       (item) => item.id === a.forecastMetric,

@@ -2,6 +2,10 @@
 id: intel_briefing_basic
 title: 情報屋の覚書（基本）
 characters: []
+ai:
+  relatedActivityIds:
+    - infoshop_basic
+    - script:intel_briefing
 ---
 
 折り紙を解く。情報屋の小さい字。

@@ -27,20 +27,14 @@ state:
     companionHp: 0
     pulsePending: null
 inputs:
-  - type: doActivity
-    id: infoshop_hidden
-  - type: next
+  []
 assertions:
-  - kind: state
-    path: baseline.inventory.ryo
-    eq: 400
-  - kind: state
-    path: baseline.inventory.cursed_blade_fragment
-    eq: 1
-  - kind: state
-    path: baseline.variables.intel_active
-    eq: ""
-  - kind: output
-    type: narration
-    present: true
-    textIncludes: 学識
+  - kind: activity
+    id: infoshop_hidden
+    available: false
+    lockedReasonIncludes: 学識 ≥80
+    requires:
+      all:
+        - inventory: { itemId: ryo, min: 300 }
+        - characterStat: { character: player, name: intellect, min: 80 }
+        - inventory: { itemId: cursed_blade_fragment, min: 1 }

@@ -35,6 +35,7 @@ import type {
   ActionResult,
   CharacterSpawnRule,
   ComposedState,
+  Condition,
   Game,
   HubActivity,
   Input,
@@ -841,7 +842,7 @@ function buildHubMenu(ctx: Ctx): Output {
     {
       id: "infoshop_hidden",
       title: "情報屋：隠し zone の坐標（300 両、学識 80+、欠片 1）",
-      desc: "宝峰山の隠し zone への足跡を知る",
+      desc: "砲響山の隠し zone への足跡を知る",
       cost: 300,
       intellectMin: 80,
       requiresFrag: true,
@@ -859,6 +860,15 @@ function buildHubMenu(ctx: Ctx): Output {
         intellect >= band.intellectMin &&
         (!band.requiresFrag ||
           (ctx.state.baseline.inventory.cursed_blade_fragment ?? 0) >= 1);
+      const requires: Condition = {
+        all: [
+          { inventory: { itemId: "ryo", min: band.cost } },
+          { characterStat: { character: "player", name: "intellect", min: band.intellectMin } },
+          ...(band.requiresFrag
+            ? [{ inventory: { itemId: "cursed_blade_fragment", min: 1 } } as const]
+            : []),
+        ],
+      };
       activities.push({
         id: band.id,
         kind: "action",
@@ -868,6 +878,7 @@ function buildHubMenu(ctx: Ctx): Output {
         category: "shop",
         cost: 0,
         available: ok,
+        requires,
         lockedReason: ok
           ? undefined
           : `両 ≥${band.cost}、学識 ≥${band.intellectMin}${band.requiresFrag ? "、呪われし刃の欠片 ≥1" : ""} が要る`,

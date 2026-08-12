@@ -2,6 +2,10 @@
 id: intel_briefing_yaodao
 title: 情報屋の覚書（妖刀の声に耐える法）
 characters: []
+ai:
+  relatedActivityIds:
+    - infoshop_yaodao
+    - script:intel_briefing
 ---
 
 折り紙の中身は短い。古い禅僧の書写。

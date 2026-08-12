@@ -2,6 +2,10 @@
 id: intel_briefing_hidden
 title: 情報屋の覚書（隠し zone）
 characters: []
+ai:
+  relatedActivityIds:
+    - infoshop_hidden
+    - script:intel_briefing
 ---
 
 折り紙ではなく、油紙に包まれた小さな絵地図。

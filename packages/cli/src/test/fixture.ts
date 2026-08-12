@@ -55,6 +55,7 @@ export interface ActivityAssertion {
   titleIncludes?: string;
   descriptionIncludes?: string;
   effectsHintIncludes?: string;
+  requires?: unknown;
   forecastMetric?: string;
   metricValue?: number;
   metricMin?: number;

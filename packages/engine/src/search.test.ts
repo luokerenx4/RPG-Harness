@@ -172,6 +172,109 @@ describe("choice state-space search", () => {
     expect(result.state.baseline.variables.churn).toBe(0);
   });
 
+  test("follows machine-readable gates on a locked authored activity", async () => {
+    const game = makeGame({
+      variables: [{ id: "churn", type: "number", initial: 0 }],
+      scripts: [makeScript("target", {
+        ai: { relatedActivityIds: ["buy:intel"] },
+      })],
+      runFn: async function* (ctx) {
+        while (ctx.state.baseline.scripts.target?.completed !== true) {
+          const coins = ctx.state.baseline.inventory.coin ?? 0;
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: [
+                {
+                  id: "churn",
+                  kind: "action" as const,
+                  title: "Churn",
+                  cost: 0,
+                  available: true,
+                },
+                {
+                  id: "earn:coin",
+                  kind: "action" as const,
+                  title: "Earn",
+                  cost: 0,
+                  available: true,
+                },
+                {
+                  id: "sell:key",
+                  kind: "action" as const,
+                  title: "Sell required key",
+                  cost: 0,
+                  available: (ctx.state.baseline.inventory.key ?? 0) > 0,
+                },
+                {
+                  id: "buy:intel",
+                  kind: "action" as const,
+                  title: "Buy",
+                  cost: 0,
+                  available: coins >= 2,
+                  requires: {
+                    all: [
+                      { inventory: { itemId: "coin", min: 2 } },
+                      { inventory: { itemId: "key", min: 1 } },
+                    ],
+                  },
+                },
+              ],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "churn") {
+            ctx.state.baseline.variables.churn =
+              Number(ctx.state.baseline.variables.churn ?? 0) + 1;
+          }
+          if (input.id === "earn:coin") {
+            ctx.state.baseline.inventory.coin = coins + 1;
+          }
+          if (input.id === "sell:key") {
+            delete ctx.state.baseline.inventory.key;
+            ctx.state.baseline.inventory.coin = coins + 2;
+          }
+          if (
+            input.id === "buy:intel" &&
+            coins >= 2 &&
+            (ctx.state.baseline.inventory.key ?? 0) >= 1
+          ) {
+            ctx.state.baseline.scripts.target = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      (() => {
+        const state = makeState(game);
+        state.baseline.inventory.key = 1;
+        return state;
+      })(),
+      { scriptId: "target" },
+      { maxNodes: 10, maxSteps: 10 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "doActivity", id: "earn:coin" },
+      { type: "doActivity", id: "earn:coin" },
+      { type: "doActivity", id: "buy:intel" },
+    ]);
+    expect(result.state.baseline.variables.churn).toBe(0);
+  });
+
   test("reports a bounded miss without mutating the source state", async () => {
     const game = makeGame({
       characters: [makeCharacter("alice")],

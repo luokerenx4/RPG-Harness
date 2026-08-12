@@ -278,6 +278,10 @@ scripts with no choices. A script may declare ordered
 does not reveal how public gameplay can satisfy it. Breadcrumbs guide search
 priority only: every activity must still be present and available in the live
 Headless/GUI output, and the completed path must replay to an identical state.
+Dynamic hub activities may expose an exact `requires` condition alongside the
+human-facing `lockedReason`. Goal-directed search uses that shared contract to
+prefer actions that measurably close a resource/stat gate and to avoid spending
+an already-satisfied prerequisite merely because another requirement improves.
 Both reach commands follow fork provenance through ancestor sessions, so an AI
 starting from a terminal child branch can recover the exact earlier checkpoint
 where another route was still playable without mutating any ancestor save.
