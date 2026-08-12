@@ -328,6 +328,12 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
     }
     const rest = trimmed.slice(1).trim();
     const arrowIdx = rest.indexOf("->");
+    if (arrowIdx < 0 && /\s[+-]\d*[A-Za-z_][\w-]*(?:\s+[+-]\d*[A-Za-z_][\w-]*)*\s*$/.test(rest)) {
+      throw new ScriptParseError(
+        `Choice option looks like it ends with inline effects but is missing \`->\`: "${rest}"`,
+        source,
+      );
+    }
     let text = rest;
     let effects: StateDelta | undefined;
     let goto: string | undefined;

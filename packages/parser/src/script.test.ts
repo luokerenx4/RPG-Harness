@@ -241,6 +241,17 @@ describe("parseScript — choice (? prompt)", () => {
       ),
     ).toThrow(/non-option line/);
   });
+
+  test("effect-like suffix without an arrow throws instead of becoming button text", () => {
+    expect(() =>
+      parseScript(
+        source(
+          "id: x\ntitle: t",
+          "? prompt\n- 答える +2alice",
+        ),
+      ),
+    ).toThrow(/missing `->`/);
+  });
 });
 
 describe("parseScript — fenced YAML choice", () => {
