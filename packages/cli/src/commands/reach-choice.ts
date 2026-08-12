@@ -14,6 +14,7 @@ import {
   isSessionCheckpointRef,
   withSessionLock,
 } from "@rpg-harness/session-store";
+import { createHash } from "node:crypto";
 import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
 import {
@@ -52,7 +53,7 @@ export interface ReachChoiceSummary {
   reason: "found" | "exhausted" | "max-nodes";
   target: Extract<ChoiceAuthoringWorkItem, { kind: "reach-choice" }>;
   inputs: Input[];
-  decisions: number;
+  path: ReachChoicePathSummary;
   exploredNodes: number;
   visitedStates: number;
   deepestSteps: number;
@@ -71,6 +72,16 @@ export interface ReachChoiceSummary {
   replayVerified: boolean;
   closest: ChoiceSearchClosest;
   report?: PlaytestReport;
+}
+
+export interface ReachChoicePathSummary {
+  revision: string;
+  inputs: number;
+  decisions: number;
+  forcedAdvances: number;
+  choices: number;
+  activities: number;
+  scriptSelections: number;
 }
 
 export async function reachChoiceCommand(args: ReachChoiceArgs): Promise<void> {
@@ -237,7 +248,7 @@ export async function runReachChoice(
     reason: search.reason,
     target,
     inputs: search.inputs,
-    decisions: search.inputs.length,
+    path: summarizeInputPath(search.inputs),
     exploredNodes: search.exploredNodes,
     visitedStates: search.visitedStates,
     deepestSteps: search.deepestSteps,
@@ -260,6 +271,22 @@ export async function runReachChoice(
     replayVerified,
     closest: search.closest,
     ...(report ? { report } : {}),
+  };
+}
+
+function summarizeInputPath(inputs: Input[]): ReachChoicePathSummary {
+  const choices = inputs.filter((input) => input.type === "choose").length;
+  const activities = inputs.filter((input) => input.type === "doActivity").length;
+  const scriptSelections = inputs.filter((input) => input.type === "select").length;
+  const decisions = choices + activities + scriptSelections;
+  return {
+    revision: createHash("sha256").update(JSON.stringify(inputs)).digest("hex"),
+    inputs: inputs.length,
+    decisions,
+    forcedAdvances: inputs.length - decisions,
+    choices,
+    activities,
+    scriptSelections,
   };
 }
 

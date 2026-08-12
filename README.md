@@ -237,6 +237,11 @@ require an explicit unused `--new-session`; authoring operations return source,
 beat, choice, and optional live-hook context without claiming an edit occurred.
 If an executable item cannot reach its declared target, `work` returns
 `status: "failed"`, keeps the attempted branch unwritten, and exits non-zero.
+Successful branch work is deliberately compact: it reports stable coordinates,
+path counts/revision, search evidence, ending, and the GUI-compatible session,
+without embedding the full save, every pending branch, or the raw replay path.
+Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
+detailed artifacts are actually needed.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports
@@ -258,6 +263,9 @@ When `--from-at` is omitted and the current save cannot progress (including a
 completed GUI playthrough), `reach` retries recoverable historical choice
 checkpoints newest-first. All attempts share the same `--max-nodes` budget, and
 the resulting fork records the exact checkpoint that produced the route.
+Its `path` separates all public inputs from semantic decisions (`choose`,
+`doActivity`, and `select`) and forced `next` advances, avoiding inflated
+decision counts on narration-heavy or grinding routes.
 On a bounded miss, `closest` reports the best path plus each satisfied/blocked
 target requirement. Add `--report-on-miss` to persist that closest state and
 turn the diagnosis into a reproducible playtest issue; without it, a miss stays

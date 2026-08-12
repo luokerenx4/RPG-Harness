@@ -1,8 +1,9 @@
 import { getPlaytestReport, reproducePlaytestReport } from "../playtest-reports";
 import { runChoiceCoverageWorkItem } from "./cover-choice";
+import type { CoverChoiceSummary } from "./cover-choice";
 import { inspectScript } from "./inspect-script";
 import { inspectSession } from "./inspect-session";
-import { runReachChoice } from "./reach-choice";
+import { runReachChoice, type ReachChoiceSummary } from "./reach-choice";
 import { collectSessionTranscript } from "./transcript";
 import {
   collectDevelopmentWorklist,
@@ -124,7 +125,14 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
         verbose: false,
         pretty: false,
       });
-      return executed(selection, operation, "isolated-session", true, target, result);
+      return executed(
+        selection,
+        operation,
+        "isolated-session",
+        true,
+        target,
+        compactCoverResult(result),
+      );
     }
     case "reach": {
       const target = requireNewSession(args, item);
@@ -153,8 +161,8 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
         wroteSession ? "isolated-session" : "read-only",
         wroteSession,
         result.session ?? null,
-        result,
-      ) : failed(selection, operation, result);
+        compactReachResult(result),
+      ) : failed(selection, operation, compactReachResult(result));
     }
     case "edit": {
       const scriptId = typeof item.coordinates.scriptId === "string"
@@ -187,6 +195,77 @@ export async function runDevelopmentWorkItem(args: WorkArgs): Promise<WorkResult
       };
     }
   }
+}
+
+function compactCoverResult(result: CoverChoiceSummary) {
+  return {
+    reason: result.reason,
+    ...(result.error ? { error: result.error } : {}),
+    progress: result.progress,
+    decisionPath: result.decisionPath,
+    inputs: result.decisions,
+    rejectedInputs: result.rejectedInputs,
+    visibleOutputs: result.steps,
+    ending: result.ending,
+    session: result.session,
+    webPath: result.webPath,
+    ...(result.fork ? { fork: result.fork } : {}),
+    ...(result.report ? { report: result.report } : {}),
+    ...(result.choiceCoverage
+      ? { choiceCoverage: { summary: result.choiceCoverage.summary } }
+      : {}),
+    targetChoice: result.targetChoice,
+    workItem: {
+      key: result.workItem.key,
+      scriptId: result.workItem.scriptId,
+      choiceId: result.workItem.choiceId,
+      optionId: result.workItem.optionId,
+    },
+  };
+}
+
+function compactReachResult(result: ReachChoiceSummary) {
+  return {
+    status: result.status,
+    found: result.found,
+    reason: result.reason,
+    target: {
+      key: result.target.key,
+      scriptId: result.target.scriptId,
+      choiceId: result.target.choiceId,
+    },
+    path: result.path,
+    search: {
+      exploredNodes: result.exploredNodes,
+      visitedStates: result.visitedStates,
+      deepestSteps: result.deepestSteps,
+      attemptedSources: result.attemptedSources,
+    },
+    source: result.source,
+    requestedSession: result.requestedSession,
+    ...(result.session ? { session: result.session } : {}),
+    ...(result.webPath ? { webPath: result.webPath } : {}),
+    ...(result.fork ? { fork: result.fork } : {}),
+    output: compactOutput(result.output),
+    replayVerified: result.replayVerified,
+    ...(!result.found ? { closest: result.closest } : {}),
+    ...(result.report ? { report: result.report } : {}),
+  };
+}
+
+function compactOutput(output: ReachChoiceSummary["output"]) {
+  if (output?.type !== "choice") return output === null ? null : { type: output.type };
+  return {
+    type: output.type,
+    scriptId: output.scriptId,
+    choiceId: output.choiceId,
+    prompt: output.prompt,
+    options: output.options.map((option) => ({
+      id: option.id,
+      available: option.available,
+      ...(option.lockedReason ? { lockedReason: option.lockedReason } : {}),
+    })),
+  };
 }
 
 function failed(

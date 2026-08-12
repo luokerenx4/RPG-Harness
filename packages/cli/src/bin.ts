@@ -83,7 +83,8 @@ COMMANDS
       Select one structured worklist item (highest priority by default) and
       execute its operation. Diagnostics are read-only; branch-producing work
       requires an explicit fresh --new-session; edits return authoring context.
-      An execution that cannot reach its declared target exits non-zero.
+      Branch results return compact evidence plus the named GUI session, not
+      full saves or pending queues. An unreachable target exits non-zero.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,

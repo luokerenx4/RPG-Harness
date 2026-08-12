@@ -93,8 +93,12 @@ describe("structured development work execution", () => {
       result: {
         targetChoice: { status: "selected", optionId: "stay" },
         workItem: { key: "scene/reply/stay" },
+        inputs: 1,
+        visibleOutputs: 2,
       },
     });
+    expect(result.result).not.toHaveProperty("finalState");
+    expect(result.result).not.toHaveProperty("choiceCoverage.pendingBranches");
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
     expect(Object.keys(await snapshotTree(sessionDir(gameDir, "ai-cover-stay"))))
       .toEqual(expect.arrayContaining(["fork.json", "log.jsonl", "state.json"]));
@@ -260,9 +264,12 @@ describe("structured development work execution", () => {
         replayVerified: true,
         session: "ai-reach-reply",
         webPath: "/?session=ai-reach-reply",
+        path: { inputs: 1, decisions: 1, forcedAdvances: 0 },
         output: { type: "choice", scriptId: "scene", choiceId: "reply" },
       },
     });
+    expect(result.result).not.toHaveProperty("inputs");
+    expect(result.result).not.toHaveProperty("closest");
     expect(await snapshotTree(sessionDir(gameDir, "fresh-player"))).toEqual(sourceBefore);
   });
 

@@ -36,6 +36,14 @@ describe("reach-choice", () => {
     expect(result).toMatchObject({
       found: true,
       reason: "found",
+      path: {
+        inputs: 2,
+        decisions: 1,
+        forcedAdvances: 1,
+        choices: 0,
+        activities: 0,
+        scriptSelections: 1,
+      },
       replayVerified: true,
       session: "ai-reach",
       webPath: "/?session=ai-reach",
@@ -213,6 +221,7 @@ describe("reach-choice", () => {
       },
       fork: { sourceLogEntry: 2 },
       output: { type: "choice", scriptId: "target", choiceId: "other-ending" },
+      path: { inputs: 4, decisions: 2, forcedAdvances: 2, choices: 1 },
     });
     expect(result.inputs).toContainEqual({
       type: "choose",
