@@ -99,6 +99,57 @@ describe("runScript — narration / dialogue input protocol", () => {
   });
 });
 
+describe("runScript — machine-readable choice consequences", () => {
+  test("yields authored effects and branch targets without requiring source inspection", async () => {
+    const beats: Beat[] = [
+      {
+        type: "choice",
+        prompt: "answer",
+        options: [
+          {
+            text: "stay",
+            effects: { characterStats: { a: { affection: 2 } } },
+            goto: "after",
+          },
+          { text: "leave", goto: "$end" },
+        ],
+      },
+      { type: "label", name: "after" },
+      { type: "endScript" },
+    ];
+    const ctx = makeCtx(
+      makeGame({
+        characters: [makeCharacter("a")],
+        scripts: [makeScript("s1", { beats })],
+      }),
+    );
+    ctx.state.baseline.currentScriptId = "s1";
+
+    const { outputs } = await drive(runScript(ctx, ctx.scriptMap.get("s1")!), [
+      { type: "quit" },
+    ]);
+
+    expect(outputs[0]).toMatchObject({
+      type: "choice",
+      options: [
+        {
+          text: "stay",
+          available: true,
+          consequence: {
+            effects: { characterStats: { a: { affection: 2 } } },
+            goto: "after",
+          },
+        },
+        {
+          text: "leave",
+          available: true,
+          consequence: { goto: "$end" },
+        },
+      ],
+    });
+  });
+});
+
 describe("runScript — inline emotion slot resolution", () => {
   const cast = () => [
     makeCharacter("a", {

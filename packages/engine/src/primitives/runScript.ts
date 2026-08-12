@@ -137,6 +137,16 @@ export async function* runScript(
             text: opt.text,
             available: r.ok,
             ...(r.ok ? {} : { lockedReason: r.reason }),
+            ...(opt.effects !== undefined || opt.goto !== undefined
+              ? {
+                  consequence: {
+                    ...(opt.effects !== undefined
+                      ? { effects: opt.effects }
+                      : {}),
+                    ...(opt.goto !== undefined ? { goto: opt.goto } : {}),
+                  },
+                }
+              : {}),
           };
         });
         const rendered = fireOnChoicePresented(

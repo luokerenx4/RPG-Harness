@@ -1051,6 +1051,14 @@ export interface RenderedChoice {
   text: string;
   available: boolean;
   lockedReason?: string;
+  // Exact authored consequence for headless players and tooling. Shells may
+  // deliberately keep this invisible so narrative choices do not become
+  // player-facing stat spreadsheets, while AI players can still reason about
+  // the decision without scraping source scripts or private save cursors.
+  consequence?: {
+    effects?: StateDelta;
+    goto?: string;
+  };
 }
 
 export interface HubActivity {
