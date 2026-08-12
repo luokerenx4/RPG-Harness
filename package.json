@@ -9,7 +9,7 @@
   "scripts": {
     "rpgh": "bun packages/cli/src/bin.ts",
     "play": "bun packages/cli/src/bin.ts play",
-    "test:unit": "bun test packages/engine packages/parser packages/frontend-core packages/session-store packages/cli packages/web/dev",
+    "test:unit": "bun test packages/engine packages/parser packages/frontend-core packages/session-store packages/cli packages/web/dev examples/sengoku-raid/modules/*.test.ts",
     "test:fixtures": "bun packages/cli/src/bin.ts test examples/hook-test && bun packages/cli/src/bin.ts test examples/eject-test && bun packages/cli/src/bin.ts test examples/sengoku-raid",
     "test:validate-negative": "bash scripts/test-validate-negative.sh",
     "test": "bun run test:unit && bun run test:fixtures && bun run test:validate-negative",

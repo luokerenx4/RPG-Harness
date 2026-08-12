@@ -1,18 +1,18 @@
-import type { ComposedState, Input, Output } from "@rpg-harness/engine";
+import type {
+  AiPersonaDecider,
+  AiPersonaDefinition,
+  Game,
+  Input,
+  Output,
+} from "@rpg-harness/engine";
 
-export type Persona = (
-  output: Output,
-  state: ComposedState,
-  step: number,
-) => Promise<Input | null>;
+export type Persona = AiPersonaDecider;
 
 export type DeterministicChoicePersona =
   | "objective"
   | "greedy"
   | "charmer"
   | "rude"
-  | "extractor"
-  | "delver"
   | "hunter";
 
 export interface PersonaChoiceDecision {
@@ -36,6 +36,11 @@ export interface PersonaChoiceDecision {
     | {
         kind: "positional-fallback";
         position: "first" | "second" | "last";
+      }
+    | {
+        kind: "registered-persona";
+        source: "builtin" | `module:${string}`;
+        description: string;
       }
     | { kind: "no-available-option" };
 }
@@ -191,34 +196,6 @@ export function explainPersonaChoice(
     return firstAvailableDecision(output);
   }
 
-  if (persona === "extractor") {
-    const preferredTags = ["independent", "cautious", "restrained", "pragmatic"];
-    const semantic = pickTaggedChoice(output, preferredTags);
-    if (semantic) {
-      return choiceDecision(output, semantic.index, {
-        kind: "semantic-tags",
-        preferredTags,
-        matchedTags: semantic.matchedTags,
-        score: semantic.score,
-      });
-    }
-    return firstAvailableDecision(output);
-  }
-
-  if (persona === "delver") {
-    const preferredTags = ["aggressive", "defiant", "bold", "risky"];
-    const semantic = pickTaggedChoice(output, preferredTags);
-    if (semantic) {
-      return choiceDecision(output, semantic.index, {
-        kind: "semantic-tags",
-        preferredTags,
-        matchedTags: semantic.matchedTags,
-        score: semantic.score,
-      });
-    }
-    return firstAvailableDecision(output);
-  }
-
   return firstAvailableDecision(output);
 }
 
@@ -324,7 +301,7 @@ export const personas: Record<string, Persona> = {
     return { type: "next" };
   },
 
-  charmer: async (output, state) => {
+  charmer: async (output) => {
     if (output.type === "choice") {
       return explainPersonaChoice("charmer", output).input;
     }
@@ -340,21 +317,6 @@ export const personas: Record<string, Persona> = {
       }
       const objective = pickObjectiveActivity(output);
       if (objective) return objective;
-      const raid = (state as Record<string, unknown>)["sengoku-raid"] as
-        | { raid?: { visited?: Record<string, { visited?: boolean }> } }
-        | undefined;
-      const visited = raid?.raid?.visited;
-      if (visited) {
-        const unvisitedMoves = available.filter((activity) => {
-          if (!activity.id.startsWith("move:")) return false;
-          return visited[activity.id.slice("move:".length)]?.visited !== true;
-        });
-        if (unvisitedMoves.length > 0) {
-          return { type: "doActivity", id: unvisitedMoves.at(-1)!.id };
-        }
-        const extract = available.find((activity) => activity.id === "extract");
-        if (extract) return { type: "doActivity", id: extract.id };
-      }
       return pickActivity(output, (acts) => acts[acts.length - 1]!.idx);
     }
     if (output.type === "gameEnd") return null;
@@ -407,139 +369,6 @@ export const personas: Record<string, Persona> = {
     return { type: "next" };
   },
 
-  // sengoku-raid: cautious extraction-shooter player. In raid mode:
-  // extract whenever possible (cash in what you have), flee from any
-  // encounter rather than fight. In hub mode: sell loot, rest, upgrade
-  // when affordable, then redeploy. Will never engage a fight.
-  extractor: async (output) => {
-    if (output.type === "hubMenu") {
-      const acts = output.snapshot.activities.filter((a) => a.available);
-      const find = (pred: (id: string) => boolean) =>
-        acts.find((a) => pred(a.id));
-      // Once the authored route is known, follow its public ending link. This
-      // keeps a cautious generic policy from feeding the wrong pulse forever.
-      const objective = pickObjectiveActivity(output);
-      if (
-        objective?.type === "doActivity" &&
-        (objective.id.startsWith("imbue:") || objective.id.startsWith("script:ending_"))
-      ) return objective;
-      // Before the route is authored, pick the first available pulse.
-      const imbue = find((id) => id.startsWith("imbue:"));
-      if (imbue) return { type: "doActivity", id: imbue.id };
-      // Negotiate options (HP<30%) — extractor releases.
-      const release = find((id) => id === "negotiate_release");
-      if (release) return { type: "doActivity", id: release.id };
-      // Raid-side priorities
-      const ext = find((id) => id === "extract");
-      if (ext) return { type: "doActivity", id: ext.id };
-      const flee = find((id) => id === "flee");
-      if (flee) return { type: "doActivity", id: flee.id };
-      const search = find((id) => id === "search");
-      if (search) return { type: "doActivity", id: search.id };
-      const move = acts.find((a) => a.id.startsWith("move:"));
-      if (move) return { type: "doActivity", id: move.id };
-      // Hub-side priorities (post-R2 unprefixed ids)
-      const sell = find((id) => id === "sell_all_loot");
-      if (sell) return { type: "doActivity", id: sell.id };
-      // Read pending intel briefing first
-      const intelRead = find((id) => id === "script:intel_briefing");
-      if (intelRead) return { type: "doActivity", id: intelRead.id };
-      const upgrade = find((id) => id === "upgrade_mundane");
-      if (upgrade) return { type: "doActivity", id: upgrade.id };
-      const sellMaterial = find((id) => id.startsWith("sell_material:"));
-      if (sellMaterial) return { type: "doActivity", id: sellMaterial.id };
-      const rest = find((id) => id === "rest");
-      if (rest) return { type: "doActivity", id: rest.id };
-      const depart = acts.find((a) => a.id.startsWith("depart:"));
-      if (depart) return { type: "doActivity", id: depart.id };
-      const first = acts[0];
-      return first ? { type: "doActivity", id: first.id } : { type: "quit" };
-    }
-    if (output.type === "choice") return explainPersonaChoice("extractor", output).input;
-    if (output.type === "scriptComplete") {
-      const first = output.nextAvailable[0];
-      return first ? { type: "select", scriptId: first.id } : null;
-    }
-    if (output.type === "gameEnd") return null;
-    return { type: "next" };
-  },
-
-  // sengoku-raid: aggressive opposite of extractor. Always fights,
-  // pushes into unvisited zones, only extracts when fully explored.
-  // Useful for proving combat / death / boss paths are reachable.
-  // Knows about module state (state["sengoku-raid"].raid.zones) to
-  // make smart movement choices — without that, the persona oscillates
-  // between visited zones forever.
-  delver: async (output, state) => {
-    if (output.type === "hubMenu") {
-      const acts = output.snapshot.activities.filter((a) => a.available);
-      const find = (pred: (id: string) => boolean) =>
-        acts.find((a) => pred(a.id));
-      const objective = pickObjectiveActivity(output);
-      if (
-        objective?.type === "doActivity" &&
-        objective.id.startsWith("script:ending_")
-      ) return objective;
-      // Pulse imbue forces a choice after each victory. Delver picks 鬼.
-      const imbueOni = find((id) => id === "imbue:oni");
-      if (imbueOni) return { type: "doActivity", id: imbueOni.id };
-      const imbueAny = find((id) => id.startsWith("imbue:"));
-      if (imbueAny) return { type: "doActivity", id: imbueAny.id };
-      // Negotiate options (HP<30%): delver finishes with the voice
-      // when possible, otherwise just keeps attacking.
-      const voice = find((id) => id === "yaodao_voice");
-      if (voice) return { type: "doActivity", id: voice.id };
-      // 1. Always fight when there's something to fight
-      const atk = find((id) => id === "attack");
-      if (atk) return { type: "doActivity", id: atk.id };
-      const sneak = find((id) => id === "sneak_strike");
-      if (sneak) return { type: "doActivity", id: sneak.id };
-      // 2. Grab loot at current zone
-      const search = find((id) => id === "search");
-      if (search) return { type: "doActivity", id: search.id };
-      // 3. Prefer moving to an UNVISITED zone (read module state to know).
-      const raid = (state as Record<string, unknown>)["sengoku-raid"] as
-        | { raid?: { visited?: Record<string, { visited?: boolean }> } }
-        | undefined;
-      const zones = raid?.raid?.visited;
-      const moveActs = acts.filter((a) => a.id.startsWith("move:"));
-      if (moveActs.length > 0 && zones) {
-        const toUnvisited = moveActs.find((a) => {
-          const target = a.id.slice("move:".length);
-          return zones[target] && !zones[target]!.visited;
-        });
-        if (toUnvisited) return { type: "doActivity", id: toUnvisited.id };
-      }
-      // 4. Extract ONLY if every zone in the map has been visited.
-      const allVisited =
-        zones !== undefined &&
-        Object.values(zones).every((z) => z?.visited === true);
-      const extract = find((id) => id === "extract");
-      if (allVisited && extract) return { type: "doActivity", id: extract.id };
-      // 5. Some zones still unvisited but no unvisited neighbor — take
-      //    the first move; eventually BFS-like wander finds the path.
-      if (moveActs.length > 0) return { type: "doActivity", id: moveActs[0]!.id };
-      // 6. Cornered: extract (if we can) or quit.
-      if (extract) return { type: "doActivity", id: extract.id };
-      // 6. Hub-side: rest if hurt, then depart on hardest map
-      const rest = find((id) => id === "rest");
-      if (rest) return { type: "doActivity", id: rest.id };
-      const departs = acts.filter((a) => a.id.startsWith("depart:"));
-      if (departs.length > 0) {
-        return { type: "doActivity", id: departs[departs.length - 1]!.id };
-      }
-      const first = acts[0];
-      return first ? { type: "doActivity", id: first.id } : { type: "quit" };
-    }
-    if (output.type === "choice") return explainPersonaChoice("delver", output).input;
-    if (output.type === "scriptComplete") {
-      const first = output.nextAvailable[0];
-      return first ? { type: "select", scriptId: first.id } : null;
-    }
-    if (output.type === "gameEnd") return null;
-    return { type: "next" };
-  },
-
   hunter: async (output) => {
     if (output.type === "hubMenu") {
       const activities = output.snapshot.activities;
@@ -587,6 +416,52 @@ export const personaDescriptions: Record<string, string> = {
   rude: "优先 defiant / blunt / independent / selfish 语义，未标注时选第二项",
   random: "随机选 — 用来 stress-test 路径",
   hunter: "训练模式专用：优先讨伐妖怪，没怪打就睡，平衡灵体化",
-  extractor: "extraction-shooter 专用：能撤就撤，能逃就逃，从不打硬仗",
-  delver: "extraction-shooter 专用：永远进攻，永远往深处推，从不回避",
 };
+
+export interface AiPersonaRegistryEntry extends AiPersonaDefinition {
+  source: "builtin" | `module:${string}`;
+}
+
+/** Merge generic runner policies with author-owned module policies. */
+export function collectAiPersonas(game: Game): Record<string, AiPersonaRegistryEntry> {
+  const registry: Record<string, AiPersonaRegistryEntry> = {};
+  for (const [name, decide] of Object.entries(personas)) {
+    registry[name] = {
+      description: personaDescriptions[name] ?? name,
+      decide,
+      deterministic: name !== "random",
+      source: "builtin",
+    };
+  }
+  for (const module of game.modules ?? []) {
+    for (const [name, definition] of Object.entries(module.aiPersonas ?? {})) {
+      if (!name.trim()) throw new Error(`Module ${module.id} registers an empty AI persona name`);
+      if (registry[name]) {
+        throw new Error(
+          `AI persona ${name} from module ${module.id} conflicts with ${registry[name]!.source}`,
+        );
+      }
+      if (typeof definition.description !== "string" || !definition.description.trim()) {
+        throw new Error(`AI persona ${name} from module ${module.id} needs a description`);
+      }
+      if (typeof definition.decide !== "function") {
+        throw new Error(`AI persona ${name} from module ${module.id} needs a decide function`);
+      }
+      registry[name] = { ...definition, source: `module:${module.id}` };
+    }
+  }
+  return registry;
+}
+
+/** Validate that a project's acceptance matrix names runnable policies. */
+export function validateAiPersonaConfig(game: Game): void {
+  const registry = collectAiPersonas(game);
+  for (const name of game.aiAudit?.personas ?? []) {
+    if (!registry[name]) {
+      throw new Error(
+        `game.yaml ai_audit.personas references unknown persona ${name}. ` +
+          `Available: ${Object.keys(registry).join(", ")}`,
+      );
+    }
+  }
+}

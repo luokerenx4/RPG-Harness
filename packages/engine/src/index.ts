@@ -111,6 +111,8 @@ export type {
   ActivityForecast,
   ActivityForecastMetric,
   AiAuditConfig,
+  AiPersonaDecider,
+  AiPersonaDefinition,
   AssetKind,
   AssetRefs,
   AssetRenderings,

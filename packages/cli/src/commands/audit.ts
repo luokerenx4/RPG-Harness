@@ -9,7 +9,7 @@ import {
   recordPlaytestReport,
   type PlaytestReport,
 } from "../playtest-reports";
-import { personaDescriptions, personas } from "../test/personas";
+import { collectAiPersonas } from "../test/personas";
 import {
   assertTargetEmpty,
   createForkFromSource,
@@ -145,6 +145,14 @@ export async function runAudit(
   assertSessionName(args.fromSession);
   await assertSourceExists(args.gameDir, args.fromSession);
   const game = await loadGame(args.gameDir);
+  const personaRegistry = collectAiPersonas(game);
+  for (const persona of args.personas) {
+    if (!personaRegistry[persona]) {
+      throw new Error(
+        `Unknown audit persona: ${persona}. Available: ${Object.keys(personaRegistry).join(", ")}`,
+      );
+    }
+  }
   const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
   const acceptanceMatrixMatches = qualityPolicy?.personas === undefined ||
     samePersonaSet(args.personas, qualityPolicy.personas);
@@ -522,13 +530,6 @@ function validateAuditArgs(args: AuditArgs): void {
     args.personas.indexOf(persona) !== index
   );
   if (duplicate) throw new Error(`Duplicate audit persona: ${duplicate}`);
-  for (const persona of args.personas) {
-    if (!personas[persona]) {
-      throw new Error(
-        `Unknown audit persona: ${persona}. Available: ${Object.keys(personaDescriptions).join(", ")}`,
-      );
-    }
-  }
   if (args.personas.includes("random") && args.seed === undefined) {
     throw new Error("Audit persona random requires --seed for reproducibility");
   }

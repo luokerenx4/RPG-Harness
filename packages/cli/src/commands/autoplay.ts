@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
-import { personaDescriptions, personas } from "../test/personas";
+import { collectAiPersonas } from "../test/personas";
 import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { forkSession } from "./fork";
@@ -159,10 +159,11 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   }
 
   const game = await loadGame(args.gameDir);
-  const persona = personas[args.persona];
+  const personaRegistry = collectAiPersonas(game);
+  const persona = personaRegistry[args.persona]?.decide;
   if (!persona) {
-    const available = Object.entries(personaDescriptions)
-      .map(([name, desc]) => `  ${name.padEnd(10)} — ${desc}`)
+    const available = Object.entries(personaRegistry)
+      .map(([name, entry]) => `  ${name.padEnd(10)} — ${entry.description}`)
       .join("\n");
     throw new Error(
       `Unknown persona: ${args.persona}\n\nAvailable personas:\n${available}`,

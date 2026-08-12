@@ -89,6 +89,40 @@ describe("read-only choice policy probe", () => {
     })).rejects.toThrow("must be deterministic");
   });
 
+  test("executes a project-registered persona against historical choice state", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await registerProjectPersona(gameDir);
+    const game = await loadGame(gameDir);
+    const waiting = await peek(game, createInitialState(game));
+    const presented = await step(game, waiting.state, {
+      type: "select",
+      scriptId: "intro",
+    });
+    await appendLog(
+      gameDir,
+      "player",
+      { input: { type: "select", scriptId: "intro" }, output: presented.output },
+      presented.state,
+    );
+
+    const summary = await runChoiceProbe({
+      gameDir,
+      session: "player",
+      at: 1,
+      personas: ["project-scout"],
+      pretty: false,
+    });
+
+    expect(summary.decisions[0]).toMatchObject({
+      persona: "project-scout",
+      optionId: "help",
+      reason: {
+        kind: "registered-persona",
+        source: "module:probe-project",
+      },
+    });
+  });
+
   test("rejects a checkpoint whose live output is not a choice", async () => {
     const gameDir = await temporaryChoiceGame();
     await expect(runChoiceProbe({
@@ -98,6 +132,18 @@ describe("read-only choice policy probe", () => {
       personas: ["objective"],
       pretty: false,
     })).rejects.toThrow("is scriptComplete, not a choice");
+  });
+
+  test("rejects an acceptance persona that no built-in or module registers", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await writeFile(
+      path.join(gameDir, "game.yaml"),
+      "title: Probe choice test\nai_audit:\n  personas: [missing-policy]\n  min_unique_decision_paths: 1\n",
+      "utf-8",
+    );
+    await expect(loadGame(gameDir)).rejects.toThrow(
+      "ai_audit.personas references unknown persona missing-policy",
+    );
   });
 });
 
@@ -126,6 +172,34 @@ async function writeChoiceScript(gameDir: string, tagged: boolean): Promise<void
       tagged ? "  - Refuse {id: refuse, ai: defiant}" : "  - Refuse {id: refuse}",
       "",
       "[end]",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+}
+
+async function registerProjectPersona(gameDir: string): Promise<void> {
+  await mkdir(path.join(gameDir, "modules"), { recursive: true });
+  await writeFile(
+    path.join(gameDir, "game.yaml"),
+    "title: Probe choice test\nmodules:\n  - ./modules/persona.ts\nai_audit:\n  personas: [project-scout]\n  min_unique_decision_paths: 1\n",
+    "utf-8",
+  );
+  await writeFile(
+    path.join(gameDir, "modules", "persona.ts"),
+    [
+      "export default {",
+      "  id: 'probe-project',",
+      "  aiPersonas: {",
+      "    'project-scout': {",
+      "      description: 'Choose help',",
+      "      decide: async (output) => {",
+      "        if (output.type !== 'choice') return { type: 'next' };",
+      "        return { type: 'choose', choiceId: output.choiceId, optionId: 'help' };",
+      "      },",
+      "    },",
+      "  },",
+      "};",
       "",
     ].join("\n"),
     "utf-8",

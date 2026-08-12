@@ -10,7 +10,7 @@ A game is a folder. A human can play that same folder in the terminal or the Web
 bun install
 bun run play              # boot 妖刀奇譚 — the bundled flagship game
 bun run dev:web           # play the same game in the browser
-bun run autoplay          # watch a built-in AI persona play through
+bun run autoplay          # watch an AI persona play through
 ```
 
 ## Make your own
@@ -206,7 +206,7 @@ rpgh studio   <game-dir>                                       # browser asset w
 ```
 
 Every mode runs on the same engine and the same content. `step` and `play` produce
-identical state files. `autoplay` is just `step` with a built-in persona deciding
+identical state files. `autoplay` is just `step` with a registered persona deciding
 the input. `test` is `step` with assertions on the resulting trace. An AI agent
 playing via the `rpg-harness-player` skill is just `step` with the LLM deciding the input.
 `report` turns an observation made during that loop into a structured coding issue,
@@ -591,11 +591,17 @@ longer hides meaningful route variation from the next coding agent.
 Completed lanes remain individually replayable if the command is interrupted;
 rerun with a fresh prefix after inspecting them. Add `random` explicitly with
 `--personas ...random --seed N` so the matrix remains reproducible.
+Generic policies are built into the runner. A game module can additionally
+register project-aware policies through `Module.aiPersonas`; autoplay, audit,
+and historical choice probes all resolve the same registry. This is where an
+agent may safely understand private mechanics such as a raid module's visited
+map without coupling the generic CLI to one game's state schema. Acceptance
+personas are validated at game load, and module policies cannot shadow built-ins.
 For authoring a single reached choice, `probe-choice` is the zero-write policy
 lane: it restores the named content-addressed checkpoint in memory, evaluates
 the current game scripts, and reports the stable option plus the exact reason
-for each deterministic persona (`semantic-tags`, `ai-priority`, or positional
-fallback). It does not advance the source, fork sessions, or create budget
+for each deterministic persona (`semantic-tags`, `ai-priority`, positional
+fallback, or the owning module). It does not advance the source, fork sessions, or create budget
 reports. Comparing the same `session@entry` before and after an edit makes
 semantic intent review cheap while still exposing live script migration through
 the source and evaluated state revisions. Random is intentionally excluded

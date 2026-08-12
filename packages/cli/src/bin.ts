@@ -118,9 +118,9 @@ COMMANDS
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
            [--session NAME] [--from-session PLAYER] [--from-at N]
            [--report-on-stop] [--pretty]
-      Have a built-in AI persona play through the game and report the ending.
-      Personas: objective / greedy / charmer / rude / random / extractor /
-      delver / hunter. Use an unknown name to print their descriptions.
+      Have a built-in or project-registered AI persona play through the game.
+      Built-ins: objective / greedy / charmer / rude / random / hunter.
+      Project modules may register more; use an unknown name to list them.
       --session persists every AI step as the same recoverable save/log used
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
       --from-session atomically forks a player/GUI save into --session before

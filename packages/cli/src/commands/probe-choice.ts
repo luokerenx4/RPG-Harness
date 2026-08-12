@@ -11,6 +11,7 @@ import {
 } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import {
+  collectAiPersonas,
   explainPersonaChoice,
   type DeterministicChoicePersona,
   type PersonaChoiceDecision,
@@ -25,10 +26,8 @@ export const DEFAULT_CHOICE_PROBE_PERSONAS: DeterministicChoicePersona[] = [
   "hunter",
 ];
 
-const DETERMINISTIC_CHOICE_PERSONAS = new Set<DeterministicChoicePersona>([
+const BUILTIN_DETERMINISTIC_CHOICE_PERSONAS = new Set<DeterministicChoicePersona>([
   ...DEFAULT_CHOICE_PROBE_PERSONAS,
-  "extractor",
-  "delver",
 ]);
 
 export interface ProbeChoiceArgs {
@@ -63,7 +62,7 @@ export interface ChoiceProbeSummary {
       aiTags: string[];
     }>;
   };
-  decisions: Array<PersonaChoiceDecision & { persona: DeterministicChoicePersona }>;
+  decisions: Array<PersonaChoiceDecision & { persona: string }>;
 }
 
 export async function probeChoiceCommand(args: ProbeChoiceArgs): Promise<void> {
@@ -83,21 +82,25 @@ export async function runChoiceProbe(
     throw new Error("--at must be a non-negative log entry number (0 selects initial state)");
   }
   if (args.personas.length === 0) throw new Error("--personas cannot be empty");
-  const requested = args.personas.map((persona) => {
-    if (!DETERMINISTIC_CHOICE_PERSONAS.has(persona as DeterministicChoicePersona)) {
-      throw new Error(
-        `Choice probe persona must be deterministic: ${persona}. Available: ${[
-          ...DETERMINISTIC_CHOICE_PERSONAS,
-        ].join(", ")}`,
-      );
-    }
-    return persona as DeterministicChoicePersona;
-  });
+  const requested = [...args.personas];
   if (new Set(requested).size !== requested.length) {
     throw new Error("--personas must not contain duplicates");
   }
 
   const game = await loadGame(args.gameDir);
+  const personaRegistry = collectAiPersonas(game);
+  for (const persona of requested) {
+    const definition = personaRegistry[persona];
+    if (!definition || definition.deterministic === false) {
+      const available = Object.entries(personaRegistry)
+        .filter(([, entry]) => entry.deterministic !== false)
+        .map(([name]) => name)
+        .join(", ");
+      throw new Error(
+        `Choice probe persona must be deterministic: ${persona}. Available: ${available}`,
+      );
+    }
+  }
   assertSessionName(args.session);
   const log = await readSessionLog(args.gameDir, args.session);
   if (args.at > log.length) {
@@ -160,9 +163,31 @@ export async function runChoiceProbe(
         aiTags: [...(option.aiTags ?? [])],
       })),
     },
-    decisions: requested.map((persona) => ({
-      persona,
-      ...explainPersonaChoice(persona, output),
+    decisions: await Promise.all(requested.map(async (persona) => {
+      if (BUILTIN_DETERMINISTIC_CHOICE_PERSONAS.has(persona as DeterministicChoicePersona)) {
+        return {
+          persona,
+          ...explainPersonaChoice(persona as DeterministicChoicePersona, output),
+        };
+      }
+      const definition = personaRegistry[persona]!;
+      const input = await definition.decide(output, result.state, args.at);
+      const optionIndex = input?.type === "choose"
+        ? "index" in input
+          ? input.index
+          : output.options.findIndex((option) => option.id === input.optionId)
+        : -1;
+      return {
+        persona,
+        input: input ?? { type: "quit" as const },
+        optionIndex: optionIndex >= 0 ? optionIndex : null,
+        optionId: optionIndex >= 0 ? output.options[optionIndex]?.id ?? null : null,
+        reason: {
+          kind: "registered-persona" as const,
+          source: definition.source,
+          description: definition.description,
+        },
+      };
     })),
   };
 }

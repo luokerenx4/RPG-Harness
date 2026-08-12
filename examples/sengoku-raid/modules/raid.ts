@@ -2861,9 +2861,174 @@ const triggers: Trigger[] = [
 // Module declaration
 // ============================================================================
 
+function personaChoice(
+  output: Extract<Output, { type: "choice" }>,
+  preferredTags: readonly string[],
+): Input {
+  const weights = new Map(
+    preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
+  );
+  let bestIndex = -1;
+  let bestScore = 0;
+  for (const [index, option] of output.options.entries()) {
+    if (!option.available) continue;
+    const score = (option.aiTags ?? []).reduce(
+      (sum, tag) => sum + (weights.get(tag) ?? 0),
+      0,
+    );
+    if (score > bestScore) {
+      bestIndex = index;
+      bestScore = score;
+    }
+  }
+  if (bestIndex < 0) {
+    bestIndex = output.options.findIndex((option) => option.available);
+  }
+  if (bestIndex < 0) return { type: "quit" };
+  const option = output.options[bestIndex];
+  return output.choiceId !== undefined && option?.id !== undefined
+    ? { type: "choose", choiceId: output.choiceId, optionId: option.id }
+    : { type: "choose", index: bestIndex };
+}
+
+function personaObjectiveActivity(
+  output: Extract<Output, { type: "hubMenu" }>,
+): Input | null {
+  const available = new Set(
+    output.snapshot.activities
+      .filter((activity) => activity.available)
+      .map((activity) => activity.id),
+  );
+  for (const objective of output.snapshot.objectives ?? []) {
+    if (objective.status !== "active") continue;
+    for (const id of objective.relatedActivityIds ?? []) {
+      if (available.has(id)) return { type: "doActivity", id };
+    }
+  }
+  return null;
+}
+
+export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
+  // Cautious extraction-shooter player: cashes out early and avoids fights.
+  extractor: {
+    description: "撤离玩法：能撤就撤，能逃就逃，从不打硬仗",
+    decide: async (output) => {
+      if (output.type === "hubMenu") {
+        const acts = output.snapshot.activities.filter((activity) => activity.available);
+        const find = (predicate: (id: string) => boolean) =>
+          acts.find((activity) => predicate(activity.id));
+        const objective = personaObjectiveActivity(output);
+        if (
+          objective?.type === "doActivity" &&
+          (objective.id.startsWith("imbue:") || objective.id.startsWith("script:ending_"))
+        ) return objective;
+        const imbue = find((id) => id.startsWith("imbue:"));
+        if (imbue) return { type: "doActivity", id: imbue.id };
+        const release = find((id) => id === "negotiate_release");
+        if (release) return { type: "doActivity", id: release.id };
+        const extract = find((id) => id === "extract");
+        if (extract) return { type: "doActivity", id: extract.id };
+        const flee = find((id) => id === "flee");
+        if (flee) return { type: "doActivity", id: flee.id };
+        const search = find((id) => id === "search");
+        if (search) return { type: "doActivity", id: search.id };
+        const move = find((id) => id.startsWith("move:"));
+        if (move) return { type: "doActivity", id: move.id };
+        const sell = find((id) => id === "sell_all_loot");
+        if (sell) return { type: "doActivity", id: sell.id };
+        const intel = find((id) => id === "script:intel_briefing");
+        if (intel) return { type: "doActivity", id: intel.id };
+        const upgrade = find((id) => id === "upgrade_mundane");
+        if (upgrade) return { type: "doActivity", id: upgrade.id };
+        const sellMaterial = find((id) => id.startsWith("sell_material:"));
+        if (sellMaterial) return { type: "doActivity", id: sellMaterial.id };
+        const rest = find((id) => id === "rest");
+        if (rest) return { type: "doActivity", id: rest.id };
+        const depart = find((id) => id.startsWith("depart:"));
+        if (depart) return { type: "doActivity", id: depart.id };
+        const first = acts[0];
+        return first ? { type: "doActivity", id: first.id } : { type: "quit" };
+      }
+      if (output.type === "choice") {
+        return personaChoice(output, ["independent", "cautious", "restrained", "pragmatic"]);
+      }
+      if (output.type === "scriptComplete") {
+        const first = output.nextAvailable[0];
+        return first ? { type: "select", scriptId: first.id } : null;
+      }
+      if (output.type === "gameEnd") return null;
+      return { type: "next" };
+    },
+  },
+
+  // Aggressive counterpart: fights, explores unvisited zones, then extracts.
+  delver: {
+    description: "撤离玩法：永远进攻，永远往深处推，从不回避",
+    decide: async (output, state) => {
+      if (output.type === "hubMenu") {
+        const acts = output.snapshot.activities.filter((activity) => activity.available);
+        const find = (predicate: (id: string) => boolean) =>
+          acts.find((activity) => predicate(activity.id));
+        const objective = personaObjectiveActivity(output);
+        if (
+          objective?.type === "doActivity" &&
+          objective.id.startsWith("script:ending_")
+        ) return objective;
+        const oni = find((id) => id === "imbue:oni");
+        if (oni) return { type: "doActivity", id: oni.id };
+        const imbue = find((id) => id.startsWith("imbue:"));
+        if (imbue) return { type: "doActivity", id: imbue.id };
+        const voice = find((id) => id === "yaodao_voice");
+        if (voice) return { type: "doActivity", id: voice.id };
+        const attack = find((id) => id === "attack");
+        if (attack) return { type: "doActivity", id: attack.id };
+        const sneak = find((id) => id === "sneak_strike");
+        if (sneak) return { type: "doActivity", id: sneak.id };
+        const search = find((id) => id === "search");
+        if (search) return { type: "doActivity", id: search.id };
+        const raid = (state as Record<string, unknown>)[MODULE_ID] as
+          | { raid?: { visited?: Record<string, { visited?: boolean }> } }
+          | undefined;
+        const zones = raid?.raid?.visited;
+        const moves = acts.filter((activity) => activity.id.startsWith("move:"));
+        const unvisited = zones && moves.find((activity) => {
+          const target = activity.id.slice("move:".length);
+          return zones[target] && zones[target]!.visited !== true;
+        });
+        if (unvisited) return { type: "doActivity", id: unvisited.id };
+        const allVisited = zones !== undefined &&
+          Object.values(zones).every((zone) => zone?.visited === true);
+        const extract = find((id) => id === "extract");
+        if (allVisited && extract) return { type: "doActivity", id: extract.id };
+        if (moves[0]) return { type: "doActivity", id: moves[0].id };
+        if (extract) return { type: "doActivity", id: extract.id };
+        const rest = find((id) => id === "rest");
+        if (rest) return { type: "doActivity", id: rest.id };
+        const departs = acts.filter((activity) => activity.id.startsWith("depart:"));
+        if (departs.length > 0) {
+          return { type: "doActivity", id: departs.at(-1)!.id };
+        }
+        const first = acts[0];
+        return first ? { type: "doActivity", id: first.id } : { type: "quit" };
+      }
+      if (output.type === "choice") {
+        return personaChoice(output, ["aggressive", "defiant", "bold", "risky"]);
+      }
+      if (output.type === "scriptComplete") {
+        const first = output.nextAvailable[0];
+        return first ? { type: "select", scriptId: first.id } : null;
+      }
+      if (output.type === "gameEnd") return null;
+      return { type: "next" };
+    },
+  },
+};
+
 const raidModule: Module = {
   id: MODULE_ID,
   version: "0.3.0",
+
+  aiPersonas: raidAiPersonas,
 
   initialize: (_game: Game): RaidModuleState => ({
     raid: null,

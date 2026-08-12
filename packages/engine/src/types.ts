@@ -897,6 +897,24 @@ export interface Trigger {
 
 export type TriggerHandler = (ctx: PresetContext) => ActionResult;
 
+/**
+ * An author-owned AI play policy. Modules can register personas alongside
+ * their gameplay handlers so project-specific exploration knowledge stays in
+ * the project instead of leaking into generic runners.
+ */
+export type AiPersonaDecider = (
+  output: Output,
+  state: ComposedState,
+  step: number,
+) => Promise<Input | null>;
+
+export interface AiPersonaDefinition {
+  description: string;
+  decide: AiPersonaDecider;
+  /** False for sampling policies that cannot serve as repeatable probe evidence. */
+  deterministic?: boolean;
+}
+
 export interface Module {
   id: string;
   version?: string;
@@ -922,6 +940,10 @@ export interface Module {
   // after every state mutation; fires `do` on rising-edge transitions.
   // See Trigger doc for semantics.
   triggers?: Trigger[];
+
+  // Project-specific autonomous play policies. Names must be unique across
+  // modules and must not shadow a runner's built-in personas.
+  aiPersonas?: Record<string, AiPersonaDefinition>;
 
   // ============ LIFECYCLE HOOKS ============
   // All hooks fire SYNC. To emit narrations, push into

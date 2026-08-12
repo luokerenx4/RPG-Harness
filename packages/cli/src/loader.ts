@@ -16,6 +16,7 @@ import type {
   SkillDef,
   WeaponDef,
 } from "@rpg-harness/engine";
+import { validateAiPersonaConfig } from "./test/personas";
 import {
   buildGame,
   parseAction,
@@ -106,6 +107,8 @@ export async function loadGame(dir: string): Promise<Game> {
     maps,
     assets,
   );
+
+  validateAiPersonaConfig(game);
 
   warnDanglingAssetRefs(game, assets);
 
