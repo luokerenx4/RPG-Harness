@@ -2,10 +2,10 @@ name: 澪の査問選択肢は表示した好感度を実際に付与する
 state:
   baseline:
     completedScripts: [000_intro]
+    currentScriptId: bond_mio_01
     characters:
       mio: { affection: 2 }
 inputs:
-  - { type: doActivity, id: "script:bond_mio_01" }
   - { type: next }
   - { type: next }
   - { type: next }

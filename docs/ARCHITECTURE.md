@@ -69,6 +69,14 @@ the authored identity (`{ type: "choose", choiceId: "route", optionId:
 A stale choice id, missing option id, locked option, or payload that mixes both
 forms fails closed and re-yields the same choice.
 
+The stateless `step()` wrapper classifies every submitted input against the
+current public Output before delivering it to the generator. Its
+`StepResult.inputResult` is the machine-readable acceptance contract used by
+Headless clients and persisted CLI logs. Rejections preserve the normalized
+peek state and return the same Output. Presets and core dispatchers repeat
+authorization-sensitive checks (script requirements, current hub membership,
+map-connection gates) so direct `Engine.run()` consumers cannot bypass them.
+
 ## Frontends
 
 A frontend is whatever consumes the `Output` stream and produces `Input`. Two ship today, and they share more than the engine:

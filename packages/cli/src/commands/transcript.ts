@@ -17,6 +17,7 @@ export interface TranscriptEvent {
   source?: string;
   input?: unknown;
   decision?: { scriptId: string; choiceId: string; optionId: string };
+  inputResult?: { accepted: boolean; code: string; message: string };
   output?: Record<string, unknown>;
   fork?: Record<string, unknown>;
   checkpoint?: { schemaVersion: 1; file: string; revision: string };
@@ -39,6 +40,7 @@ export interface SessionTranscript {
     choices: number;
     decisions: number;
     activities: number;
+    rejectedInputs: number;
     scriptsCompleted: number;
     terminal: boolean;
   };
@@ -101,12 +103,14 @@ export function buildTranscriptEvents(lineage: SessionLineageSlice[]): Transcrip
       if (input !== undefined) event.input = input;
       const decision = stableDecision(entry.decision);
       if (decision) event.decision = decision;
+      const inputResult = compactInputResult(entry.inputResult);
+      if (inputResult) event.inputResult = inputResult;
       const output = compactOutput(entry.output);
       if (output) event.output = output;
       const fork = compactFork(entry.fork);
       if (fork) event.fork = fork;
       if (isSessionCheckpointRef(entry.checkpoint)) event.checkpoint = entry.checkpoint;
-      if (input !== undefined || decision || output || fork) events.push(event);
+      if (input !== undefined || decision || inputResult || output || fork) events.push(event);
     });
   }
   return events;
@@ -125,6 +129,7 @@ function summarize(all: TranscriptEvent[], returnedEvents: number): SessionTrans
     activities: all.filter((event) =>
       isRecord(event.input) && event.input.type === "doActivity"
     ).length,
+    rejectedInputs: all.filter((event) => event.inputResult?.accepted === false).length,
     scriptsCompleted: outputs.filter((output) => output.type === "scriptComplete").length,
     terminal: outputs.some((output) => output.type === "gameEnd"),
   };
@@ -233,6 +238,15 @@ function stableDecision(value: unknown): TranscriptEvent["decision"] | null {
     : null;
 }
 
+function compactInputResult(value: unknown): TranscriptEvent["inputResult"] | null {
+  if (!isRecord(value)) return null;
+  return typeof value.accepted === "boolean" &&
+      typeof value.code === "string" &&
+      typeof value.message === "string"
+    ? { accepted: value.accepted, code: value.code, message: value.message }
+    : null;
+}
+
 function compactFork(value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
   return {
@@ -250,7 +264,7 @@ export function formatSessionTranscript(transcript: SessionTranscript): string {
     `Lineage: ${transcript.lineage.map((slice) =>
       `${slice.session}@${slice.includedEntries}/${slice.totalEntries}`
     ).join(" -> ")}`,
-    `Summary: ${summary.narration} narration · ${summary.dialogue} dialogue · ${summary.choices} choices · ${summary.decisions} decisions · ${summary.activities} activities · terminal=${summary.terminal}`,
+    `Summary: ${summary.narration} narration · ${summary.dialogue} dialogue · ${summary.choices} choices · ${summary.decisions} decisions · ${summary.activities} activities · ${summary.rejectedInputs} rejected inputs · terminal=${summary.terminal}`,
   ];
   for (const event of transcript.events) {
     const prefix = `#${event.index} ${event.session}:${event.logEntry}` +
@@ -263,7 +277,10 @@ export function formatSessionTranscript(transcript: SessionTranscript): string {
     const decision = event.decision
       ? ` decision=${event.decision.scriptId}/${event.decision.choiceId}/${event.decision.optionId}`
       : "";
-    lines.push(`${prefix}${input ? ` ${input} ->` : ""} ${formatOutput(event.output)}${decision}`);
+    const inputResult = event.inputResult?.accepted === false
+      ? ` rejected=${event.inputResult.code}(${event.inputResult.message})`
+      : "";
+    lines.push(`${prefix}${input ? ` ${input} ->` : ""} ${formatOutput(event.output)}${decision}${inputResult}`);
   }
   return lines.join("\n") + "\n";
 }

@@ -1,5 +1,6 @@
 import { Engine } from "./engine";
 import { choiceDecisionContext, type ChoiceDecisionContext } from "./decision";
+import { classifyInput, type InputResult } from "./input";
 import { cloneState, createInitialState } from "./state";
 import type { ComposedState, Game, Input, Output } from "./types";
 
@@ -8,6 +9,7 @@ export interface TraceEntry {
   input: Input | null;
   output: Output;
   decision?: ChoiceDecisionContext;
+  inputResult?: InputResult;
 }
 
 export type LoopReason =
@@ -58,9 +60,14 @@ export async function runLoop(
   try {
     let priming = true;
     while (true) {
-      const result = priming
+      const inputResult: InputResult | undefined = !priming && lastOutput && lastInput
+        ? classifyInput(lastOutput, lastInput)
+        : undefined;
+      const result: IteratorResult<Output, void> = priming
         ? await runner.next()
-        : await runner.next(lastInput!);
+        : inputResult?.accepted === false
+          ? { done: false as const, value: lastOutput! }
+          : await runner.next(lastInput!);
       priming = false;
 
       if (result.done) {
@@ -71,13 +78,14 @@ export async function runLoop(
           reason: "completed",
         };
       }
-      const decision = lastInput
+      const decision = lastInput && inputResult?.accepted !== false
         ? choiceDecisionContext(lastOutput, lastInput)
         : undefined;
       const entry: TraceEntry = {
         index: stepIndex,
         input: lastInput,
         output: result.value,
+        ...(inputResult ? { inputResult } : {}),
         ...(decision ? { decision } : {}),
       };
       lastOutput = result.value;

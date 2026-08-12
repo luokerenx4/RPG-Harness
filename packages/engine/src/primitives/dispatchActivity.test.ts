@@ -66,6 +66,18 @@ describe("dispatchActivity — script:", () => {
     expect(ctx.state.baseline.currentScriptId).toBeNull();
   });
 
+  test("cannot dispatch a script whose authored requirements are locked", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      scripts: [makeScript("secret", { requires: { switch: { name: "secret" } } })],
+    });
+    const ctx = makeCtx(game);
+
+    await drain(dispatchActivity(ctx, "script:secret"));
+
+    expect(ctx.state.baseline.currentScriptId).toBeNull();
+  });
+
   test("onScriptSelect first-wins redirects to a different script", async () => {
     const redirector: Module = {
       id: "redirector",
@@ -408,5 +420,43 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
     expect(ret).toBe("ok");
     expect(ctx.state.baseline.currentMapId).toBe("street");
     expect(ctx.state.baseline.visuals.bg).toBe("assets/backgrounds/street");
+  });
+
+  test("a locked connection cannot be crossed by submitting its activity id", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      switches: [{ id: "gate_open", initial: false }],
+      maps: [
+        {
+          id: "gate",
+          name: "門",
+          description: "",
+          connections: [{
+            dir: "奥",
+            target: "inner",
+            requires: { switch: { name: "gate_open" } },
+            lockedHint: "門は閉ざされている。",
+          }],
+        },
+        { id: "inner", name: "内側", description: "" },
+      ],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.currentMapId = "gate";
+    ctx.state.runtime.lastHubActivities = [{
+      id: "move:inner",
+      kind: "action",
+      title: "→ 内側",
+      cost: 0,
+      available: false,
+      lockedReason: "門は閉ざされている。",
+      actionKind: "moveToMap",
+      payload: { to: "inner" },
+    }];
+
+    await drain(dispatchActivity(ctx, "move:inner"));
+
+    expect(ctx.state.baseline.currentMapId).toBe("gate");
+    expect(ctx.state.runtime.pendingNarrations).toEqual(["門は閉ざされている。"]);
   });
 });

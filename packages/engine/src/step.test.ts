@@ -57,3 +57,39 @@ describe("step / peek — gameEnd terminality", () => {
     }
   });
 });
+
+describe("step input diagnostics", () => {
+  test("rejects an out-of-order input without advancing or changing state", async () => {
+    const game = makeGame({
+      scripts: [makeScript("intro", { beats: [
+        { type: "narration", text: "first" },
+        { type: "narration", text: "second" },
+      ] })],
+    });
+    const state = makeState(game);
+    state.baseline.currentScriptId = "intro";
+    const normalized = await peek(game, structuredClone(state));
+    const result = await step(game, state, { type: "doActivity", id: "rest" });
+
+    expect(result.output).toMatchObject({ type: "narration", text: "first" });
+    expect(result.inputResult).toMatchObject({
+      accepted: false,
+      code: "unexpected-input",
+    });
+    expect(result.state).toEqual(normalized.state);
+  });
+
+  test("returns accepted diagnostics for a valid input", async () => {
+    const game = makeGame({
+      scripts: [makeScript("intro", { beats: [
+        { type: "narration", text: "first" },
+        { type: "narration", text: "second" },
+      ] })],
+    });
+    const state = makeState(game);
+    state.baseline.currentScriptId = "intro";
+    const result = await step(game, state, { type: "next" });
+    expect(result.output).toMatchObject({ type: "narration", text: "second" });
+    expect(result.inputResult?.accepted).toBe(true);
+  });
+});

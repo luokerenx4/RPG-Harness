@@ -1,10 +1,12 @@
 import { Engine } from "./engine";
+import { classifyInput, type InputResult } from "./input";
 import type { ComposedState, Game, Input, Output } from "./types";
 
 export interface StepResult {
   output: Output | null;
   state: ComposedState;
   done: boolean;
+  inputResult?: InputResult;
 }
 
 export async function peek(
@@ -40,6 +42,12 @@ export async function step(
       output: null,
       state: engine.getState(),
       done: true,
+      inputResult: {
+        accepted: false,
+        code: "terminal",
+        message: "The game has already ended.",
+        expected: [],
+      },
     };
   }
   // If the current yielded output is gameEnd, the game is over.
@@ -53,6 +61,17 @@ export async function step(
       output: prime.value,
       state: engine.getState(),
       done: true,
+      inputResult: classifyInput(prime.value, input),
+    };
+  }
+  const inputResult = classifyInput(prime.value, input);
+  if (!inputResult.accepted) {
+    await runner.return();
+    return {
+      output: prime.value,
+      state: engine.getState(),
+      done: false,
+      inputResult,
     };
   }
   const next = await runner.next(input);
@@ -62,5 +81,6 @@ export async function step(
     output,
     state: engine.getState(),
     done: next.done === true || output?.type === "gameEnd",
+    inputResult,
   };
 }

@@ -57,6 +57,7 @@ export interface AutoplaySummary {
   reason: LoopReason;
   error?: string;
   decisions: number;
+  rejectedInputs: number;
   steps: number;
   finalState: Awaited<ReturnType<typeof runLoop>>["finalState"];
   ending: string | null;
@@ -209,6 +210,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
             source: `autoplay:${args.persona}`,
             input: entry.input,
             output: entry.output,
+            ...(entry.inputResult ? { inputResult: entry.inputResult } : {}),
             ...(entry.decision ? { decision: entry.decision } : {}),
           }, state);
         }
@@ -250,7 +252,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     : await play();
 
   process.stderr.write(
-    `\n=== done: ${result.reason} after ${countDecisions(result.trace)} decisions / ${result.trace.length} visible outputs ===\n`,
+    `\n=== done: ${result.reason} after ${countDecisions(result.trace)} decisions / ${countRejectedInputs(result.trace)} rejected inputs / ${result.trace.length} visible outputs ===\n`,
   );
   if (result.error) process.stderr.write(`error: ${result.error}\n`);
 
@@ -266,7 +268,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       severity: result.reason === "error" ? "blocker" : "major",
       title: `Autoplay ${args.persona} stopped before game end (${result.reason})`,
       details: [
-        `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions and ${result.trace.length} visible outputs.`,
+        `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
         ...(result.error ? [`Engine error: ${result.error}`] : []),
         ...(fork
@@ -287,6 +289,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     reason: result.reason,
     ...(result.error ? { error: result.error } : {}),
     decisions: countDecisions(result.trace),
+    rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
     finalState: result.finalState,
     ending,
@@ -312,6 +315,15 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
 
 function countDecisions(trace: Array<{ input: unknown | null }>): number {
   return trace.reduce((count, entry) => count + (entry.input === null ? 0 : 1), 0);
+}
+
+function countRejectedInputs(
+  trace: Array<{ inputResult?: { accepted: boolean } }>,
+): number {
+  return trace.reduce(
+    (count, entry) => count + (entry.inputResult?.accepted === false ? 1 : 0),
+    0,
+  );
 }
 
 export function detectTerminalScriptId(result: {

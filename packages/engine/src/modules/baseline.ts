@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { emptyVisualState } from "../types";
 import { enterMap } from "../primitives/enterMap";
+import { evaluateCondition } from "../condition";
 
 export const BASELINE_NAMESPACE = "baseline";
 
@@ -200,6 +201,23 @@ export function createBaselineState(
 const moveToMapHandler: ActionHandler = ({ state, action, game }) => {
   const to = (action.payload as { to?: unknown } | undefined)?.to;
   if (typeof to !== "string") return {};
+  const from = state.baseline.currentMapId === null
+    ? undefined
+    : (game.maps ?? []).find((map) => map.id === state.baseline.currentMapId);
+  const connection = from?.connections?.find((edge) => edge.target === to);
+  if (!connection) {
+    return {
+      narrations: [`今いる場所から ${to} へ続く道はない。`],
+    };
+  }
+  if (connection.requires !== undefined) {
+    const result = evaluateCondition(connection.requires, state);
+    if (!result.ok) {
+      return {
+        narrations: [connection.lockedHint ?? result.reason ?? "その道はまだ開いていない。"],
+      };
+    }
+  }
   enterMap(state, game, to);
   return {};
 };

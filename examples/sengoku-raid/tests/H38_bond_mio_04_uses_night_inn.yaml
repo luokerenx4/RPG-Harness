@@ -2,6 +2,7 @@ name: 澪の上申書場面は江戸城でなく夜の宿に立つ
 state:
   baseline:
     completedScripts: [000_intro, bond_mio_03]
+    currentScriptId: bond_mio_04
     switches: { road_mio_2_seen: true }
     characters:
       mio: { affection: 8 }
@@ -9,8 +10,7 @@ state:
       bg: assets/backgrounds/edo-castle
       portraits: {}
       cg: null
-inputs:
-  - { type: doActivity, id: "script:bond_mio_04" }
+inputs: []
 assertions:
   - kind: state
     path: baseline.visuals.bg

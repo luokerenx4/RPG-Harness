@@ -83,8 +83,15 @@ export async function* vnRun(
     };
     if (input.type === "quit") return;
     if (input.type !== "select") continue;
+    if (!available.some((script) => script.id === input.scriptId)) continue;
     const finalId = fireOnScriptSelect(ctx, input.scriptId);
-    if (!ctx.scriptMap.has(finalId)) continue;
+    const finalScript = ctx.scriptMap.get(finalId);
+    if (!finalScript) continue;
+    if (ctx.state.baseline.scripts[finalId]?.completed === true) continue;
+    if (
+      finalScript.requires !== undefined &&
+      !evaluateCondition(finalScript.requires, ctx.state).ok
+    ) continue;
     ctx.state.baseline.currentScriptId = finalId;
     ctx.state.baseline.beatIndex = 0;
   }

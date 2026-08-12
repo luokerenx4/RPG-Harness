@@ -2,14 +2,14 @@ name: 澪の査問場面は江戸城でなく隅田河の夕照岸に立つ
 state:
   baseline:
     completedScripts: [000_intro]
+    currentScriptId: bond_mio_01
     characters:
       mio: { affection: 2 }
     visuals:
       bg: assets/backgrounds/edo-castle
       portraits: {}
       cg: null
-inputs:
-  - { type: doActivity, id: "script:bond_mio_01" }
+inputs: []
 assertions:
   - kind: state
     path: baseline.visuals.bg

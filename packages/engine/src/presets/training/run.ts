@@ -122,6 +122,15 @@ export async function* trainingRun(
     const input = yield hubOutput;
     if (input.type === "quit") return;
     if (input.type !== "doActivity") continue;
+    if (hubOutput.type !== "hubMenu") continue;
+    const selectedActivity = hubOutput.snapshot.activities.find(
+      (activity) => activity.id === input.id,
+    );
+    if (!selectedActivity) continue;
+    if (
+      !selectedActivity.available &&
+      (selectedActivity.kind === "script" || selectedActivity.actionKind === undefined)
+    ) continue;
     const dispatched = yield* dispatchActivity(ctx, input.id);
     if (dispatched === "quit") return;
   }

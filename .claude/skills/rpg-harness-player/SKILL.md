@@ -63,6 +63,10 @@ rpgh step "$GAME" --session "$SESSION" --input '{"type":"choose","choiceId":"ans
 
 The output of `step` is the **next** event. You do NOT need to `peek` again — just react to what `step` printed.
 
+Inspect `inputResult` before continuing. When `accepted` is `false`, read its
+`code`, `message`, and `expected` fields and submit a corrected input. The game
+has not advanced, so do not blindly retry the rejected action.
+
 ### Step 4: Loop until done
 
 Keep doing step 2 + step 3 until you see `gameEnd` or `done: true`.

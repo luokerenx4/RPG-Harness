@@ -25,12 +25,15 @@ export async function stepCommand(args: Args): Promise<void> {
     const before = await peek(game, state);
     const next = await step(game, state, input);
     await saveSession(args.gameDir, args.session, next.state);
-    const decision = choiceDecisionContext(before.output, input);
+    const decision = next.inputResult?.accepted
+      ? choiceDecisionContext(before.output, input)
+      : undefined;
     await appendLog(args.gameDir, args.session, {
       t: Date.now(),
       source: "cli",
       input,
       output: next.output,
+      ...(next.inputResult ? { inputResult: next.inputResult } : {}),
       ...(decision ? { decision } : {}),
     }, next.state);
     return next;
@@ -41,6 +44,7 @@ export async function stepCommand(args: Args): Promise<void> {
     output,
     done: result.done,
     state: result.state,
+    ...(result.inputResult ? { inputResult: result.inputResult } : {}),
   };
   process.stdout.write(
     args.pretty ? JSON.stringify(payload, null, 2) + "\n" : JSON.stringify(payload) + "\n",

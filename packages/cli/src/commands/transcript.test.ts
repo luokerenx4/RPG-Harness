@@ -44,6 +44,12 @@ describe("session transcript", () => {
       {
         source: "autoplay:objective",
         input: { type: "choose", index: 1 },
+        inputResult: {
+          accepted: false,
+          code: "option-locked",
+          message: "The requested option is locked: bond too low",
+          expected: [{ type: "choose", ids: ["alone"] }],
+        },
         decision: { scriptId: "ending", choiceId: "tether", optionId: "friend" },
         output: { type: "narration", text: "friend branch", visualState: { cg: "large.png" } },
         checkpoint: checkpoint("b"),
@@ -70,6 +76,7 @@ describe("session transcript", () => {
       choices: 1,
       decisions: 1,
       activities: 0,
+      rejectedInputs: 1,
       scriptsCompleted: 0,
       terminal: true,
     });
@@ -87,6 +94,11 @@ describe("session transcript", () => {
       session: "branch",
       logEntry: 2,
       decision: { scriptId: "ending", choiceId: "tether", optionId: "friend" },
+      inputResult: {
+        accepted: false,
+        code: "option-locked",
+        message: "The requested option is locked: bond too low",
+      },
       output: { type: "narration", text: "friend branch" },
     });
     expect(JSON.stringify(transcript)).not.toContain("large.png");
@@ -94,6 +106,7 @@ describe("session transcript", () => {
     expect(formatSessionTranscript(transcript)).toContain(
       "decision=ending/tether/friend",
     );
+    expect(formatSessionTranscript(transcript)).toContain("rejected=option-locked");
   });
 
   test("tail bounds returned evidence but summary still describes the full lineage", async () => {

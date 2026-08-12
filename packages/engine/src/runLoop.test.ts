@@ -84,3 +84,32 @@ describe("runLoop terminal output", () => {
     expect(inputCalls).toBe(0);
   });
 });
+
+describe("runLoop input diagnostics", () => {
+  test("records a rejected input without delivering it to the generator", async () => {
+    const received: string[] = [];
+    const game: Game = {
+      ...terminalGame,
+      runFn: async function* () {
+        let input = yield { type: "narration" as const, text: "first" };
+        received.push(input.type);
+        input = yield { type: "narration" as const, text: "second" };
+        received.push(input.type);
+        yield { type: "gameEnd" as const };
+      },
+    };
+    const result = await runLoop(game, createInitialState(game), [
+      { type: "doActivity", id: "rest" },
+      { type: "next" },
+      { type: "next" },
+    ]);
+
+    expect(received).toEqual(["next", "next"]);
+    expect(result.trace[1]).toMatchObject({
+      input: { type: "doActivity", id: "rest" },
+      output: { type: "narration", text: "first" },
+      inputResult: { accepted: false, code: "unexpected-input" },
+    });
+    expect(result.reason).toBe("completed");
+  });
+});

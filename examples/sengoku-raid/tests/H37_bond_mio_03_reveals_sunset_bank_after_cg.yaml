@@ -2,6 +2,7 @@ name: 澪の鏡CGを隠した後も江戸城でなく夕照岸を保つ
 state:
   baseline:
     completedScripts: [000_intro]
+    currentScriptId: bond_mio_03
     switches: { befriended_mio: true }
     characters:
       mio: { affection: 6 }
@@ -10,7 +11,6 @@ state:
       portraits: {}
       cg: null
 inputs:
-  - { type: doActivity, id: "script:bond_mio_03" }
   - { type: next }
   - { type: next }
   - { type: next }

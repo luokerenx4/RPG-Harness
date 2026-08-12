@@ -376,6 +376,13 @@ State persists to `<game-dir>/.rpg-harness/sessions/<name>/state.json` between c
 Each `step` appends `(input, output, checkpoint)` to `log.jsonl`. Fork any exact
 post-step state without overwriting either session:
 
+Every `step` response also carries an `inputResult`. `accepted:true` confirms
+the input was routed. A rejected input returns the same current Output plus a
+stable reason code (`unexpected-input`, `stale-choice`, `option-locked`,
+`script-not-available`, `activity-not-present`, …), a human-readable message,
+and the currently expected input ids. Rejections do not advance gameplay; AI
+clients should correct the input instead of retrying it blindly.
+
 ```bash
 rpgh fork ./my-game --from claude --to investigate-choice --at 42
 # Or jump straight back to a captured playtest issue:

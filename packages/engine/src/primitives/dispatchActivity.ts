@@ -30,9 +30,21 @@ export async function* dispatchActivity(
 ): AsyncGenerator<Output, "ok" | "quit", Input> {
   if (activityId.startsWith("script:")) {
     const requested = activityId.slice("script:".length);
+    const requestedScript = ctx.scriptMap.get(requested);
+    if (!requestedScript) return "ok";
+    if (ctx.state.baseline.scripts[requested]?.completed === true) return "ok";
+    if (
+      requestedScript.requires !== undefined &&
+      !evaluateCondition(requestedScript.requires, ctx.state).ok
+    ) return "ok";
     const scriptId = fireOnScriptSelect(ctx, requested);
-    if (!ctx.scriptMap.has(scriptId)) return "ok";
+    const script = ctx.scriptMap.get(scriptId);
+    if (!script) return "ok";
     if (ctx.state.baseline.scripts[scriptId]?.completed === true) return "ok";
+    if (
+      script.requires !== undefined &&
+      !evaluateCondition(script.requires, ctx.state).ok
+    ) return "ok";
     ctx.state.baseline.currentScriptId = scriptId;
     ctx.state.baseline.beatIndex = 0;
     return "ok";

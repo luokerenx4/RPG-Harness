@@ -25,6 +25,7 @@ export interface LoggedStep {
   input?: unknown;
   output?: unknown;
   decision?: unknown;
+  inputResult?: unknown;
   checkpoint?: unknown;
   fork?: unknown;
 }

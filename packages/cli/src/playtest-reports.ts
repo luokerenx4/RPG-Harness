@@ -52,6 +52,7 @@ export interface PlaytestEvidence {
   lastEvent: {
     input: unknown;
     output: unknown;
+    inputResult?: unknown;
   } | null;
   visualState?: {
     bg: string | null;
@@ -367,11 +368,13 @@ async function captureEvidence(
       const entry = JSON.parse(lines[lines.length - 1] ?? "null") as {
         input?: unknown;
         output?: unknown;
+        inputResult?: unknown;
       } | null;
       if (entry) {
         lastEvent = {
           input: entry.input ?? null,
           output: compactOutput(entry.output),
+          ...(entry.inputResult !== undefined ? { inputResult: entry.inputResult } : {}),
         };
       }
     }
