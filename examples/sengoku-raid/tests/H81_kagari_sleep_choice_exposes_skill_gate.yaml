@@ -1,0 +1,33 @@
+name: Kagari's sleep answer exposes the unlearned Chinkonho gate to every client
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      kagari:
+        stats: { affection: 6 }
+    switches:
+      befriended_kagari: true
+      learnedChinkonho: false
+  sengoku-raid:
+    metCharacters: [kagari]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kagari_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-how-the-blade-sleeps
+    optionId: use-chinkonho-nightly
+    optionTextIncludes: 鎮魂法で
+    optionAvailable: false
+    optionLockedReasonIncludes: まだ伝授されていない
+    optionRequires: { switch: { name: learnedChinkonho } }
+

@@ -1,0 +1,44 @@
+name: Kagari recognizes the nightly Chinkonho answer as a truth she taught
+state:
+  baseline:
+    completedScripts: [000_intro, bond_kagari_02]
+    knownSkills: [chinkonho]
+    characters:
+      kagari:
+        stats: { affection: 6 }
+    switches:
+      befriended_kagari: true
+      learnedChinkonho: true
+  sengoku-raid:
+    metCharacters: [kagari]
+    raid: null
+inputs:
+  - { type: doActivity, id: script:bond_kagari_03 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-how-the-blade-sleeps
+    optionId: use-chinkonho-nightly
+    optionTextIncludes: 鎮魂法で
+    optionAvailable: true
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: あたしが教えた数
+  - kind: output
+    type: dialogue
+    present: false
+    textIncludes: 嘘でも
+  - kind: state
+    path: baseline.variables.kagari_sleep_reply
+    eq: chinkonho
+

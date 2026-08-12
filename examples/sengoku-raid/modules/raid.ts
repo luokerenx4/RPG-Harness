@@ -3101,6 +3101,12 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.kasumi_deer_reply = reply;
       return;
     }
+    if (scriptId === "bond_kagari_03") {
+      const replies = ["avoid-dreams", "chinkonho", "sleepless"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kagari_sleep_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3164,6 +3170,21 @@ const raidModule: Module = {
           },
         };
       }
+    }
+    if (
+      scriptId === "ending_oni_self" &&
+      beat.type === "narration" &&
+      beat.text.startsWith("「今は、数えなくていい。お主が隣で勝手に鳴らしてる」。")
+    ) {
+      const reply = ctx.state.baseline.variables.kagari_sleep_reply;
+      const memory = reply === "avoid-dreams"
+        ? "「夢を見ないようにしている」と答えた宿の月夜。"
+        : reply === "chinkonho"
+          ? "「鎮魂法で、毎晩二十押し返す」と答えた宿の月夜。"
+          : reply === "sleepless"
+            ? "「眠らない」と答え、それは答えじゃないと斬られた宿の月夜。"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
     }
     if (
       scriptId === "bond_kagari_01" &&
@@ -3315,17 +3336,33 @@ const raidModule: Module = {
   // contextual locking only, matching hook-test's coverage.
   onChoicePresented: (ctx, scriptId, _beatIdx, options) => {
     if (!scriptId.match(/^bond_\w+_03$/)) return;
+    let nextOptions = options;
+    if (
+      scriptId === "bond_kagari_03" &&
+      !ctx.state.baseline.knownSkills.includes("chinkonho")
+    ) {
+      nextOptions = nextOptions.map((opt, idx) => idx === 1
+        ? {
+            ...opt,
+            available: false,
+            lockedReason: "鎮魂法をまだ伝授されていない。",
+            requires: { switch: { name: "learnedChinkonho" } },
+          }
+        : opt);
+    }
     const m = moduleState(ctx);
-    if (!m.companion) return;
+    if (!m.companion) return nextOptions === options ? undefined : nextOptions;
     const subjectMatch = scriptId.match(/^bond_(\w+)_03$/);
     if (!subjectMatch) return;
     const subject = subjectMatch[1];
-    if (m.companion === subject) return; // self in party — no jealousy axis
+    if (m.companion === subject) {
+      return nextOptions === options ? undefined : nextOptions;
+    }
     const sideName =
       ctx.game.characters.find((c) => c.id === m.companion!)?.name ??
       m.companion!;
     const lastIdx = options.length - 1;
-    return options.map((opt, idx) =>
+    return nextOptions.map((opt, idx) =>
       idx === lastIdx
         ? {
             ...opt,

@@ -27,14 +27,30 @@ requires:
 
 :cg assets/cgs/bond-kagari-03
 
-? それでも、答える。
-  - 「夢を見ないようにしている」 -> +kagari
-  - 「鎮魂法で、毎晩二十押し返す」 -> +kagari
-  - 「眠らない」 -> +2kagari
+? それでも、答える。 {id: answer-how-the-blade-sleeps}
+  - 「夢を見ないようにしている」 {id: avoid-dreams} -> +kagari | goto dreamless
+  - 「鎮魂法で、毎晩二十押し返す」 {id: use-chinkonho-nightly} -> +kagari | goto chinkonho
+  - 「眠らない」 {id: do-not-sleep} -> +2kagari | goto sleepless
 
 :hide-cg
 
-@kagari 嘘でも、答えてくれたのが嬉しい。
+# dreamless
+
+@kagari 「見ない」じゃなく、「見ないようにする」、か。……それでも、答えてくれたのが嬉しい。
+
+:goto after_answer
+
+# chinkonho
+
+@kagari 毎晩二十。あたしが教えた数を、ちゃんと覚えていたんだな。今夜は十でいい。残りは、あたしの槍が押し返す。
+
+:goto after_answer
+
+# sleepless
+
+@kagari それは答えじゃない。……今夜はあたしが起きている。お主は寝ろ。
+
+# after_answer
 
 篝はお主の隣に座り、肩を寄せた。距離は、刀一本分ではなくなった。
 
