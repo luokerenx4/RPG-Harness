@@ -70,6 +70,22 @@ function activityScore(hint: string | undefined): number {
   return total;
 }
 
+function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): Input | null {
+  const availableById = new Map(
+    output.snapshot.activities
+      .filter((activity) => activity.available)
+      .map((activity) => [activity.id, activity]),
+  );
+  for (const objective of output.snapshot.objectives ?? []) {
+    if (objective.status !== "active") continue;
+    for (const id of objective.relatedActivityIds ?? []) {
+      const activity = availableById.get(id);
+      if (activity) return { type: "doActivity", id: activity.id };
+    }
+  }
+  return null;
+}
+
 export const personas: Record<string, Persona> = {
   // Renderer-neutral AI: follow only the public objective contract. It does
   // not inspect module-specific state or hard-code story thresholds.
@@ -80,19 +96,7 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
-      const availableById = new Map(
-        output.snapshot.activities
-          .filter((activity) => activity.available)
-          .map((activity) => [activity.id, activity]),
-      );
-      for (const objective of output.snapshot.objectives ?? []) {
-        if (objective.status !== "active") continue;
-        for (const id of objective.relatedActivityIds ?? []) {
-          const activity = availableById.get(id);
-          if (activity) return { type: "doActivity", id: activity.id };
-        }
-      }
-      return { type: "quit" };
+      return pickObjectiveActivity(output) ?? { type: "quit" };
     }
     if (output.type === "gameEnd") return null;
     return { type: "next" };
@@ -316,6 +320,16 @@ export const personas: Record<string, Persona> = {
         (a) => a.id === "action:shrine_pray" && a.available,
       );
       if (shrine >= 0) return { type: "doActivity", id: activities[shrine]!.id };
+      // Game-specific training modes do not necessarily use the generic
+      // action:hunt/action:sleep ids. Follow their public objective links
+      // before falling back to hub order, which may contain reversible
+      // toggles such as invite/uninvite ahead of the actual expedition.
+      const objective = pickObjectiveActivity(output);
+      if (objective) return objective;
+      const depart = activities.find(
+        (activity) => activity.available && activity.id.startsWith("depart:"),
+      );
+      if (depart) return { type: "doActivity", id: depart.id };
       const firstAvail = activities.findIndex((a) => a.available);
       if (firstAvail >= 0)
         return { type: "doActivity", id: activities[firstAvail]!.id };
