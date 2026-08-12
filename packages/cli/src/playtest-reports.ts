@@ -323,6 +323,7 @@ function compactOutput(output: unknown): unknown {
             category?: unknown;
             available?: unknown;
             lockedReason?: unknown;
+            forecast?: unknown;
           }>;
         }
       | undefined;
@@ -360,6 +361,9 @@ function compactOutput(output: unknown): unknown {
         title: activity.title ?? null,
         category: activity.category ?? null,
         available: activity.available ?? null,
+        ...(activity.forecast !== undefined
+          ? { forecast: activity.forecast }
+          : {}),
         ...(activity.lockedReason !== undefined
           ? { lockedReason: activity.lockedReason }
           : {}),

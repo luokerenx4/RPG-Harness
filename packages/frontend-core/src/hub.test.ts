@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { HubSnapshot } from "@rpg-harness/engine";
-import { buildHubView, formatHubCalendar } from "./hub";
+import {
+  buildHubView,
+  formatActivityForecast,
+  formatHubCalendar,
+} from "./hub";
 
 function snapshot(overrides: Partial<HubSnapshot> = {}): HubSnapshot {
   return {
@@ -142,6 +146,27 @@ describe("buildHubView", () => {
       "fishing",
     ]);
     expect(view.sections[0]?.label).toBe("Alchemy");
+  });
+});
+
+describe("formatActivityForecast", () => {
+  test("formats exact percentages and numeric ranges", () => {
+    expect(
+      formatActivityForecast({
+        ...activity("attack", "combat", true),
+        forecast: {
+          metrics: [
+            { id: "damage", label: "Damage", min: 4, max: 6, unit: "HP" },
+            {
+              id: "critical",
+              label: "Critical",
+              value: 1.4,
+              unit: "percent",
+            },
+          ],
+        },
+      }),
+    ).toBe("Damage 4–6 HP · Critical 1.4%");
   });
 });
 

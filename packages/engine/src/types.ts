@@ -1057,6 +1057,10 @@ export interface HubActivity {
   // distinct from array order: use it only when the game genuinely recommends
   // an activity, not merely to choose a default for a meaningful decision.
   recommended?: boolean;
+  // Machine-readable runtime forecast for decisions whose odds or effects can
+  // be calculated before dispatch. Metrics are intentionally generic so games
+  // can expose combat damage, escape chance, cost, duration, reputation, etc.
+  forecast?: ActivityForecast;
   // Module-supplied action handler kind for dynamic activities that
   // don't have a preregistered Action in game.actions. The engine
   // synthesizes an Action { id, title, kind: actionKind, payload, ...}
@@ -1067,6 +1071,21 @@ export interface HubActivity {
   // when the same actionKind is dispatched with different per-activity
   // parameters (e.g. `raid:move` with a `zoneId` payload).
   payload?: Record<string, unknown>;
+}
+
+export interface ActivityForecastMetric {
+  id: string;
+  label: string;
+  value?: number | string | boolean;
+  min?: number;
+  max?: number;
+  unit?: string;
+  polarity?: "benefit" | "risk" | "neutral";
+}
+
+export interface ActivityForecast {
+  summary?: string;
+  metrics: ActivityForecastMetric[];
 }
 
 export interface StatSnapshot {

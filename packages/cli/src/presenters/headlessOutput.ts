@@ -1,4 +1,8 @@
-import type { AssetSpec, Output } from "@rpg-harness/engine";
+import type {
+  ActivityForecast,
+  AssetSpec,
+  Output,
+} from "@rpg-harness/engine";
 import { buildHubView } from "@rpg-harness/frontend-core";
 import { joinVisualState, type JoinedVisualState } from "./visualSummary";
 
@@ -9,6 +13,13 @@ export interface HeadlessHubView {
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
+  candidates: Array<{
+    activityId: string;
+    input: { type: "doActivity"; id: string };
+    title: string;
+    description?: string;
+    forecast?: ActivityForecast;
+  }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
   primaryReason:
@@ -58,6 +69,9 @@ export function presentHeadlessOutput(
 
 function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): HeadlessHubView {
   const view = buildHubView(output.snapshot);
+  const activityById = new Map(
+    output.snapshot.activities.map((activity) => [activity.id, activity]),
+  );
   return {
     heuristic: true,
     selectionRule: view.selectionRule,
@@ -65,6 +79,23 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
     decisionRequired: view.decisionRequired,
     candidateActivityIds: view.candidateActivityIds,
     candidateInputs: view.candidateInputs,
+    candidates: view.candidateActivityIds.flatMap((activityId) => {
+      const activity = activityById.get(activityId);
+      if (!activity) return [];
+      return [
+        {
+          activityId,
+          input: { type: "doActivity" as const, id: activityId },
+          title: activity.title,
+          ...(activity.description !== undefined
+            ? { description: activity.description }
+            : {}),
+          ...(activity.forecast !== undefined
+            ? { forecast: activity.forecast }
+            : {}),
+        },
+      ];
+    }),
     primaryActivityId: view.primaryActivityId,
     primaryInput: view.primaryInput,
     primaryReason: view.primaryReason,

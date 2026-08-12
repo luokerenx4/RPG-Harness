@@ -8,6 +8,7 @@ import type {
 } from "@rpg-harness/engine";
 import {
   buildHubView,
+  formatActivityForecast,
   formatHubCalendar,
 } from "@rpg-harness/frontend-core";
 
@@ -167,6 +168,7 @@ function ActivityRow({
         : " "
     : "⛔";
   const hint = activity.effectsHint;
+  const forecast = formatActivityForecast(activity);
   return (
     <Box flexDirection="row">
       <Text
@@ -179,6 +181,11 @@ function ActivityRow({
       {hint && activity.available ? (
         <Box marginLeft={1}>
           <Text dimColor>({hint})</Text>
+        </Box>
+      ) : null}
+      {forecast && activity.available ? (
+        <Box marginLeft={1}>
+          <Text color="yellow">[{forecast}]</Text>
         </Box>
       ) : null}
       {!activity.available && activity.lockedReason ? (

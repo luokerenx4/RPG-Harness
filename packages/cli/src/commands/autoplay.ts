@@ -2,6 +2,7 @@ import { emptyVisualState, runLoop } from "@rpg-harness/engine";
 import type { Output, VisualState } from "@rpg-harness/engine";
 import {
   buildHubView,
+  formatActivityForecast,
   formatHubCalendar,
 } from "@rpg-harness/frontend-core";
 import { loadGame } from "../loader";
@@ -149,9 +150,10 @@ function formatOutput(o: Output): string | null {
               index += 1;
               const primary =
                 activity.id === view.primaryActivityId ? " ★" : "";
+              const forecast = formatActivityForecast(activity);
               return `${index}. ${activity.title}${primary}${
                 activity.available ? "" : " (locked)"
-              }`;
+              }${forecast ? ` [${forecast}]` : ""}`;
             })
             .join("  ");
           return `    [${section.category} ${section.availableCount}/${

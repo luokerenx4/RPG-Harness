@@ -62,6 +62,25 @@ export function formatHubCalendar(snapshot: HubSnapshot): string | null {
   return snapshot.slotName ? `${day} · ${snapshot.slotName}` : day;
 }
 
+export function formatActivityForecast(activity: HubActivity): string | null {
+  const metrics = activity.forecast?.metrics ?? [];
+  if (metrics.length === 0) return activity.forecast?.summary ?? null;
+  return metrics
+    .map((metric) => {
+      const suffix = formatMetricUnit(metric.unit);
+      if (metric.value !== undefined) {
+        return `${metric.label} ${String(metric.value)}${suffix}`;
+      }
+      if (metric.min !== undefined && metric.max !== undefined) {
+        return `${metric.label} ${metric.min}–${metric.max}${suffix}`;
+      }
+      if (metric.min !== undefined) return `${metric.label} ≥${metric.min}${suffix}`;
+      if (metric.max !== undefined) return `${metric.label} ≤${metric.max}${suffix}`;
+      return metric.label;
+    })
+    .join(" · ");
+}
+
 export function buildHubView(snapshot: HubSnapshot): HubView {
   const buckets = new Map<
     string,
@@ -176,4 +195,10 @@ function formatCategoryLabel(category: string): string {
     .filter(Boolean)
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatMetricUnit(unit: string | undefined): string {
+  if (!unit) return "";
+  if (unit === "percent") return "%";
+  return ` ${unit}`;
 }

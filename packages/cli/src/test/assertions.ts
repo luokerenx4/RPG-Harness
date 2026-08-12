@@ -108,6 +108,23 @@ function checkActivity(
       return `activity ${a.id}: expected title to include "${a.titleIncludes}", got "${act.title}"`;
     }
   }
+  if (a.forecastMetric !== undefined) {
+    const metric = act.forecast?.metrics.find(
+      (item) => item.id === a.forecastMetric,
+    );
+    if (!metric) {
+      return `activity ${a.id}: forecast metric ${a.forecastMetric} not found`;
+    }
+    if (a.metricValue !== undefined && metric.value !== a.metricValue) {
+      return `activity ${a.id}: metric ${a.forecastMetric} expected value=${a.metricValue}, got ${String(metric.value)}`;
+    }
+    if (a.metricMin !== undefined && metric.min !== a.metricMin) {
+      return `activity ${a.id}: metric ${a.forecastMetric} expected min=${a.metricMin}, got ${String(metric.min)}`;
+    }
+    if (a.metricMax !== undefined && metric.max !== a.metricMax) {
+      return `activity ${a.id}: metric ${a.forecastMetric} expected max=${a.metricMax}, got ${String(metric.max)}`;
+    }
+  }
   return null;
 }
 

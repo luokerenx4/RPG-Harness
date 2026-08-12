@@ -305,6 +305,18 @@ function StageView({
                       {a.effectsHint && (
                         <div className="activity-hint">{a.effectsHint}</div>
                       )}
+                      {a.forecast && a.forecast.metrics.length > 0 && (
+                        <div className="activity-forecast">
+                          {a.forecast.metrics.map((metric) => (
+                            <span
+                              className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
+                              key={metric.id}
+                            >
+                              {metric.label} {formatForecastMetric(metric)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {!a.available && a.lockedReason && (
                         <div className="locked-reason">🔒 {a.lockedReason}</div>
                       )}
@@ -346,6 +358,22 @@ function StageView({
         </div>
       );
   }
+}
+
+function formatForecastMetric(metric: {
+  value?: number | string | boolean;
+  min?: number;
+  max?: number;
+  unit?: string;
+}): string {
+  const suffix = metric.unit === "percent" ? "%" : metric.unit ? ` ${metric.unit}` : "";
+  if (metric.value !== undefined) return `${String(metric.value)}${suffix}`;
+  if (metric.min !== undefined && metric.max !== undefined) {
+    return `${metric.min}–${metric.max}${suffix}`;
+  }
+  if (metric.min !== undefined) return `≥${metric.min}${suffix}`;
+  if (metric.max !== undefined) return `≤${metric.max}${suffix}`;
+  return "";
 }
 
 function StatusBar({ snapshot }: { snapshot: HubSnapshot }) {

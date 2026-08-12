@@ -83,6 +83,16 @@ describe("presentHeadlessOutput", () => {
           category: "raid",
           cost: 0,
           available: true,
+          forecast: {
+            metrics: [
+              {
+                id: "success_chance",
+                label: "Success",
+                value: 100,
+                unit: "percent",
+              },
+            ],
+          },
         },
         {
           id: "continue",
@@ -104,6 +114,15 @@ describe("presentHeadlessOutput", () => {
       candidateInputs: [
         { type: "doActivity", id: "extract" },
         { type: "doActivity", id: "continue" },
+      ],
+      candidates: [
+        {
+          activityId: "extract",
+          forecast: {
+            metrics: [{ id: "success_chance", value: 100 }],
+          },
+        },
+        { activityId: "continue" },
       ],
       primaryActivityId: null,
       primaryInput: null,

@@ -828,6 +828,20 @@ function buildRaidMenu(ctx: Ctx): Output {
   }
 
   if (inst.encounter) {
+    const normalDamage = normalAttackDamageRange(ctx);
+    const criticalDamage = criticalAttackDamageRange(ctx);
+    const sneakDamage = sneakAttackDamageRange(ctx);
+    const counterDamage = counterAttackDamageRange(
+      ctx,
+      inst.encounter.enemyId,
+    );
+    const criticalChance = roundForecastPercent(playerStat(ctx, "spectral") * 0.7);
+    const sneakChance = sneakStrikeChancePercent(ctx);
+    const fleeChance = fleeSuccessChancePercent(ctx);
+    const fleeFailureDamage = Math.max(
+      2,
+      enemyAttackPower(ctx, inst.encounter.enemyId) + 1,
+    );
     activities.push({
       id: "attack",
       kind: "action",
@@ -837,6 +851,39 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "combat",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "敵が生き残れば反撃を受ける",
+        metrics: [
+          {
+            id: "damage",
+            label: "ダメージ",
+            ...normalDamage,
+            unit: "HP",
+            polarity: "benefit",
+          },
+          {
+            id: "critical_chance",
+            label: "会心率",
+            value: criticalChance,
+            unit: "percent",
+            polarity: "benefit",
+          },
+          {
+            id: "critical_damage",
+            label: "会心ダメージ",
+            ...criticalDamage,
+            unit: "HP",
+            polarity: "benefit",
+          },
+          {
+            id: "counter_damage",
+            label: "生存時反撃",
+            ...counterDamage,
+            unit: "HP",
+            polarity: "risk",
+          },
+        ],
+      },
     });
     activities.push({
       id: "sneak_strike",
@@ -847,6 +894,32 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "combat",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "失敗時はダメージを与えず反撃を受ける",
+        metrics: [
+          {
+            id: "success_chance",
+            label: "成功率",
+            value: sneakChance,
+            unit: "percent",
+            polarity: "benefit",
+          },
+          {
+            id: "success_damage",
+            label: "成功時ダメージ",
+            ...sneakDamage,
+            unit: "HP",
+            polarity: "benefit",
+          },
+          {
+            id: "failure_counter_damage",
+            label: "失敗時反撃",
+            ...counterDamage,
+            unit: "HP",
+            polarity: "risk",
+          },
+        ],
+      },
     });
     activities.push({
       id: "flee",
@@ -857,6 +930,25 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "combat",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "成功時は戦闘を離脱する",
+        metrics: [
+          {
+            id: "success_chance",
+            label: "成功率",
+            value: fleeChance,
+            unit: "percent",
+            polarity: "benefit",
+          },
+          {
+            id: "failure_damage",
+            label: "失敗時ダメージ",
+            value: fleeFailureDamage,
+            unit: "HP",
+            polarity: "risk",
+          },
+        ],
+      },
     });
     if (inst.encounter.negotiable) {
       const cunning = enemyCunning(ctx, inst.encounter.enemyId);
@@ -1032,6 +1124,82 @@ function getSwordPower(ctx: Ctx): number {
   const id = ctx.state.baseline.equippedWeaponId;
   if (!id) return 1;
   return ctx.state.baseline.weapons[id]?.power ?? 1;
+}
+
+interface NumericRange {
+  min: number;
+  max: number;
+}
+
+function combatDamageBase(ctx: Ctx): number {
+  return getSwordPower(ctx) * (1 + playerStat(ctx, "spectral") * 0.04);
+}
+
+function boundedFloorRange(
+  base: number,
+  lowerMultiplier: number,
+  upperExclusiveMultiplier: number,
+): NumericRange {
+  return {
+    min: Math.floor(base * lowerMultiplier),
+    max: Math.max(
+      Math.floor(base * lowerMultiplier),
+      Math.ceil(base * upperExclusiveMultiplier) - 1,
+    ),
+  };
+}
+
+function normalAttackDamageRange(ctx: Ctx): NumericRange {
+  return boundedFloorRange(combatDamageBase(ctx), 0.8, 1.2);
+}
+
+function criticalAttackDamageRange(ctx: Ctx): NumericRange {
+  return boundedFloorRange(combatDamageBase(ctx) * 2, 0.8, 1.2);
+}
+
+function sneakAttackDamageRange(ctx: Ctx): NumericRange {
+  return boundedFloorRange(combatDamageBase(ctx) * 2.2, 0.9, 1.1);
+}
+
+function sneakStrikeChancePercent(ctx: Ctx): number {
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      roundForecastPercent(
+        playerStat(ctx, "intellect") * 5 +
+          playerStat(ctx, "spectral") * 0.5,
+      ),
+    ),
+  );
+}
+
+function fleeSuccessChancePercent(ctx: Ctx): number {
+  const m = moduleState(ctx);
+  if (
+    ctx.state.baseline.knownSkills.includes("hayagake") ||
+    m.companion === "kasumi"
+  ) {
+    return 100;
+  }
+  return Math.max(0, Math.min(100, 80 - playerStat(ctx, "spectral")));
+}
+
+function counterAttackDamageRange(ctx: Ctx, enemyId: string): NumericRange {
+  const power = enemyAttackPower(ctx, enemyId);
+  const ordinary = boundedFloorRange(power, 0.8, 1.2);
+  const spectral = playerStat(ctx, "spectral");
+  return {
+    min: Math.max(1, ordinary.min),
+    max: Math.max(
+      1,
+      spectral > 0 ? Math.floor(Math.max(1, ordinary.max) * 1.6) : ordinary.max,
+    ),
+  };
+}
+
+function roundForecastPercent(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 // ============================================================================
@@ -1273,19 +1441,17 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
   const zone = currentMapInstance(ctx)!;
   if (!zone.encounter) return;
 
-  const sword = getSwordPower(ctx);
   const spec = playerStat(ctx, "spectral");
-  const intellect = playerStat(ctx, "intellect");
 
   // Player strikes first.
   let damage: number;
   let hitLine: string;
   if (kind === "sneak") {
     // Skill check: rng() * 100 < intellect*5 + spectral*0.5
-    const dc = intellect * 5 + spec * 0.5;
+    const dc = sneakStrikeChancePercent(ctx);
     const roll = ctx.rng() * 100;
     if (roll < dc) {
-      damage = Math.floor(sword * (1 + spec * 0.04) * 2.2 * (0.9 + ctx.rng() * 0.2));
+      damage = Math.floor(combatDamageBase(ctx) * 2.2 * (0.9 + ctx.rng() * 0.2));
       hitLine = `不意打ちが入った。柄を掴み直す間もなく一刀で割く——${damage} のダメージ。`;
     } else {
       damage = 0;
@@ -1295,7 +1461,7 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak"): void {
     const variance = 0.8 + ctx.rng() * 0.4;
     const critRoll = ctx.rng() * 100;
     const isCrit = critRoll < spec * 0.7;
-    damage = Math.floor(sword * (1 + spec * 0.04) * variance * (isCrit ? 2 : 1));
+    damage = Math.floor(combatDamageBase(ctx) * variance * (isCrit ? 2 : 1));
     hitLine = isCrit
       ? `妖刀が震えた。倍の威力で斬り抜く——${damage} のダメージ。`
       : `刀を振るう。${damage} のダメージ。`;
@@ -1401,10 +1567,9 @@ function doFlee(ctx: Ctx): void {
     return;
   }
 
-  const spec = playerStat(ctx, "spectral");
-  const dc = 30 + spec; // higher spec = harder (you're slow)
+  const successChance = fleeSuccessChancePercent(ctx);
   const roll = ctx.rng() * 100;
-  if (roll > dc - 10) {
+  if (roll > 100 - successChance) {
     ctx.state.runtime.pendingNarrations.push(
       `${enemyName(ctx, enemyId)}の隙を縫って退いた。`,
     );

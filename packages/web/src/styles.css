@@ -355,6 +355,26 @@ body {
   margin-top: 4px;
   font-style: italic;
 }
+.activity-forecast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.forecast-chip {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #252532;
+  color: #c9c9d3;
+  font-size: 11px;
+  font-style: normal;
+}
+.forecast-benefit {
+  color: #9fd7ae;
+}
+.forecast-risk {
+  color: #e3a1a1;
+}
 .locked-reason {
   display: block;
   color: #c87c7c;

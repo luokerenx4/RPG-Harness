@@ -1,0 +1,54 @@
+name: combat activities expose current structured forecasts
+description: |
+  The same power, intellect, spectral, and enemy values used by dispatch must
+  be available to human and AI renderers before they choose an action.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: kuro_swamp_ruined_hut
+    weapons:
+      ancestor_yaodao: { power: 5 }
+    characters:
+      player:
+        stats:
+          hp: 27
+          mental: 9
+          spectral: 2
+          intellect: 0
+        custom: {}
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 4
+      pendingLoot: {}
+      visited:
+        kuro_swamp_ruined_hut:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 8
+            enemyHpMax: 8
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: attack
+    forecastMetric: damage
+    metricMin: 4
+    metricMax: 6
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: success_chance
+    metricValue: 1
+  - kind: activity
+    id: flee
+    forecastMetric: success_chance
+    metricValue: 78
+  - kind: activity
+    id: flee
+    forecastMetric: failure_damage
+    metricValue: 4

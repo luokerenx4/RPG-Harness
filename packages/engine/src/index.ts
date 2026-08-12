@@ -86,6 +86,8 @@ export type {
   ActionContext,
   ActionHandler,
   ActionResult,
+  ActivityForecast,
+  ActivityForecastMetric,
   AssetKind,
   AssetRefs,
   AssetRenderings,

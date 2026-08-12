@@ -44,6 +44,10 @@ export interface ActivityAssertion {
   available?: boolean;
   lockedReasonIncludes?: string;
   titleIncludes?: string;
+  forecastMetric?: string;
+  metricValue?: number;
+  metricMin?: number;
+  metricMax?: number;
 }
 
 // Inspect the most recent hubMenu Output's stats[] for a specific
