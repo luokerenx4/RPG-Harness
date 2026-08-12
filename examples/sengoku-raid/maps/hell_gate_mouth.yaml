@@ -3,6 +3,7 @@ name: 門口
 chain: hell_gate
 is_entry: true
 difficulty: 5
+bg: assets/backgrounds/hell-gate-mouth
 entry_narration: 視界の縁が滲む。鬼の脈に染まった者にしか、この道は開かぬ。
 connections:
   - { dir: 奥, target: hell_gate_corridor }

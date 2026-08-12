@@ -1,0 +1,43 @@
+name: kijin narration remains true outside the caldera
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: hell_gate_mouth
+    visuals:
+      bg: assets/backgrounds/hell-gate-mouth
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: hell_gate
+      entryMapId: hell_gate_mouth
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        hell_gate_mouth:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+        hell_gate_corridor:
+          visited: false
+          searched: false
+          encounter:
+            enemyId: kijin
+            enemyHp: 45
+            enemyHpMax: 45
+          encounterRolled: true
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:hell_gate_corridor" }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 景色が重く歪む
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/hell-gate-corridor

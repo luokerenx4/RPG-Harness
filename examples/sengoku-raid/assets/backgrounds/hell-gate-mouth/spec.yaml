@@ -1,0 +1,16 @@
+kind: bg
+description: |
+  砲響山の北壁にだけ滲み出る地獄門の入口。黒い柱状玄武岩が
+  自然の鳥居を形作り、その奥には底のない闇と鈍い赤光がある。
+prompt: |
+  Hell Gate entrance hidden in a volcanic caldera wall. Black columnar
+  basalt forms a natural torii around an impossible fissure; dim vermilion
+  light leaks from below through indigo volcanic mist. No characters.
+placeholder: "[地獄門・門口] 黒い玄武岩の裂け目、滲む視界、底から差す暗赤の光"
+refs:
+  location: hell-gate
+  time: 黄昏
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-3, hidden-zone, hell-gate, entrance]

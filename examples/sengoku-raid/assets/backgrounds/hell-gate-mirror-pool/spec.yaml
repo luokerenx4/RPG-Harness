@@ -1,0 +1,16 @@
+kind: bg
+description: |
+  地獄門の最奥、映し井戸。円形の玄武岩聖堂の中央に黒い水鏡が
+  静まり、天井とは異なる渦を映している。赤い波紋だけが動く。
+prompt: |
+  Mirror Well in the deepest Hell Gate chamber. A circular basalt sanctuary
+  around a perfectly still black reflecting pool whose reflection shows an
+  impossible ceiling; dim crimson ripples and cold indigo mist. No characters.
+placeholder: "[地獄門・映し井戸] 黒い水鏡、異なる天井の渦、暗赤に光る波紋"
+refs:
+  location: hell-gate
+  time: 不明
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-3, hidden-zone, hell-gate, mirror, boss]

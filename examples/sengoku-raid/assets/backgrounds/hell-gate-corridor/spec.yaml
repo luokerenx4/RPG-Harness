@@ -1,0 +1,16 @@
+kind: bg
+description: |
+  地獄門の内側へ下る業の廊。黒い玄武岩の柱と自然石のアーチが
+  幾重にも続き、濡れた岩肌には別の歩みが重なって映る。
+prompt: |
+  Corridor of Karma inside Hell Gate. A long descending passage of black
+  columnar basalt and repeated natural arches, with restrained blood-red
+  embers and warped reflections in wet stone seams. No characters.
+placeholder: "[地獄門・業の廊] 幾重にも続く黒石のアーチ、濡れた岩に重なる影"
+refs:
+  location: hell-gate
+  time: 不明
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-3, hidden-zone, hell-gate, corridor]

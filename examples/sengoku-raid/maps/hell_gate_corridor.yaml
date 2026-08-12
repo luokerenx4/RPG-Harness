@@ -2,6 +2,7 @@ id: hell_gate_corridor
 name: 業の廊
 chain: hell_gate
 difficulty: 5
+bg: assets/backgrounds/hell-gate-corridor
 connections:
   - { dir: 奥, target: hell_gate_mirror_pool }
   - { dir: 戻る, target: hell_gate_mouth }

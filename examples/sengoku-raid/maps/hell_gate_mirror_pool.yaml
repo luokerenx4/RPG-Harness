@@ -2,6 +2,7 @@ id: hell_gate_mirror_pool
 name: 映し井戸
 chain: hell_gate
 difficulty: 5
+bg: assets/backgrounds/hell-gate-mirror-pool
 is_extract: true
 connections:
   - { dir: 戻る, target: hell_gate_corridor }
