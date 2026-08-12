@@ -67,6 +67,68 @@ describe("runScript — narration / dialogue input protocol", () => {
     }]);
   });
 
+  test("stable choice input selects by authored identity instead of presentation index", async () => {
+    const game = makeGame({
+      scripts: [makeScript("s1", { beats: [
+        {
+          type: "choice",
+          id: "trust-test",
+          options: [
+            { id: "stranger", text: "The stranger", goto: "stranger-reply" },
+            { id: "friend", text: "The friend", goto: "friend-reply" },
+          ],
+        },
+        { type: "label", name: "stranger-reply" },
+        { type: "narration", text: "You chose the stranger" },
+        { type: "goto", target: "$end" },
+        { type: "label", name: "friend-reply" },
+        { type: "narration", text: "You chose the friend" },
+        { type: "endScript" },
+      ] })],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.currentScriptId = "s1";
+    const run = runScript(ctx, game.scripts[0]!);
+    expect((await run.next()).value).toMatchObject({
+      type: "choice",
+      choiceId: "trust-test",
+    });
+    expect((await run.next({
+      type: "choose",
+      choiceId: "trust-test",
+      optionId: "friend",
+    })).value).toMatchObject({
+      type: "narration",
+      text: "You chose the friend",
+    });
+  });
+
+  test("stale stable choice identity fails closed and re-yields the choice", async () => {
+    const game = makeGame({
+      scripts: [makeScript("s1", { beats: [{
+        type: "choice",
+        id: "current-choice",
+        options: [
+          { id: "left", text: "Left" },
+          { id: "right", text: "Right" },
+        ],
+      }, { type: "endScript" }] })],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.currentScriptId = "s1";
+    const run = runScript(ctx, game.scripts[0]!);
+    await run.next();
+    expect((await run.next({
+      type: "choose",
+      choiceId: "stale-choice",
+      optionId: "right",
+    })).value).toMatchObject({
+      type: "choice",
+      choiceId: "current-choice",
+    });
+    expect(ctx.state.baseline.beatIndex).toBe(0);
+  });
+
   test("silent goto converges a branch without yielding a fake choice", async () => {
     const beats: Beat[] = [
       { type: "narration", text: "branch reply" },

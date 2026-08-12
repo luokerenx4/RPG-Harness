@@ -188,7 +188,11 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       status: "selected",
       index,
     };
-    return { type: "choose" as const, index };
+    return {
+      type: "choose" as const,
+      choiceId: args.targetChoice!.choiceId,
+      optionId: args.targetChoice!.optionId,
+    };
   };
 
   const play = async () => {

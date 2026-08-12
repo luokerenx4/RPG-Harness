@@ -365,8 +365,12 @@ Pure function. Stateless. Persistable. So:
 # Session "claude" plays one step at a time
 rpgh step ./my-game --session claude --input '{"type":"select","scriptId":"001_meeting"}'
 rpgh step ./my-game --session claude --input '{"type":"next"}'
-rpgh step ./my-game --session claude --input '{"type":"choose","index":2}'
+rpgh step ./my-game --session claude --input '{"type":"choose","choiceId":"route","optionId":"friends"}'
 ```
+
+Stable `choiceId` / `optionId` input is preferred for AI and automation because
+it survives option reordering. Human frontends may continue to submit the
+presentation-local `{"type":"choose","index":2}` form for legacy choices.
 
 State persists to `<game-dir>/.rpg-harness/sessions/<name>/state.json` between calls.
 Each `step` appends `(input, output, checkpoint)` to `log.jsonl`. Fork any exact

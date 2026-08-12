@@ -1293,6 +1293,7 @@ export type Output =
 export type Input =
   | { type: "next" }
   | { type: "choose"; index: number }
+  | { type: "choose"; choiceId: string; optionId: string }
   | { type: "select"; scriptId: string }
   | { type: "doActivity"; id: string }
   | { type: "quit" };

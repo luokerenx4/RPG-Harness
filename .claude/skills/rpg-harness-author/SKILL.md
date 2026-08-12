@@ -778,13 +778,17 @@ state:                       # optional partial state to seed
 inputs:
   - { type: select, scriptId: "001_meeting" }
   - { type: next }
-  - { type: choose, index: 2 }
+  - { type: choose, choiceId: answer-alice, optionId: offer-to-help }
 assertions:
   - { kind: reason, eq: completed }   # or inputs-exhausted / quit / max-steps
   - { kind: state, path: baseline.completedScripts, includes: 001_meeting }
   - { kind: state, path: baseline.characters.alice.affection, eq: 5 }
   - { kind: output, type: gameEnd, present: true }
 ```
+
+Prefer stable `choiceId` / `optionId` inputs in fixtures so option reordering
+does not silently change what the test selects. Use `index` only for legacy
+choices that have not yet been assigned ids.
 
 After writing or changing scripts, run `rpgh test .` to check fixtures still pass.
 

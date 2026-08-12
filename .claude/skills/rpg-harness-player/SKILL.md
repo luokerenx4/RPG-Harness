@@ -51,14 +51,14 @@ If `done` is `true`, the game is over. Read the final state and tell the user wh
 | `scriptComplete` | Between scripts — engine waits for you to pick one of `nextAvailable[]` | `{"type":"select","scriptId":"<id>"}` |
 | `narration` | Pure story text (no speaker) | `{"type":"next"}` |
 | `dialogue` | A character speaks (`speakerName` + `text`) | `{"type":"next"}` |
-| `choice` | Story branch — pick one of `options[]` (0-based index, only `available:true` ones) | `{"type":"choose","index":N}` |
+| `choice` | Story branch — pick an `available:true` option by stable identity | `{"type":"choose","choiceId":"<choiceId>","optionId":"<optionId>"}` |
 | `clear` | Scene break, just advance | `{"type":"next"}` |
 | `gameEnd` | You hit a terminal — no more scripts available | Stop. Report the ending. |
 
 ### Step 3: Apply your decision
 
 ```bash
-rpgh step "$GAME" --session "$SESSION" --input '{"type":"choose","index":2}'
+rpgh step "$GAME" --session "$SESSION" --input '{"type":"choose","choiceId":"answer-at-the-gate","optionId":"enter-together"}'
 ```
 
 The output of `step` is the **next** event. You do NOT need to `peek` again — just react to what `step` printed.
@@ -91,8 +91,13 @@ Example:
 Then:
 
 ```bash
-rpgh step "$GAME" --session "$SESSION" --input '{"type":"choose","index":2}'
+rpgh step "$GAME" --session "$SESSION" --input '{"type":"choose","choiceId":"answer-under-the-tree","optionId":"watch-her-paint"}'
 ```
+
+Use the `choiceId` from the current choice output and the selected option's
+`id`. This remains correct if the author reorders options while you play. Only
+fall back to `{"type":"choose","index":N}` when the current legacy choice or
+option has no stable id.
 
 ## Choosing in character
 

@@ -134,7 +134,11 @@ function compactInput(value: unknown): unknown | undefined {
   if (!isRecord(value) || typeof value.type !== "string") return undefined;
   switch (value.type) {
     case "choose":
-      return Number.isInteger(value.index) ? { type: "choose", index: value.index } : { type: "choose" };
+      return Number.isInteger(value.index)
+        ? { type: "choose", index: value.index }
+        : typeof value.choiceId === "string" && typeof value.optionId === "string"
+          ? { type: "choose", choiceId: value.choiceId, optionId: value.optionId }
+          : { type: "choose" };
     case "select":
       return typeof value.scriptId === "string"
         ? { type: "select", scriptId: value.scriptId }
@@ -270,7 +274,11 @@ function formatFork(fork: Record<string, unknown>): string {
 
 function formatInput(value: unknown): string {
   if (!isRecord(value) || typeof value.type !== "string") return "";
-  if (value.type === "choose") return `choose ${String(value.index ?? "?")}`;
+  if (value.type === "choose") {
+    return typeof value.choiceId === "string" && typeof value.optionId === "string"
+      ? `choose ${value.choiceId}/${value.optionId}`
+      : `choose ${String(value.index ?? "?")}`;
+  }
   if (value.type === "select") return `select ${String(value.scriptId ?? "?")}`;
   if (value.type === "doActivity") return `activity ${String(value.id ?? "?")}`;
   return value.type;

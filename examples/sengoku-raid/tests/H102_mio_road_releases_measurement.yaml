@@ -11,8 +11,7 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
-  - type: choose
-    index: 1
+  - { type: choose, choiceId: answer-the-human-reflection, optionId: release-her-from-measuring }
 assertions:
   - kind: output
     type: dialogue

@@ -1,6 +1,6 @@
 export { Engine, buildPresetContext } from "./engine";
 export { evaluateCondition } from "./condition";
-export { choiceDecisionContext } from "./decision";
+export { choiceDecisionContext, resolveChoiceInput } from "./decision";
 export { ensurePersistedRng, persistedRng } from "./rng";
 export type { ChoiceDecisionContext } from "./decision";
 export {

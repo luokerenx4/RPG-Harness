@@ -1,4 +1,5 @@
 import { evaluateCondition } from "../condition";
+import { resolveChoiceInput } from "../decision";
 import type {
   Beat,
   Input,
@@ -165,7 +166,7 @@ export async function* runScript(
           beatIdx,
           baseRendered,
         );
-        const input = yield {
+        const presented = {
           type: "choice",
           scriptId: script.id,
           ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
@@ -173,12 +174,14 @@ export async function* runScript(
           options: rendered,
           ...(beat.view !== undefined ? { view: beat.view } : {}),
           visualState: state.baseline.visuals,
-        };
+        } as const;
+        const input = yield presented;
         if (input.type === "quit") return false;
         if (input.type !== "choose") continue;
-        const chosen = beat.options[input.index];
+        const choiceIdx = resolveChoiceInput(presented, input);
+        if (choiceIdx === undefined) continue;
+        const chosen = beat.options[choiceIdx];
         if (!chosen) continue;
-        if (rendered[input.index]?.available === false) continue;
         state.baseline.scriptCursor = {
           scriptId: script.id,
           beatAnchor: anchorBeat(beat),
@@ -196,7 +199,7 @@ export async function* runScript(
             optionText: chosen.text,
           },
         };
-        fireOnChoiceResolved(ctx, script.id, beatIdx, input.index, {
+        fireOnChoiceResolved(ctx, script.id, beatIdx, choiceIdx, {
           ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
           ...(chosen.id !== undefined ? { optionId: chosen.id } : {}),
           prompt: beat.prompt ?? null,

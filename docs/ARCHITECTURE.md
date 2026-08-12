@@ -62,6 +62,13 @@ while (true) {
 
 The engine doesn't know whether the output ends up in a terminal, a browser, or a JSON stream. That is the frontend's job.
 
+Choice inputs have two compatible forms. Human renderers may submit the current
+presentation index (`{ type: "choose", index: 1 }`). Automation should submit
+the authored identity (`{ type: "choose", choiceId: "route", optionId:
+"friends" }`), which the engine resolves against the currently yielded choice.
+A stale choice id, missing option id, locked option, or payload that mixes both
+forms fails closed and re-yields the same choice.
+
 ## Frontends
 
 A frontend is whatever consumes the `Output` stream and produces `Input`. Two ship today, and they share more than the engine:

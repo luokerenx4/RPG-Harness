@@ -11,8 +11,7 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
-  - type: choose
-    index: 2
+  - { type: choose, choiceId: answer-the-returning-footsteps, optionId: rest-her-bow-on-his-knees }
   - { type: next }
 assertions:
   - kind: output

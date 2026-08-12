@@ -11,8 +11,7 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
-  - type: choose
-    index: 0
+  - { type: choose, choiceId: answer-mios-private-feeling, optionId: ask-her-never-to-conclude }
 assertions:
   - kind: output
     type: dialogue
