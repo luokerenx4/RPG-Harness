@@ -195,6 +195,12 @@ turn counts often reveal pseudo-progress masking navigation or action
 oscillation. Treat the cycle as the reproduction and the listed paths as the
 reason exact stall detection did not fire.
 
+For a plain `max-steps` stop, inspect `progress` before treating it as a bug.
+Newly completed scripts, changed public objective requirements, or an advancing
+in-flight script make it a resumable budget checkpoint (reported at `note`
+severity). Continue that named session. Escalate only when subsequent evidence
+shows zero progress, a strict `stall`, a `behaviorCycle`, or an engine error.
+
 ## Hard rules
 
 - Never modify the game's `scripts/` or `characters/` files unless the user explicitly asks. The author wrote them.

@@ -458,6 +458,12 @@ run is not stopped early; a `max-steps` summary instead carries a
 `behaviorCycle` candidate plus the changing state paths. That distinction keeps
 legitimate grinding observable while exposing counters that mask an otherwise
 stuck policy.
+Every autoplay summary also contains a `progress` delta derived from newly
+completed scripts, public objective requirement changes, and in-flight script
+movement. With `--report-on-stop`, a clean `max-steps` stop that made measurable
+progress becomes a note-level budget checkpoint instead of a major failure;
+errors, exact stalls, masked behavior cycles, and zero-progress stops retain
+their stronger severity.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
 `cover` is the execution half of that contract: it consumes an available branch

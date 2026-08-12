@@ -126,6 +126,15 @@ describe("charmer persona exploration", () => {
   });
 });
 
+describe("rude persona progression", () => {
+  test("keeps second-choice dialogue behavior but follows the hub objective", async () => {
+    const output = objectiveHub();
+    await expect(
+      personas.rude!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
+  });
+});
+
 function objectiveHub(): Extract<Output, { type: "hubMenu" }> {
   return {
     type: "hubMenu",

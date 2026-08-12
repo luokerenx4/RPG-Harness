@@ -64,6 +64,7 @@ export interface AutoplaySummary {
   error?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  progress: AutoplayProgress;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -78,6 +79,23 @@ export interface AutoplaySummary {
     pendingBranches: ChoiceCoverageWorkItem[];
   };
   targetChoice?: TargetChoiceResult;
+}
+
+export interface AutoplayProgress {
+  madeProgress: boolean;
+  completedScripts: string[];
+  objectiveChanges: Array<{
+    objectiveId: string;
+    requirementId: string;
+    from: string | number | boolean;
+    to: string | number | boolean;
+  }>;
+  scriptProgress?: {
+    from: string | null;
+    to: string | null;
+    beatIndexFrom: number;
+    beatIndexTo: number;
+  };
 }
 
 export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
@@ -204,10 +222,12 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     };
   };
 
+  let autoplayInitialState: Awaited<ReturnType<typeof loadSession>> | undefined;
   const play = async () => {
     const initialState = args.session
       ? await loadSession(args.gameDir, args.session, game)
       : undefined;
+    autoplayInitialState = initialState;
     const result = await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,
       stallDetection: { repetitions: 3, maxCycleLength: 20 },
@@ -267,6 +287,11 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
 
   const ending = detectTerminalScriptId(result);
   if (ending) process.stderr.write(`ending: ${ending}\n`);
+  const progress = summarizeAutoplayProgress(
+    autoplayInitialState,
+    result.finalState,
+    result.trace,
+  );
 
   let report: PlaytestReport | undefined;
   if (args.reportOnStop && args.session && !result.done) {
@@ -274,11 +299,20 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       gameDir: args.gameDir,
       session: args.session,
       area: "tooling",
-      severity: result.reason === "error" ? "blocker" : "major",
-      title: `Autoplay ${args.persona} stopped before game end (${result.reason})`,
+      severity: result.reason === "error"
+        ? "blocker"
+        : result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
+          ? "note"
+          : "major",
+      title: result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
+        ? `Autoplay ${args.persona} reached a budget checkpoint with progress`
+        : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
       details: [
         `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
+        ...(progress.madeProgress
+          ? [`Progress made: ${formatAutoplayProgress(progress)}.`]
+          : ["No authored script or public objective progress was observed during this run."]),
         ...(result.stall
           ? [
               `Detected an exact ${result.stall.cycleLength}-output cycle repeated ${result.stall.repetitions} times across trace indexes ${result.stall.firstTraceIndex}–${result.stall.lastTraceIndex}: ${formatStallCycle(result.stall)}.`,
@@ -295,7 +329,9 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
               `AI branch \`${args.session}\` was forked from player session \`${fork.fromSession}\` at source log entry ${fork.sourceLogEntry}.`,
             ]
           : []),
-        "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
+        result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
+          ? "Continue from this checkpoint; file a higher-severity issue only if a later run proves a loop or loses objective progress."
+          : "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
@@ -311,6 +347,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     ...(result.error ? { error: result.error } : {}),
     ...(result.stall ? { stall: result.stall } : {}),
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
+    progress,
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
@@ -334,6 +371,67 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
   };
+}
+
+export function summarizeAutoplayProgress(
+  initialState: Awaited<ReturnType<typeof loadSession>> | undefined,
+  finalState: Awaited<ReturnType<typeof runLoop>>["finalState"],
+  trace: Awaited<ReturnType<typeof runLoop>>["trace"],
+): AutoplayProgress {
+  const initialOrder = initialState?.baseline.completionOrder ?? [];
+  const initialCompleted = new Set(initialOrder);
+  const completedScripts = finalState.baseline.completionOrder.filter(
+    (scriptId) => !initialCompleted.has(scriptId),
+  );
+  const firstRequirements = new Map<string, string | number | boolean>();
+  const lastRequirements = new Map<string, string | number | boolean>();
+  for (const entry of trace) {
+    if (entry.output.type !== "hubMenu") continue;
+    for (const objective of entry.output.snapshot.objectives ?? []) {
+      for (const requirement of objective.requirements ?? []) {
+        const key = `${objective.id}\u0000${requirement.id}`;
+        if (!firstRequirements.has(key)) firstRequirements.set(key, requirement.current);
+        lastRequirements.set(key, requirement.current);
+      }
+    }
+  }
+  const objectiveChanges = [...firstRequirements.entries()].flatMap(([key, from]) => {
+    const to = lastRequirements.get(key);
+    if (to === undefined || Object.is(from, to)) return [];
+    const [objectiveId, requirementId] = key.split("\u0000");
+    return [{ objectiveId: objectiveId!, requirementId: requirementId!, from, to }];
+  });
+  const scriptFrom = initialState?.baseline.currentScriptId ?? null;
+  const scriptTo = finalState.baseline.currentScriptId;
+  const beatIndexFrom = initialState?.baseline.beatIndex ?? 0;
+  const beatIndexTo = finalState.baseline.beatIndex;
+  const scriptAdvanced = scriptTo !== null && (
+    scriptTo !== scriptFrom || beatIndexTo !== beatIndexFrom
+  );
+  return {
+    madeProgress: completedScripts.length > 0 || objectiveChanges.length > 0 || scriptAdvanced,
+    completedScripts,
+    objectiveChanges,
+    ...(scriptAdvanced
+      ? { scriptProgress: { from: scriptFrom, to: scriptTo, beatIndexFrom, beatIndexTo } }
+      : {}),
+  };
+}
+
+function formatAutoplayProgress(progress: AutoplayProgress): string {
+  const parts: string[] = [];
+  if (progress.completedScripts.length > 0) {
+    parts.push(`completed scripts [${progress.completedScripts.join(", ")}]`);
+  }
+  if (progress.objectiveChanges.length > 0) {
+    parts.push(`objective changes [${progress.objectiveChanges.map((change) =>
+      `${change.objectiveId}/${change.requirementId}:${String(change.from)}→${String(change.to)}`
+    ).join(", ")}]`);
+  }
+  if (progress.scriptProgress) {
+    parts.push(`script ${progress.scriptProgress.from ?? "hub"}@${progress.scriptProgress.beatIndexFrom}→${progress.scriptProgress.to}@${progress.scriptProgress.beatIndexTo}`);
+  }
+  return parts.join("; ") || "none";
 }
 
 function formatStallCycle(stall: StallDiagnostic): string {

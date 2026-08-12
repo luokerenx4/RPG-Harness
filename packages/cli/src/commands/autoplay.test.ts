@@ -119,6 +119,7 @@ describe("autoplay autonomous development lane", () => {
       area: "tooling",
       severity: "major",
     });
+    expect(summary.progress.madeProgress).toBe(false);
     expect(summary.report?.evidence.checkpoint).toBeDefined();
     expect(await readFile(
       path.join(sessionDir(gameDir, "player-main"), "state.json"),
@@ -144,6 +145,29 @@ describe("autoplay autonomous development lane", () => {
       path.join(sessionDir(gameDir, "ai-audit-repro"), "state.json"),
       "utf-8",
     ))).toEqual(summary.finalState);
+  });
+
+  test("classifies a progressing max-step stop as a note-level budget checkpoint", async () => {
+    const gameDir = await temporaryGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 1,
+      session: "ai-budget-progress",
+      reportOnStop: true,
+    });
+
+    expect(summary.reason).toBe("max-steps");
+    expect(summary.progress).toMatchObject({
+      madeProgress: true,
+      scriptProgress: { from: null, to: "intro" },
+    });
+    expect(summary.report).toMatchObject({
+      severity: "note",
+      title: "Autoplay greedy reached a budget checkpoint with progress",
+    });
+    expect(summary.report?.details).toContain("Continue from this checkpoint");
   });
 
   test("does not file an issue when the forked AI branch reaches gameEnd", async () => {

@@ -186,6 +186,8 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const objective = pickObjectiveActivity(output);
+      if (objective) return objective;
       return pickActivity(output, (acts) => {
         if (acts.length >= 2) return acts[1]!.idx;
         return acts[0]!.idx;
