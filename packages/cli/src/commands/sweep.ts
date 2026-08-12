@@ -123,8 +123,8 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
     }, 0, queuedItems);
   }
 
-  const targets = selected.map((item, index) =>
-    branchTarget(item, args.sessionPrefix, index)
+  const targets = selected.map((item) =>
+    branchTarget(item, args.sessionPrefix, allItems.indexOf(item))
   );
   const preflightedTargets = await preflightTargets(args, selected, targets);
   if (args.snapshotRevision === undefined) {

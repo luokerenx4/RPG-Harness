@@ -141,7 +141,7 @@ describe("bounded development sweep", () => {
       reason: "snapshot-completed",
       snapshot: { totalItems: 2, startIndex: 1, completedItems: 1, remainingItems: 0 },
       resume: null,
-      runs: [{ key: "story/scene-b", targetSession: "second-001" }],
+      runs: [{ key: "story/scene-b", targetSession: "second-002" }],
     });
     expect((await readdir(path.join(gameDir, ".rpg-harness", "sweeps"))))
       .toContain(`${first.snapshot.revision}.json`);
