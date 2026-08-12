@@ -1,9 +1,9 @@
 name: 提案C：listen は negotiable を消費する（連続交渉禁止）
 description: |
   After negotiate_listen resolves (success or fail), the encounter
-  remains alive but negotiable is set to false — player must re-cleave
-  the enemy below 30% again to re-negotiate. This prevents "spam listen
-  until lucky drop" exploits.
+  remains alive but its single negotiation window is consumed. Neither
+  suppressing nor another attack may reopen it; this prevents "spam listen
+  until lucky drop" exploits and hides the zero-damage suppress trap.
 state:
   baseline:
     completedScripts:
@@ -49,3 +49,15 @@ assertions:
   - kind: state
     path: sengoku-raid.raid.visited.kuro_swamp_ruined_hut.encounter.enemyHp
     eq: 2
+  - kind: state
+    path: sengoku-raid.raid.visited.kuro_swamp_ruined_hut.encounter.negotiationConsumed
+    eq: true
+  - kind: activity
+    id: suppress_strike
+    present: false
+  - kind: activity
+    id: negotiate_listen
+    present: false
+  - kind: activity
+    id: negotiate_release
+    present: false

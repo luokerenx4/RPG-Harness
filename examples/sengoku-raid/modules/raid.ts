@@ -128,6 +128,10 @@ interface MapInstance {
     // buildRaidMenu. Cleared automatically when the encounter resolves
     // (encounter goes null).
     negotiable?: boolean;
+    // Set after the player listens once. A single encounter offers one
+    // negotiation window; further attacks cannot reopen it and suppress
+    // cannot become a zero-damage reroll exploit.
+    negotiationConsumed?: boolean;
   };
   encounterCleared: boolean;
   pendingLoot: Record<string, number>;
@@ -136,6 +140,18 @@ interface MapInstance {
   // zone. The guard keeps a scouted enemy truthful: the actual arrival
   // must not re-roll and contradict what the player was shown.
   encounterRolled?: boolean;
+}
+
+function negotiationWindowConsumed(
+  encounter: NonNullable<MapInstance["encounter"]>,
+): boolean {
+  if (encounter.negotiationConsumed === true) return true;
+  // Legacy saves used explicit false only after negotiate_listen. An enemy
+  // below the negotiation threshold cannot otherwise reach that state: normal
+  // and suppress attacks mark it negotiable in the same transaction.
+  return encounter.negotiable === false &&
+    encounter.enemyHp > 0 &&
+    encounter.enemyHp < encounter.enemyHpMax * 0.3;
 }
 
 // One raid (a single "expedition" from edo_castle through a chain of maps).
@@ -1221,7 +1237,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         ],
       },
     });
-    if (!inst.encounter.negotiable) {
+    if (!inst.encounter.negotiable && !negotiationWindowConsumed(inst.encounter)) {
       const negotiationHp = Math.max(
         1,
         Math.ceil(inst.encounter.enemyHpMax * 0.3) - 1,
@@ -1838,6 +1854,8 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak" | "suppress"): void {
   if (!m.raid) return;
   const zone = currentMapInstance(ctx)!;
   if (!zone.encounter) return;
+  const negotiationAlreadyConsumed = negotiationWindowConsumed(zone.encounter);
+  if (negotiationAlreadyConsumed) zone.encounter.negotiationConsumed = true;
 
   const spec = playerStat(ctx, "spectral");
 
@@ -1884,7 +1902,8 @@ function doAttackRound(ctx: Ctx, kind: "normal" | "sneak" | "suppress"): void {
   // the encounter resolves (victory / flee / release).
   if (
     zone.encounter.enemyHp > 0 &&
-    zone.encounter.enemyHp < zone.encounter.enemyHpMax * 0.3
+    zone.encounter.enemyHp < zone.encounter.enemyHpMax * 0.3 &&
+    !negotiationAlreadyConsumed
   ) {
     zone.encounter.negotiable = true;
     ctx.state.runtime.pendingNarrations.push(
@@ -2519,7 +2538,11 @@ const sneakStrikeHandler: ActionHandler = (ctx) => {
 
 const suppressStrikeHandler: ActionHandler = (ctx) => {
   const zone = currentMapInstance(ctx);
-  if (!zone?.encounter || zone.encounter.negotiable) {
+  if (
+    !zone?.encounter ||
+    zone.encounter.negotiable ||
+    negotiationWindowConsumed(zone.encounter)
+  ) {
     return denial("今は押さえ込む相手がいない。");
   }
   doAttackRound(ctx, "suppress");
@@ -2564,9 +2587,10 @@ const negotiateListenHandler: ActionHandler = (ctx) => {
     );
   }
 
-  // Listening "consumes" the negotiation moment; encounter still alive
-  // but no longer negotiable — player must commit (attack / flee).
+  // Listening consumes the encounter's one negotiation window. The enemy
+  // remains alive, but neither attacking nor suppressing can reopen it.
   zone.encounter.negotiable = false;
+  zone.encounter.negotiationConsumed = true;
   return { deltas, narrations };
 };
 

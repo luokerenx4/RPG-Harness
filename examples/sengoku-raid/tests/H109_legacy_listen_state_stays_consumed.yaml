@@ -1,0 +1,49 @@
+name: 旧存档の交渉済み状態は再攻撃しても開き直さない
+description: |
+  Before negotiationConsumed existed, negotiate_listen persisted a weakened
+  enemy with negotiable explicitly false. The live migration must infer that
+  the one negotiation window was consumed, hide suppress, and preserve that
+  state after another nonlethal attack.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_under_eaves
+    weapons:
+      ancestor_yaodao: { power: 1 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 0 }
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 3
+      pendingLoot: {}
+      visited:
+        sumida_river_under_eaves:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 5
+            enemyHpMax: 18
+            negotiable: false
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: attack }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: sengoku-raid.raid.visited.sumida_river_under_eaves.encounter.negotiationConsumed
+    eq: true
+  - kind: activity
+    id: suppress_strike
+    present: false
+  - kind: activity
+    id: negotiate_listen
+    present: false
+  - kind: activity
+    id: negotiate_release
+    present: false
