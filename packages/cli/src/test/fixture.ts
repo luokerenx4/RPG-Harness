@@ -31,6 +31,8 @@ export interface OutputAssertion {
   present: boolean;
   speaker?: string;
   textIncludes?: string;
+  choiceId?: string;
+  optionId?: string;
   optionTextIncludes?: string;
   optionAiPriority?: number;
 }

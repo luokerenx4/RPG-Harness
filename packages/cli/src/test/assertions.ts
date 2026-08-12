@@ -262,8 +262,10 @@ function checkOutput(
     }
     if (a.optionTextIncludes !== undefined) {
       if (o.type !== "choice") return false;
+      if (a.choiceId !== undefined && o.choiceId !== a.choiceId) return false;
       const option = o.options.find((item) =>
-        item.text.includes(a.optionTextIncludes!),
+        item.text.includes(a.optionTextIncludes!) &&
+        (a.optionId === undefined || item.id === a.optionId),
       );
       if (!option) return false;
       if (
@@ -281,7 +283,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
         : ""
     }`;
   }
@@ -290,7 +292,7 @@ function checkOutput(
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
     }${
       a.optionTextIncludes
-        ? ` optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        ? ` choiceId=${String(a.choiceId)} optionId=${String(a.optionId)} optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
         : ""
     }, but found ${matches.length}`;
   }

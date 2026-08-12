@@ -1,0 +1,74 @@
+name: Kasumi's completed bond remains legible in her oni-ending tether
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - road_kasumi
+      - bond_kasumi_04
+    switches:
+      chose_court_defy: true
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      kasumi:
+        stats: { affection: 18 }
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kasumi]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+maxSteps: 40
+inputs:
+  - { type: doActivity, id: script:ending_oni_self }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 2 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 霞の声は靄の向こうでも笑っていた
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 霞に教わった獣道
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: お主と霞の選んだ結末
+  - kind: output
+    type: narration
+    present: false
+    textIncludes: 声の主の顔が、靄の向こう
+  - kind: output
+    type: gameEnd
+    present: true

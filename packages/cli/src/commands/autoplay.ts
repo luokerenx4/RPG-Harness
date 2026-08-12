@@ -17,6 +17,11 @@ import {
   recordPlaytestReport,
   type PlaytestReport,
 } from "../playtest-reports";
+import {
+  collectChoiceCoverage,
+  type ChoiceCoverageReport,
+  type ChoiceCoverageWorkItem,
+} from "./choice-coverage";
 
 export interface AutoplayArgs {
   gameDir: string;
@@ -40,6 +45,10 @@ export interface AutoplaySummary {
   webPath?: string;
   fork?: Awaited<ReturnType<typeof forkSession>>;
   report?: PlaytestReport;
+  choiceCoverage?: {
+    summary: ChoiceCoverageReport["summary"];
+    pendingBranches: ChoiceCoverageWorkItem[];
+  };
 }
 
 export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
@@ -121,6 +130,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
             source: `autoplay:${args.persona}`,
             input: entry.input,
             output: entry.output,
+            ...(entry.decision ? { decision: entry.decision } : {}),
           }, state);
         }
         if (!args.verbose) return;
@@ -190,6 +200,10 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     });
   }
 
+  const choiceCoverage = args.session
+    ? await collectChoiceCoverage(args.gameDir, args.session)
+    : undefined;
+
   return {
     reason: result.reason,
     decisions: countDecisions(result.trace),
@@ -204,6 +218,14 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       : {}),
     ...(fork ? { fork } : {}),
     ...(report ? { report } : {}),
+    ...(choiceCoverage
+      ? {
+          choiceCoverage: {
+            summary: choiceCoverage.summary,
+            pendingBranches: choiceCoverage.workItems,
+          },
+        }
+      : {}),
   };
 }
 

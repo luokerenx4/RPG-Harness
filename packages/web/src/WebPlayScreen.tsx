@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Engine, createInitialState } from "@rpg-harness/engine";
+import { choiceDecisionContext, Engine, createInitialState } from "@rpg-harness/engine";
 import type {
   AssetSpec,
   ComposedState,
@@ -70,6 +70,7 @@ export function WebPlayScreen({
   const engineRef = useRef<Engine | null>(null);
   const runnerRef = useRef<AsyncGenerator<Output, void, Input> | null>(null);
   const processingRef = useRef(false);
+  const outputRef = useRef<Output | null>(null);
   const [showBacklog, setShowBacklog] = useState(false);
   const [showArtBook, setShowArtBook] = useState(false);
 
@@ -80,12 +81,18 @@ export function WebPlayScreen({
   const commit = useCallback(
     async (res: IteratorResult<Output, void>, input?: Input) => {
       const output: Output = res.done ? { type: "gameEnd" } : res.value;
+      const decision = input
+        ? choiceDecisionContext(outputRef.current, input)
+        : undefined;
+      outputRef.current = output;
       dispatch({ kind: "apply", output });
       const engine = engineRef.current;
       if (engine && onCommit) {
         await onCommit(
           engine.getState(),
-          ...(input ? [{ input, output } satisfies WebStepEvent] : []),
+          ...(input
+            ? [{ input, output, ...(decision ? { decision } : {}) } satisfies WebStepEvent]
+            : []),
         );
       }
     },

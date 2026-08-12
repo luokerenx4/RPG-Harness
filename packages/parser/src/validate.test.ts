@@ -42,6 +42,55 @@ describe("validateGame — clean games pass", () => {
   });
 });
 
+describe("validateGame — choice coverage ids", () => {
+  test("rejects duplicate choice ids within one script", () => {
+    const game = baseGame({
+      scripts: [{
+        id: "branching",
+        title: "Branching",
+        beats: [
+          { type: "choice", id: "route", options: [{ text: "a" }] },
+          { type: "choice", id: "route", options: [{ text: "b" }] },
+        ],
+      }],
+    });
+    expect(() => validateGame(game)).toThrow(/duplicate choice id `route`/);
+  });
+
+  test("rejects duplicate option ids within one choice", () => {
+    const game = baseGame({
+      scripts: [{
+        id: "branching",
+        title: "Branching",
+        beats: [{
+          type: "choice",
+          id: "route",
+          options: [
+            { id: "same", text: "a" },
+            { id: "same", text: "b" },
+          ],
+        }],
+      }],
+    });
+    expect(() => validateGame(game)).toThrow(/duplicate option id `same`/);
+  });
+
+  test("requires stable option ids when a choice opts into coverage", () => {
+    const game = baseGame({
+      scripts: [{
+        id: "branching",
+        title: "Branching",
+        beats: [{
+          type: "choice",
+          id: "route",
+          options: [{ text: "missing id" }],
+        }],
+      }],
+    });
+    expect(() => validateGame(game)).toThrow(/requires every option.*stable id/);
+  });
+});
+
 describe("validateGame — undeclared references throw", () => {
   test("undeclared switch in script requires", () => {
     const game = baseGame({

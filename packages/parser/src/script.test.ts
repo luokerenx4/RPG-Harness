@@ -313,6 +313,7 @@ describe("parseScript — fenced YAML choice", () => {
     const body = [
       "```yaml",
       "type: choice",
+      "id: route-finale",
       "options:",
       "  - text: 篝を待つ",
       "    requires: { switch: { name: befriended_kagari } }",
@@ -336,16 +337,47 @@ describe("parseScript — fenced YAML choice", () => {
     const body = [
       "```yaml",
       "type: choice",
+      "id: route-finale",
       "options:",
-      "  - text: 集合成果を選ぶ",
+      "  - id: collective",
+      "    text: 集合成果を選ぶ",
       "    aiPriority: 20",
       "```",
     ].join("\n");
     const s = parseScript(source("id: x\ntitle: t", body));
     expect(s.beats[0]).toMatchObject({
       type: "choice",
-      options: [{ text: "集合成果を選ぶ", aiPriority: 20 }],
+      id: "route-finale",
+      options: [{ id: "collective", text: "集合成果を選ぶ", aiPriority: 20 }],
     });
+  });
+
+  test("rejects an empty choice id", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "id: ''",
+      "options:",
+      "  - text: 続ける",
+      "```",
+    ].join("\n");
+    expect(() => parseScript(source("id: x\ntitle: t", body))).toThrow(
+      /non-empty string/,
+    );
+  });
+
+  test("rejects an empty choice option id", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "options:",
+      "  - id: ''",
+      "    text: 続ける",
+      "```",
+    ].join("\n");
+    expect(() => parseScript(source("id: x\ntitle: t", body))).toThrow(
+      /option 0.*non-empty string/,
+    );
   });
 
   test("rejects a non-numeric AI priority", () => {

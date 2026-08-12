@@ -4,6 +4,7 @@ import { peekCommand } from "./commands/peek";
 import { stepCommand } from "./commands/step";
 import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
+import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
@@ -52,6 +53,11 @@ COMMANDS
       Aggregate real save sessions into story coverage. Defaults to pending
       scripts (started + uncovered), producing an AI-ready playtest worklist.
 
+  choices  <game-dir> [--session NAME] [--status pending|covered|partial|uncovered|locked|all]
+           [--format table|json]
+      Aggregate stable choice/option ids from recoverable session logs. Pending
+      options include exact fork checkpoints and executable choose inputs.
+
   fork     <game-dir> --from NAME --to NAME [--at N] [--pretty]
       Fork a save from a recoverable log checkpoint. --at is the 1-based log
       entry whose resulting state becomes the new session. Legacy entries
@@ -70,6 +76,7 @@ COMMANDS
       the AI moves, so autonomous play never mutates the player's branch.
       --report-on-stop turns a non-terminal stop into a checkpointed coding issue.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
+      Persisted runs also return executable pending choice branches.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
@@ -160,6 +167,8 @@ async function main(): Promise<void> {
       return runSessions(rest);
     case "coverage":
       return runCoverage(rest);
+    case "choices":
+      return runChoiceCoverage(rest);
     case "fork":
       return runFork(rest);
     case "test":
@@ -294,6 +303,39 @@ async function runCoverage(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     status: status as (typeof allowedStatuses)[number],
+    format,
+  });
+}
+
+async function runChoiceCoverage(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      status: { type: "string", default: "pending" },
+      format: { type: "string", default: "table" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh choices <game-dir> [--session NAME] [--status pending|covered|partial|uncovered|locked|all] [--format table|json]",
+  );
+  const status = values.status ?? "pending";
+  const allowed = ["pending", "covered", "partial", "uncovered", "locked", "all"] as const;
+  if (!allowed.includes(status as (typeof allowed)[number])) {
+    process.stderr.write(`--status must be one of: ${allowed.join(", ")} (got ${status})\n`);
+    process.exit(2);
+  }
+  const format = values.format ?? "table";
+  if (format !== "table" && format !== "json") {
+    process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
+    process.exit(2);
+  }
+  await choiceCoverageCommand({
+    gameDir,
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    status: status as (typeof allowed)[number],
     format,
   });
 }

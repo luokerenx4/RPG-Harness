@@ -11,7 +11,7 @@ import {
 import { loadGame } from "../loader";
 import { loadSession, saveSession, sessionDir } from "../session";
 
-interface ForkArgs {
+export interface ForkArgs {
   gameDir: string;
   from: string;
   to: string;
@@ -19,9 +19,10 @@ interface ForkArgs {
   pretty: boolean;
 }
 
-interface LoggedStep {
+export interface LoggedStep {
   input?: unknown;
   output?: unknown;
+  decision?: unknown;
   checkpoint?: unknown;
 }
 
@@ -41,7 +42,7 @@ export async function forkSession(args: ForkArgs) {
   }
   const game = await loadGame(args.gameDir);
   const prepared = await withSessionLock(args.gameDir, args.from, async () => {
-    const entries = await readLog(args.gameDir, args.from);
+    const entries = await readSessionLog(args.gameDir, args.from);
     const selectedEntry = args.at ?? entries.length;
     if (selectedEntry > entries.length) {
       throw new Error(
@@ -120,7 +121,10 @@ async function createFork(args: ForkArgs & {
   });
 }
 
-async function readLog(gameDir: string, session: string): Promise<LoggedStep[]> {
+export async function readSessionLog(
+  gameDir: string,
+  session: string,
+): Promise<LoggedStep[]> {
   try {
     return (await readFile(path.join(sessionDir(gameDir, session), "log.jsonl"), "utf-8"))
       .split(/\r?\n/)

@@ -62,6 +62,10 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.reason).toBe("max-steps");
     expect(summary.decisions).toBe(0);
     expect(summary.steps).toBe(1);
+    expect(summary.choiceCoverage).toMatchObject({
+      summary: { choices: 0, pendingOptions: 0 },
+      pendingBranches: [],
+    });
     expect(summary.ending).toBeNull();
     expect(summary.session).toBe("ai-audit");
     expect(summary.webPath).toBe("/?session=ai-audit");

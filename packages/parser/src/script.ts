@@ -533,6 +533,15 @@ function parseFenceChoice(
   obj: Record<string, unknown>,
   source?: string,
 ): Beat {
+  const id = typeof obj.id === "string" && obj.id.trim().length > 0
+    ? obj.id.trim()
+    : undefined;
+  if (obj.id !== undefined && id === undefined) {
+    throw new ScriptParseError(
+      "Choice fence `id` must be a non-empty string",
+      source,
+    );
+  }
   const prompt = typeof obj.prompt === "string" ? obj.prompt : undefined;
   const view = typeof obj.view === "string" && obj.view.length > 0 ? obj.view : undefined;
   const rawOptions = obj.options;
@@ -556,6 +565,15 @@ function parseFenceChoice(
         source,
       );
     }
+    const optionId = typeof opt.id === "string" && opt.id.trim().length > 0
+      ? opt.id.trim()
+      : undefined;
+    if (opt.id !== undefined && optionId === undefined) {
+      throw new ScriptParseError(
+        `Choice option ${idx} \`id\` must be a non-empty string`,
+        source,
+      );
+    }
     const requires = parseCondition(opt.requires);
     const rawAiPriority = opt.aiPriority ?? opt.ai_priority;
     if (rawAiPriority !== undefined && typeof rawAiPriority !== "number") {
@@ -574,6 +592,7 @@ function parseFenceChoice(
     const effects = parseEffectsObject(opt.effects, source, idx);
     const goto = typeof opt.goto === "string" ? opt.goto : undefined;
     return {
+      ...(optionId !== undefined ? { id: optionId } : {}),
       text: opt.text,
       ...(aiPriority !== undefined ? { aiPriority } : {}),
       ...(requires !== undefined ? { requires } : {}),
@@ -584,6 +603,7 @@ function parseFenceChoice(
   });
   return {
     type: "choice",
+    ...(id !== undefined ? { id } : {}),
     ...(prompt ? { prompt } : {}),
     ...(view !== undefined ? { view } : {}),
     options,

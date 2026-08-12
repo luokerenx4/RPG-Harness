@@ -1,4 +1,5 @@
 import { Engine } from "./engine";
+import { choiceDecisionContext, type ChoiceDecisionContext } from "./decision";
 import { cloneState, createInitialState } from "./state";
 import type { ComposedState, Game, Input, Output } from "./types";
 
@@ -6,6 +7,7 @@ export interface TraceEntry {
   index: number;
   input: Input | null;
   output: Output;
+  decision?: ChoiceDecisionContext;
 }
 
 export type LoopReason =
@@ -50,6 +52,7 @@ export async function runLoop(
   const inputsFn = !Array.isArray(inputs) ? inputs : null;
   let cursor = 0;
   let lastInput: Input | null = null;
+  let lastOutput: Output | null = null;
   let stepIndex = 0;
 
   try {
@@ -68,11 +71,16 @@ export async function runLoop(
           reason: "completed",
         };
       }
+      const decision = lastInput
+        ? choiceDecisionContext(lastOutput, lastInput)
+        : undefined;
       const entry: TraceEntry = {
         index: stepIndex,
         input: lastInput,
         output: result.value,
+        ...(decision ? { decision } : {}),
       };
+      lastOutput = result.value;
       trace.push(entry);
       await options.onStep?.(entry, engine.getState());
 

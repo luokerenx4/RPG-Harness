@@ -137,6 +137,7 @@ export async function* runScript(
               ? { ok: true }
               : evaluateCondition(opt.requires, state);
           return {
+            ...(opt.id !== undefined ? { id: opt.id } : {}),
             text: opt.text,
             available: r.ok,
             ...(opt.aiPriority !== undefined
@@ -166,6 +167,8 @@ export async function* runScript(
         );
         const input = yield {
           type: "choice",
+          scriptId: script.id,
+          ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
           prompt: beat.prompt,
           options: rendered,
           ...(beat.view !== undefined ? { view: beat.view } : {}),

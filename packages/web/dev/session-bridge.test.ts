@@ -34,6 +34,7 @@ describe("Web development session bridge", () => {
       event: {
         input: { type: "next" },
         output: { type: "dialogue", text: "同じ一歩。" },
+        decision: { scriptId: "ending", choiceId: "route", optionId: "friends" },
       },
       now: () => 1234,
     });
@@ -51,6 +52,7 @@ describe("Web development session bridge", () => {
         source: "web",
         input: { type: "next" },
         output: { type: "dialogue", text: "同じ一歩。" },
+        decision: { scriptId: "ending", choiceId: "route", optionId: "friends" },
         checkpoint: expect.objectContaining({
           schemaVersion: 1,
           file: expect.stringMatching(/^checkpoints\/[a-f0-9]{64}\.json$/),

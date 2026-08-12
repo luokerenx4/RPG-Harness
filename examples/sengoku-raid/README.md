@@ -18,6 +18,7 @@ rpgh autoplay . --persona objective --session ai-run # 公開目標だけで進�
 rpgh fork . --from ai-run --to branch --at 42        # 任意 checkpoint から分岐
 rpgh reproduce . <report-id> --to issue-repro        # playtest issue の現場へ戻る
 rpgh coverage . --status pending                      # 未走破 script を AI worklist 化
+rpgh choices . --status pending                       # 未探索の選択枝を checkpoint 付き worklist 化
 rpgh test .                                  # fixture 回帰
 ```
 

@@ -186,6 +186,7 @@ rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
+rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
 ```
@@ -199,6 +200,9 @@ automatically pointing at the current script, save, log line, and latest input/o
 `reproduce` turns that issue checkpoint into a named CLI/TUI/Web session (and
 prints its `/?session=...` path), making the coding issue directly executable.
 `resolve` closes that issue only after the resulting replay and surface behavior are verified.
+`choices` reads stable `choice.id` / `option.id` values from the same recoverable
+session log and emits pending branches with an exact `fork --at` checkpoint plus
+the `choose` input. This catches route gaps hidden by 100% script coverage.
 `assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
 visual art for the spec.yaml entries scripts reference.
 
@@ -388,8 +392,13 @@ same structured playtest-report format used by `report`/`reproduce`, and the
 JSON response includes the branch's `webPath` plus report evidence for the next
 coding agent. `max-steps` is an exact AI-decision budget: the summary reports
 those decisions separately from visible `steps`, including the initial output.
+Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
+the next AI pass receives exact unexplored branch checkpoints automatically.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
+Meaningful branch coverage uses a stable choice `id` and stable option `id`s;
+the validator rejects duplicates and partial identities so work items survive
+copy edits and option reordering.
 
 ## Architecture in one paragraph
 

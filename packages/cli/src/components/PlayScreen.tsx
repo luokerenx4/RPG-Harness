@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { useInkInstance } from "../ink-instance";
 import { watch } from "node:fs";
 import { sep } from "node:path";
-import { Engine } from "@rpg-harness/engine";
+import { choiceDecisionContext, Engine } from "@rpg-harness/engine";
 import type {
   AssetSpec,
   ComposedState,
@@ -76,6 +76,7 @@ export function PlayScreen({
   const engineRef = useRef<Engine | null>(null);
   const runnerRef = useRef<AsyncGenerator<Output, void, Input> | null>(null);
   const processingRef = useRef(false);
+  const outputRef = useRef<Output | null>(null);
   const reloadFlashRef = useRef(0);
   const [reloadFlash, setReloadFlash] = useState(0);
   const [reloadError, setReloadError] = useState<string | null>(null);
@@ -104,8 +105,10 @@ export function PlayScreen({
         const { value, done: isDone } = await runner.next();
         if (cancelled) return;
         if (isDone) {
+          outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
+          outputRef.current = value;
           dispatch({ kind: "apply", output: value });
           stateRef.current = engine.getState();
           await saveSession(gameDir, sessionName, engine.getState());
@@ -148,8 +151,10 @@ export function PlayScreen({
       try {
         const { value, done: isDone } = await newRunner.next();
         if (isDone) {
+          outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
+          outputRef.current = value;
           dispatch({ kind: "apply", output: value });
           stateRef.current = newEngine.getState();
         }
@@ -226,6 +231,7 @@ export function PlayScreen({
       if (!runner || !engine) return;
       processingRef.current = true;
       try {
+        const decision = choiceDecisionContext(outputRef.current, input);
         const { value, done: isDone } = await runner.next(input);
         const finalState = engine.getState();
         stateRef.current = finalState;
@@ -235,10 +241,13 @@ export function PlayScreen({
           source: "tui",
           input,
           output: isDone ? null : value,
+          ...(decision ? { decision } : {}),
         }, finalState);
         if (isDone) {
+          outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
+          outputRef.current = value;
           dispatch({ kind: "apply", output: value });
         }
       } catch (err) {

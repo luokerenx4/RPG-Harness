@@ -11,6 +11,19 @@ export type {
   ScriptCoverageRow,
 } from "./commands/coverage";
 export {
+  analyzeChoiceCoverage,
+  collectChoiceCoverage,
+  formatChoiceCoverage,
+} from "./commands/choice-coverage";
+export type {
+  ChoiceCoverageEvidence,
+  ChoiceCoverageOptionRow,
+  ChoiceCoverageReport,
+  ChoiceCoverageRow,
+  ChoiceCoverageStatus,
+  ChoiceCoverageWorkItem,
+} from "./commands/choice-coverage";
+export {
   loadSession,
   saveSession,
   listSessions,

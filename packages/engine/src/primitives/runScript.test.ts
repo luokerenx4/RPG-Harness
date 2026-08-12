@@ -104,9 +104,11 @@ describe("runScript — machine-readable choice consequences", () => {
     const beats: Beat[] = [
       {
         type: "choice",
+        id: "route-finale",
         prompt: "answer",
         options: [
           {
+            id: "stay",
             text: "stay",
             aiPriority: 20,
             effects: { characterStats: { a: { affection: 2 } } },
@@ -132,8 +134,11 @@ describe("runScript — machine-readable choice consequences", () => {
 
     expect(outputs[0]).toMatchObject({
       type: "choice",
+      scriptId: "s1",
+      choiceId: "route-finale",
       options: [
         {
+          id: "stay",
           text: "stay",
           available: true,
           aiPriority: 20,

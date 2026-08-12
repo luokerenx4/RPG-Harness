@@ -682,6 +682,10 @@ export type Beat =
     }
   | {
       type: "choice";
+      // Stable authoring identity for coverage/worklist tooling. Optional so
+      // concise inline choices stay lightweight; meaningful branches can keep
+      // identity across prose edits by setting it in fenced YAML.
+      id?: string;
       prompt?: string;
       options: ChoiceOption[];
       // Renderer hint. Identifies a TUI presenter (e.g. "list", "grid").
@@ -718,6 +722,8 @@ export type Beat =
   | { type: "hideCg" };
 
 export interface ChoiceOption {
+  // Stable identity within the containing choice, used by branch coverage.
+  id?: string;
   text: string;
   // Renderer-neutral preference for deterministic AI players. Higher wins;
   // human shells need not expose this authoring hint. Unset is equivalent to 0.
@@ -1078,6 +1084,7 @@ export interface ScriptInfo {
 }
 
 export interface RenderedChoice {
+  id?: string;
   text: string;
   available: boolean;
   // Authored machine preference, passed through without affecting humans.
@@ -1229,6 +1236,8 @@ export type Output =
     }
   | {
       type: "choice";
+      scriptId?: string;
+      choiceId?: string;
       prompt?: string;
       options: RenderedChoice[];
       // Passthrough of ChoiceBeat.view — see Beat definition above.

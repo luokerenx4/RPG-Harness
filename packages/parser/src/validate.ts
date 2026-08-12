@@ -74,6 +74,7 @@ export function validateGame(game: Game): void {
   const issues: Issue[] = [];
 
   for (const s of game.scripts) {
+    const seenChoiceIds = new Set<string>();
     if (s.requires) visitCondition(s.requires, `script ${s.id}.requires`, reg, issues);
     s.beats.forEach((beat, beatIdx) => {
       if (beat.type === "dialogue" && !reg.characters.has(beat.speaker)) {
@@ -85,8 +86,39 @@ export function validateGame(game: Game): void {
               : `undeclared character "${beat.speaker}". Declared: ${listOrNone(reg.characters)}`,
         });
       } else if (beat.type === "choice") {
+        if (beat.id !== undefined) {
+          if (seenChoiceIds.has(beat.id)) {
+            issues.push({
+              path: `script ${s.id}.beats[${beatIdx}].id`,
+              message: `duplicate choice id \`${beat.id}\` within script ${s.id}`,
+            });
+          }
+          seenChoiceIds.add(beat.id);
+        }
+        const seenOptionIds = new Set<string>();
         beat.options.forEach((opt, optIdx) => {
           const where = `script ${s.id}.beats[${beatIdx}].options[${optIdx}]`;
+          if (beat.id !== undefined && opt.id === undefined) {
+            issues.push({
+              path: `${where}.id`,
+              message: `choice \`${beat.id}\` uses branch coverage and requires every option to have a stable id`,
+            });
+          }
+          if (beat.id === undefined && opt.id !== undefined) {
+            issues.push({
+              path: `${where}.id`,
+              message: `option id \`${opt.id}\` requires its containing choice to have an id`,
+            });
+          }
+          if (opt.id !== undefined) {
+            if (seenOptionIds.has(opt.id)) {
+              issues.push({
+                path: `${where}.id`,
+                message: `duplicate option id \`${opt.id}\` within choice ${beat.id ?? beatIdx}`,
+              });
+            }
+            seenOptionIds.add(opt.id);
+          }
           if (opt.requires) visitCondition(opt.requires, `${where}.requires`, reg, issues);
           if (opt.effects) visitDelta(opt.effects, `${where}.effects`, reg, issues);
           if (opt.goto && opt.goto !== "$end") {
