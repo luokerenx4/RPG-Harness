@@ -219,42 +219,12 @@ export async function* runScript(
       }
       // Silent visual mutators — no yield, fall through to
       // beatAfter + beatIndex++ at the bottom.
-      case "setBg": {
-        state.baseline.visuals.bg = beat.assetPath;
-        break;
-      }
-      case "setPortrait": {
-        let resolved: string | null = beat.assetPath ?? null;
-        // If no explicit path was provided, try to resolve via the
-        // character's portraits map. Used by the `defaultPortraits`
-        // frontmatter form (which carries characterId+emotion only).
-        if (
-          resolved === null &&
-          beat.assetPath === undefined &&
-          beat.characterId &&
-          beat.emotion
-        ) {
-          const ch = ctx.game.characters.find(
-            (c) => c.id === beat.characterId,
-          );
-          resolved = ch?.portraits?.[beat.emotion] ?? null;
-        }
-        state.baseline.visuals.portraits[beat.slot] = resolved;
-        break;
-      }
-      case "clearVisuals": {
-        // bg is the slowest-changing slot and stays through scene
-        // resets — authors clear it explicitly with `:bg none`.
-        state.baseline.visuals.portraits = {};
-        state.baseline.visuals.cg = null;
-        break;
-      }
-      case "showCg": {
-        state.baseline.visuals.cg = beat.assetPath;
-        break;
-      }
+      case "setBg":
+      case "setPortrait":
+      case "clearVisuals":
+      case "showCg":
       case "hideCg": {
-        state.baseline.visuals.cg = null;
+        applySilentVisualBeat(ctx, beat);
         break;
       }
     }
@@ -264,6 +234,73 @@ export async function* runScript(
   }
   clearStageOnScriptEnd(ctx);
   return true;
+}
+
+function isSilentVisualBeat(beat: Beat): boolean {
+  return (
+    beat.type === "setBg" ||
+    beat.type === "setPortrait" ||
+    beat.type === "clearVisuals" ||
+    beat.type === "showCg" ||
+    beat.type === "hideCg"
+  );
+}
+
+function applySilentVisualBeat(ctx: PresetContext, beat: Beat): void {
+  const visuals = ctx.state.baseline.visuals;
+  switch (beat.type) {
+    case "setBg":
+      visuals.bg = beat.assetPath;
+      return;
+    case "setPortrait": {
+      let resolved: string | null = beat.assetPath ?? null;
+      if (
+        resolved === null &&
+        beat.assetPath === undefined &&
+        beat.characterId &&
+        beat.emotion
+      ) {
+        const ch = ctx.game.characters.find((c) => c.id === beat.characterId);
+        resolved = ch?.portraits?.[beat.emotion] ?? null;
+      }
+      visuals.portraits[beat.slot] = resolved;
+      return;
+    }
+    case "clearVisuals":
+      // bg is the slowest-changing slot and stays through scene resets.
+      visuals.portraits = {};
+      visuals.cg = null;
+      return;
+    case "showCg":
+      visuals.cg = beat.assetPath;
+      return;
+    case "hideCg":
+      visuals.cg = null;
+      return;
+    default:
+      return;
+  }
+}
+
+// When hot editing inserts scene setup immediately before the currently
+// visible beat, semantic relocation must replay that setup. Otherwise the
+// cursor finds the right line but skips the new bg/portrait/CG directives,
+// leaving GUI shells on the old stage until the next scene transition.
+function replayVisualSetupBefore(
+  ctx: PresetContext,
+  script: Script,
+  targetIndex: number,
+): void {
+  let start = targetIndex;
+  while (start > 0) {
+    const previous = script.beats[start - 1];
+    if (!previous || !isSilentVisualBeat(previous)) break;
+    start--;
+  }
+  for (let i = start; i < targetIndex; i++) {
+    const beat = script.beats[i];
+    if (beat) applySilentVisualBeat(ctx, beat);
+  }
 }
 
 // Scene teardown: a finished script clears its cast off the stage —
@@ -340,7 +377,9 @@ function reconcileScriptCursor(
     anchorBeat(beat) === cursor.beatAnchor ? [index] : [],
   );
   if (anchoredIndexes.length === 1) {
-    baseline.beatIndex = anchoredIndexes[0]!;
+    const target = anchoredIndexes[0]!;
+    baseline.beatIndex = target;
+    replayVisualSetupBefore(ctx, script, target);
     return;
   }
 

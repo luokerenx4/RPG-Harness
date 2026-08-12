@@ -314,6 +314,51 @@ describe("runScript — semantic cursor migration after hot edits", () => {
     expect(editedCtx.state.baseline.beatIndex).toBe(2);
   });
 
+  test("replays newly inserted visual setup before the relocated beat", async () => {
+    const oldGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const oldCtx = makeCtx(oldGame);
+    oldCtx.state.baseline.currentScriptId = "s1";
+    oldCtx.state.baseline.visuals.bg = "assets/backgrounds/old";
+    await runScript(oldCtx, oldGame.scripts[0]!).next();
+
+    const editedGame = makeGame({
+      scripts: [
+        makeScript("s1", {
+          beats: [
+            { type: "setBg", assetPath: "assets/backgrounds/new" },
+            { type: "showCg", assetPath: "assets/cgs/new" },
+            { type: "narration", text: "current" },
+            { type: "endScript" },
+          ],
+        }),
+      ],
+    });
+    const editedCtx = makeCtx(editedGame, { state: oldCtx.state });
+    const resumed = await runScript(
+      editedCtx,
+      editedGame.scripts[0]!,
+    ).next();
+
+    expect(resumed.value).toMatchObject({
+      type: "narration",
+      text: "current",
+      visualState: {
+        bg: "assets/backgrounds/new",
+        cg: "assets/cgs/new",
+      },
+    });
+    expect(editedCtx.state.baseline.beatIndex).toBe(2);
+  });
+
   test("uses the selected option to enter a newly authored response branch", async () => {
     const optionText = "Keep pace silently";
     const oldGame = makeGame({
