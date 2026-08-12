@@ -42,8 +42,8 @@ defaultPortraits:
 :hide-cg
 
 ? それでも、口にしたかった。 {id: three-flowers-vow}
-  - 「三人とも、隣にいてくれ」 {id: ask-all-to-stay} -> +kagari +kasumi +mio | goto vow_stay
-  - 「お主たちと共に死ぬ覚悟を、私は持っている」 {id: vow-to-die-together} -> +2kagari +2kasumi +2mio | goto vow_death
+  - 「三人とも、隣にいてくれ」 {id: ask-all-to-stay, ai: social collective compassionate loyal hopeful} -> +kagari +kasumi +mio | goto vow_stay
+  - 「お主たちと共に死ぬ覚悟を、私は持っている」 {id: vow-to-die-together, ai: defiant blunt loyal fatalistic self-sacrificial} -> +2kagari +2kasumi +2mio | goto vow_death
 
 # vow_stay
 

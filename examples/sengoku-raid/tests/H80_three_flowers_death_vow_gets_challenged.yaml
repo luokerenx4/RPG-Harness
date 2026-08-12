@@ -32,6 +32,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: three-flowers-vow
+    optionId: vow-to-die-together
+    optionAiTagsIncludes: fatalistic
+  - kind: output
     type: dialogue
     present: true
     textIncludes: 先に死ぬ許しと取り違えるな
