@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { peekCommand } from "./commands/peek";
 import { stepCommand } from "./commands/step";
 import { sessionsCommand } from "./commands/sessions";
+import { coverageCommand } from "./commands/coverage";
 import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
@@ -45,6 +46,11 @@ COMMANDS
 
   sessions <game-dir>
       List existing sessions (one per line, stdout). Empty status to stderr.
+
+  coverage <game-dir> [--session NAME] [--status pending|completed|started|uncovered|ignored|all]
+           [--format table|json]
+      Aggregate real save sessions into story coverage. Defaults to pending
+      scripts (started + uncovered), producing an AI-ready playtest worklist.
 
   fork     <game-dir> --from NAME --to NAME [--at N] [--pretty]
       Fork a save from a recoverable log checkpoint. --at is the 1-based log
@@ -148,6 +154,8 @@ async function main(): Promise<void> {
       return runStep(rest);
     case "sessions":
       return runSessions(rest);
+    case "coverage":
+      return runCoverage(rest);
     case "fork":
       return runFork(rest);
     case "test":
@@ -244,6 +252,46 @@ async function runSessions(args: string[]): Promise<void> {
   const { positionals } = parseArgs({ args, allowPositionals: true });
   const gameDir = requirePositional(positionals, "rpgh sessions <game-dir>");
   await sessionsCommand({ gameDir });
+}
+
+async function runCoverage(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      status: { type: "string", default: "pending" },
+      format: { type: "string", default: "table" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh coverage <game-dir> [--session NAME] [--status pending|completed|started|uncovered|ignored|all] [--format table|json]",
+  );
+  const status = values.status ?? "pending";
+  const allowedStatuses = [
+    "pending",
+    "completed",
+    "started",
+    "uncovered",
+    "ignored",
+    "all",
+  ] as const;
+  if (!allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
+    process.stderr.write(`--status must be one of: ${allowedStatuses.join(", ")} (got ${status})\n`);
+    process.exit(2);
+  }
+  const format = values.format ?? "table";
+  if (format !== "table" && format !== "json") {
+    process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
+    process.exit(2);
+  }
+  await coverageCommand({
+    gameDir,
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    status: status as (typeof allowedStatuses)[number],
+    format,
+  });
 }
 
 async function runFork(args: string[]): Promise<void> {

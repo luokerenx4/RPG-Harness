@@ -185,6 +185,7 @@ rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close a verifie
 rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
+rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
 rpgh studio   <game-dir>                                       # browser asset workbench
 ```

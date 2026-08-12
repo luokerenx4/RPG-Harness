@@ -21,6 +21,7 @@ export function parseScript(content: string, source?: string): Script {
   const title = readString(meta, "title", source);
   const requires = parseCondition(meta.requires);
   const characters = readStringArray(meta, "characters");
+  const coverage = parseCoverage(meta.coverage, source);
 
   const beats = parseBody(body, source);
 
@@ -57,10 +58,37 @@ export function parseScript(content: string, source?: string): Script {
   return {
     id,
     title,
+    ...(coverage !== undefined ? { coverage } : {}),
     ...(requires !== undefined ? { requires } : {}),
     ...(characters !== undefined ? { characters } : {}),
     beats: finalBeats,
     ...(cost !== undefined ? { cost } : {}),
+  };
+}
+
+function parseCoverage(
+  raw: unknown,
+  source?: string,
+): Script["coverage"] | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ScriptParseError(
+      "`coverage` must be { ignore: true, reason? }",
+      source,
+    );
+  }
+  const obj = raw as Record<string, unknown>;
+  if (obj.ignore !== true) {
+    throw new ScriptParseError("`coverage.ignore` must be true", source);
+  }
+  if (obj.reason !== undefined && typeof obj.reason !== "string") {
+    throw new ScriptParseError("`coverage.reason` must be a string", source);
+  }
+  return {
+    ignore: true,
+    ...(typeof obj.reason === "string" && obj.reason.trim().length > 0
+      ? { reason: obj.reason.trim() }
+      : {}),
   };
 }
 

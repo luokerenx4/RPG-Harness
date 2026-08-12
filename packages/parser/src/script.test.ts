@@ -54,6 +54,27 @@ describe("parseScript — frontmatter", () => {
     );
     expect(s.requires).toEqual({ scriptCompleted: "000_intro" });
   });
+
+  test("parses an explicit coverage ignore policy", () => {
+    const s = parseScript(
+      source(
+        "id: router\ntitle: Redirect router\ncoverage:\n  ignore: true\n  reason: Redirected before entry",
+        "",
+      ),
+    );
+    expect(s.coverage).toEqual({
+      ignore: true,
+      reason: "Redirected before entry",
+    });
+  });
+
+  test("rejects coverage policies that do not explicitly ignore", () => {
+    expect(() =>
+      parseScript(
+        source("id: x\ntitle: t\ncoverage:\n  ignore: false", ""),
+      ),
+    ).toThrow(/coverage\.ignore/);
+  });
 });
 
 describe("parseScript — beat splitting", () => {

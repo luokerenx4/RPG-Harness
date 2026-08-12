@@ -2,6 +2,15 @@ export { App } from "./app";
 export { loadGame } from "./loader";
 export { play } from "./play";
 export {
+  analyzeScriptCoverage,
+  collectScriptCoverage,
+} from "./commands/coverage";
+export type {
+  CoverageStatus,
+  ScriptCoverageReport,
+  ScriptCoverageRow,
+} from "./commands/coverage";
+export {
   loadSession,
   saveSession,
   listSessions,
