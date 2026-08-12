@@ -6,6 +6,7 @@ import { sessionsCommand } from "./commands/sessions";
 import { coverageCommand } from "./commands/coverage";
 import { choiceCoverageCommand } from "./commands/choice-coverage";
 import { worklistCommand } from "./commands/worklist";
+import { inspectScriptCommand } from "./commands/inspect-script";
 import {
   DEFAULT_CHOICE_PROBE_PERSONAS,
   probeChoiceCommand,
@@ -72,6 +73,11 @@ COMMANDS
       Merge open playtest reports, unreadable sessions, story gaps, executable
       choice branches, and authoring debt into one prioritized AI development
       queue. Every item carries structured coordinates and its next operation.
+
+  inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
+      Inspect one authored script, including requirements, source coordinates,
+      stable choices and AI intent. With --session, evaluate availability and
+      state-dependent onBeatBefore replacements on an isolated read-only clone.
 
   probe-choice <game-dir> --session NAME --at N [--personas CSV] [--pretty]
       Re-evaluate one historical choice with the live game and explain each
@@ -224,6 +230,8 @@ async function main(): Promise<void> {
       return runChoiceCoverage(rest);
     case "worklist":
       return runWorklist(rest);
+    case "inspect-script":
+      return runInspectScript(rest);
     case "probe-choice":
       return runProbeChoice(rest);
     case "transcript":
@@ -427,6 +435,29 @@ async function runWorklist(args: string[]): Promise<void> {
     gameDir,
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
+  });
+}
+
+async function runInspectScript(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2 || !positionals[0] || !positionals[1]) {
+    process.stderr.write(
+      "Usage: rpgh inspect-script <game-dir> <script-id> [--session NAME] [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await inspectScriptCommand({
+    gameDir: positionals[0],
+    scriptId: positionals[1],
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    pretty: Boolean(values.pretty),
   });
 }
 

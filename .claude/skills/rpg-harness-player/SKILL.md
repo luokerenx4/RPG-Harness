@@ -156,6 +156,18 @@ debt, while preserving the exact operation and coordinates needed by the
 specialized command. Use `--session "$SESSION"` when the task must stay scoped
 to one player/GUI lineage; omit it only for a deliberate project-wide audit.
 
+When a worklist story item names `inspect-script`, execute it directly:
+
+```bash
+rpgh inspect-script "$GAME" SCRIPT_ID --session "$SESSION" --pretty
+```
+
+The result includes the source path, indexed beats, requirements, stable choice
+ids and AI intent. Supplying the relevant session also evaluates availability
+and lists state-dependent `onBeatBefore` replacements or skips, so do not infer
+a narrative bug from a static placeholder line before checking `transforms`.
+Inspection uses isolated state clones and never advances or persists the save.
+
 `cover` forks the exact immutable checkpoint, verifies that live edits still
 present the same stable choice and option, selects by option id, and continues
 on the new session. Never copy a live session directory: that can race GUI or

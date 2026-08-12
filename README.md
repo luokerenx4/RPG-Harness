@@ -193,6 +193,7 @@ rpgh sessions <game-dir>                                       # list save sessi
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
+rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
 rpgh cover    <game-dir> --session AI [--key SCRIPT/CHOICE/OPTION] # execute one pending branch
 rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] # find unseen choice
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
@@ -226,6 +227,11 @@ as `reproduce`, `transcript`, `cover`, `reach`, `inspect-script`, or `edit`;
 the queue does not claim generic autoplay can reach a specific script when no
 exact reachability executor exists. Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
+`inspect-script` executes the diagnostic operation emitted for uncovered scripts:
+it returns the source file, indexed authored beats, requirements, stable choice
+ids and AI intent. With `--session`, it also evaluates availability and reports
+only the beats changed or skipped by `onBeatBefore` hooks, each on an isolated
+state clone; it never advances or persists the inspected save.
 Checkpoint state includes the engine PRNG cursor, so random combat, loot and
 encounter results replay identically on Headless and GUI forks. Older saves get
 a deterministic cursor derived from their checkpoint before their next draw.
