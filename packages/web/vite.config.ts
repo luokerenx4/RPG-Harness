@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
+import { gameContentReloadPlugin } from "./dev/game-content-reload";
 import { sessionBridgePlugin } from "./dev/session-bridge";
 
 // The production Web shell stays static: the engine is bundled into the page,
@@ -16,7 +17,11 @@ const examplesRoot = path.join(repoRoot, "examples");
 
 export default defineConfig({
   root: path.resolve(import.meta.dirname),
-  plugins: [react(), sessionBridgePlugin(examplesRoot)],
+  plugins: [
+    react(),
+    gameContentReloadPlugin(examplesRoot),
+    sessionBridgePlugin(examplesRoot),
+  ],
   server: {
     port: Number(process.env.WEB_PORT ?? 5174),
     strictPort: true,
