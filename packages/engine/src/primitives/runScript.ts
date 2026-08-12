@@ -139,7 +139,10 @@ export async function* runScript(
           return {
             text: opt.text,
             available: r.ok,
-            ...(r.ok ? {} : { lockedReason: r.reason }),
+            ...(r.ok
+              ? {}
+              : { lockedReason: opt.lockedHint ?? r.reason }),
+            ...(opt.requires !== undefined ? { requires: opt.requires } : {}),
             ...(opt.effects !== undefined || opt.goto !== undefined
               ? {
                   consequence: {

@@ -720,6 +720,10 @@ export type Beat =
 export interface ChoiceOption {
   text: string;
   requires?: Condition;
+  // Player-facing explanation for an unavailable choice. The underlying
+  // condition remains available to headless/tooling clients through
+  // RenderedChoice.requires; this string is what human shells should show.
+  lockedHint?: string;
   effects?: StateDelta;
   goto?: string;
 }
@@ -1067,6 +1071,9 @@ export interface RenderedChoice {
   text: string;
   available: boolean;
   lockedReason?: string;
+  // Exact authored gate for AI players, inspectors and executable issues.
+  // Human shells normally render lockedReason instead of this DSL object.
+  requires?: Condition;
   // Exact authored consequence for headless players and tooling. Shells may
   // deliberately keep this invisible so narrative choices do not become
   // player-facing stat spreadsheets, while AI players can still reason about

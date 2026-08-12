@@ -288,6 +288,29 @@ describe("parseScript — fenced YAML choice", () => {
     expect(beat.options[0]?.goto).toBe("pick_bea");
   });
 
+  test("accepts player-facing locked_hint alongside the machine condition", () => {
+    const body = [
+      "```yaml",
+      "type: choice",
+      "options:",
+      "  - text: 篝を待つ",
+      "    requires: { switch: { name: befriended_kagari } }",
+      "    locked_hint: 篝と共に戦場を生き延びていない。",
+      "```",
+    ].join("\n");
+    const s = parseScript(source("id: x\ntitle: t", body));
+    expect(s.beats[0]).toMatchObject({
+      type: "choice",
+      options: [
+        {
+          text: "篝を待つ",
+          requires: { switch: { name: "befriended_kagari" } },
+          lockedHint: "篝と共に戦場を生き延びていない。",
+        },
+      ],
+    });
+  });
+
   test("missing type in fence throws", () => {
     const body = "```yaml\noptions: []\n```";
     expect(() =>

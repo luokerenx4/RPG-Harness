@@ -14,6 +14,7 @@ import { studioCommand } from "./commands/studio";
 import {
   reportCommand,
   reportsCommand,
+  reproduceCommand,
   resolveCommand,
 } from "./commands/report";
 import {
@@ -72,6 +73,10 @@ COMMANDS
 
   resolve  <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]
       Mark a playtest issue resolved after its fix has been verified.
+
+  reproduce <game-dir> <report-id> --to NAME [--session NAME] [--pretty]
+      Fork the immutable save snapshot captured with a playtest issue. Prints
+      the named session and its Web query path for GUI or headless replay.
 
   init     <dir> [--preset vn|training] [--eject] [--force]
       Scaffold a minimal RPG-Harness game in <dir>. Creates game.yaml,
@@ -155,6 +160,8 @@ async function main(): Promise<void> {
       return runReports(rest);
     case "resolve":
       return runResolve(rest);
+    case "reproduce":
+      return runReproduce(rest);
     case "init":
       return runInit(rest);
     case "screenshot":
@@ -428,6 +435,35 @@ async function runResolve(args: string[]): Promise<void> {
     ...(values.resolution !== undefined
       ? { resolution: values.resolution }
       : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runReproduce(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      to: { type: "string" },
+      session: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2 || !positionals[0] || !positionals[1]) {
+    process.stderr.write(
+      "Usage: rpgh reproduce <game-dir> <report-id> --to NAME [--session NAME] [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  if (!values.to) {
+    process.stderr.write("Missing required flag: --to NAME\n");
+    process.exit(2);
+  }
+  await reproduceCommand({
+    gameDir: positionals[0],
+    id: positionals[1],
+    to: values.to,
+    ...(values.session !== undefined ? { session: values.session } : {}),
     pretty: Boolean(values.pretty),
   });
 }

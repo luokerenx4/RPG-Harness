@@ -529,11 +529,18 @@ function parseFenceChoice(
       );
     }
     const requires = parseCondition(opt.requires);
+    const lockedHint =
+      typeof opt.lockedHint === "string"
+        ? opt.lockedHint
+        : typeof opt.locked_hint === "string"
+          ? opt.locked_hint
+          : undefined;
     const effects = parseEffectsObject(opt.effects, source, idx);
     const goto = typeof opt.goto === "string" ? opt.goto : undefined;
     return {
       text: opt.text,
       ...(requires !== undefined ? { requires } : {}),
+      ...(lockedHint !== undefined ? { lockedHint } : {}),
       ...(effects !== undefined ? { effects } : {}),
       ...(goto !== undefined ? { goto } : {}),
     };

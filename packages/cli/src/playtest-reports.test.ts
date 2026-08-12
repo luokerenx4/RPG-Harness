@@ -6,6 +6,7 @@ import {
   formatPlaytestReports,
   listPlaytestReports,
   recordPlaytestReport,
+  reproducePlaytestReport,
   resolvePlaytestReport,
 } from "./playtest-reports";
 
@@ -68,6 +69,11 @@ describe("playtest reports", () => {
     expect(report.evidence.currentScriptId).toBe("bond_kagari_04");
     expect(report.evidence.lastCompletedScriptId).toBe("bond_kagari_01");
     expect(report.evidence.logEntry).toBe(2);
+    expect(report.evidence.checkpoint).toMatchObject({
+      schemaVersion: 1,
+      file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
     expect(report.evidence.lastEvent).toEqual({
       input: { type: "next" },
       output: {
@@ -82,6 +88,54 @@ describe("playtest reports", () => {
     expect(stored).toEqual([report]);
     const raw = await readFile(path.join(dir, "issues.jsonl"), "utf-8");
     expect(raw.trim().split("\n")).toHaveLength(1);
+  });
+
+  test("reproduces the issue snapshot after the live save and log are gone", async () => {
+    const gameDir = await temporaryGame();
+    const session = "web-bug";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    const state = {
+      baseline: {
+        currentScriptId: "ending_mundane_seal",
+        completionOrder: [],
+        visuals: { bg: "assets/backgrounds/edo-castle", portraits: {}, cg: null },
+      },
+      runtime: {},
+    };
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state));
+    await writeFile(
+      path.join(dir, "log.jsonl"),
+      JSON.stringify({ input: { type: "next" }, output: { type: "choice" } }) + "\n",
+    );
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "ui",
+      severity: "minor",
+      title: "Wrong background under the ending CG",
+    });
+    await rm(path.join(dir, "state.json"));
+    await rm(path.join(dir, "log.jsonl"));
+
+    const result = await reproducePlaytestReport({
+      gameDir,
+      id: report.id,
+      to: "repro-bg",
+    });
+
+    expect(result).toMatchObject({
+      session: "repro-bg",
+      fromReport: report.id,
+      fromSession: session,
+      sourceLogEntry: 1,
+      mode: "playtest-checkpoint",
+      webPath: "/?session=repro-bg",
+    });
+    expect(JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness/sessions/repro-bg/state.json"),
+      "utf-8",
+    ))).toEqual(state);
   });
 
   test("can report a broken session even when state and log JSON are invalid", async () => {

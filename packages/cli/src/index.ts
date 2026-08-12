@@ -13,14 +13,18 @@ export {
   PLAYTEST_SEVERITIES,
   formatPlaytestReports,
   listPlaytestReports,
+  getPlaytestReport,
   recordPlaytestReport,
+  reproducePlaytestReport,
   resolvePlaytestReport,
 } from "./playtest-reports";
 export type {
   PlaytestArea,
   PlaytestEvidence,
+  PlaytestCheckpointRef,
   PlaytestReport,
   PlaytestSeverity,
   RecordPlaytestReportArgs,
+  ReproducePlaytestReportArgs,
   ResolvePlaytestReportArgs,
 } from "./playtest-reports";

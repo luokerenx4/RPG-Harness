@@ -8,6 +8,8 @@ requires:
     - { variable: { name: pulse_mundane, min: 5 } }
 ---
 
+:bg assets/backgrounds/mountain-path-afternoon
+
 :cg assets/cgs/ending-mundane-seal
 
 お主は黙して公儀から退き、家伝の妖刀を山中の祠に納めた。
@@ -20,18 +22,23 @@ requires:
 
 祠を出る。山道を下りる背に、刀の重さがもうない。
 
+:hide-cg
+
 ```yaml
 type: choice
 prompt: 麓の辻に、人影がある。
 options:
   - text: 槍を担いだ影
     requires: { switch: { name: befriended_kagari } }
+    locked_hint: 篝と共に戦場を生き延びていない。
     goto: seeoff_kagari
   - text: 弓を背負った影
     requires: { switch: { name: befriended_kasumi } }
+    locked_hint: 霞と共に戦場を生き延びていない。
     goto: seeoff_kasumi
   - text: 藍の打掛の影
     requires: { switch: { name: befriended_mio } }
+    locked_hint: 澪と共に戦場を生き延びていない。
     goto: seeoff_mio
   - text: 誰もいない。それでいい
     goto: seeoff_none

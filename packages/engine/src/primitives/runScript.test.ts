@@ -148,6 +148,49 @@ describe("runScript — machine-readable choice consequences", () => {
       ],
     });
   });
+
+  test("keeps the machine gate while presenting an authored human lock hint", async () => {
+    const requirement = { switch: { name: "befriended_kagari" } } as const;
+    const beats: Beat[] = [
+      {
+        type: "choice",
+        options: [
+          {
+            text: "meet Kagari",
+            requires: requirement,
+            lockedHint: "篝と共に戦場を生き延びていない。",
+          },
+        ],
+      },
+      { type: "endScript" },
+    ];
+    const ctx = makeCtx(
+      makeGame({
+        characters: [makeCharacter("a")],
+        switches: [
+          { id: "befriended_kagari", initial: false },
+        ],
+        scripts: [makeScript("s1", { beats })],
+      }),
+    );
+    ctx.state.baseline.currentScriptId = "s1";
+
+    const { outputs } = await drive(runScript(ctx, ctx.scriptMap.get("s1")!), [
+      { type: "quit" },
+    ]);
+
+    expect(outputs[0]).toMatchObject({
+      type: "choice",
+      options: [
+        {
+          text: "meet Kagari",
+          available: false,
+          lockedReason: "篝と共に戦場を生き延びていない。",
+          requires: requirement,
+        },
+      ],
+    });
+  });
 });
 
 describe("runScript — inline emotion slot resolution", () => {

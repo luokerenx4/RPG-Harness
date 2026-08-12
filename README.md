@@ -34,7 +34,9 @@ bun run rpgh report examples/sengoku-raid --session web --title "..."
 
 Every browser input is appended to that game's normal `state.json` / `log.jsonl`.
 Each event also points at an immutable, content-addressed state checkpoint, so a
-GUI finding is immediately forkable and reportable by a Headless agent.
+GUI finding is immediately forkable and reportable by a Headless agent. A
+report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
+the observed state after the live save and ordinary replay log are cleared.
 The GUI watches content revisions and reloads when another surface advances the
 session. Compare-and-swap still rejects a stale write if both act inside the
 same polling window, so progress is never silently overwritten. Static Web
@@ -169,7 +171,7 @@ RPG-Harness · headless RPG Maker
 
 Saves live at `<game-dir>/.rpg-harness/sessions/<name>/state.json` — plain JSON, `git diff`-able, copyable between machines.
 
-## The twelve modes
+## The thirteen modes
 
 ```bash
 rpgh init     <dir> [--force]                                  # scaffold a new game
@@ -180,6 +182,7 @@ rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI pla
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close a verified finding
+rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
@@ -192,6 +195,8 @@ the input. `test` is `step` with assertions on the resulting trace. An AI agent
 playing via the `rpg-harness-player` skill is just `step` with the LLM deciding the input.
 `report` turns an observation made during that loop into a structured coding issue,
 automatically pointing at the current script, save, log line, and latest input/output.
+`reproduce` turns that issue checkpoint into a named CLI/TUI/Web session (and
+prints its `/?session=...` path), making the coding issue directly executable.
 `resolve` closes that issue only after the resulting replay and surface behavior are verified.
 `assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
 visual art for the spec.yaml entries scripts reference.
@@ -321,6 +326,8 @@ post-step state without overwriting either session:
 
 ```bash
 rpgh fork ./my-game --from claude --to investigate-choice --at 42
+# Or jump straight back to a captured playtest issue:
+rpgh reproduce ./my-game pt-20260812123627-deadbeef --to fix-ending-stage
 ```
 
 Legacy log entries created before checkpoints cannot be reconstructed exactly

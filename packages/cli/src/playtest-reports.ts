@@ -1,7 +1,21 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
-import { sessionDir } from "./session";
+import type { ComposedState } from "@rpg-harness/engine";
+import {
+  appendCheckpointedSessionEvent,
+  assertSessionName,
+  withSessionLock,
+} from "@rpg-harness/session-store";
+import { saveSession, sessionDir } from "./session";
 
 export const PLAYTEST_AREAS = [
   "narrative",
@@ -21,6 +35,13 @@ export const PLAYTEST_SEVERITIES = [
 export type PlaytestSeverity = (typeof PLAYTEST_SEVERITIES)[number];
 
 const REPORTS_FILE = "issues.jsonl";
+const ISSUE_CHECKPOINTS_DIR = "issue-checkpoints";
+
+export interface PlaytestCheckpointRef {
+  schemaVersion: 1;
+  file: string;
+  revision: string;
+}
 
 export interface PlaytestEvidence {
   statePath: string;
@@ -32,6 +53,7 @@ export interface PlaytestEvidence {
     input: unknown;
     output: unknown;
   } | null;
+  checkpoint?: PlaytestCheckpointRef;
   captureErrors?: string[];
 }
 
@@ -68,33 +90,41 @@ export interface ResolvePlaytestReportArgs {
   resolution?: string;
 }
 
+export interface ReproducePlaytestReportArgs {
+  gameDir: string;
+  id: string;
+  to: string;
+  session?: string;
+}
+
 export async function recordPlaytestReport(
   args: RecordPlaytestReportArgs,
 ): Promise<PlaytestReport> {
   assertSessionName(args.session);
   if (!args.title.trim()) throw new Error("Playtest report title cannot be empty");
+  return withSessionLock(args.gameDir, args.session, async () => {
+    const createdAt = new Date().toISOString();
+    const report: PlaytestReport = {
+      schemaVersion: 1,
+      id: `pt-${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`,
+      createdAt,
+      status: "open",
+      session: args.session,
+      area: args.area,
+      severity: args.severity,
+      title: args.title.trim(),
+      ...(args.details?.trim() ? { details: args.details.trim() } : {}),
+      ...(args.target?.trim() ? { target: args.target.trim() } : {}),
+      evidence: await captureEvidence(args.gameDir, args.session),
+    };
 
-  const createdAt = new Date().toISOString();
-  const report: PlaytestReport = {
-    schemaVersion: 1,
-    id: `pt-${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`,
-    createdAt,
-    status: "open",
-    session: args.session,
-    area: args.area,
-    severity: args.severity,
-    title: args.title.trim(),
-    ...(args.details?.trim() ? { details: args.details.trim() } : {}),
-    ...(args.target?.trim() ? { target: args.target.trim() } : {}),
-    evidence: await captureEvidence(args.gameDir, args.session),
-  };
-
-  const dir = sessionDir(args.gameDir, args.session);
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, REPORTS_FILE), JSON.stringify(report) + "\n", {
-    flag: "a",
+    const dir = sessionDir(args.gameDir, args.session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, REPORTS_FILE), JSON.stringify(report) + "\n", {
+      flag: "a",
+    });
+    return report;
   });
-  return report;
 }
 
 export async function listPlaytestReports(
@@ -171,6 +201,68 @@ export async function resolvePlaytestReport(
   return resolved;
 }
 
+export async function getPlaytestReport(
+  gameDir: string,
+  id: string,
+  session?: string,
+): Promise<PlaytestReport> {
+  if (!id.trim()) throw new Error("Playtest report id cannot be empty");
+  if (session !== undefined) assertSessionName(session);
+  const matches = (await listPlaytestReports(gameDir, session)).filter(
+    (report) => report.id === id,
+  );
+  if (matches.length === 0) throw new Error(`Playtest report not found: ${id}`);
+  if (matches.length > 1) throw new Error(`Duplicate playtest report id: ${id}`);
+  return matches[0]!;
+}
+
+export async function reproducePlaytestReport(
+  args: ReproducePlaytestReportArgs,
+) {
+  assertSessionName(args.to);
+  const report = await getPlaytestReport(args.gameDir, args.id, args.session);
+  const checkpoint = report.evidence.checkpoint;
+  if (!isPlaytestCheckpointRef(checkpoint)) {
+    throw new Error(
+      `Playtest report ${report.id} has no recoverable checkpoint; record a new report at the issue site`,
+    );
+  }
+  const state = await loadPlaytestCheckpoint(
+    args.gameDir,
+    report.session,
+    checkpoint,
+  ) as ComposedState;
+
+  return withSessionLock(args.gameDir, args.to, async () => {
+    await assertReproductionTargetEmpty(args.gameDir, args.to);
+    await saveSession(args.gameDir, args.to, state);
+    const provenance = {
+      schemaVersion: 1,
+      fromReport: report.id,
+      fromSession: report.session,
+      sourceLogEntry: report.evidence.logEntry,
+      mode: "playtest-checkpoint" as const,
+      createdAt: new Date().toISOString(),
+    };
+    await writeFile(
+      path.join(sessionDir(args.gameDir, args.to), "fork.json"),
+      JSON.stringify(provenance, null, 2) + "\n",
+      "utf-8",
+    );
+    await appendCheckpointedSessionEvent(
+      args.gameDir,
+      args.to,
+      { t: Date.now(), source: "playtest-report", report: provenance },
+      state,
+    );
+    return {
+      session: args.to,
+      ...provenance,
+      webPath: `/?session=${encodeURIComponent(args.to)}`,
+    };
+  });
+}
+
 export function formatPlaytestReports(reports: PlaytestReport[]): string {
   if (reports.length === 0) return "(no playtest reports)";
   const rows = reports.map((report) => [
@@ -233,9 +325,11 @@ async function captureEvidence(
   let lastCompletedScriptId: string | null = null;
   let logEntry: number | null = null;
   let lastEvent: PlaytestEvidence["lastEvent"] = null;
+  let checkpoint: PlaytestCheckpointRef | undefined;
 
   try {
-    const state = JSON.parse(await readFile(stateFile, "utf-8")) as {
+    const serialized = await readFile(stateFile, "utf-8");
+    const state = JSON.parse(serialized) as {
       baseline?: {
         currentScriptId?: unknown;
         completionOrder?: unknown;
@@ -249,6 +343,7 @@ async function captureEvidence(
       const last = order[order.length - 1];
       if (typeof last === "string") lastCompletedScriptId = last;
     }
+    checkpoint = await persistPlaytestCheckpoint(gameDir, session, serialized);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       captureErrors.push(`state.json: ${(error as Error).message}`);
@@ -285,8 +380,88 @@ async function captureEvidence(
     currentScriptId,
     lastCompletedScriptId,
     lastEvent,
+    ...(checkpoint !== undefined ? { checkpoint } : {}),
     ...(captureErrors.length > 0 ? { captureErrors } : {}),
   };
+}
+
+async function persistPlaytestCheckpoint(
+  gameDir: string,
+  session: string,
+  serialized: string,
+): Promise<PlaytestCheckpointRef> {
+  const revision = createHash("sha256").update(serialized).digest("hex");
+  const relativeFile = path.posix.join(
+    ISSUE_CHECKPOINTS_DIR,
+    `${revision}.json`,
+  );
+  const dir = path.join(sessionDir(gameDir, session), ISSUE_CHECKPOINTS_DIR);
+  const target = path.join(dir, `${revision}.json`);
+  await mkdir(dir, { recursive: true });
+  try {
+    await stat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const temporary = path.join(dir, `.${revision}-${randomUUID()}.tmp`);
+    await writeFile(temporary, serialized, "utf-8");
+    await rename(temporary, target);
+  }
+  return { schemaVersion: 1, file: relativeFile, revision };
+}
+
+function isPlaytestCheckpointRef(
+  value: unknown,
+): value is PlaytestCheckpointRef {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const ref = value as Record<string, unknown>;
+  return (
+    ref.schemaVersion === 1 &&
+    typeof ref.revision === "string" &&
+    /^[a-f0-9]{64}$/.test(ref.revision) &&
+    ref.file === `${ISSUE_CHECKPOINTS_DIR}/${ref.revision}.json`
+  );
+}
+
+async function loadPlaytestCheckpoint(
+  gameDir: string,
+  session: string,
+  checkpoint: PlaytestCheckpointRef,
+): Promise<unknown> {
+  if (!isPlaytestCheckpointRef(checkpoint)) {
+    throw new Error("Invalid playtest checkpoint reference");
+  }
+  const serialized = await readFile(
+    path.join(sessionDir(gameDir, session), ...checkpoint.file.split("/")),
+    "utf-8",
+  );
+  const revision = createHash("sha256").update(serialized).digest("hex");
+  if (revision !== checkpoint.revision) {
+    throw new Error(
+      `Playtest checkpoint revision mismatch: expected ${checkpoint.revision}, got ${revision}`,
+    );
+  }
+  return JSON.parse(serialized) as unknown;
+}
+
+async function assertReproductionTargetEmpty(
+  gameDir: string,
+  session: string,
+): Promise<void> {
+  for (const file of [
+    "state.json",
+    "log.jsonl",
+    "fork.json",
+    "checkpoints",
+    REPORTS_FILE,
+    ISSUE_CHECKPOINTS_DIR,
+  ]) {
+    try {
+      await access(path.join(sessionDir(gameDir, session), file));
+      throw new Error(`Target session already exists: ${session}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
 }
 
 function compactOutput(output: unknown): unknown {
@@ -429,17 +604,4 @@ async function readReportFile(file: string): Promise<PlaytestReport[]> {
         throw new Error(`${file}:${index + 1}: invalid report JSON — ${(error as Error).message}`);
       }
     });
-}
-
-function assertSessionName(name: string): void {
-  if (
-    !name ||
-    name === "." ||
-    name === ".." ||
-    name.includes("/") ||
-    name.includes("\\") ||
-    name.includes("\0")
-  ) {
-    throw new Error(`Invalid session name: ${JSON.stringify(name)}`);
-  }
 }
