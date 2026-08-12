@@ -55,6 +55,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-spear-rhythm
+    optionId: match-the-spear-rhythm
+    optionAiTagsIncludes: restrained
+  - kind: output
     type: narration
     present: true
     textIncludes: 石突きの拍が少しだけゆっくりになり

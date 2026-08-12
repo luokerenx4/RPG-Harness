@@ -14,6 +14,12 @@ inputs:
   - { type: choose, choiceId: answer-the-human-reflection, optionId: release-her-from-measuring }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-the-human-reflection
+    optionId: release-her-from-measuring
+    optionAiTagsIncludes: liberating
+  - kind: output
     type: dialogue
     speaker: mio
     present: true

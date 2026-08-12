@@ -19,6 +19,12 @@ inputs:
   - { type: choose, index: 2 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-kagari-last-resort
+    optionId: seal-the-spear-promise
+    optionAiTagsIncludes: symbolic
+  - kind: output
     type: dialogue
     present: true
     speaker: kagari

@@ -23,9 +23,9 @@ characters: [mio]
 @mio だから、上申を遅らせている。役目を口実に、隣にいる。……監察役にあるまじき、私情だ。
 
 ? なんと言う？ {id: answer-mios-private-feeling}
-  - 「役目が要るなら、ずっと結論を出すな」 {id: ask-her-never-to-conclude} -> +2mio | goto no_false_duty
-  - 「役目が無くても、隣にいろ」 {id: ask-her-to-stay-without-duty} -> +2mio | goto stay_without_duty
-  - 「お前の私情を、俺が引き受ける」 {id: accept-her-private-feeling} -> +mio | goto share_feeling
+  - 「役目が要るなら、ずっと結論を出すな」 {id: ask-her-never-to-conclude, ai: selfish avoidant} -> +2mio | goto no_false_duty
+  - 「役目が無くても、隣にいろ」 {id: ask-her-to-stay-without-duty, ai: romantic loyal affirming} -> +2mio | goto stay_without_duty
+  - 「お前の私情を、俺が引き受ける」 {id: accept-her-private-feeling, ai: compassionate trusting cooperative} -> +mio | goto share_feeling
 
 # no_false_duty
 

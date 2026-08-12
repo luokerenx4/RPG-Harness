@@ -15,6 +15,12 @@ inputs:
   - { type: next }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-the-returning-footsteps
+    optionId: rest-her-bow-on-his-knees
+    optionAiTagsIncludes: intimate
+  - kind: output
     type: dialogue
     speaker: kasumi
     present: true

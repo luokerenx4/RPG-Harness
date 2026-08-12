@@ -21,9 +21,9 @@ characters: [kasumi]
 @kasumi 「次は誰も失くさない」って気持ちのほうだ。それが、あたしの父だったんだと思う。
 
 ? どう返す？ {id: answer-the-returning-footsteps}
-  - 「なら、お前を失くすわけにはいかないな」 {id: vow-not-to-lose-kasumi} -> +2kasumi | goto no_loss
-  - 「俺も、お前を連れて帰る音を覚えた」 {id: remember-her-returning-step} -> +2kasumi | goto returning_step
-  - 黙って、霞の弓を膝に乗せてやる {id: rest-her-bow-on-his-knees} -> +kasumi | goto rest_bow
+  - 「なら、お前を失くすわけにはいかないな」 {id: vow-not-to-lose-kasumi, ai: romantic loyal protective} -> +2kasumi | goto no_loss
+  - 「俺も、お前を連れて帰る音を覚えた」 {id: remember-her-returning-step, ai: romantic affirming loyal} -> +2kasumi | goto returning_step
+  - 黙って、霞の弓を膝に乗せてやる {id: rest-her-bow-on-his-knees, ai: compassionate intimate restrained trusting} -> +kasumi | goto rest_bow
 
 # no_loss
 

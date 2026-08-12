@@ -21,9 +21,9 @@ characters: [mio]
 @mio お主と歩くうち、私の影が、人のものに戻ってきている。
 
 ? なんと言う？ {id: answer-the-human-reflection}
-  - 「揺れる影のほうが、よく映る」 {id: trust-the-shaking-shadow} -> +2mio | goto shaking_shadow
-  - 「測るのを、やめてもいいんだぞ」 {id: release-her-from-measuring} -> +mio | goto stop_measuring
-  - 二人の影が重なるよう、半歩寄る {id: join-the-same-reflection} -> +2mio | goto shared_reflection
+  - 「揺れる影のほうが、よく映る」 {id: trust-the-shaking-shadow, ai: affirming introspective trusting} -> +2mio | goto shaking_shadow
+  - 「測るのを、やめてもいいんだぞ」 {id: release-her-from-measuring, ai: compassionate liberating} -> +mio | goto stop_measuring
+  - 二人の影が重なるよう、半歩寄る {id: join-the-same-reflection, ai: romantic intimate social} -> +2mio | goto shared_reflection
 
 # shaking_shadow
 

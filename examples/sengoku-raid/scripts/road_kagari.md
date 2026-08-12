@@ -23,9 +23,9 @@ characters: [kagari]
 @kagari 今は、数えなくていい。お主が隣で勝手に鳴らしてる。
 
 ? なんと返す？ {id: answer-spear-rhythm}
-  - 「俺がいなくなったら、また数えるのか」 {id: ask-after-absence} -> +kagari | goto ask_absence
-  - 「なら、ずっと鳴らしていよう」 {id: promise-to-keep-ringing} -> +2kagari | goto promise
-  - 黙って、槍の拍に足を合わせる {id: match-the-spear-rhythm} -> +kagari | goto keep_pace
+  - 「俺がいなくなったら、また数えるのか」 {id: ask-after-absence, ai: probing vulnerable} -> +kagari | goto ask_absence
+  - 「なら、ずっと鳴らしていよう」 {id: promise-to-keep-ringing, ai: romantic loyal hopeful} -> +2kagari | goto promise
+  - 黙って、槍の拍に足を合わせる {id: match-the-spear-rhythm, ai: restrained cooperative intimate} -> +kagari | goto keep_pace
 
 # ask_absence
 

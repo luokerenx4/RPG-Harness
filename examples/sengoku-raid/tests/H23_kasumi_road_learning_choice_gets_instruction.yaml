@@ -18,6 +18,12 @@ inputs:
   - { type: choose, index: 0 }
 assertions:
   - kind: output
+    type: choice
+    present: true
+    choiceId: answer-reading-the-trail
+    optionId: turn-and-read-the-trail
+    optionAiTagsIncludes: cooperative
+  - kind: output
     type: dialogue
     present: true
     speaker: kasumi
