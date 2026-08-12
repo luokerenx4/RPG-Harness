@@ -1,0 +1,51 @@
+name: 三脈の選択が正確な機械可読 forecast を公開する
+description: |
+  Post-combat imbue choices are strategic decisions. Their exact weapon,
+  spectral, and route deltas must be available without parsing display titles.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: kuro_swamp_crossroads
+  sengoku-raid:
+    metCharacters: []
+    pulsePending:
+      enemyId: oni_lesser
+      absorb: 8
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        kuro_swamp_crossroads:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: imbue:pure
+    forecastMetric: weapon_power_delta
+    metricValue: 1
+  - kind: activity
+    id: imbue:pure
+    forecastMetric: spectral_delta
+    metricValue: -1
+  - kind: activity
+    id: imbue:oni
+    forecastMetric: weapon_power_delta
+    metricValue: 4
+  - kind: activity
+    id: imbue:oni
+    forecastMetric: spectral_delta
+    metricValue: 3
+  - kind: activity
+    id: imbue:mundane
+    forecastMetric: weapon_power_delta
+    metricValue: 2
+  - kind: activity
+    id: imbue:mundane
+    forecastMetric: spectral_delta
+    metricValue: 0

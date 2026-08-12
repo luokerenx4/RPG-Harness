@@ -803,6 +803,29 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "spirit",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "鎮魂寄り。刀を少し強め、現在の霊体化を鎮める",
+        metrics: [
+          {
+            id: "weapon_power_delta",
+            label: "妖刀威力",
+            value: 1,
+            polarity: "benefit",
+          },
+          {
+            id: "spectral_delta",
+            label: "霊体化",
+            value: -1,
+            polarity: "benefit",
+          },
+          {
+            id: "pulse_pure_delta",
+            label: "脈絡: 浄",
+            value: 1,
+            polarity: "benefit",
+          },
+        ],
+      },
     });
     activities.push({
       id: "imbue:oni",
@@ -813,6 +836,29 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "spirit",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "最大火力。刀と引き換えに身体を鬼へ近づける",
+        metrics: [
+          {
+            id: "weapon_power_delta",
+            label: "妖刀威力",
+            value: Math.max(3, Math.floor(absorb / 2)),
+            polarity: "benefit",
+          },
+          {
+            id: "spectral_delta",
+            label: "霊体化",
+            value: 3,
+            polarity: "risk",
+          },
+          {
+            id: "pulse_oni_delta",
+            label: "脈絡: 鬼",
+            value: 1,
+            polarity: "risk",
+          },
+        ],
+      },
     });
     activities.push({
       id: "imbue:mundane",
@@ -823,6 +869,29 @@ function buildRaidMenu(ctx: Ctx): Output {
       category: "spirit",
       cost: 0,
       available: true,
+      forecast: {
+        summary: "副作用なし。中程度の威力を得る",
+        metrics: [
+          {
+            id: "weapon_power_delta",
+            label: "妖刀威力",
+            value: 2,
+            polarity: "benefit",
+          },
+          {
+            id: "spectral_delta",
+            label: "霊体化",
+            value: 0,
+            polarity: "neutral",
+          },
+          {
+            id: "pulse_mundane_delta",
+            label: "脈絡: 凡",
+            value: 1,
+            polarity: "neutral",
+          },
+        ],
+      },
     });
     return buildSnapshot(activities, ctx);
   }
