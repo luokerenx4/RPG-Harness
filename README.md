@@ -268,6 +268,16 @@ characters: [alice]
 你转身离开了。
 ```
 
+Choices that should participate in durable branch coverage can stay concise:
+
+```markdown
+? 你怎么回应？ {id: first-reply}
+- "嗯，很美。" {id: admire-blossoms} -> +alice
+- "只是路过。" {id: passing-by} -> -alice
+```
+
+The annotations are authoring metadata and never appear in GUI/TUI prose.
+
 For complex choices (requires, flags, multiple effects), use a YAML fenced block:
 
 ```markdown
@@ -403,7 +413,11 @@ Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Meaningful branch coverage uses a stable choice `id` and stable option `id`s;
 the validator rejects duplicates and partial identities so work items survive
-copy edits and option reordering.
+copy edits and option reordering. Concise Markdown accepts `{id: ...}` on both
+the `?` prompt and each `-` option; fenced YAML accepts ordinary `id` fields.
+`rpgh choices` merges this authored inventory with runtime logs, separately
+reporting choices that need ids, stable choices that have never been reached,
+and reached options that still need an exact checkpoint fork.
 
 ## Architecture in one paragraph
 

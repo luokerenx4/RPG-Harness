@@ -740,6 +740,10 @@ export interface ChoiceOption {
 export interface Script {
   id: string;
   title: string;
+  // Authoring source locator. Parsers/loaders may attach this so diagnostics
+  // and AI worklists can point back to the exact content file. The engine
+  // never uses it for gameplay semantics.
+  source?: string;
   // Authoring-only coverage policy. Redirect placeholders and other scripts
   // that are intentionally never entered may opt out of real-session
   // coverage worklists without disappearing from the runtime registry.

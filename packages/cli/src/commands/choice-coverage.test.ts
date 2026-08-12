@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { analyzeChoiceCoverage, collectChoiceCoverage, formatChoiceCoverage } from "./choice-coverage";
+import { analyzeChoiceCoverage, collectAuthoredChoices, collectChoiceCoverage, formatChoiceCoverage } from "./choice-coverage";
 
 const temporaryDirectories: string[] = [];
 
@@ -31,6 +31,50 @@ const choice = {
 };
 
 describe("choice branch coverage", () => {
+  test("separates authored identity debt from runtime branch coverage", () => {
+    const game = {
+      title: "Inventory",
+      characters: [],
+      scripts: [{
+        id: "story",
+        title: "Story",
+        source: "/game/scripts/story.md",
+        beats: [
+          { type: "choice", prompt: "Legacy?", options: [{ text: "old" }] },
+          {
+            type: "choice",
+            id: "stable",
+            prompt: "Stable?",
+            options: [{ id: "yes", text: "Yes" }, { id: "no", text: "No" }],
+          },
+        ],
+      }],
+    } as const;
+    const authored = collectAuthoredChoices(game as never, "/game");
+    const report = analyzeChoiceCoverage([], [], authored);
+
+    expect(report.authoring.summary).toEqual({
+      choices: 2,
+      stableChoices: 1,
+      legacyChoices: 1,
+      options: 3,
+      stableOptions: 2,
+      observedStableChoices: 0,
+      unseenStableChoices: 1,
+    });
+    expect(report.authoring.workItems).toEqual([
+      expect.objectContaining({
+        kind: "stabilize-choice",
+        key: "story/beat-0",
+        source: "scripts/story.md",
+      }),
+      expect.objectContaining({ kind: "reach-choice", key: "story/stable" }),
+    ]);
+    expect(formatChoiceCoverage(report, "pending")).toContain("1/2 choices stable");
+    expect(formatChoiceCoverage(report, "pending")).toContain("stabilize story/beat-0");
+    expect(formatChoiceCoverage(report, "covered")).not.toContain("AUTHORING WORK");
+  });
+
   test("turns an unselected available option into an executable work item", () => {
     const revision = "a".repeat(64);
     const report = analyzeChoiceCoverage([{
@@ -143,6 +187,7 @@ describe("choice branch coverage", () => {
   test("a single branch report follows fork ancestry only to its checkpoint", async () => {
     const gameDir = await mkdtemp(path.join(tmpdir(), "rpgh-choice-lineage-"));
     temporaryDirectories.push(gameDir);
+    await writeFile(path.join(gameDir, "game.yaml"), "title: Choice lineage test\n");
     const parentDir = path.join(gameDir, ".rpg-harness", "sessions", "parent");
     const branchDir = path.join(gameDir, ".rpg-harness", "sessions", "branch");
     await mkdir(parentDir, { recursive: true });

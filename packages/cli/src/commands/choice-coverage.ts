@@ -1,4 +1,7 @@
 import { assertSessionName, isSessionCheckpointRef } from "@rpg-harness/session-store";
+import type { Condition, Game } from "@rpg-harness/engine";
+import path from "node:path";
+import { loadGame } from "../loader";
 import { listSessions } from "../session";
 import { readSessionLineage } from "../session-lineage";
 import { readSessionLog, type LoggedStep } from "./fork";
@@ -62,7 +65,57 @@ export interface ChoiceCoverageReport {
   sessionErrors: Array<{ session: string; error: string }>;
   choices: ChoiceCoverageRow[];
   workItems: ChoiceCoverageWorkItem[];
+  authoring: {
+    summary: {
+      choices: number;
+      stableChoices: number;
+      legacyChoices: number;
+      options: number;
+      stableOptions: number;
+      observedStableChoices: number;
+      unseenStableChoices: number;
+    };
+    choices: AuthoredChoiceRow[];
+    workItems: ChoiceAuthoringWorkItem[];
+  };
 }
+
+export interface AuthoredChoiceRow {
+  key: string;
+  scriptId: string;
+  scriptTitle: string;
+  source?: string;
+  beatIndex: number;
+  prompt: string | null;
+  choiceId?: string;
+  optionCount: number;
+  optionIds: string[];
+  status: "observed" | "unseen" | "legacy";
+  requires?: Condition;
+}
+
+export type ChoiceAuthoringWorkItem =
+  | {
+      kind: "stabilize-choice";
+      key: string;
+      scriptId: string;
+      source?: string;
+      beatIndex: number;
+      prompt: string | null;
+      optionCount: number;
+      action: "add stable choice.id and option.id values";
+    }
+  | {
+      kind: "reach-choice";
+      key: string;
+      scriptId: string;
+      choiceId: string;
+      source?: string;
+      beatIndex: number;
+      prompt: string | null;
+      requires?: Condition;
+      action: "reach this authored choice in a recoverable session";
+    };
 
 interface RuntimeChoiceOption {
   id?: unknown;
@@ -137,6 +190,8 @@ export async function collectChoiceCoverage(
   onlySession?: string,
 ): Promise<ChoiceCoverageReport> {
   if (onlySession !== undefined) assertSessionName(onlySession);
+  const game = await loadGame(gameDir);
+  const authored = collectAuthoredChoices(game, gameDir);
   const names = onlySession === undefined ? await listSessions(gameDir) : [onlySession];
   const logs: Array<{ session: string; entries: LoggedStep[] }> = [];
   const sessionErrors: Array<{ session: string; error: string }> = [];
@@ -148,7 +203,7 @@ export async function collectChoiceCoverage(
     } catch (error) {
       sessionErrors.push({ session: onlySession, error: (error as Error).message });
     }
-    return analyzeChoiceCoverage(logs, sessionErrors);
+    return analyzeChoiceCoverage(logs, sessionErrors, authored);
   }
   for (const session of names) {
     try {
@@ -157,12 +212,13 @@ export async function collectChoiceCoverage(
       sessionErrors.push({ session, error: (error as Error).message });
     }
   }
-  return analyzeChoiceCoverage(logs, sessionErrors);
+  return analyzeChoiceCoverage(logs, sessionErrors, authored);
 }
 
 export function analyzeChoiceCoverage(
   logs: Array<{ session: string; entries: LoggedStep[] }>,
   sessionErrors: Array<{ session: string; error: string }> = [],
+  authoredChoices: AuthoredChoiceRow[] = [],
 ): ChoiceCoverageReport {
   const choices = new Map<string, MutableChoice>();
   const explicitSelections: Array<{
@@ -267,6 +323,45 @@ export function analyzeChoiceCoverage(
     ),
   );
   const optionRows = rows.flatMap((choice) => choice.options);
+  const observedKeys = new Set(rows.map((choice) => choice.key));
+  const authoringChoices = authoredChoices.map((choice): AuthoredChoiceRow => ({
+    ...choice,
+    status: choice.choiceId === undefined
+      ? "legacy"
+      : observedKeys.has(`${choice.scriptId}/${choice.choiceId}`)
+        ? "observed"
+        : "unseen",
+  }));
+  const stableChoices = authoringChoices.filter((choice) => choice.choiceId !== undefined);
+  const authoringWorkItems: ChoiceAuthoringWorkItem[] = [];
+  for (const choice of authoringChoices) {
+    if (choice.status === "legacy") {
+      authoringWorkItems.push({
+        kind: "stabilize-choice" as const,
+        key: choice.key,
+        scriptId: choice.scriptId,
+        ...(choice.source ? { source: choice.source } : {}),
+        beatIndex: choice.beatIndex,
+        prompt: choice.prompt,
+        optionCount: choice.optionCount,
+        action: "add stable choice.id and option.id values" as const,
+      });
+      continue;
+    }
+    if (choice.status === "unseen" && choice.choiceId) {
+      authoringWorkItems.push({
+        kind: "reach-choice" as const,
+        key: choice.key,
+        scriptId: choice.scriptId,
+        choiceId: choice.choiceId,
+        ...(choice.source ? { source: choice.source } : {}),
+        beatIndex: choice.beatIndex,
+        prompt: choice.prompt,
+        ...(choice.requires ? { requires: choice.requires } : {}),
+        action: "reach this authored choice in a recoverable session" as const,
+      });
+    }
+  }
   const countChoice = (status: ChoiceCoverageStatus) =>
     rows.filter((choice) => choice.status === status).length;
   const countOption = (status: ChoiceCoverageOptionRow["status"]) =>
@@ -288,7 +383,46 @@ export function analyzeChoiceCoverage(
     sessionErrors,
     choices: rows,
     workItems,
+    authoring: {
+      summary: {
+        choices: authoringChoices.length,
+        stableChoices: stableChoices.length,
+        legacyChoices: authoringChoices.length - stableChoices.length,
+        options: authoringChoices.reduce((sum, choice) => sum + choice.optionCount, 0),
+        stableOptions: authoringChoices.reduce((sum, choice) => sum + choice.optionIds.length, 0),
+        observedStableChoices: stableChoices.filter((choice) => choice.status === "observed").length,
+        unseenStableChoices: stableChoices.filter((choice) => choice.status === "unseen").length,
+      },
+      choices: authoringChoices,
+      workItems: authoringWorkItems,
+    },
   };
+}
+
+export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredChoiceRow[] {
+  return game.scripts.flatMap((script) => script.beats.flatMap((beat, beatIndex) => {
+    if (beat.type !== "choice") return [];
+    const source = script.source === undefined
+      ? undefined
+      : gameDir === undefined
+        ? script.source
+        : path.relative(gameDir, script.source).split(path.sep).join("/");
+    return [{
+      key: beat.id === undefined
+        ? `${script.id}/beat-${beatIndex}`
+        : `${script.id}/${beat.id}`,
+      scriptId: script.id,
+      scriptTitle: script.title,
+      ...(source ? { source } : {}),
+      beatIndex,
+      prompt: beat.prompt ?? null,
+      ...(beat.id !== undefined ? { choiceId: beat.id } : {}),
+      optionCount: beat.options.length,
+      optionIds: beat.options.flatMap((option) => option.id ? [option.id] : []),
+      status: beat.id === undefined ? "legacy" as const : "unseen" as const,
+      ...(script.requires ? { requires: script.requires } : {}),
+    }];
+  }));
 }
 
 function asStableDecision(value: unknown): {
@@ -321,9 +455,10 @@ export function formatChoiceCoverage(
         : choice.status === statuses,
   );
   const lines = [
-    `Choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.untrackedChoiceEvents} untracked events`,
+    `Runtime choice coverage: ${report.summary.selectedOptions}/${report.summary.options - report.summary.lockedOptions} executable options selected · ${report.summary.pendingOptions} pending · ${report.summary.untrackedChoiceEvents} legacy log events`,
+    `Authored choice inventory: ${report.authoring.summary.stableChoices}/${report.authoring.summary.choices} choices stable · ${report.authoring.summary.stableOptions}/${report.authoring.summary.options} options stable · ${report.authoring.summary.unseenStableChoices} stable choices unseen · ${report.authoring.summary.legacyChoices} choices need ids`,
   ];
-  if (rows.length === 0) lines.push("(no matching choices)");
+  if (rows.length === 0) lines.push("(no matching runtime choices)");
   for (const choice of rows) {
     lines.push("", `${choice.status.toUpperCase()}  ${choice.key}  ${choice.prompt ?? "—"}`);
     for (const option of choice.options) {
@@ -337,6 +472,23 @@ export function formatChoiceCoverage(
   if (report.sessionErrors.length > 0) {
     lines.push("", "SESSION ERRORS");
     for (const error of report.sessionErrors) lines.push(`  ${error.session}: ${error.error}`);
+  }
+  const authoringItems = statuses === "pending" || statuses === "all"
+    ? report.authoring.workItems
+    : [];
+  if (authoringItems.length > 0) {
+    lines.push("", `AUTHORING WORK (${authoringItems.length})`);
+    for (const item of authoringItems.slice(0, 20)) {
+      const location = `${item.source ?? item.scriptId}:beat-${item.beatIndex}`;
+      lines.push(
+        item.kind === "stabilize-choice"
+          ? `  ○ stabilize ${item.key} · ${location} · ${item.optionCount} options · ${item.prompt ?? "—"}`
+          : `  ○ reach ${item.key} · ${location} · ${item.prompt ?? "—"}`,
+      );
+    }
+    if (authoringItems.length > 20) {
+      lines.push(`  … ${authoringItems.length - 20} more (use --format json for the complete worklist)`);
+    }
   }
   return lines.join("\n") + "\n";
 }

@@ -18,6 +18,11 @@ describe("parseScript — frontmatter", () => {
     expect(s.beats).toEqual([]);
   });
 
+  test("preserves the authoring source for diagnostics", () => {
+    const s = parseScript(source("id: x\ntitle: t", "hello"), "/game/scripts/x.md");
+    expect(s.source).toBe("/game/scripts/x.md");
+  });
+
   test("throws on missing id", () => {
     expect(() =>
       parseScript(source("title: x", "")),
@@ -218,6 +223,36 @@ describe("parseScript — choice (? prompt)", () => {
     if (!beat || beat.type !== "choice") throw new Error();
     expect(beat.prompt).toBe("你怎么做？");
     expect(beat.view).toBe("grid");
+  });
+
+  test("inline choice and option ids preserve concise markdown authoring", () => {
+    const s = parseScript(
+      source(
+        "id: x\ntitle: t",
+        "? どうする？ {id: final-answer, view: grid}\n- 待つ {id: wait}\n- 行く {id: go-now} -> goto leave",
+      ),
+    );
+    expect(s.beats[0]).toEqual({
+      type: "choice",
+      id: "final-answer",
+      prompt: "どうする？",
+      view: "grid",
+      options: [
+        { id: "wait", text: "待つ" },
+        { id: "go-now", text: "行く", goto: "leave" },
+      ],
+    });
+  });
+
+  test("inline ids reject whitespace and empty values", () => {
+    expect(() => parseScript(source(
+      "id: x\ntitle: t",
+      "? prompt {id: bad id}\n- answer {id: ok}",
+    ))).toThrow(/stable id/);
+    expect(() => parseScript(source(
+      "id: x\ntitle: t",
+      "? prompt {id: good}\n- answer {id: }",
+    ))).toThrow(/stable id/);
   });
 
   test("annotation works on a prompt-less ? line", () => {

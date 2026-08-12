@@ -58,6 +58,7 @@ export function parseScript(content: string, source?: string): Script {
   return {
     id,
     title,
+    ...(source !== undefined ? { source } : {}),
     ...(coverage !== undefined ? { coverage } : {}),
     ...(requires !== undefined ? { requires } : {}),
     ...(characters !== undefined ? { characters } : {}),
@@ -341,7 +342,7 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
   const lines = block.text.split("\n");
   const first = lines[0] ?? "";
   const rawPrompt = first.replace(/^\?\s*/, "").trim();
-  const { prompt, view } = parsePromptAnnotations(rawPrompt, source);
+  const { prompt, id, view } = parsePromptAnnotations(rawPrompt, source);
   const options: ChoiceOption[] = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
@@ -372,7 +373,10 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
       effects = parsed.effects;
       goto = parsed.goto;
     }
+    const option = parseChoiceOptionAnnotation(text, source);
+    text = option.text;
     options.push({
+      ...(option.id !== undefined ? { id: option.id } : {}),
       text,
       ...(effects !== undefined ? { effects } : {}),
       ...(goto !== undefined ? { goto } : {}),
@@ -380,6 +384,7 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
   }
   return {
     type: "choice",
+    ...(id !== undefined ? { id } : {}),
     ...(prompt ? { prompt } : {}),
     ...(view !== undefined ? { view } : {}),
     options,
@@ -394,12 +399,13 @@ function parseChoiceBlock(block: BlockSpan, source?: string): Beat {
 function parsePromptAnnotations(
   raw: string,
   source: string | undefined,
-): { prompt: string; view?: string } {
+): { prompt: string; id?: string; view?: string } {
   const match = raw.match(/^(.*?)\s*\{([^}]*)\}\s*$/);
   if (!match) return { prompt: raw };
   const prompt = (match[1] ?? "").trim();
   const inner = (match[2] ?? "").trim();
   if (inner.length === 0) return { prompt };
+  let id: string | undefined;
   let view: string | undefined;
   for (const pair of inner.split(",")) {
     const colon = pair.indexOf(":");
@@ -411,6 +417,16 @@ function parsePromptAnnotations(
     }
     const key = pair.slice(0, colon).trim();
     const value = pair.slice(colon + 1).trim();
+    if (key === "id") {
+      if (!isStableId(value)) {
+        throw new ScriptParseError(
+          "Prompt annotation `id` must be a non-empty stable id (letters, numbers, `_` or `-`)",
+          source,
+        );
+      }
+      id = value;
+      continue;
+    }
     if (key === "view") {
       if (value.length === 0) {
         throw new ScriptParseError(`Prompt annotation \`view\` is empty`, source);
@@ -423,7 +439,32 @@ function parsePromptAnnotations(
       source,
     );
   }
-  return { prompt, ...(view !== undefined ? { view } : {}) };
+  return {
+    prompt,
+    ...(id !== undefined ? { id } : {}),
+    ...(view !== undefined ? { view } : {}),
+  };
+}
+
+function parseChoiceOptionAnnotation(
+  raw: string,
+  source: string | undefined,
+): { text: string; id?: string } {
+  const match = raw.match(/^(.*?)\s*\{id:\s*([^}]*)\}\s*$/);
+  if (!match) return { text: raw };
+  const text = (match[1] ?? "").trim();
+  const id = (match[2] ?? "").trim();
+  if (!isStableId(id)) {
+    throw new ScriptParseError(
+      "Choice option annotation `id` must be a non-empty stable id (letters, numbers, `_` or `-`)",
+      source,
+    );
+  }
+  return { text, id };
+}
+
+function isStableId(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value);
 }
 
 function parseChoiceTail(tail: string): {

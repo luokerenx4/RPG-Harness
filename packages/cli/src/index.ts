@@ -12,6 +12,7 @@ export type {
 } from "./commands/coverage";
 export {
   analyzeChoiceCoverage,
+  collectAuthoredChoices,
   collectChoiceCoverage,
   formatChoiceCoverage,
 } from "./commands/choice-coverage";
@@ -31,6 +32,8 @@ export type {
   ChoiceCoverageRow,
   ChoiceCoverageStatus,
   ChoiceCoverageWorkItem,
+  AuthoredChoiceRow,
+  ChoiceAuthoringWorkItem,
 } from "./commands/choice-coverage";
 export {
   loadSession,
