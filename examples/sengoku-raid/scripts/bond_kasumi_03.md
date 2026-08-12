@@ -8,6 +8,8 @@ requires:
     - { switch: { name: befriended_kasumi } }
 ---
 
+:bg assets/backgrounds/mountain-path-morning
+
 :cg assets/cgs/bond-kasumi-03
 
 朝。山際の道。

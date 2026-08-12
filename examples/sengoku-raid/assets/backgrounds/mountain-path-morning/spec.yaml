@@ -1,0 +1,18 @@
+kind: bg
+description: |
+  山際を縫う朝の獣道。露に濡れた草と羊歯の間を細い土道が曲がり、
+  鹿の蹄跡が大きな鬼の足跡を避けている。遠い山並みには朝霧が残る。
+prompt: |
+  Early Edo-period Japanese mountain-edge path at dawn, a narrow earthen
+  trail through dew-dark grass, ferns and cedar shade. Deer hoofprints bend
+  away from several much larger ominous footprints. Pale gold morning light
+  and cool mist over distant wooded hills. Quiet, observant visual-novel
+  background, painterly, no people, animals, buildings, text, UI or weapons.
+placeholder: "[山際・朝の獣道] 朝露の草、鹿と鬼の足跡、霧に沈む遠山"
+refs:
+  location: mountain-edge-path
+  time: 朝
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-1, bond, kasumi, mountain, morning]
