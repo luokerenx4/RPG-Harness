@@ -75,7 +75,7 @@ assertions:
     type: dialogue
     speaker: kagari
     present: true
-    textIncludes: 答えを一つ、徳利の底に置いてきた
+    textIncludes: 何も訊かず、徳利を受け取った
   - kind: output
     type: dialogue
     speaker: kagari

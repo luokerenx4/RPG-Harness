@@ -63,10 +63,12 @@ variables:
   # the hub UI shows under "御沙汰" when between letters.
   shogun_chapter:  { type: number, initial: 0 }
   last_directive:  { type: string, initial: "鬼を斬り、骸を持ち帰れ。" }
-  # Stable memories of the player's first reply to each field companion.
+  # Stable memories of the player's early replies to each field companion.
   # Empty means a legacy save whose exact choice cannot be recovered safely.
   kagari_first_reply: { type: string, initial: "" }
   kasumi_first_reply: { type: string, initial: "" }
+  kagari_bond_reply: { type: string, initial: "" }
+  kasumi_bond_reply: { type: string, initial: "" }
   # 情報屋 — intel_active is the briefing text injected at raid start;
   # consumed (cleared) once the raid begins.
   intel_active:    { type: string, initial: "" }

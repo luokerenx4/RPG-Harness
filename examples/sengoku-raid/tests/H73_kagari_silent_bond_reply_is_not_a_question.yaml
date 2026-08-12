@@ -1,0 +1,41 @@
+name: Kagari does not answer a regret question when the player silently accepts the flask
+state:
+  baseline:
+    completedScripts: [000_intro, encounter_kagari_first]
+    currentScriptId: bond_kagari_01
+    characters:
+      kagari:
+        stats: { affection: 2 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-kagari-long-night
+    optionId: accept-the-flask
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 訊かないんだな
+  - kind: output
+    type: dialogue
+    present: false
+    textIncludes: 答えは
+

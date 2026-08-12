@@ -33,9 +33,9 @@ defaultPortraits:
 
 @kagari 同じ言葉を、あたしの伯母も、最後の夜に言った。
 
-? なんと答える？
-- 「お前は、伯母を斬って後悔したのか」 -> +kagari
-- ただ徳利を受け取る -> +kagari
+? なんと答える？ {id: answer-kagari-long-night}
+- 「お前は、伯母を斬って後悔したのか」 {id: ask-about-regret} -> +kagari
+- ただ徳利を受け取る {id: accept-the-flask} -> +kagari
 
 篝はしばらく黙っていた。徳利の縁が、月明かりで一筋光った。
 

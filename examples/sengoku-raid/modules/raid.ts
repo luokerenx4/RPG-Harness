@@ -3083,6 +3083,18 @@ const raidModule: Module = {
       if (reply) ctx.state.baseline.variables.kasumi_first_reply = reply;
       return;
     }
+    if (scriptId === "bond_kagari_01") {
+      const replies = ["asked-regret", "accepted-flask"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kagari_bond_reply = reply;
+      return;
+    }
+    if (scriptId === "bond_kasumi_01") {
+      const replies = ["not-foolish", "same-loss", "sat-beside"];
+      const reply = replies[choiceIdx];
+      if (reply) ctx.state.baseline.variables.kasumi_bond_reply = reply;
+      return;
+    }
     if (scriptId !== "letter_02_rival" || choiceIdx < 0 || choiceIdx > 2) return;
     const m = moduleState(ctx);
     if (m.companion) {
@@ -3176,6 +3188,77 @@ const raidModule: Module = {
             ? "将軍家の命でも、折れる時まで決めてはくれないでしょ。"
             : null;
       if (memory) return { replace: { ...beat, text: `${memory} ${beat.text}` } };
+    }
+    if (
+      scriptId === "bond_kagari_01" &&
+      beat.type === "dialogue" &&
+      beat.text === "答えは——夜が長いから、いつかまた。"
+    ) {
+      const reply = ctx.state.baseline.variables.kagari_bond_reply;
+      if (reply === "accepted-flask") {
+        return {
+          replace: {
+            ...beat,
+            text: "……訊かないんだな。それでも、夜が長いうちに、いつか話す。",
+          },
+        };
+      }
+    }
+    if (
+      scriptId === "bond_kasumi_01" &&
+      beat.type === "dialogue" &&
+      beat.text === "……ありがとう。"
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_bond_reply;
+      const response = reply === "not-foolish"
+        ? "……そう言ってくれるんだ。ありがとう。"
+        : reply === "same-loss"
+          ? "……同じ、か。じゃあ、馬鹿げてても一人じゃないね。"
+          : reply === "sat-beside"
+            ? "……そういう座り方、ずるいな。ありがとう。"
+            : null;
+      if (response) return { replace: { ...beat, text: response } };
+    }
+    if (
+      scriptId === "bond_kagari_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "最初の夜、伯母を斬ったことを話したな。あのとき、あたしは答えを一つ、徳利の底に置いてきた。" &&
+      ctx.state.baseline.variables.kagari_bond_reply === "accepted-flask"
+    ) {
+      return {
+        replace: {
+          ...beat,
+          text: "最初の夜、伯母を斬ったことを話したな。お主は何も訊かず、徳利を受け取った。あの沈黙に、あたしは答えを一つ隠した。",
+        },
+      };
+    }
+    if (
+      scriptId === "bond_kagari_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "「夜が長いから、いつかまた」——そう言って逃げた。覚えてるか。" &&
+      ctx.state.baseline.variables.kagari_bond_reply === "accepted-flask"
+    ) {
+      return {
+        replace: {
+          ...beat,
+          text: "「夜が長いうちに、いつか話す」——そう言って逃げた。覚えてるか。",
+        },
+      };
+    }
+    if (
+      scriptId === "bond_kasumi_04" &&
+      beat.type === "dialogue" &&
+      beat.text === "父の弓は「失くさないため」に引くんだって、ようやく分かったところなのに。"
+    ) {
+      const reply = ctx.state.baseline.variables.kasumi_bond_reply;
+      const memory = reply === "not-foolish"
+        ? "馬鹿げてないって言ってくれた、"
+        : reply === "same-loss"
+          ? "「俺も同じだ」って言った、"
+          : reply === "sat-beside"
+            ? "あの夜みたいに黙って隣へ来る、"
+            : null;
+      if (memory) return { replace: { ...beat, text: `${memory}${beat.text}` } };
     }
     if (!scriptId.startsWith("bond_")) return;
     if (beat.type !== "dialogue") return;

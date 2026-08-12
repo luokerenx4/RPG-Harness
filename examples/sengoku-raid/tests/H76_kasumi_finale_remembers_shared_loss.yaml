@@ -1,0 +1,35 @@
+name: Kasumi remembers the player's admission of the same loss
+state:
+  baseline:
+    completedScripts: [000_intro, encounter_kasumi_first, bond_kasumi_01, bond_kasumi_03]
+    currentScriptId: bond_kasumi_04
+    variables: { kasumi_bond_reply: same-loss }
+    switches:
+      befriended_kasumi: true
+      road_kasumi_2_seen: true
+    characters:
+      kasumi:
+        stats: { affection: 8 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 「俺も同じだ」って言った

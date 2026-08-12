@@ -1,0 +1,31 @@
+name: Kasumi answers the exact way the player receives her grief
+state:
+  baseline:
+    completedScripts: [000_intro, encounter_kasumi_first]
+    currentScriptId: bond_kasumi_01
+    characters:
+      kasumi:
+        stats: { affection: 2 }
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: answer-kasumi-lost-father
+    optionId: admit-the-same-loss
+  - kind: output
+    type: dialogue
+    present: true
+    textIncludes: 一人じゃない
+
