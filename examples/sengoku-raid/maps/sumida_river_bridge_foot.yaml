@@ -1,6 +1,7 @@
 id: sumida_river_bridge_foot
 name: 橋の袂
 chain: sumida_river
+is_entry: true
 difficulty: 2
 bg: assets/backgrounds/sumida-bridge
 entry_narration: 葦の藪が、足首より高く伸びている。汽水の臭いが鼻を打つ。

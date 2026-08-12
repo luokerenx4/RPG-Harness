@@ -1,0 +1,21 @@
+name: 橋の袂から葦の藪へ進むと独自背景へ切り替わる
+description: |
+  The semantic currentMapId and visual background must advance together when
+  entering the reed marsh, so Headless and GUI describe the same place.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+  sengoku-raid:
+    raid: null
+inputs:
+  - { type: doActivity, id: "depart:sumida_river" }
+  - { type: next }
+  - { type: doActivity, id: "move:sumida_river_reed_marsh" }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: sumida_river_reed_marsh
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-reed-marsh

@@ -2,6 +2,7 @@ id: sumida_river_drift_pier
 name: 流木の桟橋
 chain: sumida_river
 difficulty: 2
+bg: assets/backgrounds/sumida-drift-pier
 connections:
   - { dir: 戻る, target: sumida_river_drowned_shrine }
 encounter_table:

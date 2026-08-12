@@ -1,6 +1,7 @@
 id: kuro_swamp_edge
 name: 沼の縁
 chain: kuro_swamp
+is_entry: true
 difficulty: 1
 description: 黒沼地の入口。霧が脛に絡みつく。
 bg: assets/backgrounds/swamp-edge

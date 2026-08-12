@@ -1,6 +1,7 @@
 id: mt_houkyou_foothills
 name: 麓
 chain: mt_houkyou
+is_entry: true
 difficulty: 3
 bg: assets/backgrounds/houkyou-foothills
 entry_narration: 焼け石の唸りが、地の底から響く。靴底の革がじりじりと焦げる音がする。

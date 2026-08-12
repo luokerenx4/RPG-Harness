@@ -363,6 +363,10 @@ export interface MapDef {
   // loop typically surface a "leave / extract" action only when
   // `isExtract` is true on the current map.
   isExtract?: boolean;
+  // Explicit entry point for a logical map chain. The parser validator
+  // requires exactly one entry per chain and proves every sibling map is
+  // reachable from it, so disconnected authored content fails at load time.
+  isEntry?: boolean;
   // Encounter table — weighted draw the consuming module can roll on
   // map entry. enemyId values are validated against game.enemies.
   encounterTable?: { enemyId: string | null; weight: number }[];

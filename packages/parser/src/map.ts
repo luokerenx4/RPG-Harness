@@ -20,6 +20,7 @@ const KNOWN_KEYS = [
   "connections",
   "on_enter",
   "is_extract",
+  "is_entry",
   "encounter_table",
   "loot_table",
   "character_spawns",
@@ -58,6 +59,7 @@ export function parseMap(content: string, source?: string): MapDef {
 
   if (typeof obj.bg === "string" && obj.bg.length > 0) def.bg = obj.bg;
   if (obj.is_extract === true) def.isExtract = true;
+  if (obj.is_entry === true) def.isEntry = true;
   if (typeof obj.chain === "string" && obj.chain.length > 0) {
     def.chain = obj.chain;
   }

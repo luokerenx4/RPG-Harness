@@ -2,6 +2,7 @@ id: sumida_river_reed_marsh
 name: 葦の藪
 chain: sumida_river
 difficulty: 2
+bg: assets/backgrounds/sumida-reed-marsh
 connections:
   - { dir: 沼奥, target: sumida_river_drowned_shrine }
   - { dir: 戻る, target: sumida_river_bridge_foot }

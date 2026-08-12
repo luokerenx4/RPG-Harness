@@ -155,4 +155,13 @@ is_extract: true
 `);
     expect(m.isExtract).toBe(true);
   });
+
+  test("is_entry flag", () => {
+    const m = parseMap(`id: gate
+name: 門口
+chain: hell_gate
+is_entry: true
+`);
+    expect(m.isEntry).toBe(true);
+  });
 });

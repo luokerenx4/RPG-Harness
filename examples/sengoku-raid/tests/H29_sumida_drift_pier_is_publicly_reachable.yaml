@@ -1,0 +1,33 @@
+name: 水没した社から流木桟橋への移動が公開契約に現れる
+description: |
+  The drift pier used to have no incoming edge. At a cleared drowned shrine,
+  human and AI frontends must now receive a public move activity for it.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: sumida_river_drowned_shrine
+    visuals:
+      bg: assets/backgrounds/sumida-drowned-shrine
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        sumida_river_drowned_shrine:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: move:sumida_river_drift_pier
+    present: true
+    available: true
+    titleIncludes: 流木の桟橋

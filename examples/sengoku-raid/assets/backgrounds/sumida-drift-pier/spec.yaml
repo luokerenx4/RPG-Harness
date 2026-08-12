@@ -1,0 +1,20 @@
+kind: bg
+description: |
+  隅田河の淀みに張り出した流木の桟橋。縄で括った不揃いの板と杭の
+  周りに白い流木が絡み、夜明け前の黒い水が静かに揺れる。
+prompt: |
+  A precarious early-Edo driftwood pier on the Sumida River before dawn.
+  A narrow improvised jetty of mismatched wet logs and rope-lashed planks,
+  with pale driftwood trunks snagged around it, reeds at the bank and a
+  mist-hidden far shore. Blue pre-dawn, quiet threshold and hidden danger.
+  Painterly cinematic 16:9 visual-novel background, no people, demons,
+  boats, shrine, formal ferry building, text or watermark.
+placeholder: "[隅田河・流木の桟橋] 縄で括った濡れ板、絡む白い流木と黒い水"
+refs:
+  location: sumida-river
+  time: 夜明け前
+  variant_of: assets/backgrounds/sumida-ferry
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-2, raid-zone, pier, river]

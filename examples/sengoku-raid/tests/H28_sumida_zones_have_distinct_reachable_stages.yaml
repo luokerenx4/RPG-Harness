@@ -1,0 +1,49 @@
+name: 隅田河の葦藪と流木桟橋は別の舞台として到達できる
+description: |
+  From the drowned shrine, the previously orphaned drift pier must be a real
+  connection. Entering it must change both canonical map and GUI background;
+  its guaranteed encounter may then replace the move menu with combat.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    currentMapId: sumida_river_drowned_shrine
+    visuals:
+      bg: assets/backgrounds/sumida-drowned-shrine
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        sumida_river_bridge_foot:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+        sumida_river_reed_marsh:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+        sumida_river_drowned_shrine:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:sumida_river_drift_pier" }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: sumida_river_drift_pier
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/sumida-drift-pier

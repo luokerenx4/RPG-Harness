@@ -1,0 +1,20 @@
+kind: bg
+description: |
+  隅田河の橋を離れた先にある葦の藪。腰から肩ほどの葦が細い泥道を
+  挟み、茎の間に汽水が光る。明け方の露と薄霧が視界を狭める。
+prompt: |
+  Dense riverside reed marsh along the early-Edo Sumida River at dawn.
+  Waist-to-shoulder-high reeds crowd a narrow muddy bank trail; dark
+  brackish water glints between wet stems beneath light ground mist.
+  Cold blue-gray dawn with a pale-gold horizon, hidden and watchful.
+  Painterly cinematic 16:9 visual-novel background, no people, demons,
+  bridge, railing, shrine, pier, buildings, text or watermark.
+placeholder: "[隅田河・葦の藪] 高い葦に挟まれた泥道、汽水と明け方の薄霧"
+refs:
+  location: sumida-river
+  time: 明け方
+  variant_of: assets/backgrounds/sumida-bridge
+size_hint:
+  tui: { cols: 80, rows: 24 }
+  web: { aspect: "16:9" }
+tags: [chapter-2, raid-zone, reeds, river]

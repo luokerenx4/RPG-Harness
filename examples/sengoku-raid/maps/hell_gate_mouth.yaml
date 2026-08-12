@@ -1,6 +1,7 @@
 id: hell_gate_mouth
 name: 門口
 chain: hell_gate
+is_entry: true
 difficulty: 5
 entry_narration: 視界の縁が滲む。鬼の脈に染まった者にしか、この道は開かぬ。
 connections:

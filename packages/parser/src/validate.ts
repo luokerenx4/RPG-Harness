@@ -241,6 +241,8 @@ export function validateGame(game: Game): void {
     }
   }
 
+  validateMapChains(game, issues);
+
   for (const mod of game.modules ?? []) {
     visitModuleTriggers(mod, reg, issues);
   }
@@ -252,6 +254,53 @@ export function validateGame(game: Game): void {
         issues.length === 1 ? "" : "s"
       }):\n${lines.join("\n")}`,
     );
+  }
+}
+
+function validateMapChains(game: Game, issues: Issue[]): void {
+  const chains = new Map<string, NonNullable<Game["maps"]>>();
+  for (const map of game.maps ?? []) {
+    if (!map.chain) continue;
+    const siblings = chains.get(map.chain) ?? [];
+    siblings.push(map);
+    chains.set(map.chain, siblings);
+  }
+
+  for (const [chain, maps] of chains) {
+    const entries = maps.filter((map) => map.isEntry === true);
+    if (entries.length !== 1) {
+      issues.push({
+        path: `map chain ${chain}`,
+        message:
+          entries.length === 0
+            ? `must declare exactly one is_entry map; none found`
+            : `must declare exactly one is_entry map; found ${entries.map((map) => map.id).join(", ")}`,
+      });
+      continue;
+    }
+
+    const ids = new Set(maps.map((map) => map.id));
+    const byId = new Map(maps.map((map) => [map.id, map]));
+    const reachable = new Set<string>();
+    const pending = [entries[0]!.id];
+    while (pending.length > 0) {
+      const id = pending.pop()!;
+      if (reachable.has(id)) continue;
+      reachable.add(id);
+      for (const connection of byId.get(id)?.connections ?? []) {
+        if (ids.has(connection.target) && !reachable.has(connection.target)) {
+          pending.push(connection.target);
+        }
+      }
+    }
+
+    for (const map of maps) {
+      if (reachable.has(map.id)) continue;
+      issues.push({
+        path: `map ${map.id}`,
+        message: `unreachable from is_entry map "${entries[0]!.id}" in chain "${chain}"`,
+      });
+    }
   }
 }
 

@@ -5,6 +5,7 @@ difficulty: 2
 bg: assets/backgrounds/sumida-drowned-shrine
 connections:
   - { dir: 奥, target: sumida_river_under_eaves }
+  - { dir: 川沿い, target: sumida_river_drift_pier }
   - { dir: 戻る, target: sumida_river_reed_marsh }
 encounter_table:
   - { enemy: oni_warrior, weight: 50 }

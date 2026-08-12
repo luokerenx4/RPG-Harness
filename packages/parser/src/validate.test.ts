@@ -356,4 +356,66 @@ describe("validateGame — maps", () => {
     });
     expect(() => validateGame(game)).toThrow(/phantom_map/);
   });
+
+  test("map chains require exactly one explicit entry", () => {
+    const game = baseGame({
+      maps: [
+        {
+          id: "road",
+          name: "Road",
+          description: "",
+          difficulty: 1,
+          chain: "route",
+        },
+      ],
+    });
+    expect(() => validateGame(game)).toThrow(/exactly one is_entry/);
+  });
+
+  test("map chains reject content unreachable from their entry", () => {
+    const game = baseGame({
+      maps: [
+        {
+          id: "gate",
+          name: "Gate",
+          description: "",
+          difficulty: 1,
+          chain: "route",
+          isEntry: true,
+        },
+        {
+          id: "orphan",
+          name: "Orphan",
+          description: "",
+          difficulty: 1,
+          chain: "route",
+        },
+      ],
+    });
+    expect(() => validateGame(game)).toThrow(/orphan.*unreachable|unreachable.*orphan/);
+  });
+
+  test("map chains pass when every map is reachable from one entry", () => {
+    const game = baseGame({
+      maps: [
+        {
+          id: "gate",
+          name: "Gate",
+          description: "",
+          difficulty: 1,
+          chain: "route",
+          isEntry: true,
+          connections: [{ dir: "奥", target: "depths" }],
+        },
+        {
+          id: "depths",
+          name: "Depths",
+          description: "",
+          difficulty: 1,
+          chain: "route",
+        },
+      ],
+    });
+    expect(() => validateGame(game)).not.toThrow();
+  });
 });
