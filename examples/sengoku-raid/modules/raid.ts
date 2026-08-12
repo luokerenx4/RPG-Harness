@@ -1761,6 +1761,15 @@ function endRaidExtract(ctx: Ctx): void {
     ctx.state.runtime.pendingNarrations.push(
       `${charName}は無事に大名府まで歩いた。一度共に出帰った仲——刀を握る手の重さが、少し変わる。親密度 +1。`,
     );
+    if (
+      companionId === "mio" &&
+      ctx.state.baseline.switches.mio_inspection_duty === true &&
+      ctx.state.baseline.variables.last_directive ===
+        "澪と共に出帰り、見立てを受けよ。"
+    ) {
+      ctx.state.baseline.variables.last_directive =
+        "澪の見立ては続いている。同行を重ね、最終の報告を待て。";
+    }
   }
 
   m.raid = null;
@@ -2984,6 +2993,20 @@ const raidModule: Module = {
         m.companionHp = 10;
         ctx.state.baseline.switches.companion_mio = true;
       }
+    }
+    // A first safe return with 澪 starts the inspection but does not conclude
+    // it; her final bond scene authors the actual report. Migrate checkpoints
+    // from before the staged directive existed so the hub does not keep asking
+    // the player to perform the already-completed first outing.
+    if (
+      ctx.state.baseline.variables.shogun_chapter === 2 &&
+      ctx.state.baseline.switches.mio_inspection_duty === true &&
+      ctx.state.baseline.switches.befriended_mio === true &&
+      ctx.state.baseline.variables.last_directive ===
+        "澪と共に出帰り、見立てを受けよ。"
+    ) {
+      ctx.state.baseline.variables.last_directive =
+        "澪の見立ては続いている。同行を重ね、最終の報告を待て。";
     }
     // Establish the starting location. Fresh sessions land in the hub
     // (大名府 / edo_castle); seeded fixtures that have already entered a

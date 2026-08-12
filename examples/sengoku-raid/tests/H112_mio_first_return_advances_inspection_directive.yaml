@@ -1,0 +1,54 @@
+name: 澪との初生還後は見立て継続中の次手を示す
+description: |
+  Surviving one raid with Mio satisfies the first outing but does not finish
+  her official inspection. The directive must advance to continued同行 and
+  the final report instead of asking for the already-completed first return.
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    currentMapId: sumida_river_ferry_landing
+    switches:
+      companion_mio: true
+      mio_inspection_duty: true
+    characters:
+      mio:
+        stats:
+          affection: 1
+    variables:
+      raidsCompleted: 7
+      shogun_chapter: 2
+      last_directive: "澪と共に出帰り、見立てを受けよ。"
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    metCharacters: [mio]
+    companion: mio
+    companionHp: 10
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge
+      turnsTaken: 2
+      pendingLoot: {}
+      visited:
+        sumida_river_ferry_landing:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - type: doActivity
+    id: extract
+  - type: next
+  - type: next
+  - type: quit
+assertions:
+  - kind: state
+    path: baseline.switches.befriended_mio
+    eq: true
+  - kind: state
+    path: baseline.variables.last_directive
+    eq: "澪の見立ては続いている。同行を重ね、最終の報告を待て。"
+  - kind: objective
+    id: letter_03_dispatch
+    descriptionIncludes: 最終の報告

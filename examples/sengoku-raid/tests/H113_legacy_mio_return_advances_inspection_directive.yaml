@@ -1,0 +1,24 @@
+name: 旧存档の澪初生還済み状態も次の見立て段階へ移す
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    switches:
+      befriended_mio: true
+      mio_inspection_duty: true
+    variables:
+      raidsCompleted: 8
+      shogun_chapter: 2
+      last_directive: "澪と共に出帰り、見立てを受けよ。"
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    metCharacters: [mio]
+    raid: null
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.variables.last_directive
+    eq: "澪の見立ては続いている。同行を重ね、最終の報告を待て。"
+  - kind: objective
+    id: letter_03_dispatch
+    descriptionIncludes: 最終の報告
