@@ -1,0 +1,46 @@
+name: the collective oni-ending tether carries a public AI preference
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - zone_haunt_kagami_oni
+      - three_flowers_alliance
+    switches:
+      chose_court_defy: true
+      befriended_kagari: true
+      befriended_kasumi: true
+      befriended_mio: true
+      three_flowers_pledged: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch, three_flowers_alliance]
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+maxSteps: 10
+inputs:
+  - { type: doActivity, id: script:ending_oni_self }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    optionTextIncludes: 三名連署
+    optionAiPriority: 20

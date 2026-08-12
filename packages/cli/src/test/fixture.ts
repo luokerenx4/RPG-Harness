@@ -31,6 +31,8 @@ export interface OutputAssertion {
   present: boolean;
   speaker?: string;
   textIncludes?: string;
+  optionTextIncludes?: string;
+  optionAiPriority?: number;
 }
 
 // Inspect the most recent hubMenu Output for a specific activity by id.

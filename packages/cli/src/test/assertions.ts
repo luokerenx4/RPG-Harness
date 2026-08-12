@@ -260,17 +260,38 @@ function checkOutput(
         return false;
       }
     }
+    if (a.optionTextIncludes !== undefined) {
+      if (o.type !== "choice") return false;
+      const option = o.options.find((item) =>
+        item.text.includes(a.optionTextIncludes!),
+      );
+      if (!option) return false;
+      if (
+        a.optionAiPriority !== undefined &&
+        option.aiPriority !== a.optionAiPriority
+      ) {
+        return false;
+      }
+    }
     return true;
   });
   const found = matches.length > 0;
   if (a.present && !found) {
     return `expected at least one output matching type=${a.type}${
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
+    }${
+      a.optionTextIncludes
+        ? ` optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        : ""
     }`;
   }
   if (!a.present && found) {
     return `expected no output matching type=${a.type}${
       a.textIncludes ? ` textIncludes=${a.textIncludes}` : ""
+    }${
+      a.optionTextIncludes
+        ? ` optionTextIncludes=${a.optionTextIncludes} optionAiPriority=${String(a.optionAiPriority)}`
+        : ""
     }, but found ${matches.length}`;
   }
   return null;
