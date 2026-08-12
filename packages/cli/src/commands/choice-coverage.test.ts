@@ -448,4 +448,51 @@ describe("choice branch coverage", () => {
       expect.objectContaining({ id: "secret", status: "locked" }),
     ]);
   });
+
+  test("a development scope aggregates source and transitive descendant logs", async () => {
+    const gameDir = await mkdtemp(path.join(tmpdir(), "rpgh-choice-family-"));
+    temporaryDirectories.push(gameDir);
+    await writeFile(path.join(gameDir, "game.yaml"), "title: Choice family test\n");
+    const sessionsRoot = path.join(gameDir, ".rpg-harness", "sessions");
+    for (const name of ["player", "child", "grandchild", "unrelated"]) {
+      await mkdir(path.join(sessionsRoot, name), { recursive: true });
+    }
+    const revision = "9".repeat(64);
+    await writeFile(path.join(sessionsRoot, "player", "log.jsonl"),
+      JSON.stringify({ input: { type: "next" }, output: choice, checkpoint: checkpoint(revision) }) + "\n");
+    await writeFile(path.join(sessionsRoot, "child", "fork.json"), JSON.stringify({
+      fromSession: "player",
+      sourceLogEntry: 1,
+    }));
+    await writeFile(path.join(sessionsRoot, "child", "log.jsonl"), JSON.stringify({
+      input: { type: "choose", index: 0 },
+      decision: { scriptId: "ending", choiceId: "final-tether", optionId: "alone" },
+      output: { type: "narration", text: "Alone." },
+    }) + "\n");
+    await writeFile(path.join(sessionsRoot, "grandchild", "fork.json"), JSON.stringify({
+      fromSession: "child",
+      sourceLogEntry: 1,
+    }));
+    await writeFile(path.join(sessionsRoot, "grandchild", "log.jsonl"), JSON.stringify({
+      input: { type: "choose", index: 1 },
+      decision: { scriptId: "ending", choiceId: "final-tether", optionId: "friends" },
+      output: { type: "narration", text: "Together." },
+    }) + "\n");
+    await writeFile(path.join(sessionsRoot, "unrelated", "log.jsonl"), JSON.stringify({
+      input: { type: "choose", index: 2 },
+      decision: { scriptId: "ending", choiceId: "final-tether", optionId: "secret" },
+      output: { type: "narration", text: "Secret." },
+    }) + "\n");
+
+    const sourceOnly = await collectChoiceCoverage(gameDir, "player");
+    const family = await collectChoiceCoverage(gameDir, "player", true);
+
+    expect(sourceOnly.summary.selectedOptions).toBe(0);
+    expect(family.sessions).toEqual(["child", "grandchild", "player"]);
+    expect(family.choices[0]?.options).toEqual([
+      expect.objectContaining({ id: "alone", status: "selected", selectedSessions: ["child"] }),
+      expect.objectContaining({ id: "friends", status: "selected", selectedSessions: ["grandchild"] }),
+      expect.objectContaining({ id: "secret", status: "locked", selectedSessions: [] }),
+    ]);
+  });
 });

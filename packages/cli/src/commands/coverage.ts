@@ -4,6 +4,7 @@ import type { ComposedState, Game } from "@rpg-harness/engine";
 import { assertSessionName } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { listSessions, sessionDir } from "../session";
+import { sessionFamily } from "../session-lineage";
 
 export type CoverageStatus =
   | "completed"
@@ -61,10 +62,15 @@ export async function coverageCommand(args: CoverageArgs): Promise<void> {
 export async function collectScriptCoverage(
   gameDir: string,
   onlySession?: string,
+  includeDescendants = false,
 ): Promise<ScriptCoverageReport> {
   if (onlySession !== undefined) assertSessionName(onlySession);
   const game = await loadGame(gameDir);
-  const names = onlySession === undefined ? await listSessions(gameDir) : [onlySession];
+  const names = onlySession === undefined
+    ? await listSessions(gameDir)
+    : includeDescendants
+      ? await sessionFamily(gameDir, onlySession)
+      : [onlySession];
   const states: Array<{ session: string; state: ComposedState }> = [];
   const sessionErrors: Array<{ session: string; error: string }> = [];
   for (const session of names) {

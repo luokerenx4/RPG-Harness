@@ -34,6 +34,7 @@ describe("AI development worklist", () => {
       choiceBranches: 1,
       authoringItems: 2,
     });
+    expect(report.evidenceSessions).toEqual(["player"]);
     expect(report.items.map((item) => item.key)).toEqual([
       "session-error/broken",
       "report/pt-blocker",
@@ -115,6 +116,7 @@ describe("AI development worklist", () => {
 
     expect(report.summary.status).toBe("clean");
     expect(report.items).toEqual([]);
+    expect(report.evidenceSessions).toEqual(["player"]);
     expect(formatDevelopmentWorklist(report)).toContain("no actionable development work");
   });
 
@@ -192,6 +194,28 @@ describe("AI development worklist", () => {
       actionability: "executable",
       operation: expect.objectContaining({ command: "reach" }),
     }));
+  });
+
+  test("executes a branch from the session that owns its checkpoint evidence", () => {
+    const choices = choiceReport();
+    choices.workItems[0]!.evidence.session = "ai-descendant";
+    choices.workItems[0]!.evidence.fork.from = "ai-descendant";
+    const report = analyzeDevelopmentWorklist({
+      story: storyReport(),
+      choices,
+      reports: [],
+      session: "player",
+    });
+
+    expect(report.items.find((item) => item.kind === "choice-branch")?.operation)
+      .toEqual({
+        command: "cover",
+        args: {
+          key: "ending/coda/friends",
+          session: "<new-session>",
+          sourceSession: "ai-descendant",
+        },
+      });
   });
 });
 

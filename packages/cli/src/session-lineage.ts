@@ -5,7 +5,7 @@ import {
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readSessionLog, type LoggedStep } from "./commands/fork";
-import { sessionDir } from "./session";
+import { listSessions, sessionDir } from "./session";
 
 export interface SessionLineageSlice {
   session: string;
@@ -73,6 +73,38 @@ export async function readForkProvenance(
     fromSession: value.fromSession,
     sourceLogEntry: value.sourceLogEntry as number,
   };
+}
+
+/**
+ * Return a source session and every transitive fork descendant. Development
+ * coverage uses this family so isolated AI branches feed evidence back into
+ * the player's queue without ever mutating the player save.
+ */
+export async function sessionFamily(
+  gameDir: string,
+  sourceSession: string,
+): Promise<string[]> {
+  assertSessionName(sourceSession);
+  const names = await listSessions(gameDir);
+  const children = new Map<string, string[]>();
+  for (const name of names) {
+    const provenance = await readForkProvenance(gameDir, name);
+    if (!provenance) continue;
+    const siblings = children.get(provenance.fromSession) ?? [];
+    siblings.push(name);
+    children.set(provenance.fromSession, siblings);
+  }
+  const family: string[] = [];
+  const queue = [sourceSession];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const session = queue.shift()!;
+    if (seen.has(session)) continue;
+    seen.add(session);
+    family.push(session);
+    queue.push(...(children.get(session) ?? []).sort());
+  }
+  return family;
 }
 
 /**

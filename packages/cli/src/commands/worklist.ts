@@ -9,6 +9,7 @@ import {
   type ChoiceAuthoringWorkItem,
   type ChoiceCoverageReport,
 } from "./choice-coverage";
+import { sessionFamily } from "../session-lineage";
 
 export type DevelopmentWorkPriority = "P0" | "P1" | "P2" | "P3";
 export type DevelopmentWorkKind =
@@ -108,6 +109,8 @@ export interface DevelopmentWorklist {
     authoringItems: number;
   };
   session?: string;
+  /** Sessions whose isolated evidence contributed to this queue. */
+  evidenceSessions: string[];
   items: DevelopmentWorkItem[];
 }
 
@@ -132,15 +135,21 @@ export async function collectDevelopmentWorklist(
   gameDir: string,
   session?: string,
 ): Promise<DevelopmentWorklist> {
+  const evidenceSessions = session === undefined
+    ? null
+    : new Set(await sessionFamily(gameDir, session));
   const [story, choices, reports] = await Promise.all([
-    collectScriptCoverage(gameDir, session),
-    collectChoiceCoverage(gameDir, session),
-    listPlaytestReports(gameDir, session),
+    collectScriptCoverage(gameDir, session, session !== undefined),
+    collectChoiceCoverage(gameDir, session, session !== undefined),
+    listPlaytestReports(gameDir),
   ]);
   return analyzeDevelopmentWorklist({
     story,
     choices,
-    reports: reports.filter((report) => report.status === "open"),
+    reports: reports.filter((report) =>
+      report.status === "open" &&
+      (evidenceSessions === null || evidenceSessions.has(report.session))
+    ),
     ...(session !== undefined ? { session } : {}),
   });
 }
@@ -281,7 +290,10 @@ export function analyzeDevelopmentWorklist(input: {
         args: {
           key: workItem.key,
           session: "<new-session>",
-          ...(input.session ? { sourceSession: input.session } : {}),
+          // The checkpoint is authoritative even when first discovered in an
+          // isolated AI descendant. Fork that exact evidence session; the
+          // player's source remains untouched and continues to scope the queue.
+          sourceSession: workItem.evidence.session,
         },
       },
       coordinates: {
@@ -346,6 +358,11 @@ export function analyzeDevelopmentWorklist(input: {
       authoringItems: input.choices.authoring.workItems.length,
     },
     ...(input.session !== undefined ? { session: input.session } : {}),
+    evidenceSessions: [...new Set([
+      ...input.story.sessions,
+      ...input.choices.sessions,
+      ...input.reports.map((report) => report.session),
+    ])].sort(),
     items: finalizedItems,
   };
 }
@@ -356,6 +373,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
     `Development worklist: ${summary.total} items · ${summary.byPriority.P0} P0 · ${summary.byPriority.P1} P1 · ${summary.byPriority.P2} P2 · ${summary.byPriority.P3} P3`,
     `Actionability: ${summary.byActionability.executable} executable · ${summary.byActionability.diagnostic} diagnostic · ${summary.byActionability.authoring} authoring`,
     `Sources: ${summary.openReports} open reports · ${summary.sessionErrors} session errors · ${summary.storyPending} story gaps · ${summary.choiceBranches} choice branches · ${summary.authoringItems} authoring items`,
+    `Evidence sessions: ${report.evidenceSessions.join(", ") || "none"}`,
   ];
   if (report.items.length === 0) {
     lines.push("(clean: no actionable development work)");

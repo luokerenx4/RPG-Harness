@@ -3,7 +3,7 @@ import type { Condition, Game } from "@rpg-harness/engine";
 import path from "node:path";
 import { loadGame } from "../loader";
 import { listSessions } from "../session";
-import { readSessionLineage } from "../session-lineage";
+import { readSessionLineage, sessionFamily } from "../session-lineage";
 import { readSessionLog, type LoggedStep } from "./fork";
 
 export type ChoiceCoverageStatus =
@@ -230,14 +230,19 @@ interface MutableChoice {
 export async function collectChoiceCoverage(
   gameDir: string,
   onlySession?: string,
+  includeDescendants = false,
 ): Promise<ChoiceCoverageReport> {
   if (onlySession !== undefined) assertSessionName(onlySession);
   const game = await loadGame(gameDir);
   const authored = collectAuthoredChoices(game, gameDir);
-  const names = onlySession === undefined ? await listSessions(gameDir) : [onlySession];
+  const names = onlySession === undefined
+    ? await listSessions(gameDir)
+    : includeDescendants
+      ? await sessionFamily(gameDir, onlySession)
+      : [onlySession];
   const logs: Array<{ session: string; entries: LoggedStep[] }> = [];
   const sessionErrors: Array<{ session: string; error: string }> = [];
-  if (onlySession !== undefined) {
+  if (onlySession !== undefined && !includeDescendants) {
     try {
       logs.push(...(await readSessionLineage(gameDir, onlySession)).map(
         ({ session, entries }) => ({ session, entries }),
@@ -247,7 +252,17 @@ export async function collectChoiceCoverage(
     }
     return analyzeChoiceCoverage(logs, sessionErrors, authored);
   }
+  if (onlySession !== undefined && includeDescendants) {
+    try {
+      logs.push(...(await readSessionLineage(gameDir, onlySession)).map(
+        ({ session, entries }) => ({ session, entries }),
+      ));
+    } catch (error) {
+      sessionErrors.push({ session: onlySession, error: (error as Error).message });
+    }
+  }
   for (const session of names) {
+    if (includeDescendants && session === onlySession) continue;
     try {
       logs.push({ session, entries: await readSessionLog(gameDir, session) });
     } catch (error) {

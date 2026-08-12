@@ -78,7 +78,9 @@ COMMANDS
   worklist <game-dir> [--session NAME] [--format table|json]
       Merge open playtest reports, unreadable sessions, story gaps, executable
       choice branches, and authoring debt into one prioritized AI development
-      queue. Every item carries structured coordinates and its next operation.
+      queue. With --session, evidence includes that source and all fork
+      descendants while new work still forks from the named source. Every item
+      carries structured coordinates and its next operation.
 
   work <game-dir> [--key WORK-KEY] [--session SOURCE]
        [--new-session NAME] [--persona NAME] [--max-steps N]
@@ -95,7 +97,9 @@ COMMANDS
         [--max-total-nodes N] [--pretty]
       Execute a bounded frozen snapshot of the prioritized development queue.
       Preflights every isolated target before writing, stops on failures or
-      authoring judgment, and returns completed plus remaining work for resume.
+      authoring judgment, persists the immutable queue, and returns completed
+      plus remaining work for resume even as new branch evidence shrinks the
+      live queue.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,

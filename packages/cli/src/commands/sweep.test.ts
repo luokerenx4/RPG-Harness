@@ -35,6 +35,7 @@ describe("bounded development sweep", () => {
       reason: "budget-exhausted",
       snapshot: {
         sourceSession: "player",
+        file: expect.stringMatching(/^\.rpg-harness\/sweeps\/[a-f0-9]{64}\.json$/),
         totalItems: 2,
         selectedItems: 1,
         completedItems: 1,
@@ -81,6 +82,8 @@ describe("bounded development sweep", () => {
     await expect(readdir(sessionDir(gameDir, "reserved-001"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+    await expect(readdir(path.join(gameDir, ".rpg-harness", "sweeps")))
+      .rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("shares one search-node budget across the frozen batch", async () => {
@@ -140,6 +143,8 @@ describe("bounded development sweep", () => {
       resume: null,
       runs: [{ key: "story/scene-b", targetSession: "second-001" }],
     });
+    expect((await readdir(path.join(gameDir, ".rpg-harness", "sweeps"))))
+      .toContain(`${first.snapshot.revision}.json`);
 
     await expect(runDevelopmentSweep({
       gameDir,
@@ -150,6 +155,56 @@ describe("bounded development sweep", () => {
       limit: 1,
       pretty: false,
     })).rejects.toThrow("Sweep snapshot changed");
+  });
+
+  test("resume skips snapshot items already resolved by other descendant evidence", async () => {
+    const gameDir = await temporarySweepGame();
+    const first = await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "resolve-a",
+      limit: 1,
+      maxNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+    await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "resolve-b",
+      limit: 1,
+      maxNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+
+    const resumed = await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "skip-resolved",
+      fromKey: "story/scene-a",
+      snapshotRevision: first.snapshot.revision,
+      limit: 1,
+      maxNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+
+    expect(resumed).toMatchObject({
+      status: "clean",
+      reason: "clean",
+      snapshot: {
+        totalItems: 2,
+        startIndex: 0,
+        selectedItems: 0,
+        remainingItems: 0,
+        nextKey: null,
+      },
+      resume: null,
+      runs: [],
+    });
+    await expect(readdir(sessionDir(gameDir, "skip-resolved-001")))
+      .rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
