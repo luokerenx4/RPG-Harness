@@ -19,6 +19,13 @@ Three seams mirror the CLI, swapping fs for build-time + browser:
 | renderer (consumes `screen-model`) | ink components | DOM components (`WebPlayScreen`, `VisualLayer`) |
 | saves | `session.ts` → `state.json` on disk | `session.ts` → `localStorage` (`rpgh:save:<gameId>`) |
 
+In local development the session bridge replaces the right-hand save seam with
+the CLI-compatible named session directory. Web inputs use the engine's public
+`classifyInput` contract before touching the live generator; accepted and
+rejected `inputResult` values are logged with `source: "web"`. Choice stages
+preserve authored identity and submit `choiceId` / `optionId` when available,
+so GUI decisions remain stable across option reordering and copy edits.
+
 `src/loadGame.ts` is the heart: `import.meta.glob` sweeps the whole
 `examples/` tree once and inlines every game folder three ways — content
 markdown/YAML as raw strings (parsed by the same pure parser the CLI uses),

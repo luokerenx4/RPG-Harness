@@ -14,6 +14,7 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024;
 export interface BridgeStepEvent {
   input: unknown;
   output: unknown;
+  inputResult?: unknown;
   decision?: unknown;
 }
 
@@ -107,6 +108,9 @@ export async function saveBridgeSession(
           source: "web",
           input: args.event.input,
           output: args.event.output,
+          ...(args.event.inputResult !== undefined
+            ? { inputResult: args.event.inputResult }
+            : {}),
           ...(args.event.decision !== undefined
             ? { decision: args.event.decision }
             : {}),

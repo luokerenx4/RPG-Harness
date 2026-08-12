@@ -497,6 +497,38 @@ body {
   border-color: var(--accent);
 }
 
+.input-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(760px, calc(100% - 32px));
+  padding: 10px 14px;
+  transform: translateX(-50%);
+  color: #f2c2c2;
+  background: rgba(45, 17, 22, 0.94);
+  border: 1px solid #8f4852;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.input-notice strong {
+  color: #ff9aa8;
+  white-space: nowrap;
+}
+.input-notice span {
+  flex: 1;
+}
+.input-notice button {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 18px;
+}
+
 /* ---------- backlog ---------- */
 /* ---------- 設定集 (art book) ---------- */
 .artbook-inner {

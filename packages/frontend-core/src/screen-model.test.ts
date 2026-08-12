@@ -141,6 +141,21 @@ describe("applyOutput — cursor init", () => {
     expect(m.stage).toMatchObject({ kind: "choice", cursor: 1 });
   });
 
+  test("choice stage preserves stable script and choice identity for GUI inputs", () => {
+    const m = applyOutput(initialModel, {
+      type: "choice",
+      scriptId: "ending",
+      choiceId: "route",
+      options: [{ id: "friends", text: "Friends", available: true }],
+    });
+    expect(m.stage).toMatchObject({
+      kind: "choice",
+      scriptId: "ending",
+      choiceId: "route",
+      options: [{ id: "friends" }],
+    });
+  });
+
   test("choice cursor falls back to 0 when nothing is available", () => {
     const m = applyOutput(initialModel, {
       type: "choice",

@@ -2,6 +2,7 @@ import type {
   ChoiceDecisionContext,
   ComposedState,
   Input,
+  InputResult,
   Output,
 } from "@rpg-harness/engine";
 
@@ -17,6 +18,7 @@ export const SESSION_QUERY_PARAM = "session";
 export interface WebStepEvent {
   input: Input;
   output: Output;
+  inputResult?: InputResult;
   decision?: ChoiceDecisionContext;
 }
 

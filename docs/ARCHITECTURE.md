@@ -76,6 +76,11 @@ Headless clients and persisted CLI logs. Rejections preserve the normalized
 peek state and return the same Output. Presets and core dispatchers repeat
 authorization-sensitive checks (script requirements, current hub membership,
 map-connection gates) so direct `Engine.run()` consumers cannot bypass them.
+The Web shell applies the same classifier before advancing its long-lived
+generator, persists accepted and rejected `inputResult` values through the
+shared-session bridge, and displays rejection messages without replacing the
+current stage. Its choice stage preserves stable identity so authored
+`choiceId` / `optionId` values reach the same decision log used by Headless.
 
 ## Frontends
 
@@ -341,7 +346,7 @@ Saves are a single JSON file. AI playtester branching = snapshot + replay from a
 The local Web dev server exposes a same-origin session bridge. Its default
 `web` session is the same `.rpg-harness/sessions/web/state.json` and
 `log.jsonl` consumed by `rpgh peek`, `step`, `report`, and `resolve`; GUI steps
-carry `source: "web"` in the log. The bridge uses a hash revision on every PUT,
+carry `source: "web"`, semantic decisions, and `inputResult` in the log. The bridge uses a hash revision on every PUT,
 so the GUI can live-reload when a CLI/TUI step changes the file. A browser that
 writes inside the polling race window receives 409 instead of overwriting the
 newer step. Production Web builds do not include this middleware and continue

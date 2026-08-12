@@ -32,7 +32,12 @@ bun run rpgh report examples/sengoku-raid --session web --title "..."
 # http://127.0.0.1:5174/?session=ai-branch
 ```
 
-Every browser input is appended to that game's normal `state.json` / `log.jsonl`.
+Every browser input is classified against the visible public Output and appended
+to that game's normal `state.json` / `log.jsonl` with the same `inputResult`
+used by Headless. Stable GUI choices submit authored `choiceId` / `optionId`
+rather than presentation indexes. A rejected input leaves the live generator
+and screen untouched, shows a recoverable notice, and remains visible to
+`rpgh transcript` as diagnostic evidence.
 Each event also points at an immutable, content-addressed state checkpoint, so a
 GUI finding is immediately forkable and reportable by a Headless agent. A
 report also freezes its own issue checkpoint, so `rpgh reproduce` still opens

@@ -29,6 +29,8 @@ export type Stage =
   | { kind: "dialogue"; speakerId: string; speakerName: string; text: string }
   | {
       kind: "choice";
+      scriptId?: string;
+      choiceId?: string;
       prompt?: string;
       options: RenderedChoice[];
       cursor: number;
@@ -117,6 +119,8 @@ export function applyOutput(model: ScreenModel, output: Output): ScreenModel {
       return {
         stage: {
           kind: "choice",
+          ...(output.scriptId !== undefined ? { scriptId: output.scriptId } : {}),
+          ...(output.choiceId !== undefined ? { choiceId: output.choiceId } : {}),
           ...(output.prompt !== undefined ? { prompt: output.prompt } : {}),
           options: output.options,
           cursor: firstAvailableIndex(output.options.length, (i) =>

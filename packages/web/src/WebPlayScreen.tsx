@@ -5,13 +5,19 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { choiceDecisionContext, Engine, createInitialState } from "@rpg-harness/engine";
+import {
+  choiceDecisionContext,
+  classifyInput,
+  Engine,
+  createInitialState,
+} from "@rpg-harness/engine";
 import type {
   AssetSpec,
   ComposedState,
   Game,
   HubSnapshot,
   Input,
+  InputResult,
   Output,
 } from "@rpg-harness/engine";
 import {
@@ -58,6 +64,20 @@ interface Props {
   onExit?: () => void;
 }
 
+export async function submitWebInput(
+  currentOutput: Output,
+  input: Input,
+  runner: AsyncGenerator<Output, void, Input>,
+): Promise<{
+  inputResult: InputResult;
+  result?: IteratorResult<Output, void>;
+}> {
+  const inputResult = classifyInput(currentOutput, input);
+  return inputResult.accepted
+    ? { inputResult, result: await runner.next(input) }
+    : { inputResult };
+}
+
 export function WebPlayScreen({
   game,
   assetUrls,
@@ -73,13 +93,18 @@ export function WebPlayScreen({
   const outputRef = useRef<Output | null>(null);
   const [showBacklog, setShowBacklog] = useState(false);
   const [showArtBook, setShowArtBook] = useState(false);
+  const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
 
   const assetMap = useRef(
     new Map((game.assets ?? []).map((a) => [a.path, a] as const)),
   ).current;
 
   const commit = useCallback(
-    async (res: IteratorResult<Output, void>, input?: Input) => {
+    async (
+      res: IteratorResult<Output, void>,
+      input?: Input,
+      inputResult?: InputResult,
+    ) => {
       const output: Output = res.done ? { type: "gameEnd" } : res.value;
       const decision = input
         ? choiceDecisionContext(outputRef.current, input)
@@ -91,7 +116,12 @@ export function WebPlayScreen({
         await onCommit(
           engine.getState(),
           ...(input
-            ? [{ input, output, ...(decision ? { decision } : {}) } satisfies WebStepEvent]
+            ? [{
+                input,
+                output,
+                ...(inputResult ? { inputResult } : {}),
+                ...(decision ? { decision } : {}),
+              } satisfies WebStepEvent]
             : []),
         );
       }
@@ -130,14 +160,30 @@ export function WebPlayScreen({
       if (!runner) return;
       processingRef.current = true;
       try {
-        await commit(await runner.next(input), input);
+        const currentOutput = outputRef.current;
+        if (!currentOutput) return;
+        const submitted = await submitWebInput(currentOutput, input, runner);
+        if (!submitted.inputResult.accepted) {
+          setInputNotice(submitted.inputResult);
+          const engine = engineRef.current;
+          if (engine && onCommit) {
+            await onCommit(engine.getState(), {
+              input,
+              output: currentOutput,
+              inputResult: submitted.inputResult,
+            });
+          }
+          return;
+        }
+        setInputNotice(null);
+        await commit(submitted.result!, input, submitted.inputResult);
       } catch (err) {
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
       } finally {
         processingRef.current = false;
       }
     },
-    [commit],
+    [commit, onCommit],
   );
 
   // Keyboard: Space/Enter advances text beats; Esc exits. Selection on
@@ -169,6 +215,13 @@ export function WebPlayScreen({
       <div className="stage-area">
         <StageView stage={model.stage} onInput={sendInput} />
       </div>
+      {inputNotice && !inputNotice.accepted && (
+        <div className="input-notice" role="status">
+          <strong>{inputNotice.code}</strong>
+          <span>{inputNotice.message}</span>
+          <button onClick={() => setInputNotice(null)} aria-label="入力通知を閉じる">×</button>
+        </div>
+      )}
       <div className="hud">
         {sessionLabel && (
           <span className="hud-session" title="Headless CLI と共有される保存先">
@@ -241,7 +294,11 @@ function StageView({
                 <button
                   className="option-btn"
                   disabled={!opt.available}
-                  onClick={() => onInput({ type: "choose", index: i })}
+                  onClick={() => onInput(
+                    stage.choiceId && opt.id
+                      ? { type: "choose", choiceId: stage.choiceId, optionId: opt.id }
+                      : { type: "choose", index: i },
+                  )}
                   title={opt.lockedReason ?? ""}
                 >
                   <span>{opt.text}</span>
