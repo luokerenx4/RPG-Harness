@@ -178,7 +178,7 @@ rpgh init     <dir> [--force]                                  # scaffold a new 
 rpgh play     <game-dir>                                       # interactive TUI (ink, hot-reloading)
 rpgh step     <game-dir> --input <json> [--session NAME]       # headless, stateless step
 rpgh peek     <game-dir> [--session NAME]                      # inspect current state
-rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays through
+rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays/forks/reports stops
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close a verified finding
@@ -368,6 +368,8 @@ here to gameplay regression.
 rpgh autoplay ./examples/sengoku-raid --persona extractor -v   # always extract / flee / sell
 rpgh autoplay ./examples/sengoku-raid --persona delver    -v   # always attack / push deepest
 rpgh autoplay ./examples/sengoku-raid --persona objective --session ai-run
+rpgh autoplay ./examples/sengoku-raid --persona objective \
+  --from-session player-main --session ai-objective-audit --report-on-stop
 ```
 
 `objective` follows only renderer-neutral `HubSnapshot.objectives` links and can
@@ -376,6 +378,16 @@ persist every move into a GUI-compatible named session. Generic personas —
 for any game (always-first / always-last / always-second / uniform-random /
 training-aware). They're useful for fuzz-testing path coverage. For LLM-driven
 personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/SKILL.md).
+
+For an autonomous development lane, combine `--from-session`, `--session`, and
+`--report-on-stop`. The source GUI/player save is locked and checkpoint-forked
+before the first AI input; the target must not already exist. A normal game end
+returns the ending without filing noise. Any `quit`, `max-steps`, input
+exhaustion, or engine error freezes the AI branch's exact final state into the
+same structured playtest-report format used by `report`/`reproduce`, and the
+JSON response includes the branch's `webPath` plus report evidence for the next
+coding agent. `max-steps` is an exact AI-decision budget: the summary reports
+those decisions separately from visible `steps`, including the initial output.
 
 ## Architecture in one paragraph
 

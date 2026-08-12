@@ -61,11 +61,15 @@ COMMANDS
       Run all fixtures under <game-dir>/tests/*.yaml. Exits 1 on failure.
 
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
-           [--session NAME]
+           [--session NAME] [--from-session PLAYER] [--report-on-stop] [--pretty]
       Have a built-in AI persona play through the game and report the ending.
       Personas: greedy / charmer / rude / random
       --session persists every AI step as the same recoverable save/log used
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
+      --from-session atomically forks a player/GUI save into --session before
+      the AI moves, so autonomous play never mutates the player's branch.
+      --report-on-stop turns a non-terminal stop into a checkpointed coding issue.
+      --max-steps is an exact AI-decision budget; visible outputs are counted separately.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
            [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]
@@ -359,12 +363,15 @@ async function runAutoplay(args: string[]): Promise<void> {
       "max-steps": { type: "string", default: "1000" },
       seed: { type: "string" },
       session: { type: "string" },
+      "from-session": { type: "string" },
+      "report-on-stop": { type: "boolean", default: false },
+      pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N]",
+    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--report-on-stop] [--pretty]",
   );
   await autoplayCommand({
     gameDir,
@@ -373,6 +380,11 @@ async function runAutoplay(args: string[]): Promise<void> {
     maxSteps: Number(values["max-steps"] ?? "1000"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
     ...(values.session !== undefined ? { session: values.session } : {}),
+    ...(values["from-session"] !== undefined
+      ? { fromSession: values["from-session"] }
+      : {}),
+    reportOnStop: Boolean(values["report-on-stop"]),
+    pretty: Boolean(values.pretty),
   });
 }
 

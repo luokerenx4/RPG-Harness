@@ -1,36 +1,93 @@
 import { emptyVisualState, runLoop } from "@rpg-harness/engine";
-import type { Output, VisualState } from "@rpg-harness/engine";
+import type { LoopReason, Output, VisualState } from "@rpg-harness/engine";
 import {
   buildHubView,
   formatActivityForecast,
   formatHubCalendar,
 } from "@rpg-harness/frontend-core";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { personaDescriptions, personas } from "../test/personas";
-import { appendLog, loadSession, saveSession } from "../session";
+import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import { withSessionLock } from "@rpg-harness/session-store";
+import { forkSession } from "./fork";
+import {
+  recordPlaytestReport,
+  type PlaytestReport,
+} from "../playtest-reports";
 
-interface Args {
+export interface AutoplayArgs {
   gameDir: string;
   persona: string;
   verbose: boolean;
   maxSteps: number;
   seed?: number;
   session?: string;
+  fromSession?: string;
+  reportOnStop?: boolean;
+  pretty?: boolean;
 }
 
-export async function autoplayCommand(args: Args): Promise<void> {
+export interface AutoplaySummary {
+  reason: LoopReason;
+  decisions: number;
+  steps: number;
+  finalState: Awaited<ReturnType<typeof runLoop>>["finalState"];
+  ending: string | null;
+  session?: string;
+  webPath?: string;
+  fork?: Awaited<ReturnType<typeof forkSession>>;
+  report?: PlaytestReport;
+}
+
+export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
+  const summary = await runAutoplay(args);
+  process.stdout.write(
+    (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) +
+      "\n",
+  );
+}
+
+export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> {
+  if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
+    throw new Error("--max-steps must be a non-negative integer");
+  }
+  if (args.fromSession && !args.session) {
+    throw new Error("--from-session requires --session for the AI branch");
+  }
+  if (args.reportOnStop && !args.session) {
+    throw new Error("--report-on-stop requires a persisted --session");
+  }
+
   const game = await loadGame(args.gameDir);
   const persona = personas[args.persona];
   if (!persona) {
-    process.stderr.write(
-      `Unknown persona: ${args.persona}\n\nAvailable personas:\n`,
+    const available = Object.entries(personaDescriptions)
+      .map(([name, desc]) => `  ${name.padEnd(10)} — ${desc}`)
+      .join("\n");
+    throw new Error(
+      `Unknown persona: ${args.persona}\n\nAvailable personas:\n${available}`,
     );
-    for (const [name, desc] of Object.entries(personaDescriptions)) {
-      process.stderr.write(`  ${name.padEnd(10)} — ${desc}\n`);
+  }
+
+  let fork: Awaited<ReturnType<typeof forkSession>> | undefined;
+  if (args.fromSession && args.session) {
+    try {
+      await access(path.join(sessionDir(args.gameDir, args.fromSession), "state.json"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Source session does not exist: ${args.fromSession}`);
+      }
+      throw error;
     }
-    process.exit(2);
+    fork = await forkSession({
+      gameDir: args.gameDir,
+      from: args.fromSession,
+      to: args.session,
+      pretty: false,
+    });
   }
   if (args.seed !== undefined) {
     let s = args.seed;
@@ -54,7 +111,7 @@ export async function autoplayCommand(args: Args): Promise<void> {
     const initialState = args.session
       ? await loadSession(args.gameDir, args.session, game)
       : undefined;
-    return runLoop(game, initialState, persona, {
+    const result = await runLoop(game, initialState, persona, {
       maxSteps: args.maxSteps,
       onStep: async (entry, state) => {
         if (args.session && entry.input) {
@@ -90,28 +147,68 @@ export async function autoplayCommand(args: Args): Promise<void> {
         if (line) process.stderr.write(line + "\n");
       },
     });
+    // Persist the exact terminal state as well as each successful step. This
+    // matters when a run stops between public outputs (max-steps) or an input
+    // throws after mutating state: the issue checkpoint must capture the
+    // actual stop site rather than the previous log entry's state.
+    if (args.session) {
+      await saveSession(args.gameDir, args.session, result.finalState);
+    }
+    return result;
   };
   const result = args.session
     ? await withSessionLock(args.gameDir, args.session, play)
     : await play();
 
   process.stderr.write(
-    `\n=== done: ${result.reason} in ${result.trace.length} steps ===\n`,
+    `\n=== done: ${result.reason} after ${countDecisions(result.trace)} decisions / ${result.trace.length} visible outputs ===\n`,
   );
   if (result.error) process.stderr.write(`error: ${result.error}\n`);
 
   const ending = detectTerminalScriptId(result);
   if (ending) process.stderr.write(`ending: ${ending}\n`);
 
-  process.stdout.write(
-    JSON.stringify({
-      reason: result.reason,
-      steps: result.trace.length,
-      finalState: result.finalState,
-      ending,
-      ...(args.session ? { session: args.session } : {}),
-    }) + "\n",
-  );
+  let report: PlaytestReport | undefined;
+  if (args.reportOnStop && args.session && !result.done) {
+    report = await recordPlaytestReport({
+      gameDir: args.gameDir,
+      session: args.session,
+      area: "tooling",
+      severity: result.reason === "error" ? "blocker" : "major",
+      title: `Autoplay ${args.persona} stopped before game end (${result.reason})`,
+      details: [
+        `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions and ${result.trace.length} visible outputs.`,
+        `Reason: \`${result.reason}\`.`,
+        ...(result.error ? [`Engine error: ${result.error}`] : []),
+        ...(fork
+          ? [
+              `AI branch \`${args.session}\` was forked from player session \`${fork.fromSession}\` at source log entry ${fork.sourceLogEntry}.`,
+            ]
+          : []),
+        "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
+      ].join(" "),
+    });
+  }
+
+  return {
+    reason: result.reason,
+    decisions: countDecisions(result.trace),
+    steps: result.trace.length,
+    finalState: result.finalState,
+    ending,
+    ...(args.session
+      ? {
+          session: args.session,
+          webPath: `/?session=${encodeURIComponent(args.session)}`,
+        }
+      : {}),
+    ...(fork ? { fork } : {}),
+    ...(report ? { report } : {}),
+  };
+}
+
+function countDecisions(trace: Array<{ input: unknown | null }>): number {
+  return trace.reduce((count, entry) => count + (entry.input === null ? 0 : 1), 0);
 }
 
 export function detectTerminalScriptId(result: {

@@ -55,15 +55,6 @@ export async function runLoop(
   try {
     let priming = true;
     while (true) {
-      if (stepIndex > maxSteps) {
-        await runner.return();
-        return {
-          trace,
-          finalState: engine.getState(),
-          done: false,
-          reason: "max-steps",
-        };
-      }
       const result = priming
         ? await runner.next()
         : await runner.next(lastInput!);
@@ -94,6 +85,20 @@ export async function runLoop(
           finalState: engine.getState(),
           done: true,
           reason: "completed",
+        };
+      }
+
+      // maxSteps budgets inputs, not public outputs. Check the budget before
+      // asking the input source for another decision: an LLM-backed source may
+      // be expensive or stateful, and its answer must never be requested only
+      // to be discarded on the next loop iteration.
+      if (stepIndex >= maxSteps) {
+        await runner.return();
+        return {
+          trace,
+          finalState: engine.getState(),
+          done: false,
+          reason: "max-steps",
         };
       }
 
