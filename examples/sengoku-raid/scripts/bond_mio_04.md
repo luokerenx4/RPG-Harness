@@ -61,6 +61,8 @@ effects:
     mio: 1
   switches:
     mio_inspection_duty: false
+  variables:
+    last_directive: "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。"
 ```
 
 [end]

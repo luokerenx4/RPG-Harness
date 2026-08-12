@@ -274,6 +274,24 @@ function StageView({
               )}
             </section>
           ))}
+          {(stage.snapshot.objectives ?? []).map((objective) => (
+            <section className={`objective-card objective-${objective.status}`} key={objective.id}>
+              <div className="objective-title">
+                {objective.status === "completed" ? "✓" : "◆"} {objective.title}
+              </div>
+              {objective.description && (
+                <div className="objective-description">{objective.description}</div>
+              )}
+              {(objective.requirements ?? []).map((req) => (
+                <div
+                  className={`objective-requirement${req.satisfied ? " satisfied" : ""}`}
+                  key={req.id}
+                >
+                  {req.satisfied ? "✓" : "○"} {req.label}: {String(req.current)} / {String(req.target)}
+                </div>
+              ))}
+            </section>
+          ))}
           {hubView.sections.map((section) => (
             <section className="activity-section" key={section.category}>
               <div className="activity-section-head">

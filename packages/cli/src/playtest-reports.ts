@@ -307,6 +307,14 @@ function compactOutput(output: unknown): unknown {
           slotName?: unknown;
           stats?: Array<{ id?: unknown; value?: unknown; max?: unknown }>;
           affections?: Array<{ id?: unknown; value?: unknown }>;
+          objectives?: Array<{
+            id?: unknown;
+            title?: unknown;
+            description?: unknown;
+            status?: unknown;
+            requirements?: unknown;
+            relatedActivityIds?: unknown;
+          }>;
           resourceGroups?: Array<{
             id: unknown;
             title: unknown;
@@ -342,6 +350,18 @@ function compactOutput(output: unknown): unknown {
         id: affection.id ?? null,
         value: affection.value ?? null,
       })),
+      ...(snapshot?.objectives !== undefined
+        ? {
+            objectives: snapshot.objectives.map((objective) => ({
+              id: objective.id ?? null,
+              title: objective.title ?? null,
+              description: objective.description ?? null,
+              status: objective.status ?? null,
+              requirements: objective.requirements ?? [],
+              relatedActivityIds: objective.relatedActivityIds ?? [],
+            })),
+          }
+        : {}),
       ...(snapshot?.resourceGroups !== undefined
         ? {
             resourceGroups: snapshot.resourceGroups.map((group) => ({

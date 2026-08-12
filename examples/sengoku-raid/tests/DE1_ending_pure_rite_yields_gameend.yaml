@@ -76,6 +76,12 @@ inputs:
   - type: next
   - type: next
 assertions:
+  # The pure route only requires pulse_pure>=5; this seeded save also has
+  # pulse_mundane=2, so its narration must not claim an exclusive pure pulse.
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 浄の脈を主として
   - kind: state
     path: baseline.completedScripts
     includes: ending_pure_rite

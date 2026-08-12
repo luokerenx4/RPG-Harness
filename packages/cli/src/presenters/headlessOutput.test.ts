@@ -12,6 +12,17 @@ describe("presentHeadlessOutput", () => {
       slotsPerDay: 0,
       stats: [],
       affections: [],
+      objectives: [
+        {
+          id: "main",
+          title: "Reach the gate",
+          status: "active",
+          requirements: [
+            { id: "raids", label: "Raids", current: 2, target: 3, satisfied: false },
+          ],
+          relatedActivityIds: ["depart"],
+        },
+      ],
       resourceGroups: [
         {
           id: "carried-loot",
@@ -59,6 +70,16 @@ describe("presentHeadlessOutput", () => {
         {
           id: "carried-loot",
           resources: [{ id: "ryo", quantity: 8 }],
+        },
+      ],
+      objectives: [
+        {
+          id: "main",
+          title: "Reach the gate",
+          relatedActivityIds: ["depart"],
+          requirements: [
+            { id: "raids", current: 2, target: 3, satisfied: false },
+          ],
         },
       ],
       sections: [

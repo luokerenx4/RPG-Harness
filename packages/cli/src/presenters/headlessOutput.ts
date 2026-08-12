@@ -48,6 +48,7 @@ export interface HeadlessHubView {
     description?: string;
     resources: Array<{ id: string; name: string; quantity: number }>;
   }>;
+  objectives: NonNullable<Extract<Output, { type: "hubMenu" }>["snapshot"]["objectives"]>;
   sections: Array<{
     category: string;
     label: string;
@@ -111,6 +112,7 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
     primaryInput: view.primaryInput,
     primaryReason: view.primaryReason,
     resourceGroups: output.snapshot.resourceGroups ?? [],
+    objectives: output.snapshot.objectives ?? [],
     sections: view.sections.map((section) => ({
       category: section.category,
       label: section.label,

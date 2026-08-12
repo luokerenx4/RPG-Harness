@@ -300,6 +300,35 @@ body {
   color: var(--dim);
   font-size: 12px;
 }
+.objective-card {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #315c68;
+  border-radius: 9px;
+  background: #142229;
+}
+.objective-card.objective-completed {
+  border-color: #3f6d4a;
+  background: #16251b;
+}
+.objective-title {
+  color: #8ed5e8;
+  font-size: 14px;
+  font-weight: 700;
+}
+.objective-completed .objective-title,
+.objective-requirement.satisfied {
+  color: #82cf91;
+}
+.objective-description,
+.objective-requirement {
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.objective-requirement:not(.satisfied) {
+  color: #e5ca7a;
+}
 .activity-section-head {
   display: flex;
   justify-content: space-between;

@@ -7,7 +7,8 @@ export type Assertion =
   | OutputAssertion
   | ActivityAssertion
   | StatAssertion
-  | ResourceAssertion;
+  | ResourceAssertion
+  | ObjectiveAssertion;
 
 export interface ReasonAssertion {
   kind: "reason";
@@ -69,6 +70,21 @@ export interface ResourceAssertion {
   id: string;
   present?: boolean;
   quantity?: number;
+}
+
+// Inspect the public objective contract used by GUI and Headless clients.
+// A requirement assertion can verify both progress and the authored target.
+export interface ObjectiveAssertion {
+  kind: "objective";
+  id: string;
+  present?: boolean;
+  status?: "active" | "completed" | "blocked";
+  titleIncludes?: string;
+  relatedActivityIncludes?: string;
+  requirementId?: string;
+  current?: string | number | boolean;
+  target?: string | number | boolean;
+  satisfied?: boolean;
 }
 
 export interface Fixture {

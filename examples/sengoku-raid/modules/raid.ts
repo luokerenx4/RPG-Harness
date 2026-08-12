@@ -301,9 +301,93 @@ function buildSnapshot(activities: HubActivity[], ctx: Ctx): Output {
       stats: buildStatSnapshots(ctx),
       affections: buildAffectionSnapshots(ctx),
       resourceGroups: buildResourceGroups(ctx),
+      objectives: buildObjectives(ctx, activities),
       activities,
     },
   };
+}
+
+function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
+  const variables = ctx.state.baseline.variables;
+  const switches = ctx.state.baseline.switches;
+  const raids = Number(variables.raidsCompleted ?? 0);
+  const chapter = Number(variables.shogun_chapter ?? 0);
+  const directive = String(variables.last_directive ?? "");
+  const progressCategories = new Set(["raid", "combat", "spirit"]);
+  const progressActivityIds = activities
+    .filter((activity) => activity.available && progressCategories.has(activity.category))
+    .map((activity) => activity.id);
+  const requirement = (
+    id: string,
+    label: string,
+    current: string | number | boolean,
+    target: string | number | boolean,
+    satisfied: boolean,
+  ) => ({ id, label, current, target, satisfied });
+
+  if (chapter < 1) {
+    return [{
+      id: "letter_01_dispatch",
+      title: "最初の密書を待つ",
+      description: `現在の御沙汰：${directive}`,
+      status: "active" as const,
+      requirements: [requirement("raidsCompleted", "成功撤退", raids, 3, raids >= 3)],
+      relatedActivityIds: progressActivityIds,
+    }];
+  }
+  if (chapter < 2) {
+    const spectral = playerStat(ctx, "spectral");
+    return [{
+      id: "letter_02_dispatch",
+      title: "公儀の見立てを待つ",
+      description: `現在の御沙汰：${directive}`,
+      status: "active" as const,
+      requirements: [
+        requirement("raidsCompleted", "成功撤退", raids, 7, raids >= 7),
+        requirement("spectral", "霊体化上限", spectral, "49 以下", spectral <= 49),
+      ],
+      relatedActivityIds: progressActivityIds,
+    }];
+  }
+  if (chapter < 3) {
+    return [{
+      id: "letter_03_dispatch",
+      title: "最後の御沙汰を待つ",
+      description: `現在の御沙汰：${directive}`,
+      status: "active" as const,
+      requirements: [requirement("raidsCompleted", "成功撤退", raids, 12, raids >= 12)],
+      relatedActivityIds: progressActivityIds,
+    }];
+  }
+
+  const route = switches.chose_court_loyal
+    ? { id: "ending_pure_rite", title: "鎮魂結界の儀へ", variable: "pulse_pure", label: "脈絡: 浄", target: 5 }
+    : switches.chose_court_defy
+      ? { id: "ending_oni_self", title: "地獄門の底へ", variable: "pulse_oni", label: "脈絡: 鬼", target: 8 }
+      : switches.chose_court_silent
+        ? { id: "ending_mundane_seal", title: "妖刀を祠へ納める", variable: "pulse_mundane", label: "脈絡: 凡", target: 5 }
+        : null;
+  if (!route) return [];
+  const completed = ctx.state.baseline.scripts[route.id]?.completed === true;
+  const current = Number(variables[route.variable] ?? 0);
+  const endingActivityId = `script:${route.id}`;
+  const endingAvailable = activities.some(
+    (activity) => activity.id === endingActivityId && activity.available,
+  );
+  return [{
+    id: route.id,
+    title: completed ? `${route.title} — 完遂` : route.title,
+    description: directive,
+    status: completed ? "completed" as const : "active" as const,
+    requirements: [
+      requirement(route.variable, route.label, current, route.target, current >= route.target),
+    ],
+    relatedActivityIds: completed
+      ? []
+      : endingAvailable
+        ? [endingActivityId]
+        : progressActivityIds,
+  }];
 }
 
 function buildResourceGroups(ctx: Ctx) {
@@ -2593,6 +2677,14 @@ const raidModule: Module = {
       // Her final report explicitly ends the official inspection. This also
       // migrates live saves completed before the script carried the switch.
       ctx.state.baseline.switches.mio_inspection_duty = false;
+      if (
+        ctx.state.baseline.variables.shogun_chapter === 2 &&
+        ctx.state.baseline.variables.last_directive ===
+          "澪と共に出帰り、見立てを受けよ。"
+      ) {
+        ctx.state.baseline.variables.last_directive =
+          "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。";
+      }
     } else if (
       ctx.state.baseline.scripts.letter_02_rival?.completed === true &&
       ctx.state.baseline.switches.mio_inspection_duty !== true

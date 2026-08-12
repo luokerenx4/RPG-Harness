@@ -40,7 +40,51 @@ function checkAssertion(result: LoopResult, a: Assertion): string | null {
       return checkStat(result.trace.map((t) => t.output), a);
     case "resource":
       return checkResource(result.trace.map((t) => t.output), a);
+    case "objective":
+      return checkObjective(result.trace.map((t) => t.output), a);
   }
+}
+
+function checkObjective(
+  outputs: Output[],
+  a: Extract<Assertion, { kind: "objective" }>,
+): string | null {
+  const snap = lastHubSnapshot(outputs);
+  if (!snap) return `objective ${a.id}: no hubMenu output in trace`;
+  const objective = (snap.objectives ?? []).find((item) => item.id === a.id);
+  const present = a.present ?? true;
+  if (!objective) {
+    return present
+      ? `objective ${a.id}: not found in hubMenu.objectives`
+      : null;
+  }
+  if (!present) return `objective ${a.id}: expected absent but present`;
+  if (a.status !== undefined && objective.status !== a.status) {
+    return `objective ${a.id}: expected status=${a.status}, got ${objective.status}`;
+  }
+  if (a.titleIncludes !== undefined && !objective.title.includes(a.titleIncludes)) {
+    return `objective ${a.id}: expected title to include "${a.titleIncludes}", got "${objective.title}"`;
+  }
+  if (
+    a.relatedActivityIncludes !== undefined &&
+    !(objective.relatedActivityIds ?? []).includes(a.relatedActivityIncludes)
+  ) {
+    return `objective ${a.id}: expected relatedActivityIds to include ${a.relatedActivityIncludes}`;
+  }
+  if (a.requirementId !== undefined) {
+    const req = (objective.requirements ?? []).find((item) => item.id === a.requirementId);
+    if (!req) return `objective ${a.id}: requirement ${a.requirementId} not found`;
+    if (a.current !== undefined && req.current !== a.current) {
+      return `objective ${a.id}/${a.requirementId}: expected current=${String(a.current)}, got ${String(req.current)}`;
+    }
+    if (a.target !== undefined && req.target !== a.target) {
+      return `objective ${a.id}/${a.requirementId}: expected target=${String(a.target)}, got ${String(req.target)}`;
+    }
+    if (a.satisfied !== undefined && req.satisfied !== a.satisfied) {
+      return `objective ${a.id}/${a.requirementId}: expected satisfied=${a.satisfied}, got ${req.satisfied}`;
+    }
+  }
+  return null;
 }
 
 function checkResource(

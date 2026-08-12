@@ -1147,6 +1147,27 @@ export interface HubResourceGroup {
   resources: HubResourceSnapshot[];
 }
 
+// Renderer-neutral quest / milestone state. Modules author this alongside
+// activities so a human-facing GUI and an AI-facing headless client receive
+// the same goal, progress, gates, and executable action links. Keep the
+// requirement values scalar so they remain easy to log, diff, and reason over.
+export interface HubObjectiveRequirement {
+  id: string;
+  label: string;
+  current: string | number | boolean;
+  target: string | number | boolean;
+  satisfied: boolean;
+}
+
+export interface HubObjectiveSnapshot {
+  id: string;
+  title: string;
+  description?: string;
+  status: "active" | "completed" | "blocked";
+  requirements?: HubObjectiveRequirement[];
+  relatedActivityIds?: string[];
+}
+
 export interface HubSnapshot {
   day: number;
   maxDay: number;
@@ -1156,6 +1177,7 @@ export interface HubSnapshot {
   stats: StatSnapshot[];
   affections: Array<{ id: string; name: string; value: number }>;
   resourceGroups?: HubResourceGroup[];
+  objectives?: HubObjectiveSnapshot[];
   activities: HubActivity[];
 }
 

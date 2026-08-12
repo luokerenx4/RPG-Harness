@@ -63,6 +63,20 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
         </Box>
       ))}
 
+      {(snapshot.objectives ?? []).map((objective) => (
+        <Box key={objective.id} flexDirection="column" marginBottom={1}>
+          <Text bold color={objective.status === "completed" ? "green" : "cyan"}>
+            {objective.status === "completed" ? "✓" : "◆"} {objective.title}
+          </Text>
+          {objective.description ? <Text dimColor>{objective.description}</Text> : null}
+          {(objective.requirements ?? []).map((req) => (
+            <Text key={req.id} color={req.satisfied ? "green" : "yellow"}>
+              {req.satisfied ? "✓" : "○"} {req.label}: {String(req.current)} / {String(req.target)}
+            </Text>
+          ))}
+        </Box>
+      ))}
+
       <Box flexDirection="column" marginTop={1}>
         <Text bold>这一段时间你要做什么？</Text>
         {hubView.strategyDecisionRequired ? (

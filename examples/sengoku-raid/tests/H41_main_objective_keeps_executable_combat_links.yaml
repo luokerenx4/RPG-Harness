@@ -1,0 +1,36 @@
+name: 主線目標は戦闘中も次に実行できる活動へのリンクを失わない
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    currentMapId: kuro_swamp_crossroads
+    variables:
+      shogun_chapter: 2
+      raidsCompleted: 9
+    weapons:
+      ancestor_yaodao: { power: 14 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        kuro_swamp_crossroads:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_lesser
+            enemyHp: 8
+            enemyHpMax: 8
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: objective
+    id: letter_03_dispatch
+    relatedActivityIncludes: attack
+    requirementId: raidsCompleted
+    current: 9
+    target: 12

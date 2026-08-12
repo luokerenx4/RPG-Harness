@@ -1,0 +1,24 @@
+name: Hub は次の御沙汰までの進捗を GUI と Headless 共通契約で公開する
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    variables:
+      shogun_chapter: 2
+      raidsCompleted: 9
+      last_directive: "公儀の監察を受けながら、鬼を斬れ。"
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.variables.raidsCompleted
+    eq: 9
+  - kind: objective
+    id: letter_03_dispatch
+    status: active
+    titleIncludes: 最後の御沙汰
+    relatedActivityIncludes: depart:kuro_swamp
+    requirementId: raidsCompleted
+    current: 9
+    target: 12
+    satisfied: false
