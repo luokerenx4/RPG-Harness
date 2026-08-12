@@ -167,6 +167,132 @@ describe("rude persona progression", () => {
   });
 });
 
+describe("extraction personas", () => {
+  test("extractor follows authored cautious independence at a story choice", async () => {
+    const output = routeChoice();
+    await expect(
+      personas.extractor!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({
+      type: "choose",
+      choiceId: "route",
+      optionId: "silent",
+    });
+  });
+
+  test("delver follows authored aggression at a story choice", async () => {
+    const output = routeChoice();
+    await expect(
+      personas.delver!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({
+      type: "choose",
+      choiceId: "route",
+      optionId: "defy",
+    });
+  });
+
+  test("extractor follows the authored ending pulse instead of a generic imbue", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "imbue:mundane", kind: "action", title: "Mundane", cost: 0, available: true },
+      { id: "imbue:pure", kind: "action", title: "Pure", cost: 0, available: true },
+    ];
+    output.snapshot.objectives = [{
+      id: "ending_pure_rite",
+      title: "Pure ending",
+      status: "active",
+      relatedActivityIds: ["imbue:pure"],
+    }];
+
+    await expect(
+      personas.extractor!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "imbue:pure" });
+  });
+
+  test("extractor understands one-at-a-time material sales", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "sell_material:soul_shard", kind: "action", title: "Sell", cost: 0, available: true },
+      { id: "depart:kuro_swamp", kind: "action", title: "Depart", cost: 0, available: true },
+    ];
+
+    await expect(
+      personas.extractor!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "sell_material:soul_shard" });
+  });
+
+  test("delver reads the live visited-map schema when choosing an unexplored edge", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "move:temple", kind: "action", title: "Temple", cost: 0, available: true },
+      { id: "move:vent", kind: "action", title: "Vent", cost: 0, available: true },
+    ];
+    const state = {
+      "sengoku-raid": {
+        raid: {
+          visited: {
+            temple: { visited: true },
+            vent: { visited: false },
+          },
+        },
+      },
+    } as unknown as ComposedState;
+
+    await expect(personas.delver!(output, state, 0)).resolves.toEqual({
+      type: "doActivity",
+      id: "move:vent",
+    });
+  });
+
+  test("delver extracts after every map in the live visited schema is explored", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "extract", kind: "action", title: "Extract", cost: 0, available: true },
+      { id: "move:temple", kind: "action", title: "Temple", cost: 0, available: true },
+    ];
+    const state = {
+      "sengoku-raid": {
+        raid: { visited: { temple: { visited: true } } },
+      },
+    } as unknown as ComposedState;
+
+    await expect(personas.delver!(output, state, 0)).resolves.toEqual({
+      type: "doActivity",
+      id: "extract",
+    });
+  });
+
+  test("delver closes an authored ending before redeploying", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      { id: "script:ending_oni_self", kind: "script", title: "End", cost: 0, available: true },
+      { id: "depart:hell_gate", kind: "action", title: "Depart", cost: 0, available: true },
+    ];
+    output.snapshot.objectives = [{
+      id: "ending_oni_self",
+      title: "Oni ending",
+      status: "active",
+      relatedActivityIds: ["script:ending_oni_self"],
+    }];
+
+    await expect(
+      personas.delver!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "script:ending_oni_self" });
+  });
+});
+
+function routeChoice(): Extract<Output, { type: "choice" }> {
+  return {
+    type: "choice",
+    scriptId: "route",
+    choiceId: "route",
+    options: [
+      { id: "loyal", text: "Loyal", available: true, aiTags: ["loyal", "cautious"] },
+      { id: "defy", text: "Defy", available: true, aiTags: ["defiant", "aggressive"] },
+      { id: "silent", text: "Silent", available: true, aiTags: ["independent", "cautious"] },
+    ],
+  };
+}
+
 function objectiveHub(): Extract<Output, { type: "hubMenu" }> {
   return {
     type: "hubMenu",

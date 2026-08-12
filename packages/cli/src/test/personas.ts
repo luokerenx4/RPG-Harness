@@ -191,6 +191,34 @@ export function explainPersonaChoice(
     return firstAvailableDecision(output);
   }
 
+  if (persona === "extractor") {
+    const preferredTags = ["independent", "cautious", "restrained", "pragmatic"];
+    const semantic = pickTaggedChoice(output, preferredTags);
+    if (semantic) {
+      return choiceDecision(output, semantic.index, {
+        kind: "semantic-tags",
+        preferredTags,
+        matchedTags: semantic.matchedTags,
+        score: semantic.score,
+      });
+    }
+    return firstAvailableDecision(output);
+  }
+
+  if (persona === "delver") {
+    const preferredTags = ["aggressive", "defiant", "bold", "risky"];
+    const semantic = pickTaggedChoice(output, preferredTags);
+    if (semantic) {
+      return choiceDecision(output, semantic.index, {
+        kind: "semantic-tags",
+        preferredTags,
+        matchedTags: semantic.matchedTags,
+        score: semantic.score,
+      });
+    }
+    return firstAvailableDecision(output);
+  }
+
   return firstAvailableDecision(output);
 }
 
@@ -388,7 +416,14 @@ export const personas: Record<string, Persona> = {
       const acts = output.snapshot.activities.filter((a) => a.available);
       const find = (pred: (id: string) => boolean) =>
         acts.find((a) => pred(a.id));
-      // Pulse imbue forces a choice — extractor picks 浄 (rebate / safest).
+      // Once the authored route is known, follow its public ending link. This
+      // keeps a cautious generic policy from feeding the wrong pulse forever.
+      const objective = pickObjectiveActivity(output);
+      if (
+        objective?.type === "doActivity" &&
+        (objective.id.startsWith("imbue:") || objective.id.startsWith("script:ending_"))
+      ) return objective;
+      // Before the route is authored, pick the first available pulse.
       const imbue = find((id) => id.startsWith("imbue:"));
       if (imbue) return { type: "doActivity", id: imbue.id };
       // Negotiate options (HP<30%) — extractor releases.
@@ -411,6 +446,8 @@ export const personas: Record<string, Persona> = {
       if (intelRead) return { type: "doActivity", id: intelRead.id };
       const upgrade = find((id) => id === "upgrade_mundane");
       if (upgrade) return { type: "doActivity", id: upgrade.id };
+      const sellMaterial = find((id) => id.startsWith("sell_material:"));
+      if (sellMaterial) return { type: "doActivity", id: sellMaterial.id };
       const rest = find((id) => id === "rest");
       if (rest) return { type: "doActivity", id: rest.id };
       const depart = acts.find((a) => a.id.startsWith("depart:"));
@@ -438,6 +475,11 @@ export const personas: Record<string, Persona> = {
       const acts = output.snapshot.activities.filter((a) => a.available);
       const find = (pred: (id: string) => boolean) =>
         acts.find((a) => pred(a.id));
+      const objective = pickObjectiveActivity(output);
+      if (
+        objective?.type === "doActivity" &&
+        objective.id.startsWith("script:ending_")
+      ) return objective;
       // Pulse imbue forces a choice after each victory. Delver picks 鬼.
       const imbueOni = find((id) => id === "imbue:oni");
       if (imbueOni) return { type: "doActivity", id: imbueOni.id };
@@ -457,9 +499,9 @@ export const personas: Record<string, Persona> = {
       if (search) return { type: "doActivity", id: search.id };
       // 3. Prefer moving to an UNVISITED zone (read module state to know).
       const raid = (state as Record<string, unknown>)["sengoku-raid"] as
-        | { raid?: { zones?: Record<string, { visited?: boolean }> } }
+        | { raid?: { visited?: Record<string, { visited?: boolean }> } }
         | undefined;
-      const zones = raid?.raid?.zones;
+      const zones = raid?.raid?.visited;
       const moveActs = acts.filter((a) => a.id.startsWith("move:"));
       if (moveActs.length > 0 && zones) {
         const toUnvisited = moveActs.find((a) => {
