@@ -152,7 +152,7 @@ describe("applyOutput — cursor init", () => {
     expect(m.stage).toMatchObject({ kind: "choice", cursor: 0 });
   });
 
-  test("hubMenu cursor lands on first available activity", () => {
+  test("hubMenu installs semantic order and lands on its first available activity", () => {
     const snap: HubSnapshot = {
       ...emptyHub,
       activities: [
@@ -164,11 +164,23 @@ describe("applyOutput — cursor init", () => {
           available: false,
           lockedReason: "shut",
         },
-        { id: "b", kind: "script", title: "B", cost: 0, available: true },
+        {
+          id: "b",
+          kind: "script",
+          title: "B",
+          category: "raid",
+          cost: 0,
+          available: true,
+        },
       ],
     };
     const m = applyOutput(initialModel, { type: "hubMenu", snapshot: snap });
-    expect(m.stage).toMatchObject({ kind: "hubMenu", cursor: 1 });
+    expect(m.stage).toMatchObject({
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: { activities: [{ id: "b" }, { id: "a" }] },
+    });
+    expect(snap.activities.map((activity) => activity.id)).toEqual(["a", "b"]);
   });
 
   test("scriptComplete cursor starts at 0", () => {

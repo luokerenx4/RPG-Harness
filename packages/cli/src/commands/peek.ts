@@ -1,6 +1,6 @@
 import { peek } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import { joinVisualState } from "../presenters/visualSummary";
+import { presentHeadlessOutput } from "../presenters/headlessOutput";
 import { loadSession } from "../session";
 
 interface Args {
@@ -14,19 +14,7 @@ export async function peekCommand(args: Args): Promise<void> {
   const state = await loadSession(args.gameDir, args.session, game);
   const result = await peek(game, state);
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
-  // Join visualState (asset paths) with placeholder text so headless
-  // consumers don't need a second lookup against game.assets to know
-  // what each slot semantically depicts.
-  const output =
-    result.output && result.output.visualState
-      ? {
-          ...result.output,
-          visualStateResolved: joinVisualState(
-            result.output.visualState,
-            assetMap,
-          ),
-        }
-      : result.output;
+  const output = presentHeadlessOutput(result.output, assetMap);
   const payload = {
     output,
     done: result.done,

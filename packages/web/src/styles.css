@@ -256,6 +256,49 @@ body {
   flex-direction: column;
   gap: 10px;
 }
+.activity-section + .activity-section {
+  margin-top: 18px;
+}
+.resource-group {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #57436d;
+  border-radius: 9px;
+  background: #1d1725;
+}
+.resource-group-title {
+  color: #d4a7ff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.resource-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.resource-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #30243d;
+  color: #eadcf7;
+  font-size: 13px;
+}
+.resource-group-description {
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.activity-section-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 .option-btn,
 .activity-btn {
   width: 100%;
@@ -273,6 +316,13 @@ body {
 .activity-btn:hover:not(:disabled) {
   border-color: var(--accent);
   background: #1f1f29;
+}
+.activity-btn.activity-primary:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, #2a2a36);
+}
+.primary-mark {
+  margin-right: 8px;
+  color: var(--accent);
 }
 .option-btn:disabled,
 .activity-btn:disabled {

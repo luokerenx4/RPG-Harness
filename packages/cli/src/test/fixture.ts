@@ -6,7 +6,8 @@ export type Assertion =
   | StateAssertion
   | OutputAssertion
   | ActivityAssertion
-  | StatAssertion;
+  | StatAssertion
+  | ResourceAssertion;
 
 export interface ReasonAssertion {
   kind: "reason";
@@ -53,6 +54,17 @@ export interface StatAssertion {
   id: string;
   present?: boolean;
   value?: number;
+}
+
+// Inspect a structured resource group on the most recent hubMenu. This keeps
+// transient inventories (carried loot, quest materials, etc.) testable through
+// the same public contract consumed by human and AI frontends.
+export interface ResourceAssertion {
+  kind: "resource";
+  groupId: string;
+  id: string;
+  present?: boolean;
+  quantity?: number;
 }
 
 export interface Fixture {

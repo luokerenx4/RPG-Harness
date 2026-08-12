@@ -38,7 +38,36 @@ function checkAssertion(result: LoopResult, a: Assertion): string | null {
       return checkActivity(result.trace.map((t) => t.output), a);
     case "stat":
       return checkStat(result.trace.map((t) => t.output), a);
+    case "resource":
+      return checkResource(result.trace.map((t) => t.output), a);
   }
+}
+
+function checkResource(
+  outputs: Output[],
+  a: Extract<Assertion, { kind: "resource" }>,
+): string | null {
+  const snap = lastHubSnapshot(outputs);
+  if (!snap) {
+    return `resource ${a.groupId}/${a.id}: no hubMenu output in trace`;
+  }
+  const group = (snap.resourceGroups ?? []).find(
+    (item) => item.id === a.groupId,
+  );
+  const resource = group?.resources.find((item) => item.id === a.id);
+  const present = a.present ?? true;
+  if (!resource) {
+    return present
+      ? `resource ${a.groupId}/${a.id}: not found in hubMenu.resourceGroups`
+      : null;
+  }
+  if (!present) {
+    return `resource ${a.groupId}/${a.id}: expected absent but present`;
+  }
+  if (a.quantity !== undefined && resource.quantity !== a.quantity) {
+    return `resource ${a.groupId}/${a.id}: expected quantity=${a.quantity}, got ${resource.quantity}`;
+  }
+  return null;
 }
 
 function lastHubSnapshot(outputs: Output[]) {

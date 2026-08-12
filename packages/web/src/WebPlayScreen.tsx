@@ -17,6 +17,7 @@ import type {
 import {
   applyOutput,
   applyUiAction,
+  buildHubView,
   formatHubCalendar,
   initialModel,
   makeErrorModel,
@@ -246,33 +247,71 @@ function StageView({
           </ul>
         </div>
       );
-    case "hubMenu":
+    case "hubMenu": {
+      const hubView = buildHubView(stage.snapshot);
       return (
         <div className="hub-panel">
-          <ul className="activity-list">
-            {stage.snapshot.activities.map((a) => (
-              <li key={a.id}>
-                <button
-                  className="activity-btn"
-                  disabled={!a.available}
-                  onClick={() => onInput({ type: "doActivity", id: a.id })}
-                  title={a.lockedReason ?? ""}
-                >
-                  <div className="activity-head">
-                    <span className="activity-title">{a.title}</span>
-                    {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
-                  </div>
-                  {a.description && <div className="activity-desc">{a.description}</div>}
-                  {a.effectsHint && <div className="activity-hint">{a.effectsHint}</div>}
-                  {!a.available && a.lockedReason && (
-                    <div className="locked-reason">🔒 {a.lockedReason}</div>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {(stage.snapshot.resourceGroups ?? []).map((group) => (
+            <section className="resource-group" key={group.id}>
+              <div className="resource-group-title">{group.title}</div>
+              <div className="resource-group-items">
+                {group.resources.map((resource) => (
+                  <span className="resource-chip" key={resource.id}>
+                    {resource.name} ×{resource.quantity}
+                  </span>
+                ))}
+              </div>
+              {group.description && (
+                <div className="resource-group-description">{group.description}</div>
+              )}
+            </section>
+          ))}
+          {hubView.sections.map((section) => (
+            <section className="activity-section" key={section.category}>
+              <div className="activity-section-head">
+                <span>{section.label}</span>
+                <span>{section.availableCount}/{section.activities.length}</span>
+              </div>
+              <ul className="activity-list">
+                {section.activities.map(({ activity: a }) => (
+                  <li key={a.id}>
+                    <button
+                      className={`activity-btn${
+                        a.id === hubView.primaryActivityId
+                          ? " activity-primary"
+                          : ""
+                      }`}
+                      disabled={!a.available}
+                      onClick={() => onInput({ type: "doActivity", id: a.id })}
+                      title={a.lockedReason ?? ""}
+                    >
+                      <div className="activity-head">
+                        <span className="activity-title">
+                          {a.id === hubView.primaryActivityId && (
+                            <span className="primary-mark">★</span>
+                          )}
+                          {a.title}
+                        </span>
+                        {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
+                      </div>
+                      {a.description && (
+                        <div className="activity-desc">{a.description}</div>
+                      )}
+                      {a.effectsHint && (
+                        <div className="activity-hint">{a.effectsHint}</div>
+                      )}
+                      {!a.available && a.lockedReason && (
+                        <div className="locked-reason">🔒 {a.lockedReason}</div>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </div>
       );
+    }
     case "scriptComplete":
       return (
         <div className="choice-panel">

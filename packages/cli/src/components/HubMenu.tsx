@@ -6,7 +6,10 @@ import type {
   StatSnapshot,
   StatThreshold,
 } from "@rpg-harness/engine";
-import { formatHubCalendar } from "@rpg-harness/frontend-core";
+import {
+  buildHubView,
+  formatHubCalendar,
+} from "@rpg-harness/frontend-core";
 
 interface HubMenuProps {
   snapshot: HubSnapshot;
@@ -17,6 +20,7 @@ const BAR_WIDTH = 20;
 
 export function HubMenu({ snapshot, cursor }: HubMenuProps) {
   const calendar = formatHubCalendar(snapshot);
+  const hubView = buildHubView(snapshot);
   return (
     <Box flexDirection="column">
       {calendar ? (
@@ -43,19 +47,39 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
         </Box>
       ) : null}
 
+      {(snapshot.resourceGroups ?? []).map((group) => (
+        <Box key={group.id} flexDirection="column" marginBottom={1}>
+          <Text bold color="magenta">{group.title}</Text>
+          <Text>
+            {group.resources
+              .map((resource) => `${resource.name} ×${resource.quantity}`)
+              .join("、")}
+          </Text>
+          {group.description ? <Text dimColor>{group.description}</Text> : null}
+        </Box>
+      ))}
+
       <Box flexDirection="column" marginTop={1}>
         <Text bold>这一段时间你要做什么？</Text>
         <Box flexDirection="column" marginTop={1}>
           {snapshot.activities.length === 0 ? (
             <Text dimColor>（没有可用活动 — 时间会自动推进）</Text>
           ) : (
-            snapshot.activities.map((act, i) => (
-              <ActivityRow
-                key={act.id}
-                index={i + 1}
-                activity={act}
-                selected={i === cursor}
-              />
+            hubView.sections.map((section) => (
+              <Box key={section.category} flexDirection="column" marginBottom={1}>
+                <Text bold color={section.availableCount > 0 ? "yellow" : "gray"}>
+                  {section.label} · {section.availableCount}/{section.activities.length}
+                </Text>
+                {section.activities.map(({ activity, originalIndex }) => (
+                  <ActivityRow
+                    key={activity.id}
+                    index={originalIndex + 1}
+                    activity={activity}
+                    selected={originalIndex === cursor}
+                    primary={activity.id === hubView.primaryActivityId}
+                  />
+                ))}
+              </Box>
             ))
           )}
         </Box>
@@ -117,10 +141,12 @@ function ActivityRow({
   index,
   activity,
   selected,
+  primary,
 }: {
   index: number;
   activity: HubActivity;
   selected: boolean;
+  primary: boolean;
 }) {
   const color = !activity.available
     ? "gray"
@@ -129,7 +155,13 @@ function ActivityRow({
       : undefined;
   // Locked rows keep the ⛔ marker; available rows show ▸ when selected
   // so the cursor reads at a glance even alongside locked siblings.
-  const marker = activity.available ? (selected ? "▸" : " ") : "⛔";
+  const marker = activity.available
+    ? selected
+      ? "▸"
+      : primary
+        ? "★"
+        : " "
+    : "⛔";
   const hint = activity.effectsHint;
   return (
     <Box flexDirection="row">

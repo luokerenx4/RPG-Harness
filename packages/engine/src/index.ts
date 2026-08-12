@@ -106,6 +106,8 @@ export type {
   FlagValue,
   Game,
   HubActivity,
+  HubResourceGroup,
+  HubResourceSnapshot,
   HubSnapshot,
   Input,
   ItemDef,

@@ -1,6 +1,9 @@
 import { emptyVisualState, runLoop } from "@rpg-harness/engine";
 import type { Output, VisualState } from "@rpg-harness/engine";
-import { formatHubCalendar } from "@rpg-harness/frontend-core";
+import {
+  buildHubView,
+  formatHubCalendar,
+} from "@rpg-harness/frontend-core";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { personaDescriptions, personas } from "../test/personas";
@@ -127,15 +130,38 @@ function formatOutput(o: Output): string | null {
       }`;
     case "hubMenu": {
       const s = o.snapshot;
+      const view = buildHubView(s);
       const calendar = formatHubCalendar(s);
       const stats = s.stats.map((st) => `${st.name}:${st.value}`).join(" ");
-      const acts = s.activities
+      const resources = (s.resourceGroups ?? [])
         .map(
-          (a, i) =>
-            `${i + 1}. ${a.title}${a.available ? "" : " (locked)"}`,
+          (group) =>
+            `  {${group.title}: ${group.resources
+              .map((resource) => `${resource.name}×${resource.quantity}`)
+              .join("、")}}`,
         )
-        .join("  ");
-      return `  ${calendar ? `[${calendar}]  ` : ""}${stats}\n    ${acts}`;
+        .join("\n");
+      let index = 0;
+      const sections = view.sections
+        .map((section) => {
+          const acts = section.activities
+            .map(({ activity }) => {
+              index += 1;
+              const primary =
+                activity.id === view.primaryActivityId ? " ★" : "";
+              return `${index}. ${activity.title}${primary}${
+                activity.available ? "" : " (locked)"
+              }`;
+            })
+            .join("  ");
+          return `    [${section.category} ${section.availableCount}/${
+            section.activities.length
+          }] ${acts}`;
+        })
+        .join("\n");
+      return `  ${calendar ? `[${calendar}]  ` : ""}${stats}${
+        resources ? `\n${resources}` : ""
+      }\n${sections}`;
     }
     case "gameEnd":
       return `  ═══ GAME END ═══${o.reason ? ` (${o.reason})` : ""}`;

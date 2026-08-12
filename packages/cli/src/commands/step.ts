@@ -2,7 +2,7 @@ import { step } from "@rpg-harness/engine";
 import type { Input } from "@rpg-harness/engine";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
-import { joinVisualState } from "../presenters/visualSummary";
+import { presentHeadlessOutput } from "../presenters/headlessOutput";
 import { appendLog, loadSession, saveSession } from "../session";
 
 interface Args {
@@ -33,16 +33,7 @@ export async function stepCommand(args: Args): Promise<void> {
     return next;
   });
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
-  const output =
-    result.output && result.output.visualState
-      ? {
-          ...result.output,
-          visualStateResolved: joinVisualState(
-            result.output.visualState,
-            assetMap,
-          ),
-        }
-      : result.output;
+  const output = presentHeadlessOutput(result.output, assetMap);
   const payload = {
     output,
     done: result.done,

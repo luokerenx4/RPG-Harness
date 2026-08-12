@@ -15,6 +15,7 @@ import type {
   VisualState,
 } from "@rpg-harness/engine";
 import { emptyVisualState } from "@rpg-harness/engine";
+import { buildHubView } from "./hub";
 
 // `cursor` on selectable stages: the row the player has currently
 // highlighted. Owned by the TUI, not the engine — Up/Down move it,
@@ -126,19 +127,22 @@ export function applyOutput(model: ScreenModel, output: Output): ScreenModel {
         backlog: demote(model.stage, model.backlog),
         visuals,
       };
-    case "hubMenu":
+    case "hubMenu": {
+      const hubView = buildHubView(output.snapshot);
+      const snapshot = { ...output.snapshot, activities: hubView.activities };
       return {
         stage: {
           kind: "hubMenu",
-          snapshot: output.snapshot,
+          snapshot,
           cursor: firstAvailableIndex(
-            output.snapshot.activities.length,
-            (i) => isActivityAvailable(output.snapshot.activities[i]),
+            snapshot.activities.length,
+            (i) => isActivityAvailable(snapshot.activities[i]),
           ),
         },
         backlog: demote(model.stage, model.backlog),
         visuals,
       };
+    }
     case "scriptComplete":
       return {
         stage: {

@@ -318,9 +318,27 @@ function buildSnapshot(activities: HubActivity[], ctx: Ctx): Output {
       slotsPerDay: 0,
       stats: buildStatSnapshots(ctx),
       affections: buildAffectionSnapshots(ctx),
+      resourceGroups: buildResourceGroups(ctx),
       activities,
     },
   };
+}
+
+function buildResourceGroups(ctx: Ctx) {
+  const raid = moduleState(ctx).raid;
+  if (!raid) return [];
+  const resources = Object.entries(raid.pendingLoot)
+    .filter(([, quantity]) => quantity > 0)
+    .map(([id, quantity]) => ({ id, name: itemName(ctx, id), quantity }));
+  if (resources.length === 0) return [];
+  return [
+    {
+      id: "carried-loot",
+      title: "携行中の戦利品",
+      description: "撤退して大名府へ戻ると確保される",
+      resources,
+    },
+  ];
 }
 
 function buildStatSnapshots(ctx: Ctx) {
@@ -518,7 +536,7 @@ function buildHubMenu(ctx: Ctx): Output {
       id: `script:${script.id}`,
       kind: "script",
       title: `終局 — ${script.title}`,
-      category: "raid",
+      category: "story",
       cost: 0,
       available: true,
     });
@@ -688,7 +706,7 @@ function buildHubMenu(ctx: Ctx): Output {
       id: "script:intel_briefing",
       kind: "script",
       title: "情報屋の覚書を読む",
-      category: "shop",
+      category: "story",
       cost: 0,
       available: true,
     });

@@ -1074,6 +1074,22 @@ export interface StatSnapshot {
   thresholds?: StatThreshold[];
 }
 
+export interface HubResourceSnapshot {
+  id: string;
+  name: string;
+  quantity: number;
+}
+
+// A renderer-neutral collection of resources relevant to the current hub.
+// Unlike baseline inventory, groups can describe transient/module-owned state
+// such as loot carried during a raid or materials reserved for a quest.
+export interface HubResourceGroup {
+  id: string;
+  title: string;
+  description?: string;
+  resources: HubResourceSnapshot[];
+}
+
 export interface HubSnapshot {
   day: number;
   maxDay: number;
@@ -1082,6 +1098,7 @@ export interface HubSnapshot {
   slotsPerDay: number;
   stats: StatSnapshot[];
   affections: Array<{ id: string; name: string; value: number }>;
+  resourceGroups?: HubResourceGroup[];
   activities: HubActivity[];
 }
 

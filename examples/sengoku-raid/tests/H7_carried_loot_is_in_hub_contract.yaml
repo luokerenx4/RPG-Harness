@@ -1,0 +1,29 @@
+name: raid pending loot is exposed through the shared Hub resource contract
+description: |
+  A mid-raid save must tell every renderer and AI player what will be secured
+  on extraction, without requiring knowledge of the sengoku-raid state slice.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: kuro_swamp_edge
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 0
+      pendingLoot:
+        ryo: 8
+      visited:
+        kuro_swamp_edge:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: resource
+    groupId: carried-loot
+    id: ryo
+    quantity: 8

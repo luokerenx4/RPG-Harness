@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { HubSnapshot } from "@rpg-harness/engine";
-import { formatHubCalendar } from "./hub";
+import { buildHubView, formatHubCalendar } from "./hub";
 
 function snapshot(overrides: Partial<HubSnapshot> = {}): HubSnapshot {
   return {
@@ -35,3 +35,76 @@ describe("formatHubCalendar", () => {
     ).toBe("Day 1/5");
   });
 });
+
+describe("buildHubView", () => {
+  test("groups and prioritizes the primary loop without hiding locked rows", () => {
+    const view = buildHubView(
+      snapshot({
+        activities: [
+          activity("upgrade", "shop", false),
+          activity("intel", "story", true),
+          activity("buy", "shop", true),
+          activity("depart", "raid", true),
+        ],
+      }),
+    );
+
+    expect(view.sections.map((section) => section.category)).toEqual([
+      "story",
+      "raid",
+      "shop",
+    ]);
+    expect(view.activities.map((activity) => activity.id)).toEqual([
+      "intel",
+      "depart",
+      "buy",
+      "upgrade",
+    ]);
+    expect(view.primaryActivityId).toBe("intel");
+    expect(view.primaryInput).toEqual({ type: "doActivity", id: "intel" });
+    expect(view.sections[2]).toMatchObject({ availableCount: 1, lockedCount: 1 });
+  });
+
+  test("moves fully locked sections behind actionable sections", () => {
+    const view = buildHubView(
+      snapshot({
+        activities: [
+          activity("depart", "raid", false),
+          activity("rest", "rest", true),
+        ],
+      }),
+    );
+    expect(view.sections.map((section) => section.category)).toEqual([
+      "rest",
+      "raid",
+    ]);
+    expect(view.primaryActivityId).toBe("rest");
+  });
+
+  test("preserves first-seen order for custom categories", () => {
+    const view = buildHubView(
+      snapshot({
+        activities: [
+          activity("craft", "alchemy", true),
+          activity("fish", "fishing", true),
+        ],
+      }),
+    );
+    expect(view.sections.map((section) => section.category)).toEqual([
+      "alchemy",
+      "fishing",
+    ]);
+    expect(view.sections[0]?.label).toBe("Alchemy");
+  });
+});
+
+function activity(id: string, category: string, available: boolean) {
+  return {
+    id,
+    kind: "action" as const,
+    title: id,
+    category,
+    cost: 0,
+    available,
+  };
+}
