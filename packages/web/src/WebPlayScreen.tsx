@@ -270,7 +270,12 @@ function StageView({
             <section className="activity-section" key={section.category}>
               <div className="activity-section-head">
                 <span>{section.label}</span>
-                <span>{section.availableCount}/{section.activities.length}</span>
+                <span>
+                  {hubView.decisionRequired &&
+                    section.category === hubView.focusCategory &&
+                    "CHOICE · "}
+                  {section.availableCount}/{section.activities.length}
+                </span>
               </div>
               <ul className="activity-list">
                 {section.activities.map(({ activity: a }) => (

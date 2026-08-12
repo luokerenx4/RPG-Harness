@@ -2,6 +2,7 @@ id: kuro_swamp_ruined_hut
 name: 廃れた茅屋
 chain: kuro_swamp
 difficulty: 1
+bg: assets/backgrounds/swamp-edge
 connections:
   - { dir: 戻る, target: kuro_swamp_crossroads }
 encounter_table:

@@ -79,6 +79,53 @@ describe("buildHubView", () => {
       "raid",
     ]);
     expect(view.primaryActivityId).toBe("rest");
+    expect(view.primaryReason).toBe("only_available_in_focus_section");
+  });
+
+  test("leaves meaningful multi-action branches for the player or AI to decide", () => {
+    const view = buildHubView(
+      snapshot({
+        activities: [
+          activity("extract", "raid", true),
+          activity("continue", "raid", true),
+        ],
+      }),
+    );
+    expect(view).toMatchObject({
+      focusCategory: "raid",
+      decisionRequired: true,
+      candidateActivityIds: ["extract", "continue"],
+      primaryActivityId: null,
+      primaryInput: null,
+      primaryReason: null,
+    });
+    expect(view.candidateInputs).toEqual([
+      { type: "doActivity", id: "extract" },
+      { type: "doActivity", id: "continue" },
+    ]);
+  });
+
+  test("an authored recommendation can identify one action without relying on order", () => {
+    const continueActivity = {
+      ...activity("continue", "raid", true),
+      recommended: true,
+    };
+    const view = buildHubView(
+      snapshot({
+        activities: [activity("extract", "raid", true), continueActivity],
+      }),
+    );
+    expect(view).toMatchObject({
+      decisionRequired: false,
+      candidateActivityIds: ["continue"],
+      primaryActivityId: "continue",
+      primaryInput: { type: "doActivity", id: "continue" },
+      primaryReason: "authored_recommendation",
+    });
+    expect(view.activities.map((item) => item.id)).toEqual([
+      "continue",
+      "extract",
+    ]);
   });
 
   test("preserves first-seen order for custom categories", () => {

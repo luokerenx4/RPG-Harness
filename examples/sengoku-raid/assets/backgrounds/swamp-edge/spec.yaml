@@ -1,12 +1,12 @@
 kind: bg
 description: |
-  黒沼地の縁。葦の生えた泥地と、薄い霧が脛のあたりを這う。
+  黒沼地一帯。葦の生えた泥地と、薄い霧が脛のあたりを這う。
   遠くで蛙の声、近くで何かが水を蹴る音。慶長十年、秋の夜。
 prompt: |
-  Edge of a wide reedy marsh at night, late Heian-period Japan.
+  A wide reedy marsh at night, late Heian-period Japan.
   Thin mist crawling at knee height over black water. Distant frog
   calls. Cold, low moon. Mood: quiet menace, footing unsure.
-placeholder: "[黒沼地・縁] 霧が脛に絡みつく葦の泥地、秋夜"
+placeholder: "[黒沼地] 霧が脛に絡みつく葦の泥地、秋夜"
 refs:
   location: kuro-swamp
   time: 夜

@@ -1053,6 +1053,10 @@ export interface HubActivity {
   effectsHint?: string;
   available: boolean;
   lockedReason?: string;
+  // Author-owned guidance for shells and AI players. This is intentionally
+  // distinct from array order: use it only when the game genuinely recommends
+  // an activity, not merely to choose a default for a meaningful decision.
+  recommended?: boolean;
   // Module-supplied action handler kind for dynamic activities that
   // don't have a preregistered Action in game.actions. The engine
   // synthesizes an Action { id, title, kind: actionKind, payload, ...}

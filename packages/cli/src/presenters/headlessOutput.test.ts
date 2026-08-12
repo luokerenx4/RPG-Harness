@@ -46,8 +46,13 @@ describe("presentHeadlessOutput", () => {
     );
     expect(output?.hubView).toMatchObject({
       heuristic: true,
+      selectionRule: "authored_recommendation_or_only_candidate",
+      focusCategory: "raid",
+      decisionRequired: false,
+      candidateActivityIds: ["depart"],
       primaryActivityId: "depart",
       primaryInput: { type: "doActivity", id: "depart" },
+      primaryReason: "only_available_in_focus_section",
       resourceGroups: [
         {
           id: "carried-loot",
@@ -58,6 +63,50 @@ describe("presentHeadlessOutput", () => {
         { category: "raid", availableActivityIds: ["depart"] },
         { category: "shop", availableActivityIds: [] },
       ],
+    });
+  });
+
+  test("returns candidate inputs instead of inventing a primary for a branch", () => {
+    const snapshot: HubSnapshot = {
+      day: 0,
+      maxDay: 0,
+      slot: 0,
+      slotName: "",
+      slotsPerDay: 0,
+      stats: [],
+      affections: [],
+      activities: [
+        {
+          id: "extract",
+          kind: "action",
+          title: "Extract",
+          category: "raid",
+          cost: 0,
+          available: true,
+        },
+        {
+          id: "continue",
+          kind: "action",
+          title: "Continue",
+          category: "raid",
+          cost: 0,
+          available: true,
+        },
+      ],
+    };
+    const output = presentHeadlessOutput(
+      { type: "hubMenu", snapshot },
+      new Map(),
+    );
+    expect(output?.hubView).toMatchObject({
+      decisionRequired: true,
+      candidateActivityIds: ["extract", "continue"],
+      candidateInputs: [
+        { type: "doActivity", id: "extract" },
+        { type: "doActivity", id: "continue" },
+      ],
+      primaryActivityId: null,
+      primaryInput: null,
     });
   });
 });

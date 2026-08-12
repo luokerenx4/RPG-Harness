@@ -4,9 +4,17 @@ import { joinVisualState, type JoinedVisualState } from "./visualSummary";
 
 export interface HeadlessHubView {
   heuristic: true;
-  selectionRule: "first_available_in_prioritized_sections";
+  selectionRule: "authored_recommendation_or_only_candidate";
+  focusCategory: string | null;
+  decisionRequired: boolean;
+  candidateActivityIds: string[];
+  candidateInputs: Array<{ type: "doActivity"; id: string }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
+  primaryReason:
+    | "authored_recommendation"
+    | "only_available_in_focus_section"
+    | null;
   resourceGroups: Array<{
     id: string;
     title: string;
@@ -53,8 +61,13 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
   return {
     heuristic: true,
     selectionRule: view.selectionRule,
+    focusCategory: view.focusCategory,
+    decisionRequired: view.decisionRequired,
+    candidateActivityIds: view.candidateActivityIds,
+    candidateInputs: view.candidateInputs,
     primaryActivityId: view.primaryActivityId,
     primaryInput: view.primaryInput,
+    primaryReason: view.primaryReason,
     resourceGroups: output.snapshot.resourceGroups ?? [],
     sections: view.sections.map((section) => ({
       category: section.category,

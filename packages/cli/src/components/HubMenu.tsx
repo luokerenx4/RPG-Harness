@@ -69,6 +69,10 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
               <Box key={section.category} flexDirection="column" marginBottom={1}>
                 <Text bold color={section.availableCount > 0 ? "yellow" : "gray"}>
                   {section.label} · {section.availableCount}/{section.activities.length}
+                  {hubView.decisionRequired &&
+                  section.category === hubView.focusCategory
+                    ? " · CHOICE"
+                    : ""}
                 </Text>
                 {section.activities.map(({ activity, originalIndex }) => (
                   <ActivityRow

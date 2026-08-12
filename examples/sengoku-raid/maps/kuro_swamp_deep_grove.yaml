@@ -2,6 +2,7 @@ id: kuro_swamp_deep_grove
 name: 奥の杜
 chain: kuro_swamp
 difficulty: 1
+bg: assets/backgrounds/swamp-edge
 is_extract: true
 connections:
   - { dir: 戻る, target: kuro_swamp_crossroads }

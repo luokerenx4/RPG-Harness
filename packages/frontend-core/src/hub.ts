@@ -32,6 +32,7 @@ export interface HubSectionView {
   activities: HubActivityView[];
   availableCount: number;
   lockedCount: number;
+  recommendedCount: number;
 }
 
 export interface HubView {
@@ -39,9 +40,17 @@ export interface HubView {
   // Flattened presentation order. ScreenModel installs this order so keyboard
   // cursor movement and visible rows never disagree.
   activities: HubActivity[];
+  focusCategory: string | null;
+  decisionRequired: boolean;
+  candidateActivityIds: string[];
+  candidateInputs: Array<{ type: "doActivity"; id: string }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
-  selectionRule: "first_available_in_prioritized_sections";
+  primaryReason:
+    | "authored_recommendation"
+    | "only_available_in_focus_section"
+    | null;
+  selectionRule: "authored_recommendation_or_only_candidate";
 }
 
 // HubSnapshot is shared by calendar/training games and free-form map hubs.
@@ -75,6 +84,8 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
       // affordances without burying the current loop.
       const activities = [...bucket.activities].sort(
         (a, b) =>
+          Number(b.activity.recommended === true) -
+            Number(a.activity.recommended === true) ||
           Number(b.activity.available) - Number(a.activity.available) ||
           a.originalIndex - b.originalIndex,
       );
@@ -87,6 +98,9 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
         activities,
         availableCount,
         lockedCount: activities.length - availableCount,
+        recommendedCount: activities.filter(
+          ({ activity }) => activity.available && activity.recommended === true,
+        ).length,
         firstIndex: bucket.firstIndex,
       };
     })
@@ -97,6 +111,9 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
       const availability =
         Number(b.availableCount > 0) - Number(a.availableCount > 0);
       if (availability !== 0) return availability;
+      const recommendation =
+        Number(b.recommendedCount > 0) - Number(a.recommendedCount > 0);
+      if (recommendation !== 0) return recommendation;
       const aRank = categoryRank.get(a.category);
       const bRank = categoryRank.get(b.category);
       if (aRank !== undefined || bRank !== undefined) {
@@ -110,13 +127,41 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
   const activities = sections.flatMap((section) =>
     section.activities.map(({ activity }) => activity),
   );
-  const primary = activities.find((activity) => activity.available) ?? null;
+  const availableRecommended = activities.filter(
+    (activity) => activity.available && activity.recommended === true,
+  );
+  const focusSection = sections.find((section) => section.availableCount > 0);
+  const focusCandidates =
+    focusSection?.activities
+      .map(({ activity }) => activity)
+      .filter((activity) => activity.available) ?? [];
+  const candidates =
+    availableRecommended.length > 0 ? availableRecommended : focusCandidates;
+  const primary =
+    availableRecommended.length === 1
+      ? availableRecommended[0]!
+      : availableRecommended.length === 0 && focusCandidates.length === 1
+        ? focusCandidates[0]!
+        : null;
+  const primaryReason = primary
+    ? primary.recommended === true
+      ? "authored_recommendation"
+      : "only_available_in_focus_section"
+    : null;
   return {
     sections,
     activities,
+    focusCategory: focusSection?.category ?? null,
+    decisionRequired: primary === null && candidates.length > 1,
+    candidateActivityIds: candidates.map((activity) => activity.id),
+    candidateInputs: candidates.map((activity) => ({
+      type: "doActivity",
+      id: activity.id,
+    })),
     primaryActivityId: primary?.id ?? null,
     primaryInput: primary ? { type: "doActivity", id: primary.id } : null,
-    selectionRule: "first_available_in_prioritized_sections",
+    primaryReason,
+    selectionRule: "authored_recommendation_or_only_candidate",
   };
 }
 

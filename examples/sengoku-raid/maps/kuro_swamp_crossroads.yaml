@@ -2,6 +2,7 @@ id: kuro_swamp_crossroads
 name: 三叉路
 chain: kuro_swamp
 difficulty: 1
+bg: assets/backgrounds/swamp-edge
 connections:
   - { dir: 東, target: kuro_swamp_shrine }
   - { dir: 北, target: kuro_swamp_ruined_hut }

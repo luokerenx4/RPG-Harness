@@ -156,6 +156,10 @@ function formatOutput(o: Output): string | null {
             .join("  ");
           return `    [${section.category} ${section.availableCount}/${
             section.activities.length
+          }${
+            view.decisionRequired && section.category === view.focusCategory
+              ? " choice"
+              : ""
           }] ${acts}`;
         })
         .join("\n");

@@ -1,0 +1,38 @@
+name: returning from the shrine restores the crossroads background
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: kuro_swamp_shrine
+    visuals:
+      bg: assets/backgrounds/swamp-shrine
+      portraits: {}
+      cg: null
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        kuro_swamp_crossroads:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+        kuro_swamp_shrine:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: "move:kuro_swamp_crossroads" }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: kuro_swamp_crossroads
+  - kind: state
+    path: baseline.visuals.bg
+    eq: assets/backgrounds/swamp-edge

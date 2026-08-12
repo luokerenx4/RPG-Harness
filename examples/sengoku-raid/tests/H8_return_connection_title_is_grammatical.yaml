@@ -1,0 +1,30 @@
+name: return connection title does not append a second movement suffix
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: kuro_swamp_shrine
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        kuro_swamp_crossroads:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+        kuro_swamp_shrine:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: move:kuro_swamp_crossroads
+    titleIncludes: 戻る — 三叉路

@@ -908,6 +908,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         category: "raid",
         cost: 0,
         available: true,
+        recommended: true,
       });
     }
     if (map.isExtract) {
@@ -927,12 +928,13 @@ function buildRaidMenu(ctx: Ctx): Output {
       const targetInst = m.raid.visited[conn.target];
       const visitedNote = targetInst?.visited ? "（既訪）" : "";
       const extractNote = targetMap?.isExtract ? "（撤退可）" : "";
+      const direction = conn.dir === "戻る" ? conn.dir : `${conn.dir}へ進む`;
       activities.push({
         id: `move:${conn.target}`,
         kind: "action",
         actionKind: "move",
         payload: { mapId: conn.target },
-        title: `${conn.dir}へ進む — ${targetMap?.name ?? conn.target}${visitedNote}${extractNote}`,
+        title: `${direction} — ${targetMap?.name ?? conn.target}${visitedNote}${extractNote}`,
         category: "raid",
         cost: 0,
         available: true,
