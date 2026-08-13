@@ -52,6 +52,8 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
+  - { type: next }
+  - { type: next }
 assertions:
   - kind: state
     path: baseline.scripts.bond_mio_04.completed

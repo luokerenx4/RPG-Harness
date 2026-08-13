@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   clearBridgeSession,
+  createBridgeFeedback,
   developmentStatusInvalidation,
   installDevelopmentStatusInvalidation,
   loadBridgeBranchContext,
@@ -127,6 +128,100 @@ describe("Web development session bridge", () => {
       state: { value: 2 },
       revision: nextRevision,
     });
+  });
+
+  test("turns player feedback into a reproducible coding issue at the live GUI checkpoint", async () => {
+    const gameDir = await temporaryGame();
+    await saveBridgeSession({
+      gameDir,
+      session: "player-branch",
+      state: {
+        baseline: {
+          currentScriptId: "bond_mio_03",
+          completionOrder: ["bond_mio_02"],
+          visuals: { bg: "bg/river", portraits: {}, cg: null },
+        },
+      },
+    });
+    await saveBridgeSession({
+      gameDir,
+      session: "player-branch",
+      state: {
+        baseline: {
+          currentScriptId: "bond_mio_03",
+          beatIndex: 8,
+          completionOrder: ["bond_mio_02"],
+          visuals: { bg: "bg/river", portraits: {}, cg: null },
+        },
+      },
+      event: {
+        input: { type: "next" },
+        output: { type: "dialogue", speakerId: "mio", text: "The current line." },
+      },
+      now: () => 1234,
+    });
+
+    const report = await createBridgeFeedback({
+      gameDir,
+      session: "player-branch",
+      area: "narrative",
+      severity: "minor",
+      title: "This answer sounds too explanatory",
+      details: "Keep Mio guarded and let the image do more work.",
+      target: "scripts/bond_mio_03.md",
+    });
+
+    expect(report).toMatchObject({
+      status: "open",
+      session: "player-branch",
+      area: "narrative",
+      severity: "minor",
+      title: "This answer sounds too explanatory",
+      details: "Keep Mio guarded and let the image do more work.",
+      target: "scripts/bond_mio_03.md",
+      evidence: {
+        logEntry: 1,
+        currentScriptId: "bond_mio_03",
+        lastCompletedScriptId: "bond_mio_02",
+        lastEvent: {
+          input: { type: "next" },
+          output: { type: "dialogue", speakerId: "mio", text: "The current line." },
+        },
+        checkpoint: {
+          schemaVersion: 1,
+          file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+      },
+    });
+    const stored = JSON.parse(
+      (await readFile(
+        path.join(gameDir, ".rpg-harness", "sessions", "player-branch", "issues.jsonl"),
+        "utf-8",
+      )).trim(),
+    );
+    expect(stored.id).toBe(report.id);
+    expect(await loadBridgeSession(gameDir, "player-branch")).toMatchObject({
+      baseline: { currentScriptId: "bond_mio_03", beatIndex: 8 },
+    });
+  });
+
+  test("rejects malformed player feedback before writing an issue", async () => {
+    const gameDir = await temporaryGame();
+    await expect(createBridgeFeedback({
+      gameDir,
+      session: "web",
+      area: "combat" as never,
+      severity: "minor",
+      title: "Bad area",
+    })).rejects.toThrow("Invalid feedback area");
+    await expect(createBridgeFeedback({
+      gameDir,
+      session: "web",
+      area: "ui",
+      severity: "minor",
+      title: "   ",
+    })).rejects.toThrow("Feedback title cannot be empty");
   });
 
   test("projects AI work intent from fork metadata without reading save internals", async () => {

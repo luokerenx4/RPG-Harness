@@ -37,6 +37,9 @@ import { VisualLayer } from "./VisualLayer";
 import type {
   WebBranchContext,
   WebDevelopmentStatus,
+  WebFeedbackArea,
+  WebFeedbackInput,
+  WebFeedbackReceipt,
   WebStepEvent,
 } from "./session";
 
@@ -67,6 +70,8 @@ interface Props {
   sessionLabel?: string;
   branchContext?: WebBranchContext;
   developmentStatus?: WebDevelopmentStatus;
+  feedbackEnabled?: boolean;
+  onFeedback?: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
   onExit?: () => void;
 }
 
@@ -92,6 +97,8 @@ export function WebPlayScreen({
   sessionLabel,
   branchContext,
   developmentStatus,
+  feedbackEnabled = false,
+  onFeedback,
   onExit,
 }: Props) {
   const [model, dispatch] = useReducer(modelReducer, initialModel);
@@ -101,6 +108,7 @@ export function WebPlayScreen({
   const outputRef = useRef<Output | null>(null);
   const [showBacklog, setShowBacklog] = useState(false);
   const [showArtBook, setShowArtBook] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
 
   const assetMap = useRef(
@@ -203,7 +211,7 @@ export function WebPlayScreen({
         onExit();
         return;
       }
-      if (showBacklog || showArtBook) return;
+      if (showBacklog || showArtBook || showFeedback) return;
       const k = model.stage.kind;
       if ((e.key === " " || e.key === "Enter") && (k === "narration" || k === "dialogue")) {
         e.preventDefault();
@@ -212,7 +220,7 @@ export function WebPlayScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [model.stage.kind, showBacklog, showArtBook, sendInput, onExit]);
+  }, [model.stage.kind, showBacklog, showArtBook, showFeedback, sendInput, onExit]);
 
   return (
     <div className="play-root">
@@ -251,6 +259,11 @@ export function WebPlayScreen({
         <button className="hud-btn" onClick={() => setShowArtBook(true)}>
           設定集
         </button>
+        {feedbackEnabled && onFeedback && (
+          <button className="hud-btn hud-feedback-btn" onClick={() => setShowFeedback(true)}>
+            AIへフィードバック
+          </button>
+        )}
       </div>
       {showBacklog && (
         <BacklogOverlay entries={model.backlog} onClose={() => setShowBacklog(false)} />
@@ -258,6 +271,105 @@ export function WebPlayScreen({
       {showArtBook && (
         <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
       )}
+      {showFeedback && onFeedback && (
+        <FeedbackOverlay
+          branchContext={branchContext}
+          onSubmit={onFeedback}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function FeedbackOverlay({
+  branchContext,
+  onSubmit,
+  onClose,
+}: {
+  branchContext?: WebBranchContext;
+  onSubmit: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
+  onClose: () => void;
+}) {
+  const [area, setArea] = useState<WebFeedbackArea>("narrative");
+  const [severity, setSeverity] = useState<WebFeedbackInput["severity"]>("minor");
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [receipt, setReceipt] = useState<WebFeedbackReceipt | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const target = branchContext?.handoff?.target;
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      setReceipt(await onSubmit({
+        area,
+        severity,
+        title,
+        ...(details.trim() ? { details } : {}),
+        ...(target ? { target } : {}),
+      }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="AIへのフィードバック">
+      <div className="backlog-inner feedback-inner">
+        <div className="backlog-head">
+          <div>
+            <strong>AIへフィードバック</strong>
+            <div className="feedback-subtitle">今の画面・ログ・セーブを再現可能な coding issue にします。</div>
+          </div>
+          <button className="hud-btn" onClick={onClose}>閉じる</button>
+        </div>
+        {receipt ? (
+          <div className="feedback-success" role="status">
+            <strong>受け取りました · {receipt.id}</strong>
+            <p>log {receipt.evidence.logEntry ?? "—"} · script {receipt.evidence.currentScriptId ?? "—"}</p>
+            <p>{receipt.evidence.checkpoint ? "再現 checkpoint 付き。AI の worklist に追加済みです。" : "証拠の一部を取得できませんでした。issue 詳細を確認してください。"}</p>
+            <button className="hud-btn" onClick={onClose}>ゲームへ戻る</button>
+          </div>
+        ) : (
+          <form className="feedback-form" onSubmit={(event) => void submit(event)}>
+            <div className="feedback-row">
+              <label>領域
+                <select value={area} onChange={(event) => setArea(event.target.value as WebFeedbackArea)}>
+                  <option value="narrative">物語・台詞</option>
+                  <option value="gameplay">遊び・バランス</option>
+                  <option value="engine">エンジン</option>
+                  <option value="ui">UI</option>
+                  <option value="tooling">AI開発ツール</option>
+                </select>
+              </label>
+              <label>重さ
+                <select value={severity} onChange={(event) => setSeverity(event.target.value as WebFeedbackInput["severity"])}>
+                  <option value="note">メモ</option>
+                  <option value="minor">軽微</option>
+                  <option value="major">重大</option>
+                  <option value="blocker">進行不能</option>
+                </select>
+              </label>
+            </div>
+            <label>何が気になった？
+              <input autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：この返答は少し説明的すぎる" />
+            </label>
+            <label>補足（任意）
+              <textarea rows={5} maxLength={2000} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="期待した感触や、直してほしい方向を書けます。" />
+            </label>
+            {target && <div className="feedback-target">Target: {target}</div>}
+            {error && <div className="feedback-error" role="alert">{error}</div>}
+            <button className="feedback-submit" disabled={!title.trim() || submitting} type="submit">
+              {submitting ? "記録中…" : "この瞬間を issue にする"}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

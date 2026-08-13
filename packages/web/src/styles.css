@@ -569,6 +569,10 @@ body {
 .hud-btn:hover {
   border-color: var(--accent);
 }
+.hud-feedback-btn {
+  color: #e5d4f5;
+  border-color: #72558d;
+}
 
 .input-notice {
   position: absolute;
@@ -697,4 +701,76 @@ body {
   border: none;
   border-top: 1px solid #2a2a36;
   margin: 18px 0;
+}
+
+/* ---------- player → AI feedback ---------- */
+.feedback-inner {
+  width: min(620px, 100%);
+}
+.feedback-subtitle {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+.feedback-form,
+.feedback-success {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+.feedback-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 13px;
+}
+.feedback-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.feedback-form input,
+.feedback-form textarea,
+.feedback-form select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: #111119;
+  border: 1px solid #363645;
+  border-radius: 7px;
+  font: inherit;
+}
+.feedback-form textarea {
+  resize: vertical;
+}
+.feedback-target {
+  overflow: hidden;
+  color: #bba5d3;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feedback-error {
+  color: #f0a7ae;
+}
+.feedback-submit {
+  padding: 10px 14px;
+  color: #fff;
+  background: #654481;
+  border: 1px solid #8c68a8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.feedback-submit:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.feedback-success p {
+  margin: 0;
+  color: var(--dim);
 }

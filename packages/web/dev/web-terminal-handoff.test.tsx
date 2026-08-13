@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BranchHandoffBadge, DevelopmentBadge, StageView } from "../src/WebPlayScreen";
+import { BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
@@ -187,5 +187,42 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("AI Dev · 2 pending · P1");
     expect(html).toContain("Route is stuck");
     expect(html).not.toContain("AI Dev · certified");
+  });
+
+  test("offers a compact player-to-AI issue form with branch target context", () => {
+    const html = renderToStaticMarkup(
+      <FeedbackOverlay
+        branchContext={{
+          fromSession: "player",
+          sourceLogEntry: 7,
+          mode: "checkpoint",
+          handoff: {
+            schemaVersion: 1,
+            workKey: "choice-authoring/scene/reply",
+            priority: "P2",
+            kind: "choice-authoring",
+            title: "Reach Reply?",
+            operation: "reach",
+            state: "target-reached",
+            preparedAt: "2026-08-13T00:00:01.000Z",
+            target: "scripts/scene.md",
+          },
+          outcome: null,
+        }}
+        onSubmit={async () => ({
+          id: "pt-1",
+          session: "player",
+          area: "narrative",
+          severity: "minor",
+          title: "Line is too explicit",
+          evidence: { logEntry: 7, currentScriptId: "scene" },
+        })}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain("AIへフィードバック");
+    expect(html).toContain("今の画面・ログ・セーブを再現可能な coding issue にします。");
+    expect(html).toContain("この瞬間を issue にする");
+    expect(html).toContain("Target: scripts/scene.md");
   });
 });

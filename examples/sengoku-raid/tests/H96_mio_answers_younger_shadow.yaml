@@ -1,4 +1,4 @@
-name: Mio explains the younger self left behind in her reflection
+name: Mio leaves her younger shadow suggestive instead of enumerating her killings
 state:
   baseline:
     completedScripts: [000_intro, bond_mio_01, bond_mio_02]
@@ -33,7 +33,7 @@ assertions:
     type: dialogue
     speaker: mio
     present: true
-    textIncludes: 二人目を斬る前の私
+    textIncludes: 刃の数を数えていなかった頃の影
   - kind: state
     path: baseline.variables.mio_mirror_reply
     eq: younger-shadow

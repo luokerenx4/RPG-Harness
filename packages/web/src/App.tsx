@@ -10,6 +10,7 @@ import {
   loadDevelopmentStatus,
   pollExternalState,
   saveState,
+  submitFeedback,
   type WebSessionInfo,
   type WebBranchContext,
   type WebDevelopmentStatus,
@@ -210,6 +211,8 @@ export function App() {
         sessionLabel={loaded.sessionInfo.label}
         branchContext={loaded.branchContext}
         developmentStatus={loaded.developmentStatus}
+        feedbackEnabled={loaded.sessionInfo.mode === "shared"}
+        onFeedback={(input) => submitFeedback(loaded.id, input)}
         onExit={exit}
       />
     );

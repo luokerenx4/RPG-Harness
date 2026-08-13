@@ -25,6 +25,10 @@ const developmentStatusPending = new Map<string, {
 const developmentStatusGenerations = new Map<string, number>();
 let developmentStatusGlobalGeneration = 0;
 const SESSION_EVIDENCE_DEBOUNCE_MS = 15_000;
+const PLAYTEST_AREAS = ["narrative", "gameplay", "engine", "ui", "tooling"] as const;
+const PLAYTEST_SEVERITIES = ["note", "minor", "major", "blocker"] as const;
+type PlaytestArea = (typeof PLAYTEST_AREAS)[number];
+type PlaytestSeverity = (typeof PLAYTEST_SEVERITIES)[number];
 
 export interface BridgeStepEvent {
   input: unknown;
@@ -45,6 +49,61 @@ export interface SaveBridgeSessionArgs {
 export interface BridgeSessionSnapshot {
   state: unknown | null;
   revision: string | null;
+}
+
+export interface CreateBridgeFeedbackArgs {
+  gameDir: string;
+  session: string;
+  area: PlaytestArea;
+  severity: PlaytestSeverity;
+  title: string;
+  details?: string;
+  target?: string;
+}
+
+export interface BridgeFeedbackReport {
+  id: string;
+  session: string;
+  area: PlaytestArea;
+  severity: PlaytestSeverity;
+  title: string;
+  evidence: {
+    logEntry: number | null;
+    currentScriptId: string | null;
+    checkpoint?: { revision: string };
+  };
+  [key: string]: unknown;
+}
+
+export async function createBridgeFeedback(
+  args: CreateBridgeFeedbackArgs,
+): Promise<BridgeFeedbackReport> {
+  assertSegment(args.session, "session");
+  if (!PLAYTEST_AREAS.includes(args.area)) {
+    throw new RequestError(400, `Invalid feedback area: ${args.area}`);
+  }
+  if (!PLAYTEST_SEVERITIES.includes(args.severity)) {
+    throw new RequestError(400, `Invalid feedback severity: ${args.severity}`);
+  }
+  if (!args.title.trim()) throw new RequestError(400, "Feedback title cannot be empty");
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const command = [
+    cli,
+    "report",
+    args.gameDir,
+    "--session",
+    args.session,
+    "--area",
+    args.area,
+    "--severity",
+    args.severity,
+    "--title",
+    args.title.trim(),
+    ...(args.details?.trim() ? ["--details", args.details.trim()] : []),
+    ...(args.target?.trim() ? ["--target", args.target.trim()] : []),
+  ];
+  const { stdout } = await execFileAsync("bun", command, { maxBuffer: 1024 * 1024 });
+  return JSON.parse(stdout) as BridgeFeedbackReport;
 }
 
 export interface BridgeBranchContext {
@@ -449,6 +508,34 @@ async function handleBridgeRequest(
       const gameDir = path.join(examplesRoot, gameId);
       await access(path.join(gameDir, "game.yaml"));
       sendJson(res, 200, { branch: await loadBridgeBranchContext(gameDir, session) });
+      return true;
+    }
+
+    const feedbackMatch = url.pathname.match(
+      /^\/__rpgh\/session-bridge\/feedback\/([^/]+)\/([^/]+)$/,
+    );
+    if (feedbackMatch) {
+      if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
+      const gameId = decodeURIComponent(feedbackMatch[1] ?? "");
+      const session = decodeURIComponent(feedbackMatch[2] ?? "");
+      assertSegment(gameId, "game id");
+      assertSegment(session, "session");
+      const gameDir = path.join(examplesRoot, gameId);
+      await access(path.join(gameDir, "game.yaml"));
+      const body = await readJsonBody(req);
+      const report = await createBridgeFeedback({
+        gameDir,
+        session,
+        area: body.area as PlaytestArea,
+        severity: body.severity as PlaytestSeverity,
+        title: typeof body.title === "string" ? body.title : "",
+        ...(typeof body.details === "string" ? { details: body.details } : {}),
+        ...(typeof body.target === "string" ? { target: body.target } : {}),
+      });
+      bumpDevelopmentStatusGeneration(gameDir);
+      developmentStatusCache.delete(gameDir);
+      developmentStatusPending.delete(gameDir);
+      sendJson(res, 201, { report });
       return true;
     }
 

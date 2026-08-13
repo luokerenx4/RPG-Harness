@@ -798,6 +798,13 @@ When the handoff names a stable choice, the bridge derives the player's selected
 option and display text from the locked session log. The HUD updates in place,
 while `log.jsonl` remains the single evidence source that also removes that
 option from the player's structured worklist family.
+The local shared-session HUD also exposes **AIへフィードバック**. A player can
+classify a narrative, gameplay, engine, UI, or tooling concern without leaving
+the scene. The bridge routes the form through the same public `rpgh report`
+contract used by Headless: the coding issue freezes the live save, log
+coordinate, last input/output, visuals, current script, and a content-addressed
+reproduction checkpoint, then appears immediately in `rpgh worklist`. Static
+browser builds omit the control because they have no local development bridge.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

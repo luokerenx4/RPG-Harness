@@ -158,6 +158,13 @@ outcome from the session log after the player answers. The fork metadata stays
 immutable, the GUI shows the selected authored option, and Headless coverage
 consumes the same decision record—there is no parallel “completed” flag to
 drift away from replay evidence.
+Player-authored feedback uses the same issue boundary in the opposite direction.
+The development Web shell posts a small classification and comment to the local
+bridge; the bridge invokes the public Headless `report` command for the active
+session. Report capture owns the session transaction, so GUI feedback cannot mix
+a later save with an earlier log event. No separate browser feedback database is
+introduced: `issues.jsonl` plus its content-addressed checkpoint is the durable,
+reproducible input consumed by the AI worklist.
 The final `sweep --until-clean` acceptance is also persisted as a project
 quality certificate. Its input revision covers authored behavior plus the
 Headless engine, parser, session-store, CLI evaluator, Web GUI/input bridge,

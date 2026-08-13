@@ -94,6 +94,30 @@ export interface WebDevelopmentStatus {
   };
 }
 
+export type WebFeedbackArea = "narrative" | "gameplay" | "engine" | "ui" | "tooling";
+export type WebFeedbackSeverity = "note" | "minor" | "major" | "blocker";
+
+export interface WebFeedbackInput {
+  area: WebFeedbackArea;
+  severity: WebFeedbackSeverity;
+  title: string;
+  details?: string;
+  target?: string;
+}
+
+export interface WebFeedbackReceipt {
+  id: string;
+  session: string;
+  area: WebFeedbackArea;
+  severity: WebFeedbackSeverity;
+  title: string;
+  evidence: {
+    logEntry: number | null;
+    currentScriptId: string | null;
+    checkpoint?: { revision: string };
+  };
+}
+
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
 
@@ -159,6 +183,30 @@ export async function loadBranchContext(
   if (!response.ok) throw await bridgeError(response);
   const payload = (await response.json()) as { branch?: unknown };
   return (payload.branch ?? null) as WebBranchContext | null;
+}
+
+export async function submitFeedback(
+  gameId: string,
+  input: WebFeedbackInput,
+): Promise<WebFeedbackReceipt> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") {
+    throw new Error("AI feedback requires the local shared-session bridge");
+  }
+  const response = await fetch(
+    `${BRIDGE_ROOT}/feedback/${encodeURIComponent(gameId)}/${encodeURIComponent(info.session)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw await bridgeError(response);
+  const payload = await response.json() as { report?: WebFeedbackReceipt };
+  if (!payload.report || typeof payload.report.id !== "string") {
+    throw new Error("session bridge did not return a feedback report");
+  }
+  return payload.report;
 }
 
 export async function saveState(

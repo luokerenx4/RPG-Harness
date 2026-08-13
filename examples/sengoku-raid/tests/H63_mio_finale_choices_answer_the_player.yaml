@@ -31,7 +31,13 @@ inputs:
   - { type: next }
   - { type: next }
   - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
   - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
   - { type: next }
   - { type: next }
   - { type: next }
@@ -45,6 +51,10 @@ assertions:
     optionId: why-warn-me
     optionTextIncludes: なぜ忠告を
     optionAiTagsIncludes: probing
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 名を書きかけて、一度だけ止めた
   - kind: output
     type: dialogue
     present: true
