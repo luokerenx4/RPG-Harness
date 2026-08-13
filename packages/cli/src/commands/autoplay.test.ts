@@ -12,9 +12,11 @@ import {
 import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import {
   collectAutoplaySourceTargets,
+  compactAutoplaySummary,
   detectTerminalScriptId,
   runAutoplay,
   summarizeDecisionPath,
+  type AutoplaySummary,
 } from "./autoplay";
 import { loadForkSource } from "./fork";
 
@@ -52,6 +54,98 @@ describe("autoplay ending summary", () => {
 });
 
 describe("autoplay semantic decision paths", () => {
+  test("keeps default CLI output bounded while pointing at exact details", () => {
+    const full = {
+      reason: "completed",
+      progress: {
+        madeProgress: true,
+        completedScripts: Array.from(
+          { length: 1_000 },
+          (_, index) => `script:${index}`,
+        ),
+        objectiveChanges: Array.from({ length: 1_000 }, (_, index) => ({
+          objectiveId: "main",
+          requirementId: `requirement:${index}`,
+          from: index,
+          to: index + 1,
+        })),
+      },
+      decisionPath: {
+        revision: "decision-revision",
+        decisions: Array.from({ length: 1_000 }, (_, index) => ({
+          type: "doActivity" as const,
+          id: `activity:${index}`,
+        })),
+      },
+      decisions: 1_000,
+      rejectedInputs: 0,
+      steps: 1_001,
+      finalState: createInitialState([]),
+      ending: "intro",
+      session: "agent-run",
+      webPath: "/?session=agent-run",
+      choiceCoverage: {
+        summary: {
+          choices: 1,
+          covered: 0,
+          partial: 1,
+          uncovered: 0,
+          locked: 0,
+          options: 2,
+          selectedOptions: 1,
+          pendingOptions: 1,
+          lockedOptions: 0,
+          untrackedChoiceEvents: 0,
+          staleChoiceEvents: 0,
+          unversionedChoiceEvents: 0,
+        },
+        pendingBranches: [{ evidence: { checkpoint: "large" } }],
+      },
+      report: {
+        id: "pt-bounded",
+        status: "open",
+        session: "agent-run",
+        area: "tooling",
+        severity: "major",
+        title: "Large evidence",
+        evidence: { huge: "x".repeat(100_000) },
+      },
+    } as unknown as AutoplaySummary;
+
+    const compact = compactAutoplaySummary(full);
+
+    expect(compact.decisionPath).toEqual({ revision: "decision-revision" });
+    expect(compact.finalStateRevision).toMatch(/^[a-f0-9]{64}$/);
+    expect(compact.progress).toMatchObject({
+      completedScripts: { count: 1_000 },
+      objectiveChanges: { count: 1_000 },
+    });
+    expect(compact.progress.completedScripts.recent).toHaveLength(10);
+    expect(compact.progress.objectiveChanges.recent).toHaveLength(10);
+    expect(compact.choiceCoverage).toMatchObject({
+      pendingBranches: 1,
+      next: {
+        command: "worklist",
+        args: { session: "agent-run" },
+      },
+    });
+    expect(compact).not.toHaveProperty("finalState");
+    expect(compact.choiceCoverage).not.toHaveProperty("pendingBranches.0");
+    expect(compact.report).toEqual({
+      id: "pt-bounded",
+      status: "open",
+      session: "agent-run",
+      area: "tooling",
+      severity: "major",
+      title: "Large evidence",
+      next: {
+        command: "inspect-report",
+        args: { id: "pt-bounded", session: "agent-run" },
+      },
+    });
+    expect(JSON.stringify(compact).length).toBeLessThan(2_000);
+  });
+
   test("maps stable activity and choice contracts back to authoring files", () => {
     const gameDir = "/game";
     const game = {

@@ -151,12 +151,15 @@ COMMANDS
 
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
            [--session NAME] [--from-session PLAYER] [--from-at N]
-           [--report-on-stop] [--pretty]
+           [--report-on-stop] [--full] [--pretty]
       Have a built-in or project-registered AI persona play through the game.
       Built-ins: objective / greedy / charmer / rude / random / hunter.
       Project modules may register more; use an unknown name to list them.
       --session persists every AI step as the same recoverable save/log used
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
+      The default JSON is bounded: it keeps trace/state revisions and branch
+      counts instead of embedding the entire save and decision history.
+      --full restores the complete trace, state, and branch evidence payload.
       --from-session atomically forks a player/GUI save into --session before
       the AI moves, so autonomous play never mutates the player's branch.
       --report-on-stop freezes pre-run and incident checkpoints only when a
@@ -888,13 +891,14 @@ async function runAutoplay(args: string[]): Promise<void> {
       "from-session": { type: "string" },
       "from-at": { type: "string" },
       "report-on-stop": { type: "boolean", default: false },
+      full: { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--from-at N] [--report-on-stop] [--pretty]",
+    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--from-at N] [--report-on-stop] [--full] [--pretty]",
   );
   await autoplayCommand({
     gameDir,
@@ -910,6 +914,7 @@ async function runAutoplay(args: string[]): Promise<void> {
       ? { fromLogEntry: Number(values["from-at"]) }
       : {}),
     reportOnStop: Boolean(values["report-on-stop"]),
+    full: Boolean(values.full),
     pretty: Boolean(values.pretty),
   });
 }

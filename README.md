@@ -600,8 +600,15 @@ issue: persisted runs return a machine-executable `continuation` with the same
 session and the next persona RNG state. Errors, exact stalls, silent generator
 returns, and masked behavior cycles still freeze causal evidence and enter the
 worklist.
-Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
-the next AI pass receives exact unexplored branch checkpoints automatically.
+The full persisted autoplay result includes exact
+`choiceCoverage.pendingBranches` checkpoints for forensic callers.
+The CLI keeps its default JSON bounded even for very long runs: it returns the
+decision-path and final-state revisions, the coverage totals, and an executable
+`worklist` follow-up instead of embedding every decision, the full save, every
+branch checkpoint, or unbounded progress/report evidence. A filed incident is
+returned as an `inspect-report` operation. Pass `--full` when that complete
+forensic payload is actually needed; the `runAutoplay` library API continues to
+return it directly.
 `audit` productizes the multi-persona development lane. It preflights the source
 and every target name before writing anything, captures the protected player
 checkpoint once, then forks that frozen snapshot into `${prefix}-${persona}`

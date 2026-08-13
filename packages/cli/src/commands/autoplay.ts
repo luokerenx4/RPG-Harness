@@ -54,6 +54,8 @@ export interface AutoplayArgs {
   fromLogEntry?: number;
   reportOnStop?: boolean;
   pretty?: boolean;
+  /** CLI-only escape hatch for the full state, decision trace, and branch evidence. */
+  full?: boolean;
   // Internal orchestration input for callers that already froze an exact
   // source. The target fork is created inside the same lock as the run.
   preparedForkSource?: {
@@ -107,6 +109,42 @@ export interface AutoplaySummary {
   targetChoice?: TargetChoiceResult;
 }
 
+export type AutoplayCommandSummary = Omit<
+  AutoplaySummary,
+  "progress" | "decisionPath" | "finalState" | "report" | "choiceCoverage"
+> & {
+  progress: {
+    madeProgress: boolean;
+    completedScripts: { count: number; recent: string[] };
+    objectiveChanges: {
+      count: number;
+      recent: AutoplayProgress["objectiveChanges"];
+    };
+    scriptProgress?: NonNullable<AutoplayProgress["scriptProgress"]>;
+  };
+  /** Stable identity for the full semantic trace without embedding every decision. */
+  decisionPath: { revision: string };
+  /** Stable identity for the terminal save; inspect the persisted session for details. */
+  finalStateRevision: string;
+  choiceCoverage?: {
+    summary: ChoiceCoverageReport["summary"];
+    pendingBranches: number;
+    next: {
+      command: "worklist";
+      args: { session: string };
+    };
+  };
+  report?: Pick<
+    PlaytestReport,
+    "id" | "status" | "session" | "area" | "severity" | "title" | "target"
+  > & {
+    next: {
+      command: "inspect-report";
+      args: { id: string; session: string };
+    };
+  };
+};
+
 export interface AutoplayContinuation {
   kind: "budget-exhausted";
   session: string;
@@ -152,10 +190,81 @@ export interface AutoplayProgress {
 
 export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
   const summary = await runAutoplay(args);
+  const output = args.full ? summary : compactAutoplaySummary(summary);
   process.stdout.write(
-    (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) +
+    (args.pretty ? JSON.stringify(output, null, 2) : JSON.stringify(output)) +
       "\n",
   );
+}
+
+/**
+ * Keep the default agent-facing result bounded even for thousand-decision runs.
+ * The complete trace/state remains available through `--full`; persisted runs
+ * additionally expose their exact save through the shared session id and turn
+ * unexplored choices into the normal executable worklist.
+ */
+export function compactAutoplaySummary(
+  summary: AutoplaySummary,
+): AutoplayCommandSummary {
+  const {
+    progress,
+    decisionPath,
+    finalState,
+    report,
+    choiceCoverage,
+    ...rest
+  } = summary;
+  const recentLimit = 10;
+  return {
+    ...rest,
+    progress: {
+      madeProgress: progress.madeProgress,
+      completedScripts: {
+        count: progress.completedScripts.length,
+        recent: progress.completedScripts.slice(-recentLimit),
+      },
+      objectiveChanges: {
+        count: progress.objectiveChanges.length,
+        recent: progress.objectiveChanges.slice(-recentLimit),
+      },
+      ...(progress.scriptProgress
+        ? { scriptProgress: progress.scriptProgress }
+        : {}),
+    },
+    decisionPath: { revision: decisionPath.revision },
+    finalStateRevision: createHash("sha256")
+      .update(JSON.stringify(finalState))
+      .digest("hex"),
+    ...(choiceCoverage && summary.session
+      ? {
+          choiceCoverage: {
+            summary: choiceCoverage.summary,
+            pendingBranches: choiceCoverage.pendingBranches.length,
+            next: {
+              command: "worklist" as const,
+              args: { session: summary.session },
+            },
+          },
+        }
+      : {}),
+    ...(report
+      ? {
+          report: {
+            id: report.id,
+            status: report.status,
+            session: report.session,
+            area: report.area,
+            severity: report.severity,
+            title: report.title,
+            ...(report.target ? { target: report.target } : {}),
+            next: {
+              command: "inspect-report" as const,
+              args: { id: report.id, session: report.session },
+            },
+          },
+        }
+      : {}),
+  };
 }
 
 interface RunAutoplayInternalHooks {
