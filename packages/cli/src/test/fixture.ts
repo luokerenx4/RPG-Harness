@@ -68,6 +68,7 @@ export interface ActivityAssertion {
   metricValue?: number | string | boolean;
   metricMin?: number;
   metricMax?: number;
+  metricPlayerDisplay?: "primary" | "detail";
 }
 
 // Inspect the most recent hubMenu Output's stats[] for a specific

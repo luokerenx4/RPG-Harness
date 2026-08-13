@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 6;
+  schemaVersion: 7;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -19,7 +19,8 @@ export interface WebQualitySurfaceEvidence {
       | "objective-requirement"
       | "locked-condition"
       | "machine-effect-hidden"
-      | "forecast-unit-hidden";
+      | "forecast-unit-hidden"
+      | "forecast-detail-hidden";
     text: string;
   }>;
 }
@@ -148,19 +149,69 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     surface: "player-feedback-proof" as const,
     text: expectedProof,
   }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection(),
-  forecastUnitProjection()];
+  forecastUnitProjection(), forecastDetailProjection()];
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function forecastDetailProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const tree = StageView({
+    stage: {
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "attack",
+          kind: "action",
+          title: "斬る",
+          description: "",
+          category: "combat",
+          cost: 0,
+          available: true,
+          forecast: {
+            metrics: [{
+              id: "damage",
+              label: "ダメージ",
+              min: 14,
+              max: 21,
+              unit: "HP",
+            }, {
+              id: "critical_damage",
+              label: "会心ダメージ",
+              min: 28,
+              max: 43,
+              unit: "HP",
+              playerDisplay: "detail",
+            }],
+          },
+        }],
+      },
+    },
+    game: { scripts: [] } as unknown as Game,
+    onInput: () => {},
+  });
+  const text = nodeText(tree);
+  if (!text.includes("ダメージ 14–21 HP") || text.includes("会心ダメージ")) {
+    throw new Error("Web quality surface expands detail forecast metrics by default");
+  }
+  return { surface: "forecast-detail-hidden", text: "ダメージ 14–21 HP" };
 }
 
 function forecastUnitProjection(): WebQualitySurfaceEvidence["projections"][number] {

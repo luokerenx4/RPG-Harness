@@ -1292,6 +1292,8 @@ export interface ActivityForecastMetric {
   unit?: string;
   /** Optional player-facing suffix for custom units; unknown machine units stay hidden. */
   unitLabel?: string;
+  /** Player shells omit detail metrics by default; Headless clients retain both tiers. */
+  playerDisplay?: "primary" | "detail";
   polarity?: "benefit" | "risk" | "neutral";
 }
 

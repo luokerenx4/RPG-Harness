@@ -222,6 +222,12 @@ function checkActivity(
     if (a.metricMax !== undefined && metric.max !== a.metricMax) {
       return `activity ${a.id}: metric ${a.forecastMetric} expected max=${a.metricMax}, got ${String(metric.max)}`;
     }
+    if (
+      a.metricPlayerDisplay !== undefined &&
+      (metric.playerDisplay ?? "primary") !== a.metricPlayerDisplay
+    ) {
+      return `activity ${a.id}: metric ${a.forecastMetric} expected playerDisplay=${a.metricPlayerDisplay}, got ${metric.playerDisplay ?? "primary"}`;
+    }
   }
   return null;
 }

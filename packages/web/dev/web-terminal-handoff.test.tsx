@@ -8,7 +8,7 @@ import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 describe("Web terminal handoff", () => {
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -33,6 +33,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "forecast-unit-hidden",
         text: "両 +11",
+      }, {
+        surface: "forecast-detail-hidden",
+        text: "ダメージ 14–21 HP",
       }],
     });
   });

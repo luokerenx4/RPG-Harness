@@ -1400,6 +1400,7 @@ function buildRaidMenu(ctx: Ctx): Output {
             label: "会心率",
             value: criticalChance,
             unit: "percent",
+            playerDisplay: "detail",
             polarity: "benefit",
           },
           {
@@ -1407,6 +1408,7 @@ function buildRaidMenu(ctx: Ctx): Output {
             label: "会心ダメージ",
             ...criticalDamage,
             unit: "HP",
+            playerDisplay: "detail",
             polarity: "benefit",
           },
           {
@@ -1431,6 +1433,7 @@ function buildRaidMenu(ctx: Ctx): Output {
                   label: "妖刀暴発率（反撃 1.6 倍）",
                   value: fumbleChance,
                   unit: "percent",
+                  playerDisplay: "detail" as const,
                   polarity: "risk" as const,
                 },
                 ...(counterDamage.companion
@@ -1440,6 +1443,7 @@ function buildRaidMenu(ctx: Ctx): Output {
                         label: "プレイヤー承傷",
                         ...counterDamage.player,
                         unit: "HP",
+                        playerDisplay: "detail" as const,
                         polarity: "risk" as const,
                       },
                       {
@@ -1447,6 +1451,7 @@ function buildRaidMenu(ctx: Ctx): Output {
                         label: `${counterDamage.companionName}承傷`,
                         ...counterDamage.companion,
                         unit: "HP",
+                        playerDisplay: "detail" as const,
                         polarity: "risk" as const,
                       },
                     ]
@@ -1509,6 +1514,7 @@ function buildRaidMenu(ctx: Ctx): Output {
             label: "妖刀暴発率（反撃 1.6 倍）",
             value: fumbleChance,
             unit: "percent",
+            playerDisplay: "detail",
             polarity: "risk",
           },
           ...(counterDamage.companion
@@ -1518,6 +1524,7 @@ function buildRaidMenu(ctx: Ctx): Output {
                   label: "プレイヤー承傷",
                   ...counterDamage.player,
                   unit: "HP",
+                  playerDisplay: "detail" as const,
                   polarity: "risk" as const,
                 },
                 {
@@ -1525,6 +1532,7 @@ function buildRaidMenu(ctx: Ctx): Output {
                   label: `${counterDamage.companionName}承傷`,
                   ...counterDamage.companion,
                   unit: "HP",
+                  playerDisplay: "detail" as const,
                   polarity: "risk" as const,
                 },
               ]
@@ -1877,12 +1885,14 @@ function victoryForecastMetrics(ctx: Ctx, enemyHpMax: number) {
       id: "victory_spectral_after",
       label: "撃破時霊体化",
       value: spectralAfterAbsorb,
+      playerDisplay: "detail" as const,
       polarity: "neutral" as const,
     },
     {
       id: "victory_followup",
       label: "撃破後",
       value: "三脈選択",
+      playerDisplay: "detail" as const,
       polarity: "neutral" as const,
     },
   ];

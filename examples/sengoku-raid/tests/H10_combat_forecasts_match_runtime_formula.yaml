@@ -41,6 +41,14 @@ assertions:
     metricMin: 4
     metricMax: 6
   - kind: activity
+    id: attack
+    forecastMetric: critical_damage
+    metricPlayerDisplay: detail
+  - kind: activity
+    id: attack
+    forecastMetric: kill_outcome
+    metricPlayerDisplay: primary
+  - kind: activity
     id: sneak_strike
     forecastMetric: success_chance
     metricValue: 5

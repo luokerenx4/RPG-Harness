@@ -225,6 +225,7 @@ describe("presentHeadlessOutput", () => {
                 label: "Success",
                 value: 100,
                 unit: "percent",
+                playerDisplay: "detail",
               },
             ],
           },
@@ -254,7 +255,11 @@ describe("presentHeadlessOutput", () => {
         {
           activityId: "extract",
           forecast: {
-            metrics: [{ id: "success_chance", value: 100 }],
+            metrics: [{
+              id: "success_chance",
+              value: 100,
+              playerDisplay: "detail",
+            }],
           },
         },
         { activityId: "continue" },

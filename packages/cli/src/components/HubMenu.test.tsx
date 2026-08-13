@@ -30,6 +30,11 @@ describe("HubMenu player projection", () => {
             value: 11,
             unit: "item",
             polarity: "benefit",
+          }, {
+            id: "loot_table_revision",
+            label: "戦利品表 revision",
+            value: 7,
+            playerDisplay: "detail",
           }],
         },
       }],
@@ -42,5 +47,6 @@ describe("HubMenu player projection", () => {
     expect(screen.lastFrame()).not.toContain("ryo-50");
     expect(screen.lastFrame()).toContain("両 +11");
     expect(screen.lastFrame()).not.toContain("item");
+    expect(screen.lastFrame()).not.toContain("戦利品表 revision");
   });
 });

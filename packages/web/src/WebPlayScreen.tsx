@@ -28,6 +28,7 @@ import {
   formatHubCalendar,
   formatObjectiveRequirement,
   initialModel,
+  playerForecastMetrics,
   makeErrorModel,
   type BacklogEntry,
   type ScreenModel,
@@ -638,9 +639,9 @@ export function StageView({
                       {a.description && (
                         <div className="activity-desc">{a.description}</div>
                       )}
-                      {a.forecast && a.forecast.metrics.length > 0 && (
+                      {playerForecastMetrics(a).length > 0 && (
                         <div className="activity-forecast">
-                          {a.forecast.metrics.map((metric) => (
+                          {playerForecastMetrics(a).map((metric) => (
                             <span
                               className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
                               key={metric.id}

@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 6,
+        schemaVersion: 7,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -516,6 +516,9 @@ describe("bounded development sweep", () => {
         }, {
           surface: "forecast-unit-hidden",
           text: "両 +11",
+        }, {
+          surface: "forecast-detail-hidden",
+          text: "ダメージ 14–21 HP",
         }],
       }],
     });

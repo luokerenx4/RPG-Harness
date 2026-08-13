@@ -437,6 +437,12 @@ Headless clients. Player shells format shared semantic units centrally
 (`percent`, `HP`, and inventory `item` gains); unknown ids stay hidden unless
 the author supplies an explicit player-facing `unitLabel`.
 
+Forecast density is also authored, not inferred by each renderer. Metrics with
+`playerDisplay: detail` remain lossless in Headless output and captured coding
+issues, while the shared Web/TUI projection omits them from the default action
+row. Keep three or four decision-defining metrics primary and reserve derived
+breakdowns, zero-value proc chances, and post-outcome diagnostics for detail.
+
 ## State model
 
 State is plain JSON. No class instances, no functions, no `Date`s, no `Map`s. Survives `JSON.stringify` round-trip without loss.

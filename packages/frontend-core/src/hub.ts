@@ -102,7 +102,7 @@ export function formatHubCalendar(snapshot: HubSnapshot): string | null {
 }
 
 export function formatActivityForecast(activity: HubActivity): string | null {
-  const metrics = activity.forecast?.metrics ?? [];
+  const metrics = playerForecastMetrics(activity);
   if (metrics.length === 0) return activity.forecast?.summary ?? null;
   return metrics
     .map((metric) => {
@@ -110,6 +110,19 @@ export function formatActivityForecast(activity: HubActivity): string | null {
       return value ? `${metric.label} ${value}` : metric.label;
     })
     .join(" · ");
+}
+
+/**
+ * Player shells share one authored density boundary. The complete ordered
+ * metric list remains available on the activity for Headless planning,
+ * replay evidence, diagnostics, and optional detail views.
+ */
+export function playerForecastMetrics(
+  activity: HubActivity,
+): ActivityForecastMetric[] {
+  return (activity.forecast?.metrics ?? []).filter(
+    (metric) => metric.playerDisplay !== "detail",
+  );
 }
 
 /**
