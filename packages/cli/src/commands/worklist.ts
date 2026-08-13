@@ -242,6 +242,9 @@ export function analyzeDevelopmentWorklist(input: {
         severity: report.severity,
         logEntry: report.evidence.logEntry,
         currentScriptId: report.evidence.currentScriptId,
+        ...(report.evidence.sourceTargets?.length
+          ? { sourceTargets: report.evidence.sourceTargets }
+          : {}),
         ...(report.evidence.checkpoint
           ? { checkpoint: report.evidence.checkpoint }
           : {}),

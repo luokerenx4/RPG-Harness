@@ -5,6 +5,7 @@ import {
   recordPlaytestReport,
   reproducePlaytestReport,
   resolvePlaytestReport,
+  supersedePlaytestReport,
   type PlaytestArea,
   type PlaytestSeverity,
 } from "../playtest-reports";
@@ -24,7 +25,7 @@ interface ReportsArgs {
   gameDir: string;
   session?: string;
   format: "json" | "table";
-  status: "open" | "resolved" | "all";
+  status: "open" | "resolved" | "superseded" | "all";
 }
 
 interface ResolveArgs {
@@ -32,6 +33,14 @@ interface ResolveArgs {
   id: string;
   session?: string;
   resolution?: string;
+  pretty: boolean;
+}
+
+interface SupersedeArgs {
+  gameDir: string;
+  id: string;
+  session?: string;
+  reason: string;
   pretty: boolean;
 }
 
@@ -80,6 +89,14 @@ export async function inspectReportCommand(args: InspectReportArgs): Promise<voi
 
 export async function resolveCommand(args: ResolveArgs): Promise<void> {
   const report = await resolvePlaytestReport(args);
+  process.stdout.write(
+    (args.pretty ? JSON.stringify(report, null, 2) : JSON.stringify(report)) +
+      "\n",
+  );
+}
+
+export async function supersedeCommand(args: SupersedeArgs): Promise<void> {
+  const report = await supersedePlaytestReport(args);
   process.stdout.write(
     (args.pretty ? JSON.stringify(report, null, 2) : JSON.stringify(report)) +
       "\n",

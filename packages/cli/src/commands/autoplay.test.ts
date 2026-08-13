@@ -11,6 +11,7 @@ import {
 } from "../playtest-reports";
 import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import {
+  collectAutoplaySourceTargets,
   detectTerminalScriptId,
   runAutoplay,
   summarizeDecisionPath,
@@ -51,6 +52,114 @@ describe("autoplay ending summary", () => {
 });
 
 describe("autoplay semantic decision paths", () => {
+  test("maps stable activity and choice contracts back to authoring files", () => {
+    const gameDir = "/game";
+    const game = {
+      characters: [],
+      scripts: [{
+        id: "route",
+        title: "Route",
+        source: "/game/scripts/route.md",
+        beats: [],
+      }],
+      modules: [{
+        id: "raid",
+        source: "modules/raid.ts",
+        actionHandlers: { depart: () => ({}) },
+      }],
+    } as unknown as Parameters<typeof collectAutoplaySourceTargets>[1];
+    const hub = {
+      type: "hubMenu" as const,
+      snapshot: {
+        day: 1,
+        maxDay: 1,
+        slot: 0,
+        slotName: "day",
+        slotsPerDay: 1,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "depart:kuro",
+          kind: "action" as const,
+          title: "Depart",
+          cost: 1,
+          available: true,
+          actionKind: "raid:depart",
+          payload: { mapId: "kuro" },
+        }],
+      },
+    };
+    const choice = {
+      type: "choice" as const,
+      scriptId: "route",
+      scriptRevision: "b".repeat(64),
+      choiceId: "fork",
+      options: [{ id: "left", text: "Left", available: true }],
+    };
+    const trace = [
+      { index: 0, input: null, output: hub },
+      {
+        index: 1,
+        input: { type: "doActivity" as const, id: "depart:kuro" },
+        output: choice,
+      },
+      {
+        index: 2,
+        input: { type: "choose" as const, choiceId: "fork", optionId: "left" },
+        output: { type: "narration" as const, text: "Left" },
+        decision: {
+          scriptId: "route",
+          choiceId: "fork",
+          optionId: "left",
+        },
+      },
+    ];
+
+    expect(collectAutoplaySourceTargets(gameDir, game, trace)).toEqual([
+      {
+        kind: "module-action",
+        file: "modules/raid.ts",
+        moduleId: "raid",
+        actionKind: "raid:depart",
+        activityId: "depart:kuro",
+      },
+      {
+        kind: "script",
+        file: "scripts/route.md",
+        scriptId: "route",
+        scriptRevision: "b".repeat(64),
+        choiceId: "fork",
+      },
+    ]);
+  });
+
+  test("uses the terminal save cursor when a narration has no inline script id", () => {
+    const game = {
+      characters: [],
+      scripts: [{
+        id: "prologue",
+        title: "Prologue",
+        source: "/game/scripts/prologue.md",
+        beats: [],
+      }],
+    } as unknown as Parameters<typeof collectAutoplaySourceTargets>[1];
+    expect(collectAutoplaySourceTargets(
+      "/game",
+      game,
+      [{
+        index: 0,
+        input: { type: "next" },
+        output: { type: "narration", text: "Still inside the prologue." },
+      }],
+      undefined,
+      "prologue",
+    )).toEqual([{
+      kind: "script",
+      file: "scripts/prologue.md",
+      scriptId: "prologue",
+    }]);
+  });
+
   test("content-addresses accepted semantic ids and ignores rejected inputs", () => {
     const first = summarizeDecisionPath([
       {
@@ -143,6 +252,14 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.decisions).toBeLessThan(100);
     expect(summary.stall).toMatchObject({ cycleLength: 2, repetitions: 3 });
     expect(summary.report?.evidence.stall).toEqual(summary.stall);
+    expect(summary.report?.target).toBe("modules/actions.ts");
+    expect(summary.report?.evidence.sourceTargets).toEqual([{
+      kind: "module-action",
+      file: "modules/actions.ts",
+      moduleId: "toggle-actions",
+      actionKind: "toggle-actions:toggle",
+      activityId: "toggle",
+    }]);
     expect(summary.seed).toBeInteger();
     expect(summary.report?.evidence.autoplay).toEqual({
       replayCheckpoint: {
@@ -540,13 +657,24 @@ async function temporaryToggleGame(): Promise<string> {
   await writeFile(path.join(dir, "game.yaml"), [
     "title: Autoplay stall test",
     "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/actions.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "actions.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const actions: Module = {",
+    '  id: "toggle-actions",',
+    '  actionHandlers: { toggle: () => ({}) },',
+    "};",
+    "export default actions;",
     "",
   ].join("\n"), "utf-8");
   await writeFile(path.join(dir, "modules", "run.ts"), [
     'import type { RunFunction } from "@rpg-harness/engine";',
     "const run: RunFunction = async function* () {",
     "  while (true) {",
-    '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true }] } };',
+    '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true, actionKind: "toggle-actions:toggle", payload: { direction: "flip" } }] } };',
     '    yield { type: "narration", text: "Nothing changes." };',
     "  }",
     "};",

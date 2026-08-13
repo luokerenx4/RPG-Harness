@@ -56,8 +56,11 @@ Structured autoplay findings additionally freeze the pre-run state and replay
 seed: their verifier reruns the whole causal path, not merely the already-stuck
 final save, and the ordinary `resolve` command cannot bypass that proof.
 Findings created before causal replay evidence existed remain reproducible from
-their incident checkpoint and may be explicitly reviewed or superseded with
-ordinary `resolve`; the worklist does not send them to an impossible verifier.
+their incident checkpoint and may be explicitly reviewed with ordinary
+`resolve`; the worklist does not send them to an impossible verifier. If a
+structured finding later loses its persona or checkpoint artifact, `rpgh
+supersede ... --reason TEXT` retires it with an audit trail without pretending
+that a causal verifier proved the bug fixed.
 The GUI watches content revisions and reloads when another surface advances the
 session. Compare-and-swap still rejects a stale write if both act inside the
 same polling window, so progress is never silently overwritten. Static Web
@@ -203,6 +206,7 @@ rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI pla
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close an ordinary finding (structured findings require verification)
+rpgh supersede <game-dir> <report-id> --reason TEXT            # retire unreplayable evidence without claiming a verified fix
 rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions

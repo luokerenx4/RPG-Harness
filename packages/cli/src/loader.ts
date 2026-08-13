@@ -148,9 +148,16 @@ async function loadModules(
         `Module at ${rel} must export a default Module with a string \`id\``,
       );
     }
-    modules.push(mod as Module);
+    modules.push({
+      ...(mod as Module),
+      source: toGameRelativePath(gameDir, abs),
+    });
   }
   return modules;
+}
+
+function toGameRelativePath(gameDir: string, file: string): string {
+  return path.relative(gameDir, file).split(path.sep).join(path.posix.sep);
 }
 
 async function loadDir<T>(

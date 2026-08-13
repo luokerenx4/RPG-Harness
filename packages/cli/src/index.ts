@@ -114,12 +114,14 @@ export {
   recordPlaytestReport,
   reproducePlaytestReport,
   resolvePlaytestReport,
+  supersedePlaytestReport,
 } from "./playtest-reports";
 export type {
   PlaytestArea,
   PlaytestEvidence,
   PlaytestCheckpointRef,
   PlaytestReport,
+  PlaytestSourceTarget,
   PlaytestSeverity,
   PlaytestAuditVerification,
   PlaytestAutoplayEvidence,
@@ -129,4 +131,5 @@ export type {
   RecordPlaytestReportArgs,
   ReproducePlaytestReportArgs,
   ResolvePlaytestReportArgs,
+  SupersedePlaytestReportArgs,
 } from "./playtest-reports";

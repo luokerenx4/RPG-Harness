@@ -935,6 +935,10 @@ export interface AiPersonaDefinition {
 export interface Module {
   id: string;
   version?: string;
+  // Authoring source locator attached by project loaders. Runtime semantics do
+  // not depend on it; autonomous playtest reports use it to turn a failing
+  // action contract into a directly editable coding target.
+  source?: string;
   initialize?(game: Game): unknown;
 
   // Map of action.kind → handler. When the engine dispatches an Action

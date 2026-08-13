@@ -38,6 +38,7 @@ import {
   inspectReportCommand,
   reproduceCommand,
   resolveCommand,
+  supersedeCommand,
 } from "./commands/report";
 import {
   PLAYTEST_AREAS,
@@ -207,7 +208,7 @@ COMMANDS
       save + latest input/output. Areas: narrative / gameplay / engine / ui /
       tooling. Severities: note / minor / major / blocker.
 
-  reports  <game-dir> [--session NAME] [--status open|resolved|all]
+  reports  <game-dir> [--session NAME] [--status open|resolved|superseded|all]
            [--format json|table]
       List structured playtest issues. Defaults to open issues across all sessions.
 
@@ -217,6 +218,10 @@ COMMANDS
   resolve  <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]
       Mark an ordinary playtest issue resolved. Structured autoplay and audit
       findings can close only through their causal verifier.
+
+  supersede <game-dir> <report-id> [--session NAME] --reason TEXT [--pretty]
+      Retire an issue whose replay artifact or authored persona no longer
+      exists. This remains distinct from a verified fix and requires a reason.
 
   reproduce <game-dir> <report-id> --to NAME [--session NAME] [--pretty]
       Fork the immutable save snapshot captured with a playtest issue. Prints
@@ -338,6 +343,8 @@ async function main(): Promise<void> {
       return runInspectReport(rest);
     case "resolve":
       return runResolve(rest);
+    case "supersede":
+      return runSupersede(rest);
     case "reproduce":
       return runReproduce(rest);
     case "init":
@@ -1124,7 +1131,7 @@ async function runReports(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh reports <game-dir> [--session NAME] [--status open|resolved|all] [--format json|table]",
+    "rpgh reports <game-dir> [--session NAME] [--status open|resolved|superseded|all] [--format json|table]",
   );
   const format = values.format ?? "json";
   if (format !== "json" && format !== "table") {
@@ -1134,9 +1141,12 @@ async function runReports(args: string[]): Promise<void> {
     process.exit(2);
   }
   const status = values.status ?? "open";
-  if (status !== "open" && status !== "resolved" && status !== "all") {
+  if (
+    status !== "open" && status !== "resolved" &&
+    status !== "superseded" && status !== "all"
+  ) {
     process.stderr.write(
-      `--status must be 'open', 'resolved', or 'all' (got ${status})\n`,
+      `--status must be 'open', 'resolved', 'superseded', or 'all' (got ${status})\n`,
     );
     process.exit(2);
   }
@@ -1194,6 +1204,34 @@ async function runResolve(args: string[]): Promise<void> {
     ...(values.resolution !== undefined
       ? { resolution: values.resolution }
       : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runSupersede(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      reason: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (
+    positionals.length !== 2 || !positionals[0] || !positionals[1] ||
+    !values.reason?.trim()
+  ) {
+    process.stderr.write(
+      "Usage: rpgh supersede <game-dir> <report-id> [--session NAME] --reason TEXT [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await supersedeCommand({
+    gameDir: positionals[0],
+    id: positionals[1],
+    ...(values.session !== undefined ? { session: values.session } : {}),
+    reason: values.reason,
     pretty: Boolean(values.pretty),
   });
 }

@@ -7,6 +7,7 @@ import type {
   TraceEntry,
   VisualState,
   ComposedState,
+  Game,
 } from "@rpg-harness/engine";
 import {
   buildHubView,
@@ -33,6 +34,7 @@ import {
   recordPlaytestReport,
   type PlaytestEvidenceSnapshot,
   type PlaytestReport,
+  type PlaytestSourceTarget,
 } from "../playtest-reports";
 import {
   collectChoiceCoverage,
@@ -413,6 +415,19 @@ export async function runAutoplay(
     ) {
       throw new Error("Autoplay report is missing transaction-frozen evidence");
     }
+    const sourceTargets = collectAutoplaySourceTargets(
+      args.gameDir,
+      game,
+      result.trace,
+      result.stall ?? result.behaviorCycle,
+      result.finalState.baseline.currentScriptId,
+    );
+    const terminalScriptTarget = sourceTargets.find((target) =>
+      target.kind === "script" &&
+      target.scriptId === result.finalState.baseline.currentScriptId
+    );
+    const primaryTarget = terminalScriptTarget?.file ??
+      sourceTargets.at(-1)?.file;
     report = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: args.session,
@@ -427,6 +442,8 @@ export async function runAutoplay(
         : result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
+      ...(primaryTarget ? { target: primaryTarget } : {}),
+      ...(sourceTargets.length > 0 ? { sourceTargets } : {}),
       details: [
         `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
@@ -516,6 +533,118 @@ export async function runAutoplay(
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
   };
+}
+
+export function collectAutoplaySourceTargets(
+  gameDir: string,
+  game: Game,
+  trace: ReadonlyArray<TraceEntry>,
+  diagnostic?: Pick<StallDiagnostic, "firstTraceIndex" | "lastTraceIndex">,
+  terminalScriptId?: string | null,
+): PlaytestSourceTarget[] {
+  const firstIndex = diagnostic?.firstTraceIndex ?? Math.max(0, trace.length - 20);
+  const lastIndex = diagnostic?.lastTraceIndex ?? trace.length - 1;
+  const targets: PlaytestSourceTarget[] = [];
+
+  const addScript = (
+    scriptId: string | undefined,
+    details: Pick<PlaytestSourceTarget, "scriptRevision" | "choiceId"> = {},
+  ) => {
+    if (!scriptId) return;
+    const script = game.scripts.find(({ id }) => id === scriptId);
+    if (!script?.source) return;
+    targets.push({
+      kind: "script",
+      file: authoringPath(gameDir, script.source),
+      scriptId,
+      ...details,
+    });
+  };
+
+  for (let index = firstIndex; index <= lastIndex; index += 1) {
+    const entry = trace[index];
+    if (!entry || entry.inputResult?.accepted === false) continue;
+    const previousOutput = index > 0 ? trace[index - 1]?.output : undefined;
+    if (entry.decision) {
+      const choice = previousOutput?.type === "choice" ? previousOutput : undefined;
+      addScript(entry.decision.scriptId, {
+        ...(choice?.scriptRevision
+          ? { scriptRevision: choice.scriptRevision }
+          : {}),
+        choiceId: entry.decision.choiceId,
+      });
+      continue;
+    }
+    if (entry.input?.type === "select") {
+      addScript(entry.input.scriptId);
+      continue;
+    }
+    if (entry.input?.type !== "doActivity") continue;
+    const activityId = entry.input.id;
+    const hub = previousOutput?.type === "hubMenu"
+      ? previousOutput
+      : entry.output.type === "hubMenu"
+        ? entry.output
+        : undefined;
+    const activity = hub?.snapshot.activities.find(
+      ({ id }) => id === activityId,
+    );
+    if (!activity) continue;
+    if (activity.kind === "script") {
+      addScript(activity.id);
+      continue;
+    }
+    const actionKind = activity.actionKind ?? game.actions?.find(
+      ({ id }) => id === activity.id,
+    )?.kind;
+    if (!actionKind) continue;
+    const owner = actionOwner(game, actionKind);
+    if (!owner?.source) continue;
+    targets.push({
+      kind: "module-action",
+      file: authoringPath(gameDir, owner.source),
+      moduleId: owner.id,
+      actionKind,
+      activityId: activity.id,
+    });
+  }
+  addScript(terminalScriptId ?? undefined);
+
+  const unique = new Map<string, PlaytestSourceTarget>();
+  for (const target of targets) {
+    const key = JSON.stringify(target);
+    // Refresh duplicates so the final entry remains the most recent causal
+    // contract and can serve as the report's primary coding target.
+    unique.delete(key);
+    unique.set(key, target);
+  }
+  return [...unique.values()];
+}
+
+function actionOwner(game: Game, actionKind: string) {
+  const separator = actionKind.indexOf(":");
+  if (separator > 0) {
+    const moduleId = actionKind.slice(0, separator);
+    const kind = actionKind.slice(separator + 1);
+    return game.modules?.find((mod) =>
+      mod.id === moduleId && Object.hasOwn(mod.actionHandlers ?? {}, kind)
+    );
+  }
+  const owners = (game.modules ?? []).filter((mod) =>
+    Object.hasOwn(mod.actionHandlers ?? {}, actionKind)
+  );
+  return owners.length === 1 ? owners[0] : undefined;
+}
+
+function authoringPath(gameDir: string, source: string): string {
+  const normalizedGame = path.resolve(gameDir);
+  const normalizedSource = path.resolve(source);
+  const relativeToGame = path.relative(normalizedGame, normalizedSource);
+  const relative = path.isAbsolute(source) ||
+      (!relativeToGame.startsWith(`..${path.sep}`) && relativeToGame !== "..")
+    ? relativeToGame
+    : source;
+  return relative.split(path.sep).join(path.posix.sep);
 }
 
 export function summarizeDecisionPath(

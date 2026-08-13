@@ -55,6 +55,16 @@ describe("AI development worklist", () => {
     expect(report.items[0]?.actionability).toBe("diagnostic");
     expect(report.items.find((item) => item.key === "report/pt-blocker"))
       .toMatchObject({ actionability: "executable" });
+    expect(report.items.find((item) => item.key === "report/pt-blocker")?.coordinates)
+      .toMatchObject({
+        sourceTargets: [{
+          kind: "module-action",
+          file: "modules/raid.ts",
+          moduleId: "raid",
+          actionKind: "raid:depart",
+          activityId: "depart:kuro",
+        }],
+      });
     expect(report.items.find((item) => item.kind === "choice-branch")?.operation)
       .toEqual({
         command: "cover",
@@ -412,6 +422,13 @@ function playtestReport(
       lastCompletedScriptId: null,
       lastEvent: null,
       ...(checkpoint ? { checkpoint } : {}),
+      sourceTargets: [{
+        kind: "module-action",
+        file: "modules/raid.ts",
+        moduleId: "raid",
+        actionKind: "raid:depart",
+        activityId: "depart:kuro",
+      }],
     },
   };
 }

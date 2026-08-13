@@ -13,6 +13,7 @@ import {
   reproducePlaytestReport,
   resolvePlaytestReport,
   resolveVerifiedPlaytestReport,
+  supersedePlaytestReport,
   type ResolvePlaytestReportArgs,
   type PlaytestAutoplayVerification,
 } from "./playtest-reports";
@@ -203,12 +204,18 @@ describe("playtest reports", () => {
             activities: [
               {
                 id: "depart:kuro_swamp",
+                kind: "action",
                 title: "出立 — 黒沼地",
+                description: "Cross into the authored raid module.",
                 category: "raid",
                 aiTags: ["exploration", "progression"],
+                effectsHint: "opens kuro_swamp",
                 available: false,
+                recommended: true,
                 lockedReason: "need a key",
                 requires: { inventory: { itemId: "key", min: 1 } },
+                actionKind: "raid:depart",
+                payload: { mapId: "kuro_swamp" },
               },
             ],
           },
@@ -233,14 +240,53 @@ describe("playtest reports", () => {
       activities: [
         {
           id: "depart:kuro_swamp",
+          kind: "action",
           title: "出立 — 黒沼地",
+          description: "Cross into the authored raid module.",
           category: "raid",
           aiTags: ["exploration", "progression"],
+          effectsHint: "opens kuro_swamp",
           available: false,
+          recommended: true,
           lockedReason: "need a key",
           requires: { inventory: { itemId: "key", min: 1 } },
+          actionKind: "raid:depart",
+          payload: { mapId: "kuro_swamp" },
         },
       ],
+    });
+  });
+
+  test("retains stable authored choice coordinates in compact evidence", async () => {
+    const gameDir = await temporaryGame();
+    const session = "choice-contract";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "log.jsonl"), JSON.stringify({
+      input: { type: "next" },
+      output: {
+        type: "choice",
+        scriptId: "bond_kagari_04",
+        scriptRevision: "a".repeat(64),
+        choiceId: "answer",
+        prompt: "答える？",
+        options: [{ id: "yes", text: "はい", available: true }],
+      },
+    }) + "\n");
+
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "narrative",
+      severity: "major",
+      title: "Choice route stalls",
+    });
+
+    expect(report.evidence.lastEvent?.output).toMatchObject({
+      type: "choice",
+      scriptId: "bond_kagari_04",
+      scriptRevision: "a".repeat(64),
+      choiceId: "answer",
     });
   });
 
@@ -522,6 +568,69 @@ describe("playtest reports", () => {
       status: "resolved",
       verification: validVerification,
     });
+  });
+
+  test("supersedes unreplayable structured evidence without claiming a fix", async () => {
+    const gameDir = await temporaryGame();
+    const session = "missing-persona";
+    const state = createInitialState({
+      title: "Supersession lifecycle",
+      characters: [],
+      scripts: [],
+    } as Game);
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state));
+    const evidenceSnapshot = await capturePlaytestEvidenceSnapshot(gameDir, session);
+    const open = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "major",
+      title: "Removed persona cannot be replayed",
+      evidenceSnapshot,
+      autoplay: {
+        replayState: state,
+        replayLogEntry: 0,
+        persona: "removed-persona",
+        maxSteps: 20,
+        seed: 19,
+        stopReason: "stalled",
+        decisions: 5,
+        rejectedInputs: 0,
+        steps: 6,
+        decisionPathRevision: "c".repeat(64),
+      },
+    });
+
+    await expect(supersedePlaytestReport({
+      gameDir,
+      id: open.id,
+      reason: "   ",
+    })).rejects.toThrow("requires a reason");
+    const superseded = await supersedePlaytestReport({
+      gameDir,
+      id: open.id,
+      reason: "The authored persona was intentionally removed.",
+    });
+
+    expect(superseded).toMatchObject({
+      status: "superseded",
+      supersededReason: "The authored persona was intentionally removed.",
+    });
+    expect(superseded.supersededAt).toBeString();
+    expect(superseded.resolvedAt).toBeUndefined();
+    expect(superseded.verification).toBeUndefined();
+    expect(await supersedePlaytestReport({
+      gameDir,
+      id: open.id,
+      reason: "The authored persona was intentionally removed.",
+    })).toEqual(superseded);
+    await expect(resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      resolution: "fixed",
+    })).rejects.toThrow("already superseded");
   });
 
   test("snapshots manual resolution authority before waiting for the session lock", async () => {

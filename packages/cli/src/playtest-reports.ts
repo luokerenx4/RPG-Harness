@@ -69,7 +69,20 @@ export interface PlaytestEvidence {
   behaviorCycle?: BehaviorCycleDiagnostic;
   autoplay?: PlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
+  /** Author-owned files and stable runtime symbols implicated by the trace. */
+  sourceTargets?: PlaytestSourceTarget[];
   captureErrors?: string[];
+}
+
+export interface PlaytestSourceTarget {
+  kind: "module-action" | "script";
+  file: string;
+  moduleId?: string;
+  actionKind?: string;
+  activityId?: string;
+  scriptId?: string;
+  scriptRevision?: string;
+  choiceId?: string;
 }
 
 /**
@@ -183,7 +196,7 @@ export interface PlaytestReport {
   schemaVersion: 1;
   id: string;
   createdAt: string;
-  status: "open" | "resolved";
+  status: "open" | "resolved" | "superseded";
   session: string;
   area: PlaytestArea;
   severity: PlaytestSeverity;
@@ -192,6 +205,8 @@ export interface PlaytestReport {
   target?: string;
   resolvedAt?: string;
   resolution?: string;
+  supersededAt?: string;
+  supersededReason?: string;
   verification?: PlaytestVerification;
   evidence: PlaytestEvidence;
 }
@@ -293,6 +308,7 @@ export interface RecordPlaytestReportArgs {
   title: string;
   details?: string;
   target?: string;
+  sourceTargets?: PlaytestSourceTarget[];
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
   autoplay?: RecordPlaytestAutoplayEvidence;
@@ -308,6 +324,13 @@ export interface ResolvePlaytestReportArgs {
   resolution?: string;
 }
 
+export interface SupersedePlaytestReportArgs {
+  gameDir: string;
+  id: string;
+  session?: string;
+  reason: string;
+}
+
 /** @internal Only verification commands may persist structured proof. */
 export type ResolveVerifiedPlaytestReportArgs = ResolvePlaytestReportArgs & {
   verification: PlaytestVerification;
@@ -315,7 +338,8 @@ export type ResolveVerifiedPlaytestReportArgs = ResolvePlaytestReportArgs & {
 
 type ResolvePlaytestReportInternalArgs =
   | ({ mode: "manual" } & ResolvePlaytestReportArgs)
-  | ({ mode: "verified" } & ResolveVerifiedPlaytestReportArgs);
+  | ({ mode: "verified" } & ResolveVerifiedPlaytestReportArgs)
+  | ({ mode: "supersede" } & SupersedePlaytestReportArgs);
 
 export interface ReproducePlaytestReportArgs {
   gameDir: string;
@@ -360,6 +384,9 @@ export async function recordPlaytestReport(
       ...(args.target?.trim() ? { target: args.target.trim() } : {}),
       evidence: {
         ...incidentEvidence,
+        ...(args.sourceTargets?.length
+          ? { sourceTargets: structuredClone(args.sourceTargets) }
+          : {}),
         ...(args.stall ? { stall: args.stall } : {}),
         ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
         ...(autoplay ? { autoplay } : {}),
@@ -457,6 +484,27 @@ export async function resolveVerifiedPlaytestReport(
   return resolvePlaytestReportInternal(snapshot);
 }
 
+/**
+ * Retire an issue whose causal prerequisites no longer exist. This is not a
+ * claim that the bug was fixed: the mandatory reason preserves that distinction
+ * in history while removing an unreplayable item from the active worklist.
+ */
+export async function supersedePlaytestReport(
+  args: SupersedePlaytestReportArgs,
+): Promise<PlaytestReport> {
+  if (!args.reason.trim()) {
+    throw new Error("Superseding a playtest report requires a reason");
+  }
+  const snapshot: ResolvePlaytestReportInternalArgs = {
+    mode: "supersede",
+    gameDir: args.gameDir,
+    id: args.id,
+    reason: args.reason.trim(),
+    ...(args.session !== undefined ? { session: args.session } : {}),
+  };
+  return resolvePlaytestReportInternal(snapshot);
+}
+
 async function resolvePlaytestReportInternal(
   args: ResolvePlaytestReportInternalArgs,
 ): Promise<PlaytestReport> {
@@ -525,7 +573,16 @@ async function resolvePlaytestReportInLockedSession(
       `Playtest report session mismatch: ${current.id} names ${current.session}, stored under ${session}`,
     );
   }
+  if (current.status === "superseded") {
+    if (args.mode === "supersede" && args.reason === current.supersededReason) {
+      return current;
+    }
+    throw new Error(`Playtest report is already superseded: ${current.id}`);
+  }
   if (current.status === "resolved") {
+    if (args.mode === "supersede") {
+      throw new Error(`Resolved playtest report cannot be superseded: ${current.id}`);
+    }
     if (args.mode === "verified") {
       throw new Error(
         `Playtest report was resolved concurrently by another verification: ${current.id}`,
@@ -540,6 +597,17 @@ async function resolvePlaytestReportInLockedSession(
       );
     }
     return current;
+  }
+  if (args.mode === "supersede") {
+    const superseded: PlaytestReport = {
+      ...current,
+      status: "superseded",
+      supersededAt: new Date().toISOString(),
+      supersededReason: args.reason,
+    };
+    reports[index] = superseded;
+    await writeReportFileAtomically(file, reports);
+    return superseded;
   }
   const verification = args.mode === "verified" ? args.verification : undefined;
   assertVerificationMatchesReport(current, verification, args.resolution);
@@ -1054,7 +1122,16 @@ function compactOutput(output: unknown): unknown {
     return pick(obj, ["type", "speakerId", "speakerName", "text"]);
   }
   if (type === "narration") return pick(obj, ["type", "text"]);
-  if (type === "choice") return pick(obj, ["type", "prompt", "options"]);
+  if (type === "choice") {
+    return pick(obj, [
+      "type",
+      "scriptId",
+      "scriptRevision",
+      "choiceId",
+      "prompt",
+      "options",
+    ]);
+  }
   if (type === "hubMenu") {
     const snapshot = obj.snapshot as
       | {
@@ -1086,13 +1163,19 @@ function compactOutput(output: unknown): unknown {
           }>;
           activities?: Array<{
             id?: unknown;
+            kind?: unknown;
             title?: unknown;
+            description?: unknown;
             category?: unknown;
             aiTags?: unknown;
+            effectsHint?: unknown;
             available?: unknown;
+            recommended?: unknown;
             lockedReason?: unknown;
             requires?: unknown;
             forecast?: unknown;
+            actionKind?: unknown;
+            payload?: unknown;
           }>;
         }
       | undefined;
@@ -1141,10 +1224,20 @@ function compactOutput(output: unknown): unknown {
         : {}),
       activities: (snapshot?.activities ?? []).map((activity) => ({
         id: activity.id ?? null,
+        kind: activity.kind ?? null,
         title: activity.title ?? null,
+        ...(activity.description !== undefined
+          ? { description: activity.description }
+          : {}),
         category: activity.category ?? null,
         ...(activity.aiTags !== undefined ? { aiTags: activity.aiTags } : {}),
+        ...(activity.effectsHint !== undefined
+          ? { effectsHint: activity.effectsHint }
+          : {}),
         available: activity.available ?? null,
+        ...(activity.recommended !== undefined
+          ? { recommended: activity.recommended }
+          : {}),
         ...(activity.forecast !== undefined
           ? { forecast: activity.forecast }
           : {}),
@@ -1153,6 +1246,12 @@ function compactOutput(output: unknown): unknown {
           : {}),
         ...(activity.requires !== undefined
           ? { requires: activity.requires }
+          : {}),
+        ...(activity.actionKind !== undefined
+          ? { actionKind: activity.actionKind }
+          : {}),
+        ...(activity.payload !== undefined
+          ? { payload: activity.payload }
           : {}),
       })),
     };
