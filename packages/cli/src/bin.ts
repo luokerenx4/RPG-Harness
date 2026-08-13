@@ -206,10 +206,12 @@ COMMANDS
       segments by default, preserving one deterministic quality matrix.
 
   cover    <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY]
-           [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
+           [--player-session NAME] [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
       Execute one pending stable choice branch. Forks its exact checkpoint,
       verifies the stable choice/option after live edits, selects by option id
-      (not array position), then lets the persona continue on the AI branch.
+      (not array position), then lets the persona continue on the AI proof
+      branch. --player-session also forks the first authored response into a
+      GUI-ready premiere branch, so the player watches rather than misses it.
 
   reach    <game-dir> --from-session NAME --session AI [--from-at N]
            [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N]
@@ -1042,6 +1044,7 @@ async function runCoverChoice(args: string[]): Promise<void> {
     options: {
       session: { type: "string" },
       "source-session": { type: "string" },
+      "player-session": { type: "string" },
       key: { type: "string" },
       persona: { type: "string", default: "objective" },
       verbose: { type: "boolean", short: "v", default: false },
@@ -1052,7 +1055,7 @@ async function runCoverChoice(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh cover <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY] [--persona NAME] [-v] [--max-steps N] [--pretty]",
+    "rpgh cover <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY] [--player-session NAME] [--persona NAME] [-v] [--max-steps N] [--pretty]",
   );
   if (!values.session) {
     process.stderr.write("Missing required flag: --session NAME\n");
@@ -1063,6 +1066,9 @@ async function runCoverChoice(args: string[]): Promise<void> {
     session: values.session,
     ...(values["source-session"] !== undefined
       ? { sourceSession: values["source-session"] }
+      : {}),
+    ...(values["player-session"] !== undefined
+      ? { playerSession: values["player-session"] }
       : {}),
     ...(values.key !== undefined ? { key: values.key } : {}),
     persona: values.persona ?? "objective",

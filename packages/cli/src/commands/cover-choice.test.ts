@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readSessionLog } from "./fork";
+import { peek } from "@rpg-harness/engine";
+import { loadGame } from "../loader";
+import { loadSession } from "../session";
 import { runAutoplay } from "./autoplay";
 import { collectChoiceCoverage } from "./choice-coverage";
 import { runChoiceCoverageWorkItem } from "./cover-choice";
@@ -26,6 +29,7 @@ describe("coverage-driven autoplay", () => {
     const summary = await runChoiceCoverageWorkItem({
       gameDir,
       session: "cover-beta",
+      playerSession: "premiere-beta",
       sourceSession: "seed-alpha",
       key: "intro/opening/beta",
       persona: "greedy",
@@ -62,6 +66,19 @@ describe("coverage-driven autoplay", () => {
       { type: "narration", text: "After the choice." },
       { type: "narration", text: "After the pacing prompt." },
     ]);
+    expect(summary.playerHandoff).toEqual({
+      session: "premiere-beta",
+      webPath: "/?session=premiere-beta",
+      sourceSession: "cover-beta",
+      sourceLogEntry: 2,
+    });
+    const game = await loadGame(gameDir);
+    const premiereState = await loadSession(gameDir, "premiere-beta", game);
+    expect((await peek(game, premiereState)).output).toMatchObject({
+      type: "narration",
+      text: "After the choice.",
+    });
+    expect(await readSessionLog(gameDir, "premiere-beta")).toHaveLength(1);
     expect(summary.decisions).toBe(4);
     expect(summary.ending).toBe("intro");
     // The branch lineage intentionally excludes the source's later alpha
@@ -91,6 +108,17 @@ describe("coverage-driven autoplay", () => {
         },
       },
     });
+    expect(JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "premiere-beta", "fork.json"),
+      "utf-8",
+    ))).toMatchObject({
+      fromSession: "cover-beta",
+      sourceLogEntry: 2,
+      handoff: {
+        workKey: "choice-branch/intro/opening/beta",
+        state: "covered",
+      },
+    });
   });
 
   test("refuses a stale work item instead of selecting the same array index", async () => {
@@ -112,6 +140,32 @@ describe("coverage-driven autoplay", () => {
     expect((await readSessionLog(gameDir, "cover-stale")).some((entry) =>
       (entry.decision as { optionId?: string } | undefined)?.optionId !== undefined
     )).toBe(false);
+  });
+
+  test("preflights an occupied player premiere before publishing the proof branch", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await seedFirstBranch(gameDir);
+    await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 20,
+      session: "occupied-premiere",
+    });
+
+    await expect(runChoiceCoverageWorkItem({
+      gameDir,
+      session: "unwritten-proof",
+      playerSession: "occupied-premiere",
+      sourceSession: "seed-alpha",
+      key: "intro/opening/beta",
+      persona: "greedy",
+      maxSteps: 20,
+      verbose: false,
+      pretty: false,
+    })).rejects.toThrow("Target session already exists: occupied-premiere");
+
+    expect(await readSessionLog(gameDir, "unwritten-proof")).toEqual([]);
   });
 
   test("keeps direct cover telemetry while returning JSON on stdout", async () => {

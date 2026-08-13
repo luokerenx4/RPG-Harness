@@ -256,6 +256,11 @@ in unrelated later scenes. A branch that emits `gameEnd` remains a genuine
 completed ending rather than a local-stop result. Use `--source-session` to
 constrain the worklist to one GUI/headless lineage and `--key` to select a
 specific branch.
+For a player-facing continuation, add `--player-session NAME`. `cover` keeps
+the original autonomous session as complete proof that the target script still
+finishes, then derives a second immutable checkpoint branch at the first
+authored response after the selected option. Opening that session in Web starts
+on the new dialogue/narration instead of dropping the player into the later Hub.
 `worklist` is the project-level orchestration view: it merges open playtest
 reports, unreadable session state/logs, story coverage gaps, executable choice
 branches, and authored choice debt into one deterministic priority order. JSON
@@ -819,10 +824,12 @@ revision and certificate as player-visible repair proof.
 At a shared-session ending, Web also projects the current lineage's recoverable
 choice work instead of reducing the save to a dead **The End** screen. It shows
 the pending branch count and next authored option; one click invokes the public
-`cover` workflow, creates a uniquely named checkpoint fork, and deep-links
-directly into that GUI-compatible session. The completed save and its log stay
-byte-for-byte unchanged, while `--family` coverage observes the new branch and
-removes it from the parent's remaining queue.
+`cover` workflow. The AI completes an isolated proof branch, then Web deep-links
+to a player premiere fork paused on the option's first new authored response.
+The player watches and advances the scene rather than arriving after it; the
+completed save and its log stay byte-for-byte unchanged, while `--family`
+coverage observes the proof branch and removes the option from the parent's
+remaining queue.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

@@ -26,7 +26,9 @@ rpgh test .                                  # fixture 回帰
 共有 Web セッションで結末へ到達すると、同じ `choices --family` 証拠が
 **AI BRANCH** として終局画面に現れる。未探索の安定 option を一つ選ぶたび、
 元の結末を残したまま checkpoint から独立セッションを作り、その場で別の
-返答の後へ deep-link する。プレイヤーの一周目は上書きされず、AI の分岐結果は
+返答へ deep-link する。AI は裏側の proof branch で脚本完走まで検証する一方、
+Web は選んだ直後の最初の台詞で止めた premiere branch を渡すため、プレイヤーは
+新しい場面を見逃さず自分で続きを送れる。一周目は上書きされず、AI の分岐結果は
 次回の family coverage にそのまま戻る。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。

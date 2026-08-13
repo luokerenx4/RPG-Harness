@@ -156,6 +156,7 @@ export interface WebExplorationStatus {
 
 export interface WebExplorationReceipt {
   sourceSession: string;
+  proofSession: string;
   session: string;
   webPath: string;
   workItem: NonNullable<WebExplorationStatus["next"]>;

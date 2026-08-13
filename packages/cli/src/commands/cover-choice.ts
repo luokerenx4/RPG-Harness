@@ -1,5 +1,7 @@
 import {
   attachDevelopmentBranchHandoff,
+  assertTargetEmpty,
+  forkSession,
   readSessionLog,
   type LoggedStep,
 } from "./fork";
@@ -17,6 +19,12 @@ export interface CoverChoiceArgs {
   gameDir: string;
   session: string;
   sourceSession?: string;
+  /**
+   * Optional player-facing premiere branch. The autonomous cover run remains
+   * the proof branch; this session opens on the first authored response after
+   * the selected option so GUI players can actually watch and continue it.
+   */
+  playerSession?: string;
   key?: string;
   persona: string;
   maxSteps: number;
@@ -28,6 +36,12 @@ export interface CoverChoiceSummary extends AutoplaySummary {
   workItem: ChoiceCoverageWorkItem;
   targetScriptCompleted: boolean;
   responseTrace: NarrativeResponse[];
+  playerHandoff?: {
+    session: string;
+    webPath: string;
+    sourceSession: string;
+    sourceLogEntry: number;
+  };
 }
 
 export async function coverChoiceCommand(args: CoverChoiceArgs): Promise<void> {
@@ -49,6 +63,14 @@ export async function runChoiceCoverageWorkItem(
   if (!args.session) throw new Error("--session is required");
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 1) {
     throw new Error("--max-steps must be a positive integer for choice coverage");
+  }
+  if (args.playerSession) {
+    if (args.playerSession === args.session) {
+      throw new Error("Choice proof and player premiere sessions must differ");
+    }
+    // Fail before spending an autonomous run or publishing its proof branch.
+    // The final fork still repeats this check under the player-session lock.
+    await assertTargetEmpty(args.gameDir, args.playerSession);
   }
   const coverage = await collectChoiceCoverage(args.gameDir, args.sourceSession);
   if (coverage.sessionErrors.length > 0) {
@@ -95,7 +117,12 @@ export async function runChoiceCoverageWorkItem(
       `Choice coverage response did not finish target script: ${workItem.scriptId}`,
     );
   }
-  await attachDevelopmentBranchHandoff(args.gameDir, args.session, {
+  const log = await readSessionLog(args.gameDir, args.session);
+  const selectedLogEntry = findTargetSelectionEntry(log, workItem);
+  if (selectedLogEntry === null) {
+    throw new Error(`Choice coverage selection has no recoverable log entry: ${workItem.key}`);
+  }
+  const handoff = {
     schemaVersion: 1,
     workKey: `choice-branch/${workItem.key}`,
     priority: "P3",
@@ -110,31 +137,58 @@ export async function runChoiceCoverageWorkItem(
       choiceId: workItem.choiceId,
       optionId: workItem.optionId,
     },
-  });
+  } as const;
+  await attachDevelopmentBranchHandoff(args.gameDir, args.session, handoff);
+  let playerHandoff: CoverChoiceSummary["playerHandoff"];
+  if (args.playerSession) {
+    const premiere = await forkSession({
+      gameDir: args.gameDir,
+      from: args.session,
+      to: args.playerSession,
+      at: selectedLogEntry,
+      pretty: false,
+    });
+    await attachDevelopmentBranchHandoff(args.gameDir, args.playerSession, handoff);
+    playerHandoff = {
+      session: args.playerSession,
+      webPath: `/?session=${encodeURIComponent(args.playerSession)}`,
+      sourceSession: args.session,
+      sourceLogEntry: premiere.sourceLogEntry,
+    };
+  }
   return {
     ...summary,
     workItem,
     targetScriptCompleted,
     responseTrace: extractTargetResponse(
-      await readSessionLog(args.gameDir, args.session),
+      log,
       workItem,
     ),
+    ...(playerHandoff ? { playerHandoff } : {}),
   };
+}
+
+function findTargetSelectionEntry(
+  entries: LoggedStep[],
+  workItem: ChoiceCoverageWorkItem,
+): number | null {
+  const index = entries.findIndex((entry) => {
+    const decision = entry.decision as Record<string, unknown> | undefined;
+    return decision?.scriptId === workItem.scriptId &&
+      decision.choiceId === workItem.choiceId &&
+      decision.optionId === workItem.optionId;
+  });
+  return index < 0 ? null : index + 1;
 }
 
 function extractTargetResponse(
   entries: LoggedStep[],
   workItem: ChoiceCoverageWorkItem,
 ): NarrativeResponse[] {
-  const start = entries.findIndex((entry) => {
-    const decision = entry.decision as Record<string, unknown> | undefined;
-    return decision?.scriptId === workItem.scriptId &&
-      decision.choiceId === workItem.choiceId &&
-      decision.optionId === workItem.optionId;
-  });
-  if (start < 0) return [];
+  const selectedEntry = findTargetSelectionEntry(entries, workItem);
+  if (selectedEntry === null) return [];
   const trace: NarrativeResponse[] = [];
-  for (const entry of entries.slice(start)) {
+  for (const entry of entries.slice(selectedEntry - 1)) {
     const output = entry.output as Record<string, unknown> | undefined;
     if (output?.type === "narration" && typeof output.text === "string") {
       trace.push({ type: "narration", text: output.text });

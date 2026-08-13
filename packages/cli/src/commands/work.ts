@@ -390,6 +390,7 @@ function compactCoverResult(result: CoverChoiceSummary) {
     targetChoice: result.targetChoice,
     targetScriptCompleted: result.targetScriptCompleted,
     responseTrace: result.responseTrace,
+    ...(result.playerHandoff ? { playerHandoff: result.playerHandoff } : {}),
     workItem: {
       key: result.workItem.key,
       scriptId: result.workItem.scriptId,

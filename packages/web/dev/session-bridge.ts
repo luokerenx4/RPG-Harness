@@ -123,6 +123,9 @@ export interface BridgeExplorationStatus {
 
 export interface BridgeExplorationReceipt {
   sourceSession: string;
+  /** Autonomous, completed branch that proves the authored option still works. */
+  proofSession: string;
+  /** Player-facing branch paused on the first new authored response. */
   session: string;
   webPath: string;
   workItem: NonNullable<BridgeExplorationStatus["next"]>;
@@ -279,17 +282,20 @@ export async function createBridgeExploration(
     : await findBridgeExplorationWorkItem(gameDir, sourceSession, key);
   if (!workItem) throw new RequestError(409, `Pending exploration branch not found: ${key}`);
   const session = explorationSessionName(sourceSession, now(), randomUUID());
+  const proofSession = `${session}-proof`;
   const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
   await execFileAsync("bun", [
     cli,
     "cover",
     gameDir,
     "--session",
-    session,
+    proofSession,
     "--source-session",
     sourceSession,
     "--key",
     key,
+    "--player-session",
+    session,
     "--persona",
     "objective",
     "--max-steps",
@@ -297,6 +303,7 @@ export async function createBridgeExploration(
   ], { maxBuffer: 8 * 1024 * 1024 });
   return {
     sourceSession,
+    proofSession,
     session,
     webPath: `/?session=${encodeURIComponent(session)}&game=${encodeURIComponent(path.basename(gameDir))}`,
     workItem,

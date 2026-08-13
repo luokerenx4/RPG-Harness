@@ -305,6 +305,7 @@ describe("Web development session bridge", () => {
     );
     expect(branch.sourceSession).toBe("finished-player");
     expect(branch.session).toMatch(/^explore-finished-player-ya-[a-f0-9]{8}$/);
+    expect(branch.proofSession).toBe(`${branch.session}-proof`);
     expect(branch.workItem).toEqual(status.next);
     expect(branch.webPath).toBe(
       `/?session=${branch.session}&game=${encodeURIComponent(path.basename(gameDir))}`,
@@ -312,7 +313,7 @@ describe("Web development session bridge", () => {
     expect(await readFile(path.join(sourceDir, "state.json"), "utf-8")).toBe(sourceState);
     expect(await readFile(path.join(sourceDir, "log.jsonl"), "utf-8")).toBe(sourceLog);
     expect(await loadBridgeBranchContext(gameDir, branch.session)).toMatchObject({
-      fromSession: "finished-player",
+      fromSession: branch.proofSession,
       sourceLogEntry: 2,
       mode: "checkpoint",
       handoff: {
@@ -326,11 +327,22 @@ describe("Web development session bridge", () => {
           optionId: "beta",
         },
       },
-      // The autonomous cover run records its stable selection in the branch
-      // log; the handoff title/coordinates are sufficient even though there
-      // is no later player decision to project as an outcome.
+      // The premiere branch begins on the first authored response; selection
+      // evidence remains in the autonomous proof parent.
       outcome: null,
     });
+    const premiere = await runCli(gameDir, [
+      "peek", gameDir,
+      "--session", branch.session,
+    ]) as { output: { type: string; text?: string }; done: boolean };
+    expect(premiere).toMatchObject({
+      output: { type: "narration", text: "After." },
+      done: false,
+    });
+    expect((await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", branch.session, "log.jsonl"),
+      "utf-8",
+    )).trim().split("\n")).toHaveLength(1);
     // A child lineage stops its source evidence at the fork checkpoint, so it
     // still offers the original sibling answer. The player's family combines
     // both branches and is complete.
