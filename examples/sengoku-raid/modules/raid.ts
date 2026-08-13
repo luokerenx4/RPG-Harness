@@ -604,9 +604,37 @@ function buildAffectionSnapshots(ctx: Ctx) {
     }));
 }
 
+function minimumAffection(
+  condition: Condition,
+  characterId: string,
+): number | null {
+  if (
+    "affection" in condition &&
+    condition.affection.character === characterId
+  ) {
+    return condition.affection.min ?? condition.affection.eq ?? null;
+  }
+  if (
+    "characterStat" in condition &&
+    condition.characterStat.character === characterId &&
+    condition.characterStat.name === "affection"
+  ) {
+    return condition.characterStat.min ?? condition.characterStat.eq ?? null;
+  }
+  if ("all" in condition) {
+    const targets = condition.all.flatMap((child) => {
+      const target = minimumAffection(child, characterId);
+      return target === null ? [] : [target];
+    });
+    return targets.length > 0 ? Math.max(...targets) : null;
+  }
+  return null;
+}
+
 function buildHubMenu(ctx: Ctx): Output {
   const m = moduleState(ctx);
   const activities: HubActivity[] = [];
+  const storyCompanionRecommendations = new Set<string>();
 
   // Per-character bonding: hub-side gift + scripted bond scenes.
   // The bond scripts are static files (scripts/bond_<id>_NN.md) with
@@ -618,6 +646,32 @@ function buildHubMenu(ctx: Ctx): Output {
     const char = ctx.game.characters.find((c) => c.id === charId);
     if (!char) continue;
     const ryo = ctx.state.baseline.inventory.ryo ?? 0;
+    const affection =
+      ctx.state.baseline.characters[charId]?.stats.affection ?? 0;
+    const bondScripts = ctx.game.scripts
+      .filter((script) =>
+        script.id.startsWith(`bond_${charId}_`) &&
+        ctx.state.baseline.scripts[script.id]?.completed !== true
+      )
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const nextBondScript = bondScripts[0];
+    const nextBondResult = nextBondScript?.requires === undefined
+      ? { ok: true as const }
+      : evaluateCondition(nextBondScript.requires, ctx.state);
+    const affectionTarget = nextBondScript?.requires === undefined
+      ? null
+      : minimumAffection(nextBondScript.requires, charId);
+    const giftAdvancesStory = nextBondScript !== undefined &&
+      affectionTarget !== null &&
+      affection < affectionTarget;
+    if (
+      nextBondScript &&
+      !nextBondResult.ok &&
+      !giftAdvancesStory &&
+      (affectionTarget === null || affection >= affectionTarget)
+    ) {
+      storyCompanionRecommendations.add(charId);
+    }
     activities.push({
       id: `bond:${charId}`,
       kind: "action",
@@ -628,6 +682,7 @@ function buildHubMenu(ctx: Ctx): Output {
       category: "social",
       cost: 0,
       effectsHint: `${char.name}+1 ryo-50`,
+      ...(giftAdvancesStory ? { aiTags: ["social", "progression"] } : {}),
       available: ryo >= 50,
       lockedReason: ryo < 50 ? "両が足りない" : undefined,
     });
@@ -636,9 +691,7 @@ function buildHubMenu(ctx: Ctx): Output {
     // even when locked — with lockedReason — so the player can see
     // "送り物をもう一度すれば開放" instead of wondering whether the
     // scene exists at all.
-    for (const script of ctx.game.scripts) {
-      if (!script.id.startsWith(`bond_${charId}_`)) continue;
-      if (ctx.state.baseline.scripts[script.id]?.completed === true) continue;
+    for (const script of bondScripts) {
       const reqs = script.requires;
       const r =
         reqs === undefined ? { ok: true } : evaluateCondition(reqs, ctx.state);
@@ -647,6 +700,9 @@ function buildHubMenu(ctx: Ctx): Output {
         kind: "script",
         title: `${char.name} — ${script.title}`,
         category: "social",
+        ...(r.ok && script.id === nextBondScript?.id
+          ? { aiTags: ["social", "story"] }
+          : {}),
         cost: 0,
         available: r.ok,
         ...(r.ok ? {} : { lockedReason: r.reason }),
@@ -704,7 +760,7 @@ function buildHubMenu(ctx: Ctx): Output {
       id: "sell_all_loot",
       kind: "action",
       actionKind: "sell_all_loot",
-      title: `戦利品を炼器師に売る（${total} 両）`,
+      title: `戦利品を鍛冶師に売る（${total} 両）`,
       description: lootIds.map(([id, n]) => `${itemName(ctx, id)} ×${n}`).join("、"),
       category: "shop",
       cost: 0,
@@ -725,7 +781,7 @@ function buildHubMenu(ctx: Ctx): Output {
       actionKind: "sell_material",
       payload: { itemId: id },
       title: `${itemName(ctx, id)}を一つ売る（${value} 両）`,
-      description: `所持 ${count}。炼器師は一度に一つだけ買い取る`,
+      description: `所持 ${count}。鍛冶師は一度に一つだけ買い取る`,
       category: "shop",
       cost: 0,
       available: true,
@@ -743,14 +799,14 @@ function buildHubMenu(ctx: Ctx): Output {
     id: "upgrade_mundane",
     kind: "action",
     actionKind: "upgrade_mundane",
-    title: "炼器師に整え直させる（威力 +2、脈絡: 凡 +1）",
-    description: "魂石碎片 ×3 + 100 両",
+    title: "鍛冶師に整え直させる（威力 +2、脈絡: 凡 +1）",
+    description: "魂石の欠片 ×3 + 100 両",
     category: "shop",
     cost: 0,
     available: canMundane,
     lockedReason: canMundane
       ? undefined
-      : `魂石碎片 ≥3（現在 ${shards}）、両 ≥100（現在 ${ryoNow}）`,
+      : `魂石の欠片 ≥3（現在 ${shards}）、両 ≥100（現在 ${ryoNow}）`,
   });
   const canPure = horns >= 1 && ryoNow >= 80;
   activities.push({
@@ -946,6 +1002,9 @@ function buildHubMenu(ctx: Ctx): Output {
           ? "公儀の見立てが済むまで同行可。他者を誘うと自動的に交代"
           : "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
+      ...(!alreadyInvited && storyCompanionRecommendations.has(charId)
+        ? { aiTags: ["social", "progression"] }
+        : {}),
       cost: 0,
       available: true,
     });
@@ -2126,14 +2185,14 @@ const sellAllLootHandler: ActionHandler = (ctx) => {
   inventoryDelta.ryo = (inventoryDelta.ryo ?? 0) + total;
   return {
     deltas: { inventory: inventoryDelta },
-    narrations: [`炼器師に納めた：${lines.join("、")}。合計 ${total} 両。`],
+    narrations: [`鍛冶師に納めた：${lines.join("、")}。合計 ${total} 両。`],
   };
 };
 
 const sellMaterialHandler: ActionHandler = (ctx) => {
   const itemId = ctx.action.payload?.itemId as string | undefined;
   if (!itemId || !isMaterial(ctx, itemId)) {
-    return denial("炼器師が買い取れる材料ではない。");
+    return denial("鍛冶師が買い取れる材料ではない。");
   }
   const count = ctx.state.baseline.inventory[itemId] ?? 0;
   if (count < 1) return denial(`${itemName(ctx, itemId)}は手元にない。`);
@@ -2141,7 +2200,7 @@ const sellMaterialHandler: ActionHandler = (ctx) => {
   return {
     deltas: { inventory: { [itemId]: -1, ryo: value } },
     narrations: [
-      `炼器師に${itemName(ctx, itemId)}を一つ渡した。秤の分銅が沈む——${value} 両を受け取った（残り ${count - 1}）。`,
+      `鍛冶師に${itemName(ctx, itemId)}を一つ渡した。秤の分銅が沈む——${value} 両を受け取った（残り ${count - 1}）。`,
     ],
   };
 };
@@ -2154,10 +2213,10 @@ const upgradeMundaneHandler: ActionHandler = (ctx) => {
   const shards = ctx.state.baseline.inventory.soul_shard ?? 0;
   const ryo = ctx.state.baseline.inventory.ryo ?? 0;
   if (shards < 3) {
-    return denial(`炼器師「魂石碎片が足りない。あと ${3 - shards} 枚要る。」`);
+    return denial(`鍛冶師「魂石の欠片が足りない。あと ${3 - shards} 枚要る。」`);
   }
   if (ryo < 100) {
-    return denial(`炼器師「持ち合わせが ${ryo} 両か。あと ${100 - ryo} 両要る。」`);
+    return denial(`鍛冶師「持ち合わせが ${ryo} 両か。あと ${100 - ryo} 両要る。」`);
   }
   const wid = ctx.state.baseline.equippedWeaponId;
   const deltas: StateDelta = {
@@ -2168,7 +2227,7 @@ const upgradeMundaneHandler: ActionHandler = (ctx) => {
   return {
     deltas,
     narrations: [
-      `炼器師は無言で碎片を炉に投じた。一夜明け、妖刀の刃に新しい紋様が浮いている——威力 +2、脈絡: 凡 +1。`,
+      `鍛冶師は無言で欠片を炉に投じた。一夜明け、妖刀の刃に新しい紋様が浮いている——威力 +2、脈絡: 凡 +1。`,
     ],
   };
 };
@@ -2202,11 +2261,11 @@ const upgradeOniHandler: ActionHandler = (ctx) => {
   const ryo = ctx.state.baseline.inventory.ryo ?? 0;
   if (horns < 1 || frags < 1) {
     return denial(
-      `炼器師「鬼の角 1 + 呪われし刃の欠片 1 が要る。短期的に強くなる代わり、後戻りはできぬ」`,
+      `鍛冶師「鬼の角 1 + 呪われし刃の欠片 1 が要る。短期的に強くなる代わり、後戻りはできぬ」`,
     );
   }
   if (ryo < 120) {
-    return denial(`炼器師「持ち合わせが ${ryo} 両か。120 両要る」`);
+    return denial(`鍛冶師「持ち合わせが ${ryo} 両か。120 両要る」`);
   }
   const wid = ctx.state.baseline.equippedWeaponId;
   const deltas: StateDelta = {
@@ -2218,7 +2277,7 @@ const upgradeOniHandler: ActionHandler = (ctx) => {
   return {
     deltas,
     narrations: [
-      `炼器師は炉に欠片を投じた。炎が黒く立ち上り、刀の刃に鬼の歯のような連紋が浮く——威力 +4、霊体化 +5、脈絡: 鬼 +1。`,
+      `鍛冶師は炉に欠片を投じた。炎が黒く立ち上り、刀の刃に鬼の歯のような連紋が浮く——威力 +4、霊体化 +5、脈絡: 鬼 +1。`,
     ],
   };
 };

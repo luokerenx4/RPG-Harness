@@ -93,6 +93,7 @@ export async function* dispatchActivity(
       title: dyn.title,
       cost: dyn.cost,
       kind: dyn.actionKind,
+      ...(dyn.aiTags ? { aiTags: [...dyn.aiTags] } : {}),
       ...(dyn.payload ? { payload: dyn.payload } : {}),
     };
     const dispatched = fireOnActionDispatch(ctx, synthetic);

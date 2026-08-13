@@ -2,7 +2,7 @@ name: hub:upgrade_mundane 資源不足時の denial（D 分割後）
 description: |
   Pulse-system update — upgrade_weapon is split into upgrade_mundane/
   upgrade_pure/upgrade_oni. This test exercises the mundane path
-  (魂石碎片 ×3 + 100 両) with no shards. The denial narration mentions
+  (魂石の欠片 ×3 + 100 両) with no shards. The denial narration mentions
   the missing resource.
 state:
   baseline:
@@ -25,4 +25,4 @@ assertions:
   - kind: output
     type: narration
     present: true
-    textIncludes: 魂石碎片
+    textIncludes: 魂石の欠片

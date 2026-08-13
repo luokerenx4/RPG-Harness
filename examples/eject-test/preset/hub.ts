@@ -45,6 +45,7 @@ export function buildHubSnapshot(state: ComposedState, game: Game): Output {
       title: a.title,
       description: a.description,
       category: a.category,
+      ...(a.aiTags ? { aiTags: [...a.aiTags] } : {}),
       cost: a.cost,
       effectsHint: formatEffectsHint(a.effects),
       available: r.ok,

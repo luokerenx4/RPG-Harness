@@ -803,6 +803,10 @@ export interface Action {
   title: string;
   description?: string;
   category?: string;
+  // Renderer-neutral semantic intent for AI players. Unlike `category`,
+  // which groups the Hub visually, tags explain why a persona may prefer the
+  // action (for example social, story, cautious, risky).
+  aiTags?: string[];
   cost: number;
   slot?: "any" | "day" | "night";
   requires?: Condition;
@@ -1197,6 +1201,10 @@ export interface HubActivity {
   title: string;
   description?: string;
   category?: string;
+  // Semantic, author-owned intent consumed by AI personas. Dynamic modules
+  // may add or omit tags as state changes, so a social action can be preferred
+  // only while it genuinely advances a relationship rather than forever.
+  aiTags?: string[];
   cost: number;
   effectsHint?: string;
   available: boolean;

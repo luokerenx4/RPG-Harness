@@ -622,6 +622,7 @@ function compactOutput(output: unknown): unknown {
             id?: unknown;
             title?: unknown;
             category?: unknown;
+            aiTags?: unknown;
             available?: unknown;
             lockedReason?: unknown;
             requires?: unknown;
@@ -674,6 +675,7 @@ function compactOutput(output: unknown): unknown {
         id: activity.id ?? null,
         title: activity.title ?? null,
         category: activity.category ?? null,
+        ...(activity.aiTags !== undefined ? { aiTags: activity.aiTags } : {}),
         available: activity.available ?? null,
         ...(activity.forecast !== undefined
           ? { forecast: activity.forecast }

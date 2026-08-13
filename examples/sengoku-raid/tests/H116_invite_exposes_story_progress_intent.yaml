@@ -1,0 +1,33 @@
+name: 次の羁绊が同行待ちなら invite が物語進行意図を公開する
+description: |
+  篝の好感度は bond_kagari_03 の数値条件を満たしているが、同行経験の
+  befriended スイッチだけが不足している。この時だけ invite:kagari が
+  social/progression を公開し、AI が表示順や日本語文言を推測せずに
+  次の羁绊を解錠できることを検証する。
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - encounter_kagari_first
+      - bond_kagari_01
+      - bond_kagari_02
+    characters:
+      kagari:
+        affection: 6
+        custom: {}
+  sengoku-raid:
+    raid: null
+    metCharacters:
+      - kagari
+inputs: []
+assertions:
+  - kind: activity
+    id: invite:kagari
+    available: true
+    aiTagsIncludes: social
+  - kind: activity
+    id: invite:kagari
+    aiTagsIncludes: progression
+  - kind: activity
+    id: bond:kagari
+    aiTagsExcludes: progression

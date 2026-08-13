@@ -247,6 +247,27 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
   return null;
 }
 
+function pickTaggedActivity(
+  output: Extract<Output, { type: "hubMenu" }>,
+  preferredTags: readonly string[],
+): Input | null {
+  const weights = new Map(
+    preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
+  );
+  let best: { id: string; score: number } | null = null;
+  for (const activity of output.snapshot.activities) {
+    if (!activity.available) continue;
+    const score = (activity.aiTags ?? []).reduce(
+      (sum, tag) => sum + (weights.get(tag) ?? 0),
+      0,
+    );
+    if (score > 0 && (best === null || score > best.score)) {
+      best = { id: activity.id, score };
+    }
+  }
+  return best ? { type: "doActivity", id: best.id } : null;
+}
+
 export const personas: Record<string, Persona> = {
   // Renderer-neutral AI: follow only the public objective contract. It does
   // not inspect module-specific state or hard-code story thresholds.
@@ -315,6 +336,14 @@ export const personas: Record<string, Persona> = {
       if (recommended.length > 0) {
         return { type: "doActivity", id: recommended.at(-1)!.id };
       }
+      const semantic = pickTaggedActivity(output, [
+        "story",
+        "social",
+        "compassionate",
+        "romantic",
+        "loyal",
+      ]);
+      if (semantic) return semantic;
       const objective = pickObjectiveActivity(output);
       if (objective) return objective;
       return pickActivity(output, (acts) => acts[acts.length - 1]!.idx);

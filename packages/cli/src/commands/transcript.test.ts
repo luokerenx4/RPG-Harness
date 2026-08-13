@@ -130,6 +130,27 @@ describe("session transcript", () => {
     });
   });
 
+  test("does not invent calendar labels for a mode-less hub", async () => {
+    const gameDir = await mkdtemp(path.join(tmpdir(), "rpgh-transcript-hub-"));
+    temporaryDirectories.push(gameDir);
+    await writeLog(gameDir, "run", [{
+      input: { type: "next" },
+      output: {
+        type: "hubMenu",
+        snapshot: {
+          day: 0,
+          slotName: "",
+          activities: [{ id: "depart", available: true }],
+        },
+      },
+    }]);
+    const formatted = formatSessionTranscript(
+      await collectSessionTranscript(gameDir, "run", 0),
+    );
+    expect(formatted).toContain("hub available=[depart]");
+    expect(formatted).not.toContain("day=0 slot=");
+  });
+
   test("rejects path traversal and invalid tail sizes", async () => {
     await expect(collectSessionTranscript("/tmp/game", "../escape", 80)).rejects.toThrow(
       "Invalid session name",

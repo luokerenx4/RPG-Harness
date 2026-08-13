@@ -144,6 +144,14 @@ describe("charmer persona exploration", () => {
     ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
   });
 
+  test("follows semantic activity intent before a non-social main objective", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities[0]!.aiTags = ["social", "story"];
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
   test("stays renderer-neutral when module-private visited state is present", async () => {
     const output = objectiveHub();
     output.snapshot.activities = [

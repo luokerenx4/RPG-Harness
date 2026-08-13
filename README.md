@@ -311,6 +311,13 @@ Dynamic hub activities may expose an exact `requires` condition alongside the
 human-facing `lockedReason`. Goal-directed search uses that shared contract to
 prefer actions that measurably close a resource/stat gate and to avoid spending
 an already-satisfied prerequisite merely because another requirement improves.
+Static action YAML may also declare `ai_tags: [social, progression]`; dynamic
+modules expose the same contract as `HubActivity.aiTags`. Tags describe semantic
+intent rather than visual grouping: `category` may remain `social` for a gift
+button forever, while a module can add `progression` only when that gift closes
+the next relationship gate. Generic personas, project personas, GUI and
+Headless therefore receive one state-aware public action contract without
+depending on menu order or renderer text.
 Both reach commands follow fork provenance through ancestor sessions, so an AI
 starting from a terminal child branch can recover the exact earlier checkpoint
 where another route was still playable without mutating any ancestor save.

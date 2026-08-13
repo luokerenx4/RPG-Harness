@@ -176,6 +176,18 @@ function checkActivity(
   ) {
     return `activity ${a.id}: expected effectsHint to include "${a.effectsHintIncludes}", got "${act.effectsHint ?? ""}"`;
   }
+  if (
+    a.aiTagsIncludes !== undefined &&
+    !(act.aiTags ?? []).includes(a.aiTagsIncludes)
+  ) {
+    return `activity ${a.id}: expected aiTags to include "${a.aiTagsIncludes}", got ${JSON.stringify(act.aiTags ?? [])}`;
+  }
+  if (
+    a.aiTagsExcludes !== undefined &&
+    (act.aiTags ?? []).includes(a.aiTagsExcludes)
+  ) {
+    return `activity ${a.id}: expected aiTags to exclude "${a.aiTagsExcludes}", got ${JSON.stringify(act.aiTags ?? [])}`;
+  }
   if (a.requires !== undefined && !deepEqual(act.requires, a.requires)) {
     return `activity ${a.id}: expected requires=${JSON.stringify(a.requires)}, got ${JSON.stringify(act.requires)}`;
   }

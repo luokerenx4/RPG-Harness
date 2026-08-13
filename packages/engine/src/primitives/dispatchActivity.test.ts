@@ -295,7 +295,7 @@ describe("dispatchActivity — hook composition", () => {
 
 describe("dispatchActivity — dynamic activity resolution via lastHubActivities", () => {
   test("synthesizes Action from HubActivity (actionKind + payload)", async () => {
-    let received: { kind?: string; payload?: unknown } = {};
+    let received: { kind?: string; payload?: unknown; aiTags?: string[] } = {};
     const mod: Module = {
       id: "mymod",
       provides: ["sengoku-raid:move"],
@@ -304,6 +304,7 @@ describe("dispatchActivity — dynamic activity resolution via lastHubActivities
           received = {
             kind: action.kind,
             payload: action.payload,
+            aiTags: action.aiTags,
           };
           return {};
         },
@@ -323,6 +324,7 @@ describe("dispatchActivity — dynamic activity resolution via lastHubActivities
         cost: 0,
         available: true,
         actionKind: "sengoku-raid:move",
+        aiTags: ["exploration", "progression"],
         payload: { zoneId: "crossroads" },
       },
     ];
@@ -331,6 +333,7 @@ describe("dispatchActivity — dynamic activity resolution via lastHubActivities
 
     expect(received.kind).toBe("sengoku-raid:move");
     expect(received.payload).toEqual({ zoneId: "crossroads" });
+    expect(received.aiTags).toEqual(["exploration", "progression"]);
   });
 
   test("dispatches even when available:false — handler decides denial", async () => {

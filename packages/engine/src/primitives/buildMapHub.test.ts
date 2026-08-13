@@ -113,6 +113,16 @@ describe("buildMapHubSnapshot", () => {
     expect(ids).toEqual(["action:ambient"]);
   });
 
+  test("preserves author-owned AI intent on static actions", () => {
+    const game = gameWith([], {
+      actions: [makeAction("comfort", { aiTags: ["social", "story"] })],
+    });
+    expect(collectMapActivities(makeCtx(game))[0]).toMatchObject({
+      id: "action:comfort",
+      aiTags: ["social", "story"],
+    });
+  });
+
   test("locked connection surfaces with lockedReason", () => {
     const game = gameWith(
       [

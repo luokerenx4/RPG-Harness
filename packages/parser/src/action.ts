@@ -45,6 +45,31 @@ export function parseActionSpec(
   if (typeof obj.category === "string") {
     action.category = obj.category;
   }
+  const rawAiTags = obj.aiTags ?? obj.ai_tags;
+  if (rawAiTags !== undefined) {
+    if (!Array.isArray(rawAiTags) || rawAiTags.length === 0) {
+      throw new ActionParseError(
+        `${source ?? action.id}: \`ai_tags\` must be a non-empty array of stable tag strings`,
+      );
+    }
+    const tags = rawAiTags.map((tag, index) => {
+      if (
+        typeof tag !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(tag)
+      ) {
+        throw new ActionParseError(
+          `${source ?? action.id}: \`ai_tags[${index}]\` must be a non-empty stable tag`,
+        );
+      }
+      return tag;
+    });
+    if (new Set(tags).size !== tags.length) {
+      throw new ActionParseError(
+        `${source ?? action.id}: \`ai_tags\` must not contain duplicates`,
+      );
+    }
+    action.aiTags = tags;
+  }
   if (obj.slot === "any" || obj.slot === "day" || obj.slot === "night") {
     action.slot = obj.slot;
   }

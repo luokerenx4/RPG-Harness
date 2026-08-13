@@ -110,6 +110,7 @@ function pushAction(
     title: a.title,
     description: a.description,
     category: a.category,
+    ...(a.aiTags ? { aiTags: [...a.aiTags] } : {}),
     cost: a.cost,
     available: r.ok,
     ...(r.ok ? {} : { lockedReason: r.reason }),

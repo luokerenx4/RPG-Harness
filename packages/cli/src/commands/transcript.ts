@@ -325,7 +325,10 @@ function formatOutput(value: Record<string, unknown> | undefined): string {
     const available = Array.isArray(value.availableActivities)
       ? value.availableActivities.join(",")
       : "";
-    return `hub day=${String(value.day ?? "?")} slot=${String(value.slotName ?? "?")} available=[${available}]`;
+    const calendar = typeof value.slotName === "string" && value.slotName.length > 0
+      ? ` day=${String(value.day ?? "?")} slot=${value.slotName}`
+      : "";
+    return `hub${calendar} available=[${available}]`;
   }
   if (value.type === "scriptComplete") return `scriptComplete ${String(value.completedId ?? "-")}`;
   if (value.type === "gameEnd") return `gameEnd${value.reason ? `: ${String(value.reason)}` : ""}`;
