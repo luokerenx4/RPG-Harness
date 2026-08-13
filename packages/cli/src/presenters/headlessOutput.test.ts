@@ -47,6 +47,9 @@ describe("presentHeadlessOutput", () => {
           kind: "action",
           title: "Depart",
           category: "raid",
+          aiTags: ["story", "return-to-hub"],
+          recommended: true,
+          actionKind: "raid:depart",
           pacingInstanceId: "raid:7/map:gate",
           cost: 0,
           available: true,
@@ -60,7 +63,7 @@ describe("presentHeadlessOutput", () => {
     );
     expect(output?.hubView).toMatchObject({
       heuristic: true,
-      selectionRule: "main_objective_or_authored_recommendation_or_only_candidate",
+      selectionRule: "focused_or_main_objective_or_authored_recommendation_or_only_candidate",
       focusCategory: "raid",
       strategyDecisionRequired: false,
       candidateScope: "main_objective",
@@ -72,6 +75,7 @@ describe("presentHeadlessOutput", () => {
       objectiveGuidance: {
         objectiveId: "main",
         scope: "main",
+        focused: false,
         terminal: false,
         candidateActivityIds: ["depart"],
         primaryActivityId: "depart",
@@ -104,6 +108,10 @@ describe("presentHeadlessOutput", () => {
           candidates: [
             {
               activityId: "depart",
+              category: "raid",
+              aiTags: ["story", "return-to-hub"],
+              recommended: true,
+              actionKind: "raid:depart",
               pacingInstanceId: "raid:7/map:gate",
               input: { type: "doActivity", id: "depart" },
               title: "Depart",
@@ -129,6 +137,7 @@ describe("presentHeadlessOutput", () => {
           kind: "action",
           title: "Depart one",
           category: "raid",
+          aiTags: ["return-to-hub", "memory"],
           cost: 0,
           available: true,
         },
@@ -292,6 +301,7 @@ describe("presentHeadlessOutput", () => {
           kind: "action",
           title: "Depart",
           category: "raid",
+          aiTags: ["return-to-hub", "memory"],
           cost: 0,
           available: true,
           recommended: true,
@@ -337,6 +347,9 @@ describe("presentHeadlessOutput", () => {
           {
             activityId: "depart",
             title: "Depart",
+            category: "raid",
+            aiTags: ["return-to-hub", "memory"],
+            recommended: true,
             effectsHint: "route:kuro_swamp progress+1",
           },
           { activityId: "move", title: "Move onward" },

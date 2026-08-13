@@ -1,0 +1,55 @@
+name: 特別帰還は放した鬼の回想を屋敷に届ける
+description: |
+  Extracting from the entry because a released memory is pending must mark the
+  memory as recovered (B), return to Edo, and retarget the same focused side
+  objective to the renderer-neutral story activity.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_foothills
+    scripts:
+      zone_haunt_oni_warrior:
+        selfSwitches: { A: true }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 20, intellect: 5 }
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 2
+      pendingLoot: { ryo: 19 }
+      visited:
+        mt_houkyou_foothills:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: { ryo: 19 }
+inputs:
+  - { type: doActivity, id: extract }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.currentMapId
+    eq: edo_castle
+  - kind: state
+    path: baseline.scripts.zone_haunt_oni_warrior.selfSwitches.B
+    eq: true
+  - kind: activity
+    id: script:zone_haunt_oni_warrior
+    available: true
+    recommended: true
+    aiTagsIncludes: memory
+  - kind: objective
+    id: released_oni_memory
+    scope: side
+    focus: true
+    relatedActivityIncludes: script:zone_haunt_oni_warrior
+    requirementId: return_to_hub
+    current: true
+    target: true
+    satisfied: true

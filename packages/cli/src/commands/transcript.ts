@@ -27,6 +27,7 @@ export interface TranscriptEvent {
     actionKind?: string;
     pacingInstanceId?: string;
     relatedObjectiveIds?: string[];
+    focusedObjectiveId?: string;
   };
   inputResult?: { accepted: boolean; code: string; message: string };
   output?: Record<string, unknown>;
@@ -231,6 +232,11 @@ function compactOutput(value: unknown): Record<string, unknown> | null {
           ? snapshot.objectives.filter(isRecord).filter((objective) => objective.status === "active")
               .flatMap((objective) => typeof objective.id === "string" ? [objective.id] : [])
           : [],
+        focusedObjective: Array.isArray(snapshot.objectives)
+          ? snapshot.objectives.filter(isRecord).find((objective) =>
+              objective.status === "active" && objective.focus === true
+            )?.id ?? null
+          : null,
         availableActivities: Array.isArray(snapshot.activities)
           ? snapshot.activities.filter(isRecord).filter((activity) => activity.available === true)
               .flatMap((activity) => typeof activity.id === "string" ? [activity.id] : [])
@@ -288,6 +294,9 @@ function stableActivityDecision(
       ? { pacingInstanceId: value.pacingInstanceId }
       : {}),
     ...(relatedObjectiveIds ? { relatedObjectiveIds } : {}),
+    ...(typeof value.focusedObjectiveId === "string"
+      ? { focusedObjectiveId: value.focusedObjectiveId }
+      : {}),
   };
 }
 
@@ -349,6 +358,9 @@ function formatActivityDecision(
     ...(decision.relatedObjectiveIds?.length
       ? [`objectives=${decision.relatedObjectiveIds.join(",")}`]
       : []),
+    ...(decision.focusedObjectiveId
+      ? [`focus=${decision.focusedObjectiveId}`]
+      : []),
     ...(decision.recommended === true ? ["recommended"] : []),
   ];
   return ` "${decision.title}"${semantics.length ? ` [${semantics.join("; ")}]` : ""}`;
@@ -392,7 +404,10 @@ function formatOutput(value: Record<string, unknown> | undefined): string {
     const calendar = typeof value.slotName === "string" && value.slotName.length > 0
       ? ` day=${String(value.day ?? "?")} slot=${value.slotName}`
       : "";
-    return `hub${calendar} available=[${available}]`;
+    const focus = typeof value.focusedObjective === "string"
+      ? ` focus=${value.focusedObjective}`
+      : "";
+    return `hub${calendar}${focus} available=[${available}]`;
   }
   if (value.type === "scriptComplete") return `scriptComplete ${String(value.completedId ?? "-")}`;
   if (value.type === "gameEnd") return `gameEnd${value.reason ? `: ${String(value.reason)}` : ""}`;

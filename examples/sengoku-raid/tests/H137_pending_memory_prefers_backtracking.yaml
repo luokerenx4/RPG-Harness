@@ -1,0 +1,44 @@
+name: 放した鬼の记忆在等距时优先引导回入口
+description: |
+  From the stone paths, both the burnt temple extraction point and the known
+  foothills entry are one move away. The focused memory objective must prefer
+  backtracking instead of sending a player deeper into a fresh danger merely
+  to cash in a nonlethal story reward.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_stone_paths
+    scripts:
+      zone_haunt_oni_warrior:
+        selfSwitches: { A: true }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 20, intellect: 5 }
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 3
+      pendingLoot: { ryo: 19 }
+      visited:
+        mt_houkyou_foothills:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: { ryo: 19 }
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: objective
+    id: released_oni_memory
+    scope: side
+    focus: true
+    relatedActivityIncludes: move:mt_houkyou_foothills

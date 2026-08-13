@@ -25,6 +25,8 @@ export interface ActivityDecisionContext {
   actionKind?: string;
   pacingInstanceId?: string;
   relatedObjectiveIds?: string[];
+  /** The related active objective that currently owns player/AI attention. */
+  focusedObjectiveId?: string;
 }
 
 interface ChoiceSelectionTarget {
@@ -84,12 +86,15 @@ export function activityDecisionContext(
   if (output?.type !== "hubMenu" || input.type !== "doActivity") return undefined;
   const activity = output.snapshot.activities.find(({ id }) => id === input.id);
   if (!activity || activity.available !== true) return undefined;
-  const relatedObjectiveIds = output.snapshot.objectives
+  const relatedObjectives = output.snapshot.objectives
     ?.filter((objective) =>
       objective.status === "active" &&
       objective.relatedActivityIds?.includes(activity.id)
-    )
-    .map(({ id }) => id);
+    );
+  const relatedObjectiveIds = relatedObjectives?.map(({ id }) => id);
+  const focusedObjectiveId = relatedObjectives?.find(
+    (objective) => objective.focus === true,
+  )?.id;
   return {
     activityId: activity.id,
     title: activity.title,
@@ -104,5 +109,6 @@ export function activityDecisionContext(
       ? { pacingInstanceId: activity.pacingInstanceId }
       : {}),
     ...(relatedObjectiveIds?.length ? { relatedObjectiveIds } : {}),
+    ...(focusedObjectiveId !== undefined ? { focusedObjectiveId } : {}),
   };
 }

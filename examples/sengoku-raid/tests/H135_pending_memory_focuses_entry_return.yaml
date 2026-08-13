@@ -1,0 +1,51 @@
+name: 放した鬼の記憶は入口からの特別帰還を案内する
+description: |
+  A released enemy leaves memory in the field (A) but it is not yet available
+  at the estate (B). At the raid entry, the one-shot return action must become
+  the focused public objective without turning every entry into a free extract.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_foothills
+    scripts:
+      zone_haunt_oni_warrior:
+        selfSwitches: { A: true }
+    weapons:
+      ancestor_yaodao: { power: 10 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 20, intellect: 5 }
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 2
+      pendingLoot: { ryo: 19 }
+      visited:
+        mt_houkyou_foothills:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: { ryo: 19 }
+inputs: []
+assertions:
+  - kind: activity
+    id: extract
+    available: true
+    recommended: true
+    titleIncludes: 鬼の残した記憶
+    aiTagsIncludes: return-to-hub
+  - kind: activity
+    id: extract
+    aiTagsIncludes: memory
+  - kind: objective
+    id: released_oni_memory
+    scope: side
+    focus: true
+    terminal: false
+    relatedActivityIncludes: extract
+    requirementId: return_to_hub
+    current: false
+    target: true
+    satisfied: false

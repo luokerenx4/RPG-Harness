@@ -99,6 +99,48 @@ describe("Web terminal handoff", () => {
     expect(html).not.toContain("ended-ending-id");
   });
 
+  test("makes a focused side objective visible as the current concern", () => {
+    const html = renderToStaticMarkup(
+      <StageView
+        stage={{
+          kind: "hubMenu",
+          cursor: 0,
+          snapshot: {
+            day: 0,
+            maxDay: 0,
+            slot: 0,
+            slotName: "",
+            slotsPerDay: 0,
+            stats: [],
+            affections: [],
+            objectives: [{
+              id: "memory",
+              title: "Bring the memory home",
+              scope: "side",
+              terminal: false,
+              focus: true,
+              status: "active",
+              relatedActivityIds: ["extract"],
+            }],
+            activities: [{
+              id: "extract",
+              kind: "action",
+              title: "Return",
+              cost: 0,
+              available: true,
+            }],
+          },
+        }}
+        game={{ scripts: [] } as unknown as Game}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(html).toContain("objective-focused");
+    expect(html).toContain("SIDE · NOW");
+    expect(html).toContain("Bring the memory home");
+  });
+
   test("hands a recoverable choice branch back to the player after an ending", () => {
     let explored = false;
     const html = renderToStaticMarkup(

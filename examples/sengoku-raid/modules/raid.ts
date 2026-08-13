@@ -351,6 +351,66 @@ function buildSnapshot(activities: HubActivity[], ctx: Ctx): Output {
   };
 }
 
+function pendingHauntScripts(ctx: Ctx) {
+  return ctx.game.scripts.flatMap((script) => {
+    if (!script.id.startsWith("zone_haunt_")) return [];
+    const state = ctx.state.baseline.scripts[script.id];
+    if (state?.completed === true || state?.selfSwitches.A !== true) return [];
+    return [{ script, readyInHub: state.selfSwitches.B === true }];
+  });
+}
+
+function nextMemoryReturnActivityId(
+  ctx: Ctx,
+  activities: HubActivity[],
+): string | null {
+  const m = moduleState(ctx);
+  if (!m.raid) return null;
+  if (availableActivity(activities, "extract")) return "extract";
+  const currentId = ctx.state.baseline.currentMapId;
+  if (!currentId) return null;
+  const candidates = activities.filter((activity) =>
+    activity.available && activity.id.startsWith("move:")
+  );
+  if (candidates.length === 0) return null;
+  const targetIds = new Set(
+    (ctx.game.maps ?? [])
+      .filter((map) =>
+        map.chain === m.raid!.chain &&
+        (map.isExtract === true || map.id === m.raid!.entryMapId)
+      )
+      .map(({ id }) => id),
+  );
+  const distance = (start: string): number => {
+    const seen = new Set([start]);
+    let frontier = [start];
+    let steps = 0;
+    while (frontier.length > 0) {
+      if (frontier.some((id) => targetIds.has(id))) return steps;
+      frontier = frontier.flatMap((id) =>
+        getMap(ctx, id)?.connections?.flatMap(({ target }) => {
+          if (seen.has(target)) return [];
+          seen.add(target);
+          return [target];
+        }) ?? []
+      );
+      steps += 1;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+  return candidates
+    .map((activity) => ({
+      id: activity.id,
+      targetId: activity.id.slice("move:".length),
+      distance: distance(activity.id.slice("move:".length)),
+    }))
+    .sort((left, right) =>
+      left.distance - right.distance ||
+      Number(right.targetId === m.raid!.entryMapId) -
+        Number(left.targetId === m.raid!.entryMapId)
+    )[0]?.id ?? null;
+}
+
 function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const variables = ctx.state.baseline.variables;
   const switches = ctx.state.baseline.switches;
@@ -374,6 +434,40 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     target: string | number | boolean,
     satisfied: boolean,
   ) => ({ id, label, current, target, satisfied });
+  const withPendingMemory = <T>(main: T[]) => {
+    const pending = pendingHauntScripts(ctx);
+    if (pending.length === 0) return main;
+    const inRaid = moduleState(ctx).raid !== null;
+    const ready = pending.filter(({ readyInHub }) => readyInHub);
+    const memoryReturnActivityId = inRaid
+      ? nextMemoryReturnActivityId(ctx, activities)
+      : null;
+    const relatedActivityIds = inRaid
+      ? memoryReturnActivityId ? [memoryReturnActivityId] : []
+      : ready
+          .map(({ script }) => `script:${script.id}`)
+          .filter((id) => availableActivity(activities, id));
+    const names = pending.map(({ script }) => script.title).join("、");
+    return [{
+      id: "released_oni_memory",
+      title: inRaid ? "放した鬼の記憶を大名府へ持ち帰る" : "放した鬼の記憶を辿る",
+      description: inRaid
+        ? `${names}。入口か撤退点から帰還すれば、屋敷で回想できる。`
+        : `${names}。屋敷に残った気配を調べる。`,
+      scope: "side" as const,
+      terminal: false,
+      focus: true,
+      status: "active" as const,
+      requirements: [requirement(
+        "return_to_hub",
+        "大名府へ帰還",
+        ready.length > 0,
+        true,
+        ready.length > 0,
+      )],
+      relatedActivityIds,
+    }, ...main];
+  };
   const withThreeFlowers = <T>(main: T[]) => {
     const completed =
       ctx.state.baseline.scripts.three_flowers_alliance?.completed === true;
@@ -511,7 +605,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     }, ...main];
   };
 
-  const withDeepGoals = <T>(main: T[]) => withThreeFlowers(withHellGate(main));
+  const withDeepGoals = <T>(main: T[]) =>
+    withPendingMemory(withThreeFlowers(withHellGate(main)));
 
   if (chapter < 1) {
     return withDeepGoals([{
@@ -840,7 +935,10 @@ function buildHubMenu(ctx: Ctx): Output {
   // true and it disappears from the hub.
   for (const script of ctx.game.scripts) {
     if (!script.id.startsWith("zone_haunt_")) continue;
-    if (ctx.state.baseline.scripts[script.id]?.completed === true) continue;
+    const scriptState = ctx.state.baseline.scripts[script.id];
+    if (scriptState?.completed === true || scriptState?.selfSwitches.B !== true) {
+      continue;
+    }
     const reqs = script.requires;
     const eligible = reqs === undefined || evaluateCondition(reqs, ctx.state).ok;
     if (!eligible) continue;
@@ -848,7 +946,10 @@ function buildHubMenu(ctx: Ctx): Output {
       id: `script:${script.id}`,
       kind: "script",
       title: `回想 — ${script.title}`,
-      category: "social",
+      description: "放した鬼が残した気配を、屋敷の記録と照らし合わせる",
+      category: "story",
+      aiTags: ["story", "memory", "nonlethal"],
+      recommended: true,
       cost: 0,
       available: true,
     });
@@ -1705,14 +1806,29 @@ function buildRaidMenu(ctx: Ctx): Output {
         },
       });
     }
-    if (map.isExtract) {
+    const unrecoveredMemory = pendingHauntScripts(ctx).some(
+      ({ readyInHub }) => !readyInHub,
+    );
+    const memoryReturnAtEntry =
+      map.id === m.raid.entryMapId && unrecoveredMemory;
+    if (map.isExtract || memoryReturnAtEntry) {
       activities.push({
         id: "extract",
         kind: "action",
         actionKind: "extract",
-        title: `${map.name} から撤退して大名府に戻る`,
-        description: "戦利品を蔵に納める",
+        title: memoryReturnAtEntry
+          ? `鬼の残した記憶を携え、${map.name}から大名府に戻る`
+          : `${map.name} から撤退して大名府に戻る`,
+        description: unrecoveredMemory
+          ? "戦利品を蔵に納め、放した鬼の回想を屋敷に開く"
+          : "戦利品を蔵に納める",
         category: "raid",
+        ...(unrecoveredMemory
+          ? {
+              aiTags: ["return-to-hub", "memory", "story", "nonlethal"],
+              recommended: true,
+            }
+          : {}),
         cost: 0,
         available: true,
       });
@@ -2129,6 +2245,13 @@ function endRaidExtract(ctx: Ctx): void {
     lootSummary.push(`${itemName(ctx, itemId)} ×${count}`);
   }
   const chainLabel = chainDisplayName(m.raid.chain) ?? m.raid.chain;
+  const recoveredMemories = pendingHauntScripts(ctx).filter(
+    ({ readyInHub }) => !readyInHub,
+  );
+  for (const { script } of recoveredMemories) {
+    const scriptState = ctx.state.baseline.scripts[script.id];
+    if (scriptState) scriptState.selfSwitches.B = true;
+  }
   if (
     m.raid.chain === "hell_gate" &&
     !m.achievementLog.includes("地獄門踏破 — 映し井戸より生還")
@@ -2170,6 +2293,11 @@ function endRaidExtract(ctx: Ctx): void {
   ctx.state.runtime.pendingNarrations.push(
     `${chainLabel}から撤退に成功。${lootSummary.length > 0 ? "持ち帰った戦利品：" + lootSummary.join("、") + "。" : "今回は手ぶら。"}`,
   );
+  if (recoveredMemories.length > 0) {
+    ctx.state.runtime.pendingNarrations.push(
+      `放した鬼の気配が、屋敷の古い記録へ続いている——${recoveredMemories.map(({ script }) => `「${script.title}」`).join("、")}の回想を辿れる。`,
+    );
+  }
 
   // 脈絡の話 — defer pulse_intro to the back-in-hub transition rather
   // than firing it mid-raid via a trigger on pulse_<x> rising edge.
@@ -3071,7 +3199,10 @@ const extractHandler: ActionHandler = (ctx) => {
   if (!m.raid) return {};
   const map = currentMap(ctx);
   if (!map) return {};
-  if (!map.isExtract) {
+  const memoryReturnAtEntry =
+    map.id === m.raid.entryMapId &&
+    pendingHauntScripts(ctx).some(({ readyInHub }) => !readyInHub);
+  if (!map.isExtract && !memoryReturnAtEntry) {
     return denial(`${map.name}は撤退点ではない。社か杜まで戻れ。`);
   }
   endRaidExtract(ctx);

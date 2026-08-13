@@ -57,7 +57,8 @@ export interface HubOpportunityGroupView {
 
 export interface HubObjectiveGuidanceView {
   objectiveId: string;
-  scope: "main";
+  scope: "main" | "side" | "mastery";
+  focused: boolean;
   terminal: boolean;
   decisionRequired: boolean;
   candidateActivityIds: string[];
@@ -78,18 +79,23 @@ export interface HubView {
   strategyDecisionRequired: boolean;
   opportunityGroups: HubOpportunityGroupView[];
   objectiveGuidance: HubObjectiveGuidanceView | null;
-  candidateScope: "main_objective" | "authored_recommendations" | "focus_section";
+  candidateScope:
+    | "focused_objective"
+    | "main_objective"
+    | "authored_recommendations"
+    | "focus_section";
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
   primaryReason:
+    | "focused_objective"
     | "main_objective"
     | "authored_recommendation"
     | "only_available_in_focus_section"
     | null;
-  selectionRule: "main_objective_or_authored_recommendation_or_only_candidate";
+  selectionRule: "focused_or_main_objective_or_authored_recommendation_or_only_candidate";
 }
 
 // HubSnapshot is shared by calendar/training games and free-form map hubs.
@@ -253,8 +259,14 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
       .filter((activity) => activity.available)
       .map((activity) => [activity.id, activity]),
   );
-  const guidedObjective = (snapshot.objectives ?? [])
-    .filter((objective) => objective.scope === "main" && objective.status === "active")
+  const activeObjectives = (snapshot.objectives ?? []).filter(
+    (objective) => objective.status === "active",
+  );
+  const focusedObjective = activeObjectives.find((objective) => objective.focus === true);
+  const guidedObjective = [
+    ...(focusedObjective ? [focusedObjective] : []),
+    ...activeObjectives.filter((objective) => objective.scope === "main"),
+  ]
     .map((objective) => ({
       objective,
       activities: (objective.relatedActivityIds ?? []).flatMap((id) => {
@@ -270,7 +282,9 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
       ? availableRecommended
       : focusCandidates;
   const candidateScope = guidedActivities.length > 0
-    ? "main_objective" as const
+    ? guidedObjective?.objective.focus === true
+      ? "focused_objective" as const
+      : "main_objective" as const
     : availableRecommended.length > 0
       ? "authored_recommendations" as const
       : "focus_section" as const;
@@ -288,7 +302,9 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
             : null;
   const primaryReason = primary
     ? guidedActivities.includes(primary)
-      ? "main_objective" as const
+      ? guidedObjective?.objective.focus === true
+        ? "focused_objective" as const
+        : "main_objective" as const
       : primary.recommended === true
         ? "authored_recommendation"
         : "only_available_in_focus_section"
@@ -351,7 +367,8 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     objectiveGuidance: guidedObjective
       ? {
           objectiveId: guidedObjective.objective.id,
-          scope: "main",
+          scope: guidedObjective.objective.scope,
+          focused: guidedObjective.objective.focus === true,
           terminal: guidedObjective.objective.terminal,
           decisionRequired: guidedActivities.length > 1,
           candidateActivityIds: guidedActivities.map((activity) => activity.id),
@@ -377,7 +394,7 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     primaryActivityId: primary?.id ?? null,
     primaryInput: primary ? { type: "doActivity", id: primary.id } : null,
     primaryReason,
-    selectionRule: "main_objective_or_authored_recommendation_or_only_candidate",
+    selectionRule: "focused_or_main_objective_or_authored_recommendation_or_only_candidate",
   };
 }
 

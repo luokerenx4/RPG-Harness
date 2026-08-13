@@ -93,6 +93,7 @@ describe("activity decision context", () => {
           status: "active",
           scope: "side",
           terminal: false,
+          focus: true,
           relatedActivityIds: ["release"],
         }],
         activities: [{
@@ -119,6 +120,7 @@ describe("activity decision context", () => {
       actionKind: "raid:release",
       pacingInstanceId: "encounter-1",
       relatedObjectiveIds: ["remember-the-oni"],
+      focusedObjectiveId: "remember-the-oni",
     });
   });
 

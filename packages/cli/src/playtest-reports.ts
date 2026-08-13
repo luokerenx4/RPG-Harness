@@ -1226,6 +1226,7 @@ function compactActivityDecision(value: unknown): unknown {
     "actionKind",
     "pacingInstanceId",
     "relatedObjectiveIds",
+    "focusedObjectiveId",
   ]);
 }
 
@@ -1366,6 +1367,7 @@ function compactOutput(output: unknown): unknown {
             status?: unknown;
             scope?: unknown;
             terminal?: unknown;
+            focus?: unknown;
             requirements?: unknown;
             relatedActivityIds?: unknown;
           }>;
@@ -1422,6 +1424,7 @@ function compactOutput(output: unknown): unknown {
               status: objective.status ?? null,
               scope: objective.scope ?? null,
               terminal: objective.terminal ?? null,
+              focus: objective.focus ?? null,
               requirements: objective.requirements ?? [],
               relatedActivityIds: objective.relatedActivityIds ?? [],
             })),

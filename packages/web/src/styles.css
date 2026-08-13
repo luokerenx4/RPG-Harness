@@ -311,6 +311,10 @@ body {
   border-color: #3f6d4a;
   background: #16251b;
 }
+.objective-card.objective-focused {
+  border-color: #be78e8;
+  box-shadow: inset 3px 0 0 #be78e8, 0 0 16px #be78e826;
+}
 .objective-title {
   color: #8ed5e8;
   font-size: 14px;

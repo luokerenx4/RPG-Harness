@@ -169,6 +169,7 @@ describe("session transcript", () => {
         recommended: true,
         actionKind: "private:release",
         relatedObjectiveIds: ["remember-the-oni"],
+        focusedObjectiveId: "remember-the-oni",
       },
       output: { type: "narration", text: "The oni leaves alive." },
     }]);
@@ -183,9 +184,10 @@ describe("session transcript", () => {
       recommended: true,
       actionKind: "private:release",
       relatedObjectiveIds: ["remember-the-oni"],
+      focusedObjectiveId: "remember-the-oni",
     });
     expect(formatSessionTranscript(transcript)).toContain(
-      'activity release-private-id "Release the oni" [category=combat; tags=nonlethal,mercy,memory; objectives=remember-the-oni; recommended]',
+      'activity release-private-id "Release the oni" [category=combat; tags=nonlethal,mercy,memory; objectives=remember-the-oni; focus=remember-the-oni; recommended]',
     );
   });
 

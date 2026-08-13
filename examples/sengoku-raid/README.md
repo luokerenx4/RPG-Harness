@@ -45,10 +45,15 @@ authoring source、戦闘や Hub なら live checkpoint/runtime を修正座標�
 `nonlethal/restraint/compassionate`、聞き出し・解放は `story/knowledge` や
 `mercy/memory` を持つ。quality gate は `nonlethal` の実行を必須とするため、
 Headless matrix が実際に圧制・交渉系の遊びを通らなければ certified にならない。
+放した鬼の回想は field の self-switch A と屋敷へ回収済みの B を分ける。回収前は
+`focus: true` の side objective が最短の入口/撤退点を案内し、入口ではその時だけ
+特別帰還を公開する。帰還後は同じ focus が `zone_haunt_*` 回想へ移るため、慈悲の
+約束が「もう一度危険地帯へ進まないと受け取れない」隠し条件にはならない。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
 密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。
-Web と Headless は同じ共有 view から main の候補を案内し、AI persona も目標の
+Web / TUI / Headless は同じ共有 view から、一時的な focused side を main より先に、
+通常時は main の候補を案内する。AI persona も目標の
 配列順や `ending_*` という名前には依存しない。`completionist` は terminal main
 を選ぶ前に side/mastery を消化するため、deep content の自律監査に使える。
 

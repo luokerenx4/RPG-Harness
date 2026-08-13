@@ -103,6 +103,30 @@ describe("objective persona choice preference", () => {
       personas.objective!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
   });
+
+  test("follows an author-focused side objective before the main objective", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities.unshift({
+      id: "extract-memory",
+      kind: "action",
+      title: "Bring the memory home",
+      cost: 0,
+      available: true,
+    });
+    output.snapshot.objectives!.push({
+      id: "released-memory",
+      title: "Return with the memory",
+      scope: "side",
+      terminal: false,
+      focus: true,
+      status: "active",
+      relatedActivityIds: ["extract-memory"],
+    });
+
+    await expect(
+      personas.objective!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "extract-memory" });
+  });
 });
 
 describe("hunter persona progress fallback", () => {

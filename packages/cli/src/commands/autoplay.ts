@@ -181,6 +181,8 @@ export type AutoplaySemanticDecision =
       aiTags?: string[];
       /** Active public objectives that explicitly offered this activity. */
       linkedObjectiveIds?: string[];
+      /** Related objective currently owning player/AI attention. */
+      focusedObjectiveId?: string;
     };
 
 export interface AutoplayDecisionPath {
@@ -888,6 +890,22 @@ export function summarizeDecisionPath(
             ? { linkedObjectiveIds: [...entry.activityDecision.relatedObjectiveIds].sort() }
             : linkedObjectiveIds?.length
               ? { linkedObjectiveIds }
+              : {}),
+          ...(entry.activityDecision?.focusedObjectiveId
+            ? { focusedObjectiveId: entry.activityDecision.focusedObjectiveId }
+            : activitySource?.snapshot.objectives?.find((objective) =>
+                  objective.status === "active" &&
+                  objective.focus === true &&
+                  objective.relatedActivityIds?.includes(activityId)
+                )?.id
+              ? {
+                  focusedObjectiveId: activitySource.snapshot.objectives.find(
+                    (objective) =>
+                      objective.status === "active" &&
+                      objective.focus === true &&
+                      objective.relatedActivityIds?.includes(activityId),
+                  )!.id,
+                }
               : {}),
         });
       }

@@ -11,6 +11,10 @@ interface HeadlessActivityCandidate {
   input: { type: "doActivity"; id: string };
   title: string;
   description?: string;
+  category?: string;
+  aiTags?: string[];
+  recommended?: boolean;
+  actionKind?: string;
   effectsHint?: string;
   pacingInstanceId?: string;
   forecast?: ActivityForecast;
@@ -18,11 +22,11 @@ interface HeadlessActivityCandidate {
 
 export interface HeadlessHubView {
   heuristic: true;
-  selectionRule: "main_objective_or_authored_recommendation_or_only_candidate";
+  selectionRule: ReturnType<typeof buildHubView>["selectionRule"];
   focusCategory: string | null;
   strategyDecisionRequired: boolean;
   objectiveGuidance: ReturnType<typeof buildHubView>["objectiveGuidance"];
-  candidateScope: "main_objective" | "authored_recommendations" | "focus_section";
+  candidateScope: ReturnType<typeof buildHubView>["candidateScope"];
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
@@ -42,6 +46,7 @@ export interface HeadlessHubView {
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
   primaryReason:
+    | "focused_objective"
     | "main_objective"
     | "authored_recommendation"
     | "only_available_in_focus_section"
@@ -254,6 +259,18 @@ function summarizeCandidates(
         title: activity.title,
         ...(activity.description !== undefined
           ? { description: activity.description }
+          : {}),
+        ...(activity.category !== undefined
+          ? { category: activity.category }
+          : {}),
+        ...(activity.aiTags !== undefined
+          ? { aiTags: [...activity.aiTags] }
+          : {}),
+        ...(activity.recommended !== undefined
+          ? { recommended: activity.recommended }
+          : {}),
+        ...(activity.actionKind !== undefined
+          ? { actionKind: activity.actionKind }
           : {}),
         ...(activity.effectsHint !== undefined
           ? { effectsHint: activity.effectsHint }

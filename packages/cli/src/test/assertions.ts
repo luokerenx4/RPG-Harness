@@ -68,6 +68,9 @@ function checkObjective(
   if (a.terminal !== undefined && objective.terminal !== a.terminal) {
     return `objective ${a.id}: expected terminal=${a.terminal}, got ${objective.terminal}`;
   }
+  if (a.focus !== undefined && objective.focus !== a.focus) {
+    return `objective ${a.id}: expected focus=${a.focus}, got ${String(objective.focus)}`;
+  }
   if (a.titleIncludes !== undefined && !objective.title.includes(a.titleIncludes)) {
     return `objective ${a.id}: expected title to include "${a.titleIncludes}", got "${objective.title}"`;
   }

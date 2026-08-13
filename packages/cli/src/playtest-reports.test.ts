@@ -306,6 +306,7 @@ describe("playtest reports", () => {
         actionKind: "raid:release",
         pacingInstanceId: "encounter:oni-1",
         relatedObjectiveIds: ["remember-the-oni"],
+        focusedObjectiveId: "remember-the-oni",
         payload: { private: true },
       },
       output: { type: "narration", text: "The oni leaves alive." },
@@ -328,6 +329,7 @@ describe("playtest reports", () => {
       actionKind: "raid:release",
       pacingInstanceId: "encounter:oni-1",
       relatedObjectiveIds: ["remember-the-oni"],
+      focusedObjectiveId: "remember-the-oni",
     });
   });
 

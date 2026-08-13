@@ -49,4 +49,35 @@ describe("HubMenu player projection", () => {
     expect(screen.lastFrame()).not.toContain("item");
     expect(screen.lastFrame()).not.toContain("戦利品表 revision");
   });
+
+  test("marks the author-focused objective as the current player concern", () => {
+    const snapshot: HubSnapshot = {
+      day: 0,
+      maxDay: 0,
+      slot: 0,
+      slotName: "",
+      slotsPerDay: 0,
+      stats: [],
+      affections: [],
+      objectives: [{
+        id: "memory",
+        title: "Bring the memory home",
+        scope: "side",
+        terminal: false,
+        focus: true,
+        status: "active",
+        relatedActivityIds: ["extract"],
+      }],
+      activities: [{
+        id: "extract",
+        kind: "action",
+        title: "Return",
+        cost: 0,
+        available: true,
+      }],
+    };
+
+    const screen = render(<HubMenu snapshot={snapshot} cursor={0} />);
+    expect(screen.lastFrame()).toContain("Bring the memory home · NOW");
+  });
 });

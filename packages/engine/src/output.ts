@@ -34,8 +34,17 @@ export function validateOutput(output: Output): void {
   }
   if (output.snapshot.objectives === undefined) return;
   const objectiveIds = new Set<string>();
+  let focusedObjectiveId: string | null = null;
   for (const objective of output.snapshot.objectives) {
     validateObjective(objective, objectiveIds, activityIds);
+    if (objective.focus === true) {
+      if (focusedObjectiveId !== null) {
+        throw new OutputContractError(
+          `hub objectives "${focusedObjectiveId}" and "${objective.id}" are both focused`,
+        );
+      }
+      focusedObjectiveId = objective.id;
+    }
     objectiveIds.add(objective.id);
   }
 }
@@ -107,6 +116,16 @@ function validateObjective(
   if (typeof objective.terminal !== "boolean") {
     throw new OutputContractError(
       `hub objective "${objective.id}" must declare terminal as a boolean`,
+    );
+  }
+  if (objective.focus !== undefined && typeof objective.focus !== "boolean") {
+    throw new OutputContractError(
+      `hub objective "${objective.id}" focus must be a boolean when present`,
+    );
+  }
+  if (objective.focus === true && objective.status !== "active") {
+    throw new OutputContractError(
+      `hub objective "${objective.id}" can be focused only while active`,
     );
   }
   if (!["active", "completed", "blocked"].includes(objective.status)) {

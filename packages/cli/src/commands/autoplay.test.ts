@@ -103,6 +103,7 @@ describe("autoplay semantic decision paths", () => {
         actionKind: "raid:release",
         pacingInstanceId: "encounter:oni-1",
         relatedObjectiveIds: ["remember-the-oni"],
+        focusedObjectiveId: "remember-the-oni",
       },
       inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
       output: { type: "narration", text: "The oni leaves alive." },
@@ -113,6 +114,7 @@ describe("autoplay semantic decision paths", () => {
       pacingInstanceId: "encounter:oni-1",
       aiTags: ["nonlethal", "mercy", "memory"],
       linkedObjectiveIds: ["remember-the-oni"],
+      focusedObjectiveId: "remember-the-oni",
     }]);
   });
 

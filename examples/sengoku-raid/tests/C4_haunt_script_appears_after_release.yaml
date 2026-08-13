@@ -11,6 +11,7 @@ state:
       zone_haunt_oni_lesser:
         selfSwitches:
           A: true
+          B: true
     weapons:
       ancestor_yaodao:
         power: 6

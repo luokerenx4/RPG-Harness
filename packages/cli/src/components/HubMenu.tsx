@@ -66,8 +66,14 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
 
       {(snapshot.objectives ?? []).map((objective) => (
         <Box key={objective.id} flexDirection="column" marginBottom={1}>
-          <Text bold color={objective.status === "completed" ? "green" : "cyan"}>
+          <Text
+            bold
+            color={objective.status === "completed"
+              ? "green"
+              : objective.focus === true ? "magenta" : "cyan"}
+          >
             {objective.status === "completed" ? "✓" : "◆"} {objective.title}
+            {objective.focus === true ? " · NOW" : ""}
           </Text>
           {objective.description ? <Text dimColor>{objective.description}</Text> : null}
           {(objective.requirements ?? []).map((req) => (

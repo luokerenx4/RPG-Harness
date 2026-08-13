@@ -691,7 +691,7 @@ export function StageView({
           ))}
           {(stage.snapshot.objectives ?? []).map((objective) => (
             <section
-              className={`objective-card objective-${objective.status} objective-scope-${objective.scope}`}
+              className={`objective-card objective-${objective.status} objective-scope-${objective.scope}${objective.focus === true ? " objective-focused" : ""}`}
               key={objective.id}
             >
               <div className="objective-title">
@@ -702,6 +702,7 @@ export function StageView({
                       ? "SIDE"
                       : "MASTERY"}
                   {objective.terminal ? " · FINAL" : ""}
+                  {objective.focus === true ? " · NOW" : ""}
                 </span>
                 {objective.status === "completed" ? "✓" : "◆"} {objective.title}
               </div>

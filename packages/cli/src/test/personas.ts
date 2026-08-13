@@ -239,7 +239,9 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
   );
   const scopeRank = { main: 0, side: 1, mastery: 2 } as const;
   const objectives = [...(output.snapshot.objectives ?? [])].sort(
-    (left, right) => scopeRank[left.scope] - scopeRank[right.scope],
+    (left, right) =>
+      Number(right.focus === true) - Number(left.focus === true) ||
+      scopeRank[left.scope] - scopeRank[right.scope],
   );
   for (const objective of objectives) {
     if (objective.status !== "active") continue;

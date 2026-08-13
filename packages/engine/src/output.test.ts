@@ -71,6 +71,29 @@ describe("AI-facing output contract", () => {
     expect(() => validateOutput(output)).toThrow(/duplicate hub activity id/);
   });
 
+  test("allows one focused side objective and rejects ambiguous focus", () => {
+    const output = hub({
+      id: "memory",
+      title: "Recover a memory",
+      scope: "side",
+      terminal: false,
+      focus: true,
+      status: "active",
+      relatedActivityIds: ["conclude"],
+    }) as Extract<Output, { type: "hubMenu" }>;
+    expect(() => validateOutput(output)).not.toThrow();
+    output.snapshot.objectives!.push({
+      id: "second",
+      title: "Second focus",
+      scope: "main",
+      terminal: false,
+      focus: true,
+      status: "active",
+      relatedActivityIds: ["conclude"],
+    });
+    expect(() => validateOutput(output)).toThrow(/both focused/);
+  });
+
   test("Engine.run enforces the contract before exposing custom preset output", async () => {
     const game: Game = {
       title: "Dynamic output",

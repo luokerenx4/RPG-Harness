@@ -192,8 +192,9 @@ Hub objectives carry explicit author intent rather than naming conventions:
 linked activity may conclude the run. `Engine.run()` validates objective ids,
 requirements, enum values, and same-snapshot activity links before any renderer
 or agent sees the output. `frontend-core` then derives one shared guidance model
-for both Web and Headless clients: an executable active main objective takes
-precedence over authored recommendations, without collapsing multiple valid
+for Web, TUI, and Headless clients: one author-declared active `focus` objective
+takes precedence, followed by an executable active main objective and authored
+recommendations, without collapsing multiple valid
 links into an arbitrary automatic choice. Built-in and module personas consume
 the same fields, so objective ordering and `ending_*`-style ids are not policy.
 

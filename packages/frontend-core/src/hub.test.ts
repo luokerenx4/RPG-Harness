@@ -110,9 +110,51 @@ describe("buildHubView", () => {
       objectiveGuidance: {
         objectiveId: "campaign",
         scope: "main",
+        focused: false,
         terminal: true,
         decisionRequired: false,
         primaryInput: { type: "doActivity", id: "conclude" },
+      },
+    });
+  });
+
+  test("lets one focused side objective guide without relabeling it main", () => {
+    const view = buildHubView(snapshot({
+      objectives: [
+        {
+          id: "memory",
+          title: "Bring the memory home",
+          scope: "side",
+          terminal: false,
+          focus: true,
+          status: "active",
+          relatedActivityIds: ["extract"],
+        },
+        {
+          id: "campaign",
+          title: "Continue campaign",
+          scope: "main",
+          terminal: false,
+          status: "active",
+          relatedActivityIds: ["deeper"],
+        },
+      ],
+      activities: [
+        activity("deeper", "raid", true),
+        activity("extract", "raid", true),
+      ],
+    }));
+
+    expect(view).toMatchObject({
+      candidateScope: "focused_objective",
+      candidateActivityIds: ["extract"],
+      primaryActivityId: "extract",
+      primaryReason: "focused_objective",
+      objectiveGuidance: {
+        objectiveId: "memory",
+        scope: "side",
+        focused: true,
+        primaryInput: { type: "doActivity", id: "extract" },
       },
     });
   });

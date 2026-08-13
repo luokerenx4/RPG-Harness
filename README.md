@@ -399,7 +399,8 @@ coordinates. An AI can therefore review what a GUI or Headless player actually
 experienced without scraping JSONL or confusing later source edits with history.
 Accepted Hub inputs persist an `activityDecision` beside the input/output pair:
 the exact replay id plus its title, category, AI tags, recommendation, pacing
-identity and linked public objectives. The compact transcript renders that
+identity, linked public objectives, and the focused objective that owned the
+decision. The compact transcript renders that
 evidence on the selected line, so a tailed or forked history still says that an
 opaque module action meant `nonlethal / mercy / memory` without retaining the
 entire preceding menu or leaking its dispatch payload.
@@ -625,7 +626,10 @@ rpgh cover ./examples/sengoku-raid --source-session player-main \
 persist every move into a GUI-compatible named session. Every objective declares
 its authored `scope` (`main`, `side`, or `mastery`) and whether it is `terminal`;
 clients never infer either meaning from array order or ids such as `ending_*`.
-An active main objective with executable links becomes the shared GUI/Headless
+A Hub objective may additionally set `focus: true` when a temporary side
+concern must own immediate player and agent attention without being relabelled
+as the main quest. At most one active objective may be focused. A focused
+objective, otherwise an active main objective, becomes the shared GUI/TUI/Headless
 guidance candidate before ordinary authored recommendations. One link is a safe
 primary action; several links remain an explicit decision for the player or
 agent. The engine validates this contract at the output boundary and rejects

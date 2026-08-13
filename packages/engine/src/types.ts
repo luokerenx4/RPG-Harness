@@ -1354,6 +1354,12 @@ export interface HubObjectiveSnapshot {
   scope: HubObjectiveScope;
   /** True when following this objective can end the current campaign/session. */
   terminal: boolean;
+  /**
+   * Author-owned current attention. A focused side objective may temporarily
+   * guide GUI and AI players without being mislabeled as the main campaign.
+   * At most one active objective may be focused in a Hub snapshot.
+   */
+  focus?: boolean;
   status: "active" | "completed" | "blocked";
   requirements?: HubObjectiveRequirement[];
   relatedActivityIds?: string[];
