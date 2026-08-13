@@ -40,7 +40,11 @@ and screen untouched, shows a recoverable notice, and remains visible to
 `rpgh transcript` as diagnostic evidence.
 Each event also points at an immutable, content-addressed state checkpoint, so a
 GUI finding is immediately forkable and reportable by a Headless agent. A
-report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
+project stores each unique checkpoint body once under
+`.rpg-harness/objects/checkpoints/`, even when many GUI and Headless branches
+reference it. `rpgh compact-checkpoints <game-dir>` safely previews migration
+of older per-session copies; add `--apply` only after the hash preflight passes.
+A report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
 the observed state after the live save and ordinary replay log are cleared.
 The GUI watches content revisions and reloads when another surface advances the
 session. Compare-and-swap still rejects a stale write if both act inside the
@@ -190,6 +194,7 @@ rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close a verifie
 rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
+rpgh compact-checkpoints <game-dir> [--apply]                 # deduplicate immutable state objects
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue

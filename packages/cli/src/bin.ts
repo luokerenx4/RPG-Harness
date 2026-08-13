@@ -27,6 +27,7 @@ import { initCommand } from "./commands/init";
 import { screenshotCommand } from "./commands/screenshot";
 import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
 import { studioCommand } from "./commands/studio";
+import { compactCheckpointsCommand } from "./commands/compact-checkpoints";
 import {
   reportCommand,
   reportsCommand,
@@ -63,6 +64,11 @@ COMMANDS
 
   sessions <game-dir>
       List existing sessions (one per line, stdout). Empty status to stderr.
+
+  compact-checkpoints <game-dir> [--apply] [--pretty]
+      Preflight legacy per-session checkpoints and consolidate identical state
+      bodies into the project content-addressed object store. Dry-run by default;
+      --apply removes each legacy copy only after its global object is verified.
 
   coverage <game-dir> [--session NAME] [--family] [--status pending|completed|started|stale|uncovered|ignored|all]
            [--format table|json]
@@ -272,6 +278,8 @@ async function main(): Promise<void> {
       return runStep(rest);
     case "sessions":
       return runSessions(rest);
+    case "compact-checkpoints":
+      return runCompactCheckpoints(rest);
     case "coverage":
       return runCoverage(rest);
     case "choices":
@@ -344,6 +352,26 @@ async function runPlay(args: string[]): Promise<void> {
   }
   const gameDir = positionals[0];
   await playCommand(gameDir ? { gameDir } : {});
+}
+
+async function runCompactCheckpoints(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      apply: { type: "boolean", default: false },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh compact-checkpoints <game-dir> [--apply] [--pretty]",
+  );
+  await compactCheckpointsCommand({
+    gameDir,
+    apply: Boolean(values.apply),
+    pretty: Boolean(values.pretty),
+  });
 }
 
 async function runPeek(args: string[]): Promise<void> {

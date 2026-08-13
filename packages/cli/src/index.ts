@@ -22,6 +22,10 @@ export {
   formatDevelopmentWorklist,
 } from "./commands/worklist";
 export { runDevelopmentWorkItem } from "./commands/work";
+export {
+  compactCheckpointsCommand,
+  formatCheckpointCompaction,
+} from "./commands/compact-checkpoints";
 export type { WorkArgs, WorkResult } from "./commands/work";
 export {
   DEFAULT_CHOICE_PROBE_PERSONAS,
