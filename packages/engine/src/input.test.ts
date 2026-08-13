@@ -76,7 +76,7 @@ describe("public output/input contract", () => {
     }).code).toBe("activity-not-present");
   });
 
-  test("hard-locks static activities but routes handler-backed actions to their denial handler", () => {
+  test("keeps GUI availability and expected Headless activity ids identical", () => {
     const output = hub();
     expect(classifyInput(output, {
       type: "doActivity",
@@ -85,11 +85,22 @@ describe("public output/input contract", () => {
     expect(classifyInput(output, {
       type: "doActivity",
       id: "rest",
-    }).accepted).toBe(true);
+    })).toMatchObject({
+      accepted: false,
+      code: "activity-locked",
+      expected: [
+        { type: "doActivity", ids: ["depart"] },
+        { type: "quit" },
+      ],
+    });
     expect(classifyInput(output, {
       type: "doActivity",
       id: "study",
     }).code).toBe("activity-locked");
+    expect(classifyInput(output, {
+      type: "doActivity",
+      id: "depart",
+    }).accepted).toBe(true);
   });
 });
 
@@ -129,6 +140,14 @@ function hub(): Extract<Output, { type: "hubMenu" }> {
           cost: 1,
           available: false,
           lockedReason: "Library closed",
+        },
+        {
+          id: "depart",
+          kind: "action",
+          actionKind: "depart",
+          title: "Depart",
+          cost: 0,
+          available: true,
         },
       ],
     },

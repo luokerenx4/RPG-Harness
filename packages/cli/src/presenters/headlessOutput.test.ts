@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { HubSnapshot } from "@rpg-harness/engine";
-import { presentHeadlessOutput } from "./headlessOutput";
+import { compactHeadlessOutput, presentHeadlessOutput } from "./headlessOutput";
 
 describe("presentHeadlessOutput", () => {
   test("adds grouped hub semantics and a directly executable heuristic input", () => {
@@ -258,5 +258,89 @@ describe("presentHeadlessOutput", () => {
       primaryActivityId: null,
       primaryInput: null,
     });
+  });
+
+  test("compacts a hub to its GUI-visible context and available decisions", () => {
+    const snapshot: HubSnapshot = {
+      day: 2,
+      maxDay: 7,
+      slot: 1,
+      slotName: "Evening",
+      slotsPerDay: 2,
+      stats: [{ id: "hp", name: "HP", value: 8, min: 0, max: 10 }],
+      affections: [{ id: "ally", name: "Ally", value: 3 }],
+      objectives: [{
+        id: "main",
+        title: "Leave town",
+        scope: "main",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: ["depart", "move"],
+      }],
+      activities: [
+        {
+          id: "depart",
+          kind: "action",
+          title: "Depart",
+          category: "raid",
+          cost: 0,
+          available: true,
+          recommended: true,
+        },
+        {
+          id: "move",
+          kind: "action",
+          title: "Move onward",
+          category: "raid",
+          cost: 0,
+          available: true,
+        },
+        ...Array.from({ length: 100 }, (_, index) => ({
+          id: `locked-${index}`,
+          kind: "action" as const,
+          title: `Locked ${index}`,
+          category: "shop",
+          cost: 0,
+          available: false,
+          lockedReason: `need-key-${index}`,
+        })),
+      ],
+    };
+    const compact = compactHeadlessOutput(
+      presentHeadlessOutput({ type: "hubMenu", snapshot }, new Map()),
+    );
+
+    expect(compact).toMatchObject({
+      type: "hubMenu",
+      context: {
+        day: 2,
+        stats: [{ id: "hp", value: 8 }],
+        objectives: [{ id: "main", title: "Leave town" }],
+      },
+      decision: {
+        candidateActivityIds: ["depart", "move"],
+        candidateInputs: [
+          { type: "doActivity", id: "depart" },
+          { type: "doActivity", id: "move" },
+        ],
+        candidates: [
+          { activityId: "depart", title: "Depart" },
+          { activityId: "move", title: "Move onward" },
+        ],
+        primaryActivityId: null,
+      },
+      opportunityGroups: [{
+        category: "raid",
+        candidates: [{ activityId: "depart", title: "Depart" }],
+      }],
+      sections: [
+        { category: "raid", availableCount: 2, lockedCount: 0 },
+        { category: "shop", availableCount: 0, lockedCount: 100 },
+      ],
+    });
+    expect(compact).not.toHaveProperty("snapshot");
+    expect(compact).not.toHaveProperty("hubView");
+    expect(JSON.stringify(compact)).not.toContain("need-key-99");
+    expect(JSON.stringify(compact).length).toBeLessThan(2_000);
   });
 });

@@ -3,12 +3,14 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { assertSessionName, withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
+import { presentHeadlessCommandResult } from "../presenters/headlessCommand";
 import { presentHeadlessOutput } from "../presenters/headlessOutput";
 import { loadSession, saveSession, sessionDir } from "../session";
 
 interface Args {
   gameDir: string;
   session: string;
+  full: boolean;
   pretty: boolean;
 }
 
@@ -28,11 +30,13 @@ export async function peekCommand(args: Args): Promise<void> {
   });
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
   const output = presentHeadlessOutput(result.output, assetMap);
-  const payload = {
+  const payload = presentHeadlessCommandResult({
+    session: args.session,
     output,
     done: result.done,
     state: result.state,
-  };
+    full: args.full,
+  });
   process.stdout.write(
     args.pretty ? JSON.stringify(payload, null, 2) + "\n" : JSON.stringify(payload) + "\n",
   );

@@ -59,12 +59,14 @@ COMMANDS
       Without <game-dir>, scans ./ and ./examples for folders with
       game.yaml and shows a picker.
 
-  peek     <game-dir> [--session NAME] [--pretty]
+  peek     <game-dir> [--session NAME] [--full] [--pretty]
       Print the current Output for the session without applying any input.
       Defaults to session "default". Creates an initial state if none exists.
+      The default decision envelope is bounded; --full includes raw state/hub.
 
-  step     <game-dir> --input JSON [--session NAME] [--pretty]
+  step     <game-dir> --input JSON [--session NAME] [--full] [--pretty]
       Apply one Input and return the next Output. Persists state.
+      The default decision envelope is bounded; --full includes raw state/hub.
       Example: rpgh step ./my-game --input '{"type":"next"}'
 
   sessions <game-dir>
@@ -455,17 +457,19 @@ async function runPeek(args: string[]): Promise<void> {
     args,
     options: {
       session: { type: "string", default: "default" },
+      full: { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh peek <game-dir> [--session NAME] [--pretty]",
+    "rpgh peek <game-dir> [--session NAME] [--full] [--pretty]",
   );
   await peekCommand({
     gameDir,
     session: values.session ?? "default",
+    full: Boolean(values.full),
     pretty: Boolean(values.pretty),
   });
 }
@@ -476,13 +480,14 @@ async function runStep(args: string[]): Promise<void> {
     options: {
       session: { type: "string", default: "default" },
       input: { type: "string" },
+      full: { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh step <game-dir> --input JSON [--session NAME] [--pretty]",
+    "rpgh step <game-dir> --input JSON [--session NAME] [--full] [--pretty]",
   );
   if (!values.input) {
     process.stderr.write("Missing required flag: --input\n");
@@ -492,6 +497,7 @@ async function runStep(args: string[]): Promise<void> {
     gameDir,
     session: values.session ?? "default",
     input: values.input,
+    full: Boolean(values.full),
     pretty: Boolean(values.pretty),
   });
 }

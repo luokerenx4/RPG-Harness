@@ -36,13 +36,19 @@ Output is a single line of JSON:
 
 ```json
 {
+  "session": "claude-thoughtful",
+  "webPath": "/?session=claude-thoughtful",
+  "stateRevision": "<sha256>",
   "output": { "type": "...", ... },
-  "done": false,
-  "state": { "baseline": { ... } }
+  "done": false
 }
 ```
 
-If `done` is `true`, the game is over. Read the final state and tell the user which ending you reached.
+The default response is the bounded public decision surface. Hub output keeps
+the GUI-visible context, objectives, available opportunity groups and exact
+candidate inputs without dumping the private save or every locked activity.
+Use `--full` only when diagnosing state internals. If `done` is `true`, the game
+is over; read the `gameEnd` output and tell the user which ending you reached.
 
 ### Step 2: Decide based on `output.type`
 
@@ -124,10 +130,11 @@ In a `choice`, options have `available: true` or `available: false`. Locked opti
 ## When the game ends
 
 ```bash
-rpgh peek "$GAME" --session "$SESSION"
+rpgh peek "$GAME" --session "$SESSION" --full
 ```
 
-The final state's `baseline.completedScripts[-1]` is the ending you reached. Tell the user:
+The terminal output's stable `endingId` is the ending you reached; `--full`
+also exposes the final state when diagnosis needs it. Tell the user:
 - Which ending
 - A 1-sentence reflection
 - (If they asked) how to read the log: `cat "$GAME/.rpg-harness/sessions/$SESSION/log.jsonl"`
@@ -284,7 +291,7 @@ audit. If `random` is included in `--personas`, always provide `--seed`.
 
 ```bash
 $ rpgh peek "$GAME" --session "$SESSION"
-{"output":{"type":"dialogue","speakerName":"narrator","text":"慶長十年、初秋。"},"done":false,"state":{"baseline":{"currentScriptId":"000_intro",...}}}
+{"session":"claude-thoughtful","webPath":"/?session=claude-thoughtful","stateRevision":"...","output":{"type":"dialogue","speakerName":"narrator","text":"慶長十年、初秋。"},"done":false}
 
 # Intro is auto-launched (sengoku-raid sets currentScriptId in onSessionStart).
 # Just drain it with `next`.

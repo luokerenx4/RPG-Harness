@@ -1,9 +1,9 @@
-name: hub:upgrade_mundane 資源不足時の denial（D 分割後）
+name: hub:upgrade_mundane 資源不足時は public action を lock（D 分割後）
 description: |
   Pulse-system update — upgrade_weapon is split into upgrade_mundane/
-  upgrade_pure/upgrade_oni. This test exercises the mundane path
-  (魂石の欠片 ×3 + 100 両) with no shards. The denial narration mentions
-  the missing resource.
+  upgrade_pure/upgrade_oni. With no shards, the same public snapshot used by
+  GUI and Headless clients locks the mundane path and explains the missing
+  resource instead of advertising an input that can only narrate denial.
 state:
   baseline:
     completedScripts:
@@ -14,15 +14,12 @@ state:
   sengoku-raid:
     raid: null
     metCharacters: []
-inputs:
-  - type: doActivity
-    id: upgrade_mundane
-  - type: next
+inputs: []
 assertions:
   - kind: state
     path: baseline.weapons.ancestor_yaodao.power
     eq: 4
-  - kind: output
-    type: narration
-    present: true
-    textIncludes: 魂石の欠片
+  - kind: activity
+    id: upgrade_mundane
+    available: false
+    lockedReasonIncludes: 魂石の欠片

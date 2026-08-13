@@ -66,6 +66,55 @@ export type HeadlessOutput = Output & {
   hubView?: HeadlessHubView;
 };
 
+export interface CompactHeadlessHubOutput {
+  type: "hubMenu";
+  context: {
+    day: number;
+    maxDay: number;
+    slot: number;
+    slotName: string;
+    slotsPerDay: number;
+    stats: Extract<Output, { type: "hubMenu" }>["snapshot"]["stats"];
+    affections: Extract<Output, { type: "hubMenu" }>["snapshot"]["affections"];
+    resourceGroups: NonNullable<
+      Extract<Output, { type: "hubMenu" }>["snapshot"]["resourceGroups"]
+    >;
+    objectives: NonNullable<
+      Extract<Output, { type: "hubMenu" }>["snapshot"]["objectives"]
+    >;
+  };
+  decision: Pick<
+    HeadlessHubView,
+    | "selectionRule"
+    | "focusCategory"
+    | "strategyDecisionRequired"
+    | "objectiveGuidance"
+    | "candidateScope"
+    | "decisionRequired"
+    | "candidateActivityIds"
+    | "candidateInputs"
+    | "candidates"
+    | "primaryActivityId"
+    | "primaryInput"
+    | "primaryReason"
+  >;
+  opportunityGroups: HeadlessHubView["opportunityGroups"];
+  sections: Array<{
+    category: string;
+    label: string;
+    availableCount: number;
+    lockedCount: number;
+  }>;
+  visualState?: Extract<Output, { type: "hubMenu" }>["visualState"];
+  visualStateResolved?: JoinedVisualState;
+}
+
+export type CompactHeadlessOutput =
+  | CompactHeadlessHubOutput
+  | (Exclude<Output, { type: "hubMenu" }> & {
+      visualStateResolved?: JoinedVisualState;
+    });
+
 // Add renderer-neutral affordances to the raw engine event. The original
 // Output fields stay intact; clients that know only the engine protocol can
 // ignore these additions, while AI players get a directly executable input.
@@ -83,6 +132,63 @@ export function presentHeadlessOutput(
     ...output,
     ...(visualStateResolved ? { visualStateResolved } : {}),
     ...(hubView ? { hubView } : {}),
+  };
+}
+
+/**
+ * Keep the interactive Headless loop focused on the same actionable surface
+ * rendered by GUI/TUI clients. A raw hub embeds every locked activity and then
+ * repeats the available subset in hubView; that is useful diagnostic data, but
+ * it is the wrong default context for one AI decision. `peek --full` and
+ * `step --full` retain the lossless representation.
+ */
+export function compactHeadlessOutput(
+  output: HeadlessOutput | null,
+): CompactHeadlessOutput | null {
+  if (!output || output.type !== "hubMenu") {
+    return output as CompactHeadlessOutput | null;
+  }
+  const view = output.hubView ?? summarizeHubView(output);
+  return {
+    type: "hubMenu",
+    context: {
+      day: output.snapshot.day,
+      maxDay: output.snapshot.maxDay,
+      slot: output.snapshot.slot,
+      slotName: output.snapshot.slotName,
+      slotsPerDay: output.snapshot.slotsPerDay,
+      stats: output.snapshot.stats,
+      affections: output.snapshot.affections,
+      resourceGroups: output.snapshot.resourceGroups ?? [],
+      objectives: output.snapshot.objectives ?? [],
+    },
+    decision: {
+      selectionRule: view.selectionRule,
+      focusCategory: view.focusCategory,
+      strategyDecisionRequired: view.strategyDecisionRequired,
+      objectiveGuidance: view.objectiveGuidance,
+      candidateScope: view.candidateScope,
+      decisionRequired: view.decisionRequired,
+      candidateActivityIds: view.candidateActivityIds,
+      candidateInputs: view.candidateInputs,
+      candidates: view.candidates,
+      primaryActivityId: view.primaryActivityId,
+      primaryInput: view.primaryInput,
+      primaryReason: view.primaryReason,
+    },
+    opportunityGroups: view.opportunityGroups,
+    sections: view.sections.map((section) => ({
+      category: section.category,
+      label: section.label,
+      availableCount: section.availableCount,
+      lockedCount: section.lockedCount,
+    })),
+    ...(output.visualState !== undefined
+      ? { visualState: output.visualState }
+      : {}),
+    ...(output.visualStateResolved !== undefined
+      ? { visualStateResolved: output.visualStateResolved }
+      : {}),
   };
 }
 

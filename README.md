@@ -200,8 +200,8 @@ Saves live at `<game-dir>/.rpg-harness/sessions/<name>/state.json` — plain JSO
 ```bash
 rpgh init     <dir> [--force]                                  # scaffold a new game
 rpgh play     <game-dir>                                       # interactive TUI (ink, hot-reloading)
-rpgh step     <game-dir> --input <json> [--session NAME]       # headless, stateless step
-rpgh peek     <game-dir> [--session NAME]                      # inspect current state
+rpgh step     <game-dir> --input <json> [--session NAME] [--full] # headless persisted step
+rpgh peek     <game-dir> [--session NAME] [--full]             # compact current decision
 rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays/forks/reports stops
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
@@ -505,6 +505,14 @@ presentation-local `{"type":"choose","index":2}` form for legacy choices.
 State persists to `<game-dir>/.rpg-harness/sessions/<name>/state.json` between calls.
 Each `step` appends `(input, output, checkpoint)` to `log.jsonl`. Fork any exact
 post-step state without overwriting either session:
+
+By default, `peek` and `step` return a bounded decision envelope with `session`,
+`webPath`, a content revision for the resulting state, the current public
+output, and `inputResult` after a step. Hub outputs retain the same stats,
+objectives, available opportunity groups, executable inputs, and selection
+guidance rendered by GUI/TUI clients, while omitting the duplicated raw activity
+table and private save body. Use `--full` only for lossless state/hub diagnosis;
+ordinary AI play should follow the compact public contract.
 
 Every `step` response also carries an `inputResult`. `accepted:true` confirms
 the input was routed. A rejected input returns the same current Output plus a

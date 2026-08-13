@@ -154,10 +154,7 @@ export function classifyInput(output: Output, input: unknown): InputResult {
       expected,
     );
   }
-  if (
-    !activity.available &&
-    (activity.kind === "script" || activity.actionKind === undefined)
-  ) {
+  if (!activity.available) {
     return rejected(
       "activity-locked",
       activity.lockedReason
@@ -191,10 +188,7 @@ export function expectedInputs(output: Output): InputExpectation[] {
       return [{ type: "select", ids: output.nextAvailable.map((script) => script.id) }, { type: "quit" }];
     case "hubMenu":
       return [{ type: "doActivity", ids: output.snapshot.activities
-        .filter((activity) =>
-          activity.available ||
-          (activity.kind === "action" && activity.actionKind !== undefined)
-        )
+        .filter((activity) => activity.available)
         .map((activity) => activity.id) }, { type: "quit" }];
     case "gameEnd":
       return [];
