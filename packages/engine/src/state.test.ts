@@ -358,6 +358,32 @@ describe("createInitialState", () => {
     const state = createInitialState([makeCharacter("alice")]);
     expect(state.baseline.characters.alice).toBeDefined();
   });
+
+  test("seeds author module initialization and persists its advanced cursor", () => {
+    const randomWorld = {
+      id: "random-world",
+      initialize: (_game: unknown, context: { rng: () => number }) => ({
+        landmarks: [context.rng(), context.rng()],
+      }),
+    };
+    const game = makeGame({ modules: [randomWorld] });
+
+    const first = createInitialState(game, { seed: 17 });
+    const replay = createInitialState(game, { seed: 17 });
+    const other = createInitialState(game, { seed: 18 });
+
+    expect(first["random-world"]).toEqual(replay["random-world"]);
+    expect(first.runtime.rng).toEqual(replay.runtime.rng);
+    expect(first["random-world"]).not.toEqual(other["random-world"]);
+    expect(first.runtime.rng?.state).not.toBe(17);
+  });
+
+  test("rejects initial-world seeds outside uint32", () => {
+    expect(() => createInitialState(twoCharGame(), { seed: -1 }))
+      .toThrow("uint32");
+    expect(() => createInitialState(twoCharGame(), { seed: 0x1_0000_0000 }))
+      .toThrow("uint32");
+  });
 });
 
 describe("applyDelta — selfSwitches", () => {

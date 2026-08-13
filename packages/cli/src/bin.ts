@@ -165,10 +165,11 @@ COMMANDS
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
 
-  audit    <game-dir> --from-session PLAYER --session-prefix PREFIX
-           [--from-at N] [--personas CSV] [--max-steps N] [--seed N]
+  audit    <game-dir> --session-prefix PREFIX
+           [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--seed N]
            [--no-report-on-stop] [--pretty]
-      Fork one immutable player checkpoint into an isolated AI persona matrix.
+      Fork one immutable player checkpoint into an isolated AI persona matrix,
+      or omit --from-session to materialize a seeded <prefix>-source new game.
       Preflights every target before running, then summarizes endings, stalls,
       masked behavior cycles, semantic path diversity, choice divergences,
       budget continuations, reports, and Web paths.
@@ -930,10 +931,14 @@ async function runAuditCommand(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh audit <game-dir> --from-session PLAYER --session-prefix PREFIX [--from-at N] [--personas CSV] [--max-steps N] [--seed N] [--no-report-on-stop] [--pretty]",
+    "rpgh audit <game-dir> --session-prefix PREFIX [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--seed N] [--no-report-on-stop] [--pretty]",
   );
-  if (!values["from-session"] || !values["session-prefix"]) {
-    process.stderr.write("Missing required flags: --from-session PLAYER --session-prefix PREFIX\n");
+  if (!values["session-prefix"]) {
+    process.stderr.write("Missing required flag: --session-prefix PREFIX\n");
+    process.exit(2);
+  }
+  if (values["from-at"] !== undefined && values["from-session"] === undefined) {
+    process.stderr.write("--from-at requires --from-session PLAYER\n");
     process.exit(2);
   }
   const game = await loadGame(gameDir);
@@ -945,7 +950,9 @@ async function runAuditCommand(args: string[]): Promise<void> {
       .filter(Boolean);
   await auditCommand({
     gameDir,
-    fromSession: values["from-session"],
+    ...(values["from-session"] !== undefined
+      ? { fromSession: values["from-session"] }
+      : {}),
     ...(values["from-at"] !== undefined
       ? { fromLogEntry: Number(values["from-at"]) }
       : {}),

@@ -25,10 +25,16 @@ export function persistedRng(runtime: RuntimeState): () => number {
   if (runtime.rng === undefined) {
     throw new Error("persistedRng requires an initialized runtime RNG state");
   }
+  return statefulRng(runtime.rng);
+}
+
+/** Create a Mulberry32 closure whose cursor remains externally persistable. */
+export function statefulRng(
+  cursor: NonNullable<RuntimeState["rng"]>,
+): () => number {
   return () => {
-    const rng = runtime.rng!;
-    rng.state = (rng.state + STEP) >>> 0;
-    let value = rng.state;
+    cursor.state = (cursor.state + STEP) >>> 0;
+    let value = cursor.state;
     value = Math.imul(value ^ (value >>> 15), value | 1);
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
     return ((value ^ (value >>> 14)) >>> 0) / 0x1_0000_0000;

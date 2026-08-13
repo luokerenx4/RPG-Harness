@@ -1,9 +1,9 @@
 import { access } from "node:fs/promises";
 import { createHash, randomInt } from "node:crypto";
 import path from "node:path";
-import { assertSessionName } from "@rpg-harness/session-store";
-import type { AiAuditConfig } from "@rpg-harness/engine";
-import { sessionDir } from "../session";
+import { assertSessionName, withSessionLock } from "@rpg-harness/session-store";
+import { createInitialState, type AiAuditConfig } from "@rpg-harness/engine";
+import { saveSession, sessionDir } from "../session";
 import { loadGame } from "../loader";
 import {
   capturePlaytestEvidenceSnapshot,
@@ -34,7 +34,8 @@ export const DEFAULT_AUDIT_PERSONAS = [
 
 export interface AuditArgs {
   gameDir: string;
-  fromSession: string;
+  /** Existing GUI/TUI lineage to freeze. Omit to audit a seeded fresh game. */
+  fromSession?: string;
   fromLogEntry?: number;
   sessionPrefix: string;
   personas: string[];
@@ -82,6 +83,8 @@ export interface AuditSummary {
     stateRevision: string;
   };
   sessionPrefix: string;
+  /** Seed shared by fresh-game PRNG initialization and the persona matrix. */
+  seed: number;
   maxSteps: number;
   lanes: AuditLaneSummary[];
   totals: {
@@ -159,8 +162,13 @@ export async function runAudit(
   preparedSource?: ForkSource,
 ): Promise<AuditSummary> {
   validateAuditArgs(args);
-  assertSessionName(args.fromSession);
-  await assertSourceExists(args.gameDir, args.fromSession);
+  if (preparedSource && args.fromSession === undefined) {
+    throw new Error("A prepared audit source must name its --from-session provenance");
+  }
+  if (args.fromSession !== undefined) {
+    assertSessionName(args.fromSession);
+    await assertSourceExists(args.gameDir, args.fromSession);
+  }
   const game = await loadGame(args.gameDir);
   const personaRegistry = collectAiPersonas(game);
   for (const persona of args.personas) {
@@ -183,6 +191,8 @@ export async function runAudit(
   // caller seed or mint one before any lane starts, then freeze it in the
   // audit evidence.
   const effectiveSeed = args.seed ?? randomInt(0, 233_280);
+  const sourceSession = args.fromSession ?? `${args.sessionPrefix}-source`;
+  assertSessionName(sourceSession);
   const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
   const acceptanceMatrixMatches = qualityPolicy?.personas === undefined ||
     samePersonaSet(args.personas, qualityPolicy.personas);
@@ -204,15 +214,31 @@ export async function runAudit(
     await assertTargetEmpty(args.gameDir, qualityEvidenceSession);
   }
 
+  // A fresh audit owns one explicit GUI-compatible source save. Preflight it
+  // alongside every lane before writing anything, then seed the persisted
+  // engine PRNG from the same public seed used by the persona matrix. Repeating
+  // a fresh audit with the same game + seed therefore freezes the same source
+  // revision instead of depending on ambient Math.random state.
+  if (args.fromSession === undefined) {
+    await assertTargetEmpty(args.gameDir, sourceSession);
+  }
+
   // Capture the live player branch exactly once. The player may keep using
   // GUI/TUI while this matrix runs; every AI lane must still start from this
   // same audit-time state rather than whatever state happens to be current
   // when its sequential turn begins.
-  const source = preparedSource ?? await loadForkSource(
-    args.gameDir,
-    args.fromSession,
-    args.fromLogEntry,
-  );
+  const source = preparedSource ?? (args.fromSession === undefined
+    ? await createFreshAuditSource(
+        args.gameDir,
+        sourceSession,
+        game,
+        effectiveSeed,
+      )
+    : await loadForkSource(
+        args.gameDir,
+        args.fromSession,
+        args.fromLogEntry,
+      ));
   const stateRevision = createHash("sha256")
     .update(JSON.stringify(source.state))
     .digest("hex");
@@ -231,7 +257,7 @@ export async function runAudit(
       maxSteps: args.maxSteps,
       session: target.session,
       preparedForkSource: {
-        fromSession: args.fromSession,
+        fromSession: sourceSession,
         source,
       },
       reportOnStop: args.reportOnStop,
@@ -327,7 +353,7 @@ export async function runAudit(
     let evidenceSnapshot: PlaytestEvidenceSnapshot | undefined;
     await createForkFromSource({
       gameDir: args.gameDir,
-      from: args.fromSession,
+      from: sourceSession,
       to: qualityEvidenceSession,
       pretty: false,
     }, source, {
@@ -395,13 +421,14 @@ export async function runAudit(
   }
   return {
     source: {
-      session: args.fromSession,
+      session: sourceSession,
       at: source.selectedEntry,
       entries: source.sourceEntries,
       mode: source.mode,
       stateRevision,
     },
     sessionPrefix: args.sessionPrefix,
+    seed: effectiveSeed,
     maxSteps: args.maxSteps,
     lanes,
     totals: {
@@ -646,6 +673,9 @@ function validateAuditArgs(args: AuditArgs): void {
   if (args.fromLogEntry !== undefined && (
     !Number.isInteger(args.fromLogEntry) || args.fromLogEntry < 0
   )) throw new Error("--from-at must be a non-negative integer");
+  if (args.fromSession === undefined && args.fromLogEntry !== undefined) {
+    throw new Error("--from-at requires --from-session");
+  }
   if (args.personas.length === 0) throw new Error("--personas must contain at least one persona");
   const duplicate = args.personas.find((persona, index) =>
     args.personas.indexOf(persona) !== index
@@ -657,6 +687,32 @@ function validateAuditArgs(args: AuditArgs): void {
   if (args.seed !== undefined && (!Number.isInteger(args.seed) || args.seed < 0)) {
     throw new Error("--seed must be a non-negative integer");
   }
+  if (
+    args.fromSession === undefined &&
+    args.seed !== undefined &&
+    args.seed > 0xffff_ffff
+  ) {
+    throw new Error("A fresh audit --seed must fit in uint32");
+  }
+}
+
+async function createFreshAuditSource(
+  gameDir: string,
+  session: string,
+  game: Awaited<ReturnType<typeof loadGame>>,
+  seed: number,
+): Promise<ForkSource> {
+  return withSessionLock(gameDir, session, async () => {
+    await assertTargetEmpty(gameDir, session);
+    const state = createInitialState(game, { seed });
+    await saveSession(gameDir, session, state);
+    return {
+      state,
+      selectedEntry: 0,
+      sourceEntries: 0,
+      mode: "initial-state",
+    };
+  });
 }
 
 async function assertSourceExists(gameDir: string, session: string): Promise<void> {

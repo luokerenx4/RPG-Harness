@@ -76,6 +76,92 @@ describe("autoplay audit matrix", () => {
     )).toBe(sourceBefore);
   });
 
+  test("materializes a seeded fresh source without a sacrificial player save", async () => {
+    const gameDir = await temporaryGame();
+    const first = await runAudit({
+      gameDir,
+      sessionPrefix: "fresh-matrix-a",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      seed: 17,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(first).toMatchObject({
+      source: {
+        session: "fresh-matrix-a-source",
+        at: 0,
+        entries: 0,
+        mode: "initial-state",
+      },
+      seed: 17,
+      totals: { completed: 2, errors: 0 },
+    });
+    expect(await readSessionLog(gameDir, "fresh-matrix-a-source")).toEqual([]);
+    const game = await loadGame(gameDir);
+    const source = await loadSession(gameDir, "fresh-matrix-a-source", game);
+    expect(source.runtime.rng).toEqual({ algorithm: "mulberry32", state: 17 });
+
+    const second = await runAudit({
+      gameDir,
+      sessionPrefix: "fresh-matrix-b",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      seed: 17,
+      reportOnStop: true,
+      pretty: false,
+    });
+    expect(second.source.stateRevision).toBe(first.source.stateRevision);
+    expect(second.lanes.map((lane) => lane.path.revision))
+      .toEqual(first.lanes.map((lane) => lane.path.revision));
+  });
+
+  test("preflights every fresh audit target before materializing its source", async () => {
+    const gameDir = await temporaryGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "fresh-preflight-greedy", createInitialState(game));
+
+    await expect(runAudit({
+      gameDir,
+      sessionPrefix: "fresh-preflight",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      seed: 23,
+      reportOnStop: true,
+      pretty: false,
+    })).rejects.toThrow("Target session already exists: fresh-preflight-greedy");
+    await expect(readFile(
+      path.join(sessionDir(gameDir, "fresh-preflight-source"), "state.json"),
+    )).rejects.toThrow();
+  });
+
+  test("rejects a checkpoint coordinate without an existing source session", async () => {
+    const gameDir = await temporaryGame();
+    await expect(runAudit({
+      gameDir,
+      fromLogEntry: 0,
+      sessionPrefix: "fresh-at",
+      personas: ["objective"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    })).rejects.toThrow("--from-at requires --from-session");
+  });
+
+  test("rejects a fresh-world seed that cannot be represented by the engine RNG", async () => {
+    const gameDir = await temporaryGame();
+    await expect(runAudit({
+      gameDir,
+      sessionPrefix: "fresh-wide-seed",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: 0x1_0000_0000,
+      reportOnStop: true,
+      pretty: false,
+    })).rejects.toThrow("fresh audit --seed must fit in uint32");
+  });
+
   test("preflights every target before creating the first lane", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
@@ -264,6 +350,55 @@ describe("autoplay audit matrix", () => {
     });
     expect(summary.totals.openReports).toBe(0);
     expect(await listPlaytestReports(gameDir)).toEqual([]);
+  });
+
+  test("turns a failed fresh-game gate into replayable coding work", async () => {
+    const gameDir = await temporaryGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Fresh audit failure",
+      "ai_audit:",
+      "  min_unique_endings: 2",
+    ].join("\n") + "\n", "utf-8");
+
+    const summary = await runAudit({
+      gameDir,
+      sessionPrefix: "fresh-failing-matrix",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      seed: 71,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toMatchObject({
+      status: "failed",
+      evidenceSession: "fresh-failing-matrix-quality-gate",
+      violations: ["unique endings 1 < required 2"],
+      report: { severity: "major" },
+    });
+    const [report] = await listPlaytestReports(gameDir);
+    expect(report).toMatchObject({
+      session: "fresh-failing-matrix-quality-gate",
+      status: "open",
+      evidence: {
+        checkpoint: {
+          schemaVersion: 1,
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
+        auditMatrix: {
+          sourceRevision: summary.source.stateRevision,
+          seed: 71,
+          sessionPrefix: "fresh-failing-matrix",
+        },
+      },
+    });
+    expect((await collectDevelopmentWorklist(
+      gameDir,
+      "fresh-failing-matrix-source",
+    )).items).toContainEqual(expect.objectContaining({
+      key: `report/${report!.id}`,
+      operation: expect.objectContaining({ command: "verify-audit" }),
+    }));
   });
 
   test("turns an unplayed semantic activity surface into reproducible work", async () => {
@@ -588,6 +723,40 @@ describe("autoplay audit matrix", () => {
         },
         status: "passed",
       },
+    });
+  });
+
+  test("CLI audits a fresh game when --from-session is omitted", async () => {
+    const gameDir = await temporaryGame();
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "audit",
+      gameDir,
+      "--session-prefix",
+      "cli-fresh-matrix",
+      "--personas",
+      "objective",
+      "--max-steps",
+      "10",
+      "--seed",
+      "31",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [exitCode, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      source: {
+        session: "cli-fresh-matrix-source",
+        mode: "initial-state",
+      },
+      seed: 31,
+      lanes: [
+        { persona: "objective", session: "cli-fresh-matrix-objective" },
+      ],
     });
   });
 

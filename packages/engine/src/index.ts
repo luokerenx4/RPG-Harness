@@ -4,7 +4,7 @@ export { choiceDecisionContext, resolveChoiceInput } from "./decision";
 export { classifyInput, expectedInputs } from "./input";
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
-export { ensurePersistedRng, persistedRng } from "./rng";
+export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export type { ChoiceDecisionContext } from "./decision";
 export {
   createInitialState,
@@ -17,6 +17,7 @@ export {
   resolveModules,
   resolveRunFn,
 } from "./state";
+export type { InitialStateOptions } from "./state";
 export { makeScriptState, emptyVisualState } from "./types";
 export {
   trainingPreset,
@@ -147,6 +148,7 @@ export type {
   MapConnection,
   MapDef,
   Module,
+  ModuleInitializationContext,
   Output,
   PresetContext,
   RenderedChoice,

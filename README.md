@@ -540,6 +540,8 @@ rpgh autoplay ./examples/sengoku-raid --persona objective \
   --from-session player-main --session ai-objective-audit --report-on-stop
 rpgh audit ./examples/sengoku-raid --from-session player-main \
   --session-prefix ai-matrix --max-steps 500
+rpgh audit ./examples/sengoku-raid \
+  --session-prefix ai-fresh-matrix --seed 17 --max-steps 500
 rpgh probe-choice ./examples/sengoku-raid --session player-main --at 42 --pretty
 rpgh cover ./examples/sengoku-raid --source-session player-main \
   --session ai-cover-branch --key SCRIPT/CHOICE/OPTION
@@ -555,6 +557,13 @@ primary action; several links remain an explicit decision for the player or
 agent. The engine validates this contract at the output boundary and rejects
 missing semantics, duplicate ids, or links to activities absent from the same
 hub snapshot.
+
+`audit` does not require a sacrificial player save. When `--from-session` is
+omitted it materializes a seeded `<session-prefix>-source` new game, then forks
+every persona lane from that immutable GUI-readable state. The returned seed
+and source revision reproduce both the engine RNG and persona decisions; pass
+`--from-session` only when the matrix should begin at an actual player/GUI
+checkpoint.
 
 Generic personas —
 `greedy`, `charmer`, `rude`, `random`, `hunter` — also ship

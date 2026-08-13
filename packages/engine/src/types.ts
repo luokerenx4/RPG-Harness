@@ -932,6 +932,14 @@ export interface AiPersonaDefinition {
   deterministic?: boolean;
 }
 
+/** Runner-owned deterministic services available while a new save is built. */
+export interface ModuleInitializationContext {
+  /** Public uint32 seed that identifies this initial world. */
+  readonly seed: number;
+  /** Shared stream; module draws advance the persisted runtime RNG cursor. */
+  readonly rng: () => number;
+}
+
 export interface Module {
   id: string;
   version?: string;
@@ -939,7 +947,7 @@ export interface Module {
   // not depend on it; autonomous playtest reports use it to turn a failing
   // action contract into a directly editable coding target.
   source?: string;
-  initialize?(game: Game): unknown;
+  initialize?(game: Game, context: ModuleInitializationContext): unknown;
 
   // Map of action.kind → handler. When the engine dispatches an Action
   // whose `kind` matches one of the keys, this handler is invoked.

@@ -2,6 +2,7 @@ import type {
   CharacterDef,
   ComposedState,
   Game,
+  ModuleInitializationContext,
   Module,
   RunFunction,
   StateDelta,
@@ -11,6 +12,12 @@ import { baselineModule } from "./modules/baseline";
 import { runtimeModule } from "./modules/runtime";
 import { trainingPreset, trainingRun } from "./presets/training";
 import { vnRun } from "./presets/vn/run";
+import { statefulRng } from "./rng";
+
+export interface InitialStateOptions {
+  /** Deterministically seeds built-in and author-owned module initialization. */
+  seed?: number;
+}
 
 export function defaultModules(): Module[] {
   return [baselineModule, runtimeModule];
@@ -29,24 +36,44 @@ export function resolveModules(game: Game): Module[] {
   return [...builtin, ...game_modules];
 }
 
-export function createInitialState(game: Game): ComposedState;
-export function createInitialState(characters: CharacterDef[]): ComposedState;
+export function createInitialState(game: Game, options?: InitialStateOptions): ComposedState;
+export function createInitialState(
+  characters: CharacterDef[],
+  options?: InitialStateOptions,
+): ComposedState;
 export function createInitialState(
   arg: Game | CharacterDef[],
+  options: InitialStateOptions = {},
 ): ComposedState {
   const game: Game = Array.isArray(arg)
     ? { title: "", characters: arg, scripts: [] }
     : arg;
   const modules = resolveModules(game);
+  const seed = options.seed ?? Math.floor(Math.random() * 0x1_0000_0000);
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
+    throw new Error("Initial state seed must be a uint32 integer");
+  }
+  const rngCursor = {
+    algorithm: "mulberry32" as const,
+    state: seed >>> 0,
+  };
+  const context: ModuleInitializationContext = {
+    seed,
+    rng: statefulRng(rngCursor),
+  };
   const composed: ComposedState = {
     baseline: undefined as never,
     runtime: undefined as never,
   };
   for (const mod of modules) {
     if (!mod.initialize) continue;
-    const slice = mod.initialize(game);
+    const slice = mod.initialize(game, context);
     if (slice !== undefined) composed[mod.id] = slice;
   }
+  // Author module initialization may consume the shared stream after the
+  // runtime slice was created. Persist the final cursor so gameplay resumes
+  // exactly after those world-generation draws.
+  composed.runtime.rng = rngCursor;
   return composed;
 }
 
