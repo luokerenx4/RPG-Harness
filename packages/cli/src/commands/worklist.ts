@@ -263,9 +263,34 @@ export function analyzeDevelopmentWorklist(input: {
       .filter((item) => item.kind === "reach-choice")
       .map((item) => item.scriptId),
   );
+  const pendingStoryByScript = new Map(
+    input.story.scripts
+      .filter((script) =>
+        script.status === "started" ||
+        script.status === "stale" ||
+        script.status === "uncovered"
+      )
+      .map((script) => [script.id, script] as const),
+  );
+  const delegatedChoiceKeyByScript = new Map<string, string>();
+  for (const workItem of [...input.choices.workItems]
+    .sort((left, right) => left.key.localeCompare(right.key))) {
+    if (
+      pendingStoryByScript.has(workItem.scriptId) &&
+      !delegatedChoiceKeyByScript.has(workItem.scriptId)
+    ) {
+      delegatedChoiceKeyByScript.set(workItem.scriptId, workItem.key);
+    }
+  }
   for (const script of input.story.scripts) {
     if (script.status !== "started" && script.status !== "stale" && script.status !== "uncovered") continue;
-    if (script.status === "uncovered" && preciselyReachableScripts.has(script.id)) {
+    // An exact choice checkpoint is a cheaper, stronger completion path than
+    // searching for the same script again. `cover` refuses success unless the
+    // target script completes, so one delegated branch can settle both debts.
+    if (
+      delegatedChoiceKeyByScript.has(script.id) ||
+      (script.status === "uncovered" && preciselyReachableScripts.has(script.id))
+    ) {
       continue;
     }
     const startedSession = script.startedSessions[0];
@@ -303,14 +328,24 @@ export function analyzeDevelopmentWorklist(input: {
   }
 
   for (const workItem of input.choices.workItems) {
+    const pendingStory = pendingStoryByScript.get(workItem.scriptId);
+    const alsoFinishesStory = pendingStory !== undefined &&
+      delegatedChoiceKeyByScript.get(workItem.scriptId) === workItem.key;
     items.push({
       key: `choice-branch/${workItem.key}`,
       kind: "choice-branch",
-      priority: "P2",
+      priority: alsoFinishesStory &&
+          (pendingStory.status === "started" || pendingStory.status === "stale")
+        ? "P1"
+        : "P2",
       actionability: "executable",
-      title: `Exercise choice branch: ${workItem.optionText}`,
+      title: alsoFinishesStory
+        ? `Exercise choice branch and finish ${pendingStory.status === "stale" ? "edited " : ""}script: ${workItem.optionText}`
+        : `Exercise choice branch: ${workItem.optionText}`,
       ...(workItem.source ? { target: workItem.source } : {}),
-      detail: `${workItem.choiceId}/${workItem.optionId} has an executable checkpoint but no selected evidence`,
+      detail: `${workItem.choiceId}/${workItem.optionId} has an executable checkpoint but no selected evidence${
+        alsoFinishesStory ? `; completing it also resolves ${pendingStory.status} story coverage` : ""
+      }`,
       operation: {
         command: "cover",
         args: {
@@ -328,6 +363,15 @@ export function analyzeDevelopmentWorklist(input: {
         choiceId: workItem.choiceId,
         optionId: workItem.optionId,
         evidence: workItem.evidence,
+        ...(alsoFinishesStory
+          ? {
+              alsoResolves: {
+                kind: "story-coverage",
+                scriptId: workItem.scriptId,
+                status: pendingStory.status,
+              },
+            }
+          : {}),
       },
     });
   }

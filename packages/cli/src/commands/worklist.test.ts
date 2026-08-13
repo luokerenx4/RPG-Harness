@@ -311,6 +311,54 @@ describe("AI development worklist", () => {
       });
   });
 
+  test("delegates pending script completion to one exact choice branch", () => {
+    const story = storyReport();
+    story.summary = {
+      ...story.summary,
+      started: 0,
+      uncovered: 0,
+      stale: 1,
+    };
+    story.sessionErrors = [];
+    story.scripts = [{
+      id: "ending",
+      title: "Edited ending",
+      source: "scripts/ending.md",
+      status: "stale",
+      completedSessions: [],
+      staleSessions: ["old-proof"],
+      legacySessions: ["old-proof"],
+      startedSessions: [],
+    }];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.authoring.workItems = [];
+
+    const report = analyzeDevelopmentWorklist({
+      story,
+      choices,
+      reports: [],
+      session: "player",
+    });
+
+    expect(report.summary.storyPending).toBe(1);
+    expect(report.summary.byKind["story-coverage"]).toBe(0);
+    expect(report.items.some((item) => item.key === "story/ending")).toBe(false);
+    expect(report.items[0]).toMatchObject({
+      key: "choice-branch/ending/coda/friends",
+      priority: "P1",
+      title: "Exercise choice branch and finish edited script: Friends",
+      operation: { command: "cover" },
+      coordinates: {
+        alsoResolves: {
+          kind: "story-coverage",
+          scriptId: "ending",
+          status: "stale",
+        },
+      },
+    });
+  });
+
   test("re-verifies stale scripts from a session that owns old completion evidence", () => {
     const story = storyReport();
     story.summary.started = 0;
