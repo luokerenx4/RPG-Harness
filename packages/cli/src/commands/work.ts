@@ -10,6 +10,7 @@ import {
 } from "./reach-choice";
 import { runReachScript, type ReachScriptSummary } from "./reach-script";
 import { verifyAuditReport } from "./verify-audit";
+import { verifyAutoplayReport } from "./verify-autoplay";
 import { collectSessionTranscript } from "./transcript";
 import {
   collectDevelopmentWorklist,
@@ -130,6 +131,17 @@ export async function executeDevelopmentWorkItem(
     case "verify-audit": {
       const target = requireNewSession(args, item);
       const result = await verifyAuditReport({
+        gameDir: args.gameDir,
+        reportId: operation.args.reportId,
+        sessionPrefix: target,
+      });
+      return result.status === "verified"
+        ? executed(selection, operation, "isolated-session", true, target, result)
+        : failedAfterWrite(selection, operation, target, result);
+    }
+    case "verify-autoplay": {
+      const target = requireNewSession(args, item);
+      const result = await verifyAutoplayReport({
         gameDir: args.gameDir,
         reportId: operation.args.reportId,
         sessionPrefix: target,

@@ -59,6 +59,11 @@ export type {
   VerifyAuditArgs,
   VerifyAuditSummary,
 } from "./commands/verify-audit";
+export { verifyAutoplayReport } from "./commands/verify-autoplay";
+export type {
+  VerifyAutoplayArgs,
+  VerifyAutoplaySummary,
+} from "./commands/verify-autoplay";
 export type {
   CoverChoiceArgs,
   CoverChoiceSummary,
@@ -116,6 +121,9 @@ export type {
   PlaytestCheckpointRef,
   PlaytestReport,
   PlaytestSeverity,
+  PlaytestAuditVerification,
+  PlaytestAutoplayEvidence,
+  PlaytestAutoplayVerification,
   PlaytestVerification,
   PlaytestAuditMatrixEvidence,
   RecordPlaytestReportArgs,

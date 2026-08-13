@@ -136,6 +136,16 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.decisions).toBeLessThan(100);
     expect(summary.stall).toMatchObject({ cycleLength: 2, repetitions: 3 });
     expect(summary.report?.evidence.stall).toEqual(summary.stall);
+    expect(summary.seed).toBeInteger();
+    expect(summary.report?.evidence.autoplay).toEqual({
+      persona: "greedy",
+      maxSteps: 100,
+      seed: summary.seed,
+      stopReason: "stalled",
+      decisions: summary.decisions,
+      rejectedInputs: summary.rejectedInputs,
+      steps: summary.steps,
+    });
     expect(summary.report?.details).toContain("exact 2-output cycle");
   });
 

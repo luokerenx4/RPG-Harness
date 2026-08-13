@@ -33,6 +33,10 @@ export type DevelopmentOperation =
       args: { reportId: string; sessionPrefix: "<new-session>" };
     }
   | {
+      command: "verify-autoplay";
+      args: { reportId: string; sessionPrefix: "<new-session>" };
+    }
+  | {
       command: "inspect-report";
       args: { reportId: string; session: string };
     }
@@ -200,6 +204,12 @@ export function analyzeDevelopmentWorklist(input: {
     const auditVerifiable = auditMatrix !== undefined &&
       Number.isInteger(auditMatrix.maxSteps) && auditMatrix.maxSteps! >= 0 &&
       auditMatrix.lanes.length > 0;
+    const autoplay = report.evidence.autoplay;
+    const autoplayVerifiable = autoplay !== undefined &&
+      typeof autoplay.persona === "string" &&
+      autoplay.persona.trim().length > 0 &&
+      Number.isInteger(autoplay.maxSteps) && autoplay.maxSteps >= 0 &&
+      Number.isInteger(autoplay.seed) && autoplay.seed! >= 0;
     items.push({
       key: `report/${report.id}`,
       kind: "playtest-report",
@@ -211,6 +221,11 @@ export function analyzeDevelopmentWorklist(input: {
       operation: auditVerifiable && report.evidence.checkpoint
         ? {
             command: "verify-audit",
+            args: { reportId: report.id, sessionPrefix: "<new-session>" },
+          }
+        : autoplayVerifiable && report.evidence.checkpoint
+        ? {
+            command: "verify-autoplay",
             args: { reportId: report.id, sessionPrefix: "<new-session>" },
           }
         : report.evidence.checkpoint
@@ -234,6 +249,9 @@ export function analyzeDevelopmentWorklist(input: {
           : {}),
         ...(report.evidence.auditMatrix
           ? { auditMatrix: report.evidence.auditMatrix }
+          : {}),
+        ...(report.evidence.autoplay
+          ? { autoplay: report.evidence.autoplay }
           : {}),
       },
     });
@@ -485,6 +503,7 @@ function workExecutor(
 ): DevelopmentWorkItem["executor"] {
   const createsBranch = item.operation.command === "reproduce" ||
     item.operation.command === "verify-audit" ||
+    item.operation.command === "verify-autoplay" ||
     item.operation.command === "cover" ||
     item.operation.command === "reach" ||
     item.operation.command === "reach-script";

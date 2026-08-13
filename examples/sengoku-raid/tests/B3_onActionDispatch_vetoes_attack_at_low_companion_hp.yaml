@@ -1,9 +1,10 @@
-name: 提案B：onActionDispatch first-wins — 同行者 HP<=3 で attack を cancel
+name: 提案B：同行者の attack veto は一度語られ、その後公開 action を lock する
 description: |
   Seed a raid encounter with companionHp=2. Dispatch attack — the
-  first-wins onActionDispatch hook returns "cancel", so the attack
-  handler never runs. Encounter HP unchanged; cancellation narration
-  appears in pendingNarrations.
+  first-wins onActionDispatch hook returns "cancel", so the attack handler
+  never runs. The first refusal remains visible narration; the following Hub
+  makes attack and sneak_strike unavailable with a reason, preventing an AI
+  from repeating an accepted-but-cancelled action forever.
 state:
   baseline:
     completedScripts:
@@ -55,3 +56,17 @@ assertions:
   - kind: state
     path: baseline.characters.player.stats.spectral
     eq: 30
+  - kind: state
+    path: sengoku-raid.raid.companionAttackRefused
+    eq: true
+  - kind: activity
+    id: attack
+    available: false
+    lockedReasonIncludes: 重傷
+  - kind: activity
+    id: sneak_strike
+    available: false
+    lockedReasonIncludes: 撤退せよ
+  - kind: activity
+    id: flee
+    available: true

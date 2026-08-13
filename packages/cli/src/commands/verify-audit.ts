@@ -2,7 +2,7 @@ import {
   getPlaytestReport,
   reproducePlaytestReport,
   resolvePlaytestReport,
-  type PlaytestVerification,
+  type PlaytestAuditVerification,
 } from "../playtest-reports";
 import { runAudit, type AuditSummary } from "./audit";
 import { assertTargetEmpty } from "./fork";
@@ -35,7 +35,7 @@ export interface VerifyAuditSummary {
     status: "resolved";
     resolvedAt: string;
     resolution?: string;
-    verification: PlaytestVerification;
+    verification: PlaytestAuditVerification;
   };
 }
 
@@ -115,7 +115,7 @@ export async function verifyAuditReport(
 
   const qualityGate = audit.qualityGate!;
 
-  const verification: PlaytestVerification = {
+  const verification: PlaytestAuditVerification = {
     kind: "ai-audit",
     verifiedAt: new Date().toISOString(),
     sessionPrefix: args.sessionPrefix,

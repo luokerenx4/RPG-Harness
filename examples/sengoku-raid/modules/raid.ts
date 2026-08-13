@@ -166,6 +166,11 @@ interface RaidInstance {
   visited: Record<string, MapInstance>;
   pendingLoot: Record<string, number>; // gathered this raid (sum across maps)
   turnsTaken: number;
+  // The first attack attempted while a companion is critically wounded is a
+  // story beat: onActionDispatch vetoes it and sets this acknowledgement.
+  // Subsequent combat menus must publish the same refusal as locked actions,
+  // otherwise an autonomous player can repeat the accepted-but-cancelled move.
+  companionAttackRefused: boolean;
 }
 
 interface RaidModuleState {
@@ -1249,6 +1254,18 @@ function buildRaidMenu(ctx: Ctx): Output {
   }
 
   if (inst.encounter) {
+    const companionRefusesAttack =
+      m.raid.companionAttackRefused === true &&
+      m.companion !== null &&
+      m.companionHp > 0 &&
+      m.companionHp <= 3;
+    const companionName = m.companion
+      ? ctx.game.characters.find((character) => character.id === m.companion)?.name ??
+        m.companion
+      : null;
+    const attackLockedReason = companionRefusesAttack
+      ? `${companionName}が重傷のため、これ以上の攻撃を拒んでいる。撤退せよ。`
+      : undefined;
     const normalDamage = normalAttackDamageRange(ctx);
     const criticalDamage = criticalAttackDamageRange(ctx);
     const sneakDamage = sneakAttackDamageRange(ctx);
@@ -1272,7 +1289,8 @@ function buildRaidMenu(ctx: Ctx): Output {
       description: "妖刀威力 × (1 + 霊体化×0.04) × ばらつき",
       category: "combat",
       cost: 0,
-      available: true,
+      available: !companionRefusesAttack,
+      ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
       forecast: {
         summary: counterDamage.companion
           ? "敵が生き残れば反撃。同行者が一部を引き受ける"
@@ -1342,7 +1360,8 @@ function buildRaidMenu(ctx: Ctx): Output {
       description: "学識+霊体化と敵の狡知で判定。成功で大ダメージ、失敗で外す",
       category: "combat",
       cost: 0,
-      available: true,
+      available: !companionRefusesAttack,
+      ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
       forecast: {
         summary: counterDamage.companion
           ? "失敗時は反撃。同行者が一部を引き受ける"
@@ -1827,6 +1846,7 @@ function startRaid(ctx: Ctx, chain: string, entryId: string): void {
     visited: {},
     pendingLoot: {},
     turnsTaken: 0,
+    companionAttackRefused: false,
   };
   // Mark the entry map visited + roll its loot. Encounter stays null
   // (entry maps' encounter tables are null-only by convention).
@@ -3800,8 +3820,10 @@ const raidModule: Module = {
   // ============== Companion-aware reducers ==============
   //
   // onActionDispatch (first-wins): when a companion is in party at
-  // critical HP, veto `attack` and `sneak_strike` dispatches. Player
-  // must flee, use chinkonho, or let HP recover before re-engaging.
+  // critical HP, veto `attack` and `sneak_strike` dispatches. The first
+  // refusal remains a story beat; after it fires, buildRaidMenu exposes the
+  // same decision as locked so GUI and Headless clients cannot loop on it.
+  // Player must flee, use chinkonho, or let HP recover before re-engaging.
   // Returns "cancel" — engine still fires onActionComplete with
   // result=undefined, but the handler body doesn't run.
   onActionDispatch: (ctx, action) => {
@@ -3815,9 +3837,12 @@ const raidModule: Module = {
       const charName =
         ctx.game.characters.find((c) => c.id === m.companion!)?.name ??
         m.companion!;
-      ctx.state.runtime.pendingNarrations.push(
-        `${charName}が刀を抑えた。「下がれ、深い」——その目に、お主が今日見たどの鬼より強い意志。攻撃は取り消された。`,
-      );
+      if (m.raid?.companionAttackRefused !== true) {
+        if (m.raid) m.raid.companionAttackRefused = true;
+        ctx.state.runtime.pendingNarrations.push(
+          `${charName}が刀を抑えた。「下がれ、深い」——その目に、お主が今日見たどの鬼より強い意志。攻撃は取り消された。`,
+        );
+      }
       return "cancel";
     }
     return;

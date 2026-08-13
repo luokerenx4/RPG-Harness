@@ -390,7 +390,7 @@ function branchTarget(
 }
 
 function createsBranch(item: DevelopmentWorkItem): boolean {
-  return ["reproduce", "verify-audit", "cover", "reach", "reach-script"]
+  return ["reproduce", "verify-audit", "verify-autoplay", "cover", "reach", "reach-script"]
     .includes(item.operation.command);
 }
 
@@ -414,6 +414,8 @@ async function preflightTargets(
         `${target}-source`,
         ...personas.map((persona) => `${target}-${persona}`),
       );
+    } else if (item.operation.command === "verify-autoplay") {
+      expanded.push(`${target}-source`, `${target}-run`);
     } else {
       expanded.push(target);
     }

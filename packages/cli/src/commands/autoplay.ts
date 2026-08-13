@@ -14,7 +14,7 @@ import {
   formatHubCalendar,
 } from "@rpg-harness/frontend-core";
 import { access } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import path from "node:path";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
@@ -71,6 +71,7 @@ export interface TargetChoiceResult extends TargetChoice {
 
 export interface AutoplaySummary {
   reason: LoopReason;
+  seed?: number;
   error?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
@@ -131,6 +132,9 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
     throw new Error("--max-steps must be a non-negative integer");
   }
+  if (args.seed !== undefined && (!Number.isInteger(args.seed) || args.seed < 0)) {
+    throw new Error("--seed must be a non-negative integer");
+  }
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
   }
@@ -157,6 +161,13 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   if (args.reportOnStop && !args.session) {
     throw new Error("--report-on-stop requires a persisted --session");
   }
+  // Any run that may become an automatically verifiable coding issue must be
+  // replayable even when the persona itself is deterministic: authored combat
+  // and module hooks can still consume RNG. Preserve an explicit caller seed,
+  // otherwise mint and record one before the first output is evaluated.
+  const effectiveSeed = args.seed ?? (args.reportOnStop
+    ? randomInt(0, 233_280)
+    : undefined);
 
   const game = await loadGame(args.gameDir);
   const personaRegistry = collectAiPersonas(game);
@@ -189,8 +200,8 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     });
   }
   const originalRandom = Math.random;
-  if (args.seed !== undefined) {
-    let s = args.seed;
+  if (effectiveSeed !== undefined) {
+    let s = effectiveSeed;
     Math.random = () => {
       s = (s * 9301 + 49297) % 233280;
       return s / 233280;
@@ -359,6 +370,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       details: [
         `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
+        `Replay seed: \`${effectiveSeed}\`.`,
         ...(progress.madeProgress
           ? [`Progress made: ${formatAutoplayProgress(progress)}.`]
           : ["No authored script or public objective progress was observed during this run."]),
@@ -384,6 +396,21 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
+      autoplay: {
+        persona: args.persona,
+        maxSteps: args.maxSteps,
+        seed: effectiveSeed!,
+        stopReason: result.reason,
+        decisions: countDecisions(result.trace),
+        rejectedInputs: countRejectedInputs(result.trace),
+        steps: result.trace.length,
+        ...(fork
+          ? {
+              sourceSession: fork.fromSession,
+              sourceLogEntry: fork.sourceLogEntry,
+            }
+          : {}),
+      },
     });
   }
 
@@ -393,6 +420,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
 
   return {
     reason: result.reason,
+    ...(effectiveSeed !== undefined ? { seed: effectiveSeed } : {}),
     ...(result.error ? { error: result.error } : {}),
     ...(result.stall ? { stall: result.stall } : {}),
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),

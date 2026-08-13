@@ -12,6 +12,7 @@ import path from "node:path";
 import type {
   BehaviorCycleDiagnostic,
   ComposedState,
+  LoopReason,
   StallDiagnostic,
 } from "@rpg-harness/engine";
 import {
@@ -66,8 +67,21 @@ export interface PlaytestEvidence {
   checkpoint?: PlaytestCheckpointRef;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  autoplay?: PlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
   captureErrors?: string[];
+}
+
+export interface PlaytestAutoplayEvidence {
+  persona: string;
+  maxSteps: number;
+  seed?: number;
+  stopReason: LoopReason;
+  decisions: number;
+  rejectedInputs: number;
+  steps: number;
+  sourceSession?: string;
+  sourceLogEntry?: number;
 }
 
 export interface PlaytestAuditMatrixEvidence {
@@ -130,7 +144,7 @@ export interface PlaytestReport {
   evidence: PlaytestEvidence;
 }
 
-export interface PlaytestVerification {
+export interface PlaytestAuditVerification {
   kind: "ai-audit";
   verifiedAt: string;
   sessionPrefix: string;
@@ -163,6 +177,32 @@ export interface PlaytestVerification {
   }>;
 }
 
+export interface PlaytestAutoplayVerification {
+  kind: "autoplay";
+  verifiedAt: string;
+  sourceCheckpointRevision: string;
+  originalStopReason: LoopReason;
+  persona: string;
+  maxSteps: number;
+  seed?: number;
+  session: string;
+  webPath: string;
+  result: {
+    reason: "completed";
+    ending: string | null;
+    decisions: number;
+    rejectedInputs: number;
+    steps: number;
+    decisionPathRevision: string;
+    completedScripts: string[];
+    objectiveChanges: number;
+  };
+}
+
+export type PlaytestVerification =
+  | PlaytestAuditVerification
+  | PlaytestAutoplayVerification;
+
 export interface RecordPlaytestReportArgs {
   gameDir: string;
   session: string;
@@ -173,6 +213,7 @@ export interface RecordPlaytestReportArgs {
   target?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  autoplay?: PlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
 }
 
@@ -213,6 +254,7 @@ export async function recordPlaytestReport(
         ...await captureEvidence(args.gameDir, args.session),
         ...(args.stall ? { stall: args.stall } : {}),
         ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
+        ...(args.autoplay ? { autoplay: args.autoplay } : {}),
         ...(args.auditMatrix ? { auditMatrix: args.auditMatrix } : {}),
       },
     };
