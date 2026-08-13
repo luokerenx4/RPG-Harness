@@ -421,11 +421,29 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const progressActivityIds = activities
     .filter((activity) => activity.available && progressCategories.has(activity.category))
     .map((activity) => activity.id);
+  // Chapter objectives used to expose every departure in Hub presentation
+  // order, which made stable goal-following personas choose Kuro Swamp for
+  // every expedition. Keep every valid route public, but rotate the first
+  // recommendation by successful raid count so GUI guidance and Headless play
+  // sample the three ordinary chains instead of mechanically replaying one.
+  const routeRotation = [
+    "depart:kuro_swamp",
+    "depart:sumida_river",
+    "depart:mt_houkyou",
+  ];
+  const preferredDeparture = routeRotation[raids % routeRotation.length];
+  const orderedProgressActivityIds = preferredDeparture &&
+      progressActivityIds.includes(preferredDeparture)
+    ? [
+        preferredDeparture,
+        ...progressActivityIds.filter((id) => id !== preferredDeparture),
+      ]
+    : progressActivityIds;
   const restActivityId = activities.some(
     (activity) => activity.id === "rest" && activity.available,
   ) ? ["rest"] : [];
-  const executableProgressActivityIds = progressActivityIds.length > 0
-    ? progressActivityIds
+  const executableProgressActivityIds = orderedProgressActivityIds.length > 0
+    ? orderedProgressActivityIds
     : restActivityId;
   const requirement = (
     id: string,
@@ -3605,7 +3623,21 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         ) === true;
         const completionObjective = personaScopedObjectiveActivity(output, "mastery") ??
           personaScopedObjectiveActivity(output, "side");
-        if (completionObjective) return completionObjective;
+        if (completionObjective) {
+          // Once a companion is already selected, the relationship objective
+          // is simply to bring them home alive. Prefer Kuro's short, quiet
+          // extract instead of inheriting the generic route-tour suggestion.
+          // Before invitation, keep exact encounter routes (notably Kasumi's
+          // Mt Houkyou introduction) authoritative.
+          const shortCompanionRoute = m?.companion &&
+              completionObjective.type === "doActivity" &&
+              completionObjective.id.startsWith("depart:")
+            ? find(({ id }) => id === "depart:kuro_swamp")
+            : undefined;
+          return shortCompanionRoute
+            ? { type: "doActivity", id: shortCompanionRoute.id }
+            : completionObjective;
+        }
 
         if (completionPending) {
           const chapterObjective = output.snapshot.objectives
@@ -3617,6 +3649,17 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
             .flatMap(({ relatedActivityIds }) => relatedActivityIds ?? [])
             .find((id) => acts.some((activity) => activity.id === id));
           if (chapterObjective) {
+            // Generic personas benefit from rotating the public route hint,
+            // but this project-owned completion proof has much deeper work
+            // after the chapter counter. When a chapter objective merely
+            // needs another successful expedition, take the authored short
+            // route and reserve the long chains for objectives that name them.
+            const shortChapterRoute = find(
+              ({ id }) => id === "depart:kuro_swamp",
+            );
+            if (chapterObjective.startsWith("depart:") && shortChapterRoute) {
+              return { type: "doActivity", id: shortChapterRoute.id };
+            }
             return { type: "doActivity", id: chapterObjective };
           }
           const progression = find(({ id, aiTags }) =>

@@ -330,6 +330,82 @@ describe("sengoku-raid project personas", () => {
       },
     })).resolves.toEqual({ type: "doActivity", id: "extract" });
   });
+
+  test("completionist uses the short route for chapter-only progress", async () => {
+    const output = hub([
+      activity("depart:kuro_swamp"),
+      activity("depart:mt_houkyou"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "three_flowers_alliance",
+        title: "Three flowers",
+        scope: "mastery",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: [],
+      },
+      {
+        id: "letter_03_dispatch",
+        title: "Await the final order",
+        scope: "main",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: ["depart:mt_houkyou", "depart:kuro_swamp"],
+      },
+    ];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { achievementLog: [] },
+    })).resolves.toEqual({
+      type: "doActivity",
+      id: "depart:kuro_swamp",
+    });
+  });
+
+  test("completionist takes an invited companion home by the short route", async () => {
+    const output = hub([
+      activity("depart:kuro_swamp"),
+      activity("depart:mt_houkyou"),
+    ]);
+    output.snapshot.objectives = [{
+      id: "three_flowers_alliance",
+      title: "Survive with Kasumi",
+      scope: "mastery",
+      terminal: false,
+      status: "active",
+      relatedActivityIds: ["depart:mt_houkyou", "depart:kuro_swamp"],
+    }];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { companion: "kasumi", achievementLog: [] },
+    })).resolves.toEqual({
+      type: "doActivity",
+      id: "depart:kuro_swamp",
+    });
+  });
+
+  test("completionist preserves a named encounter route before invitation", async () => {
+    const output = hub([
+      activity("depart:kuro_swamp"),
+      activity("depart:mt_houkyou"),
+    ]);
+    output.snapshot.objectives = [{
+      id: "three_flowers_alliance",
+      title: "Meet Kasumi",
+      scope: "mastery",
+      terminal: false,
+      status: "active",
+      relatedActivityIds: ["depart:mt_houkyou"],
+    }];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { companion: null, achievementLog: [] },
+    })).resolves.toEqual({
+      type: "doActivity",
+      id: "depart:mt_houkyou",
+    });
+  });
 });
 
 describe("sengoku-raid authored language", () => {

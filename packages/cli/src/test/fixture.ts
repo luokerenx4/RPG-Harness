@@ -104,6 +104,8 @@ export interface ObjectiveAssertion {
   focus?: boolean;
   titleIncludes?: string;
   descriptionIncludes?: string;
+  /** First executable hint; ordering is part of the AI objective contract. */
+  relatedActivityFirst?: string;
   relatedActivityIncludes?: string;
   relatedActivityExcludes?: string;
   requirementId?: string;

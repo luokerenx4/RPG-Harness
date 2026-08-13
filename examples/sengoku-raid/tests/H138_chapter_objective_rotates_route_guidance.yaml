@@ -1,0 +1,18 @@
+name: 章進行の目標は遠征先を巡回し、同じ短路の反復を勧め続けない
+state:
+  baseline:
+    completedScripts: [000_intro]
+    variables:
+      shogun_chapter: 0
+      raidsCompleted: 1
+inputs: []
+assertions:
+  - kind: objective
+    id: letter_01_dispatch
+    scope: main
+    status: active
+    relatedActivityFirst: depart:sumida_river
+    relatedActivityIncludes: depart:kuro_swamp
+    requirementId: raidsCompleted
+    current: 1
+    target: 2

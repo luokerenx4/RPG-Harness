@@ -81,6 +81,12 @@ function checkObjective(
     return `objective ${a.id}: expected description to include "${a.descriptionIncludes}", got "${objective.description ?? ""}"`;
   }
   if (
+    a.relatedActivityFirst !== undefined &&
+    objective.relatedActivityIds?.[0] !== a.relatedActivityFirst
+  ) {
+    return `objective ${a.id}: expected first relatedActivityId ${a.relatedActivityFirst}, got ${objective.relatedActivityIds?.[0] ?? "none"}`;
+  }
+  if (
     a.relatedActivityIncludes !== undefined &&
     !(objective.relatedActivityIds ?? []).includes(a.relatedActivityIncludes)
   ) {

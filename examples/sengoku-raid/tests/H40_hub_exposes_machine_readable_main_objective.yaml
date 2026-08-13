@@ -19,6 +19,7 @@ assertions:
     terminal: false
     status: active
     titleIncludes: 最後の御沙汰
+    relatedActivityFirst: depart:mt_houkyou
     relatedActivityIncludes: depart:kuro_swamp
     requirementId: raidsCompleted
     current: 5
