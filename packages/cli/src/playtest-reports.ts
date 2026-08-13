@@ -14,6 +14,7 @@ import type {
   ComposedState,
   LoopReason,
   LoopFailure,
+  ModuleHookName,
   StallDiagnostic,
 } from "@rpg-harness/engine";
 import {
@@ -85,14 +86,19 @@ export interface PlaytestSourceTarget {
   kind:
     | "module-action"
     | "module-persona"
+    | "module-hook"
     | "module-setup"
     | "preset"
     | "script";
   file: string;
   moduleId?: string;
   actionKind?: string;
+  actionId?: string;
   activityId?: string;
   persona?: string;
+  hookName?: ModuleHookName;
+  beatIndex?: number;
+  labelName?: string;
   setupPhase?: "initialize" | "engine";
   runtimePhase?: "prime" | "input";
   scriptId?: string;
@@ -109,6 +115,7 @@ export interface PlaytestFailureEvidence {
   decision?: LoopFailure["decision"];
   activityDecision?: LoopFailure["activityDecision"];
   stack?: string;
+  hook?: LoopFailure["hook"];
   moduleIds?: string[];
 }
 
@@ -548,6 +555,7 @@ function compactLoopFailure(failure: LoopFailure): PlaytestFailureEvidence {
       : {}),
     ...(failure.stack ? { stack: failure.stack } : {}),
     ...(failure.moduleIds?.length ? { moduleIds: [...failure.moduleIds] } : {}),
+    ...(failure.hook ? { hook: structuredClone(failure.hook) } : {}),
   };
 }
 

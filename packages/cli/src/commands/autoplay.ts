@@ -296,6 +296,8 @@ export function compactAutoplaySummary(
             ...(failure.activityDecision
               ? { activityDecision: failure.activityDecision }
               : {}),
+            ...(failure.moduleIds ? { moduleIds: failure.moduleIds } : {}),
+            ...(failure.hook ? { hook: failure.hook } : {}),
           },
         }
       : {}),
@@ -711,7 +713,9 @@ export async function runAutoplay(
       session: args.session,
       area: "tooling",
       severity: result.reason === "error" ? "blocker" : "major",
-      title: result.failure?.activityDecision?.actionKind
+      title: failureTarget?.kind === "module-hook"
+          ? `Autoplay ${args.persona} failed in ${failureTarget.moduleId}.${failureTarget.hookName}`
+          : result.failure?.activityDecision?.actionKind
           ? `Autoplay ${args.persona} failed in ${result.failure.activityDecision.actionKind}`
           : result.failure?.phase === "decision" &&
               failureTarget?.kind === "module-persona"
@@ -748,7 +752,7 @@ export async function runAutoplay(
         ...(result.error ? [`Engine error: ${result.error}`] : []),
         ...(result.failure
           ? [
-              `Failure phase: \`${result.failure.phase}\`; attempted input: \`${JSON.stringify(result.failure.input)}\`${result.failure.activityDecision?.actionKind ? `; action contract: \`${result.failure.activityDecision.actionKind}\` / \`${result.failure.activityDecision.activityId}\`` : ""}.`,
+              `Failure phase: \`${result.failure.phase}\`; attempted input: \`${JSON.stringify(result.failure.input)}\`${result.failure.activityDecision?.actionKind ? `; action contract: \`${result.failure.activityDecision.actionKind}\` / \`${result.failure.activityDecision.activityId}\`` : ""}${result.failure.hook ? `; module hook: \`${result.failure.hook.moduleId}.${result.failure.hook.name}\`` : ""}.`,
             ]
           : []),
         ...(fork
@@ -1026,7 +1030,33 @@ export function collectAutoplaySourceTargets(
       });
     }
   }
+  if (failure?.hook?.scriptId) addScript(failure.hook.scriptId);
   addScript(terminalScriptId ?? undefined);
+  // Hook identity is the innermost author-owned frame and therefore follows
+  // outer script/action/preset coordinates so reverse causal selection makes
+  // the hook module the primary repair target.
+  if (failure?.hook) {
+    const owner = game.modules?.find(({ id }) => id === failure.hook!.moduleId);
+    if (owner?.source) {
+      targets.push({
+        kind: "module-hook",
+        file: normalizeAuthoringSource(gameDir, owner.source),
+        moduleId: owner.id,
+        hookName: failure.hook.name,
+        ...(failure.hook.scriptId ? { scriptId: failure.hook.scriptId } : {}),
+        ...(failure.hook.beatIndex !== undefined
+          ? { beatIndex: failure.hook.beatIndex }
+          : {}),
+        ...(failure.hook.actionId ? { actionId: failure.hook.actionId } : {}),
+        ...(failure.hook.actionKind
+          ? { actionKind: failure.hook.actionKind }
+          : {}),
+        ...(failure.hook.labelName
+          ? { labelName: failure.hook.labelName }
+          : {}),
+      });
+    }
+  }
 
   const unique = new Map<string, PlaytestSourceTarget>();
   for (const target of targets) {
@@ -1071,6 +1101,10 @@ function sourceTargetMatchesFailure(
   if (target.kind === "module-setup") {
     return failure.phase === "setup" &&
       (failure.moduleIds ?? []).includes(target.moduleId ?? "");
+  }
+  if (target.kind === "module-hook") {
+    return target.moduleId === failure.hook?.moduleId &&
+      target.hookName === failure.hook?.name;
   }
   if (target.kind === "preset") {
     return (failure.phase === "prime" || failure.phase === "input") &&

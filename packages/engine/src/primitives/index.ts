@@ -17,6 +17,7 @@ export {
 export { hasSkill, learnSkill, forgetSkill } from "./skills";
 export {
   fireHook,
+  ModuleHookExecutionError,
   fireOnSessionStart,
   fireOnScriptStart,
   fireOnScriptComplete,

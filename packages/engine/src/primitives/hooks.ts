@@ -4,12 +4,72 @@ import type {
   Beat,
   ChoiceResolution,
   EndConditionSpec,
+  Module,
+  ModuleHookContext,
+  ModuleHookName,
   Output,
   PresetContext,
   RenderedChoice,
   StateDelta,
   StateMutationSource,
 } from "../types";
+
+/** Preserves the exact project module and stable hook symbol across runLoop. */
+export class ModuleHookExecutionError extends Error {
+  readonly causeName: string;
+  readonly causeMessage: string;
+
+  constructor(
+    readonly moduleId: string,
+    readonly hookName: ModuleHookName,
+    cause: unknown,
+    readonly context: ModuleHookContext = {},
+  ) {
+    const original = cause instanceof Error ? cause : new Error(String(cause));
+    super(`Module ${moduleId} hook ${hookName} failed: ${original.message}`, {
+      cause: original,
+    });
+    this.name = "ModuleHookExecutionError";
+    this.causeName = original.name;
+    this.causeMessage = original.message;
+    // Project source maps in the original stack are more actionable than the
+    // dispatcher wrapper. Structured fields above retain the wrapper context.
+    if (original.stack) this.stack = original.stack;
+  }
+}
+
+function invokeModuleHook<T>(
+  mod: Module,
+  hookName: ModuleHookName,
+  invoke: () => T,
+  context: ModuleHookContext = {},
+): T {
+  try {
+    const result = invoke();
+    if (
+      result !== null &&
+      (typeof result === "object" || typeof result === "function") &&
+      typeof (result as { then?: unknown }).then === "function"
+    ) {
+      // Hooks are deliberately synchronous: the generator cannot freeze an
+      // await boundary here without changing save semantics. Consume a later
+      // rejection so malformed project code does not also become an unhandled
+      // process error, then report the contract at the owning module symbol.
+      void Promise.resolve(result).catch(() => undefined);
+      throw new TypeError(
+        `Module hook ${hookName} returned a Promise; lifecycle hooks must be synchronous`,
+      );
+    }
+    return result;
+  } catch (error) {
+    // A hook can call another primitive that fires a different hook. Preserve
+    // the innermost author-owned failure instead of blaming its caller.
+    if (error instanceof ModuleHookExecutionError) throw error;
+    throw new ModuleHookExecutionError(mod.id, hookName, error, context);
+  }
+}
+
+const scriptStartsInFlight = new WeakMap<PresetContext, Set<string>>();
 
 // Per-hook fire functions. Verbose but type-safe and explicit at each
 // call site — easier to reason about than a single dynamic dispatch.
@@ -22,7 +82,10 @@ import type {
 // ============ OBSERVERS ============
 
 export function fireOnSessionStart(ctx: PresetContext): void {
-  for (const mod of ctx.modules) mod.onSessionStart?.(ctx);
+  for (const mod of ctx.modules) {
+    if (!mod.onSessionStart) continue;
+    invokeModuleHook(mod, "onSessionStart", () => mod.onSessionStart!(ctx));
+  }
 }
 
 // Dedup'd entry: `step`-style callers re-enter runScript on every step
@@ -41,8 +104,27 @@ export function fireOnScriptStart(
 ): void {
   const fired = ctx.state.runtime.firedScriptStarts;
   if (fired.includes(scriptId)) return;
-  fired.push(scriptId);
-  for (const mod of ctx.modules) mod.onScriptStart?.(ctx, scriptId);
+  const inFlight = scriptStartsInFlight.get(ctx) ?? new Set<string>();
+  scriptStartsInFlight.set(ctx, inFlight);
+  if (inFlight.has(scriptId)) return;
+  inFlight.add(scriptId);
+  try {
+    for (const mod of ctx.modules) {
+      if (!mod.onScriptStart) continue;
+      invokeModuleHook(
+        mod,
+        "onScriptStart",
+        () => mod.onScriptStart!(ctx, scriptId),
+        { scriptId },
+      );
+    }
+    // Publish the once marker only after every hook succeeds. A failed hook is
+    // therefore retried after a hot repair instead of being silently skipped.
+    fired.push(scriptId);
+  } finally {
+    inFlight.delete(scriptId);
+    if (inFlight.size === 0) scriptStartsInFlight.delete(ctx);
+  }
 }
 
 export function fireOnScriptComplete(
@@ -52,7 +134,15 @@ export function fireOnScriptComplete(
   const fired = ctx.state.runtime.firedScriptStarts;
   const idx = fired.indexOf(scriptId);
   if (idx >= 0) fired.splice(idx, 1);
-  for (const mod of ctx.modules) mod.onScriptComplete?.(ctx, scriptId);
+  for (const mod of ctx.modules) {
+    if (!mod.onScriptComplete) continue;
+    invokeModuleHook(
+      mod,
+      "onScriptComplete",
+      () => mod.onScriptComplete!(ctx, scriptId),
+      { scriptId },
+    );
+  }
 }
 
 export function fireOnBeatAfter(
@@ -61,7 +151,15 @@ export function fireOnBeatAfter(
   beatIdx: number,
   beat: Beat,
 ): void {
-  for (const mod of ctx.modules) mod.onBeatAfter?.(ctx, scriptId, beatIdx, beat);
+  for (const mod of ctx.modules) {
+    if (!mod.onBeatAfter) continue;
+    invokeModuleHook(
+      mod,
+      "onBeatAfter",
+      () => mod.onBeatAfter!(ctx, scriptId, beatIdx, beat),
+      { scriptId, beatIndex: beatIdx },
+    );
+  }
 }
 
 export function fireOnChoiceResolved(
@@ -72,7 +170,13 @@ export function fireOnChoiceResolved(
   resolution: ChoiceResolution,
 ): void {
   for (const mod of ctx.modules) {
-    mod.onChoiceResolved?.(ctx, scriptId, beatIdx, choiceIdx, resolution);
+    if (!mod.onChoiceResolved) continue;
+    invokeModuleHook(
+      mod,
+      "onChoiceResolved",
+      () => mod.onChoiceResolved!(ctx, scriptId, beatIdx, choiceIdx, resolution),
+      { scriptId, beatIndex: beatIdx },
+    );
   }
 }
 
@@ -81,7 +185,15 @@ export function fireOnLabelEnter(
   scriptId: string,
   labelName: string,
 ): void {
-  for (const mod of ctx.modules) mod.onLabelEnter?.(ctx, scriptId, labelName);
+  for (const mod of ctx.modules) {
+    if (!mod.onLabelEnter) continue;
+    invokeModuleHook(
+      mod,
+      "onLabelEnter",
+      () => mod.onLabelEnter!(ctx, scriptId, labelName),
+      { scriptId, labelName },
+    );
+  }
 }
 
 export function fireOnActionComplete(
@@ -89,7 +201,18 @@ export function fireOnActionComplete(
   action: Action,
   result: ActionResult | undefined,
 ): void {
-  for (const mod of ctx.modules) mod.onActionComplete?.(ctx, action, result);
+  for (const mod of ctx.modules) {
+    if (!mod.onActionComplete) continue;
+    invokeModuleHook(
+      mod,
+      "onActionComplete",
+      () => mod.onActionComplete!(ctx, action, result),
+      {
+        actionId: action.id,
+        ...(action.kind ? { actionKind: action.kind } : {}),
+      },
+    );
+  }
 }
 
 export function fireOnStateMutated(
@@ -97,21 +220,43 @@ export function fireOnStateMutated(
   delta: StateDelta,
   source: StateMutationSource,
 ): void {
-  for (const mod of ctx.modules) mod.onStateMutated?.(ctx, delta, source);
+  for (const mod of ctx.modules) {
+    if (!mod.onStateMutated) continue;
+    invokeModuleHook(
+      mod,
+      "onStateMutated",
+      () => mod.onStateMutated!(ctx, delta, source),
+      { mutationSource: source },
+    );
+  }
 }
 
 export function fireOnNarrationDrain(
   ctx: PresetContext,
   text: string,
 ): void {
-  for (const mod of ctx.modules) mod.onNarrationDrain?.(ctx, text);
+  for (const mod of ctx.modules) {
+    if (!mod.onNarrationDrain) continue;
+    invokeModuleHook(
+      mod,
+      "onNarrationDrain",
+      () => mod.onNarrationDrain!(ctx, text),
+    );
+  }
 }
 
 export function fireOnEndConditionFire(
   ctx: PresetContext,
   ec: EndConditionSpec,
 ): void {
-  for (const mod of ctx.modules) mod.onEndConditionFire?.(ctx, ec);
+  for (const mod of ctx.modules) {
+    if (!mod.onEndConditionFire) continue;
+    invokeModuleHook(
+      mod,
+      "onEndConditionFire",
+      () => mod.onEndConditionFire!(ctx, ec),
+    );
+  }
 }
 
 // ============ FIRST-WINS ============
@@ -128,7 +273,13 @@ export function fireOnScriptSelect(
 ): string {
   let winner: string | undefined;
   for (const mod of ctx.modules) {
-    const r = mod.onScriptSelect?.(ctx, scriptId);
+    if (!mod.onScriptSelect) continue;
+    const r = invokeModuleHook(
+      mod,
+      "onScriptSelect",
+      () => mod.onScriptSelect!(ctx, scriptId),
+      { scriptId },
+    );
     if (winner === undefined && typeof r === "string") winner = r;
   }
   return winner ?? scriptId;
@@ -145,7 +296,12 @@ export function fireOnHubBuild(ctx: PresetContext): Output | undefined {
 
   let winner: Output | undefined;
   for (const mod of ctx.modules) {
-    const r = mod.onHubBuild?.(ctx);
+    if (!mod.onHubBuild) continue;
+    const r = invokeModuleHook(
+      mod,
+      "onHubBuild",
+      () => mod.onHubBuild!(ctx),
+    );
     if (winner === undefined && r !== undefined) winner = r;
   }
   // The composed baseline is the single source of truth for the current
@@ -171,7 +327,16 @@ export function fireOnActionDispatch(
 ): Action | "cancel" {
   let winner: Action | "cancel" | undefined;
   for (const mod of ctx.modules) {
-    const r = mod.onActionDispatch?.(ctx, action);
+    if (!mod.onActionDispatch) continue;
+    const r = invokeModuleHook(
+      mod,
+      "onActionDispatch",
+      () => mod.onActionDispatch!(ctx, action),
+      {
+        actionId: action.id,
+        ...(action.kind ? { actionKind: action.kind } : {}),
+      },
+    );
     if (winner === undefined && r !== undefined) winner = r;
   }
   return winner ?? action;
@@ -187,7 +352,13 @@ export function fireOnChoicePresented(
 ): RenderedChoice[] {
   let acc = initial;
   for (const mod of ctx.modules) {
-    const r = mod.onChoicePresented?.(ctx, scriptId, beatIdx, acc);
+    if (!mod.onChoicePresented) continue;
+    const r = invokeModuleHook(
+      mod,
+      "onChoicePresented",
+      () => mod.onChoicePresented!(ctx, scriptId, beatIdx, acc),
+      { scriptId, beatIndex: beatIdx },
+    );
     if (r !== undefined) acc = r;
   }
   return acc;
@@ -201,7 +372,13 @@ export function fireOnBeatBefore(
 ): Beat | { skip: true } {
   let acc: Beat = initial;
   for (const mod of ctx.modules) {
-    const r = mod.onBeatBefore?.(ctx, scriptId, beatIdx, acc);
+    if (!mod.onBeatBefore) continue;
+    const r = invokeModuleHook(
+      mod,
+      "onBeatBefore",
+      () => mod.onBeatBefore!(ctx, scriptId, beatIdx, acc),
+      { scriptId, beatIndex: beatIdx },
+    );
     if (r === undefined) continue;
     if ("skip" in r && r.skip === true) return { skip: true };
     if ("replace" in r) {

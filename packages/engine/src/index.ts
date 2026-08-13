@@ -14,6 +14,7 @@ export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export type { ActivityDecisionContext, ChoiceDecisionContext } from "./decision";
+export type { ModuleHookContext, ModuleHookName } from "./types";
 export {
   createInitialState,
   applyDelta,
@@ -99,6 +100,7 @@ export {
   learnSkill,
   forgetSkill,
   fireHook,
+  ModuleHookExecutionError,
   fireOnSessionStart,
   fireOnScriptStart,
   fireOnScriptComplete,

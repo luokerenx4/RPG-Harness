@@ -946,6 +946,19 @@ export interface AiPersonaDefinition {
   deterministic?: boolean;
 }
 
+/** Stable author-facing symbols derived from every module lifecycle hook. */
+export type ModuleHookName = Extract<keyof Module, `on${string}`>;
+
+/** Stable semantic arguments retained when a module hook fails. */
+export interface ModuleHookContext {
+  scriptId?: string;
+  beatIndex?: number;
+  actionId?: string;
+  actionKind?: string;
+  labelName?: string;
+  mutationSource?: StateMutationSource;
+}
+
 /** Runner-owned deterministic services available while a new save is built. */
 export interface ModuleInitializationContext {
   /** Public uint32 seed that identifies this initial world. */

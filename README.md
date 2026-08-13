@@ -31,10 +31,13 @@ of dropping back to the project picker.
 Autonomous runtime failures retain the attempted public input separately from
 the successful trace. The resulting coding issue records the failure phase,
 error type and stack, frozen Choice/Hub semantics, and the owning script,
-module action, or project persona source. Action-handler and decision-policy
-crashes therefore point directly at their stable `activityId` / `actionKind`
-or persona name and editable module file instead of asking a later AI to infer
-the cause from prose or a terminal save.
+module action, project persona, preset, or lifecycle hook source. Hook failures
+retain their stable module id, hook name, and available script/beat/action
+coordinates; failed generator advances publish the pre-transition save rather
+than half-applied module state. Action-handler, decision-policy, preset, and
+hook crashes therefore point directly at editable project code and can be
+retried safely after a hot repair instead of asking a later AI to infer the
+cause from prose or a terminal save.
 
 Project TypeScript entrypoints are content-addressed together with their local
 dependency graph before evaluation. A long-running TUI or verifier therefore

@@ -1,9 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import { makeCtx, makeGame } from "../test-utils";
 import type { Module } from "../types";
-import { fireOnHubBuild } from "./hooks";
+import { fireOnHubBuild, ModuleHookExecutionError } from "./hooks";
 
 describe("fireOnHubBuild", () => {
+  test("rejects async hook contracts with the exact module symbol", () => {
+    const game = makeGame({
+      modules: [{
+        id: "async-hub",
+        onHubBuild: (() => Promise.resolve(undefined)) as never,
+      }],
+    });
+    const ctx = makeCtx(game);
+
+    expect(() => fireOnHubBuild(ctx)).toThrow(ModuleHookExecutionError);
+    try {
+      fireOnHubBuild(ctx);
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "async-hub",
+        hookName: "onHubBuild",
+        causeName: "TypeError",
+      });
+    }
+  });
   test("adds authoritative visuals to custom hub outputs", () => {
     const customHub: Module = {
       id: "custom-hub",

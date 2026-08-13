@@ -4,6 +4,7 @@ import { runLoop } from "./runLoop";
 import { makeGame } from "./test-utils";
 import type { Game } from "./types";
 import { dispatchActivity } from "./primitives";
+import { runScript } from "./primitives";
 
 const terminalGame: Game = {
   title: "terminal",
@@ -121,9 +122,66 @@ describe("runLoop terminal output", () => {
     expect(result.failure?.output?.type === "hubMenu" &&
       result.failure.output.snapshot.activities[0]?.title).toBe("Use forge");
     expect(result.finalState.runtime.lastHubActivities[0]?.title).toBe(
-      "Corrupted after dispatch",
+      "Use forge",
     );
     expect(result.failure?.stack).toContain("forge overheated");
+  });
+
+  test("retains the exact module hook symbol and retries onScriptStart after failure", async () => {
+    let shouldThrow = true;
+    let calls = 0;
+    const game = makeGame({
+      scripts: [{
+        id: "opening",
+        title: "Opening",
+        beats: [{ type: "narration", text: "The repaired scene begins." }],
+      }],
+      modules: [{
+        id: "early-hook",
+        onScriptStart: (ctx) => {
+          ctx.state.baseline.variables.earlyHookRuns =
+            Number(ctx.state.baseline.variables.earlyHookRuns ?? 0) + 1;
+        },
+      }, {
+        id: "broken-hooks",
+        source: "modules/hooks.ts",
+        onScriptStart: () => {
+          calls += 1;
+          if (shouldThrow) throw new RangeError("opening hook snapped");
+        },
+      }],
+      runFn: async function* (ctx) {
+        yield* runScript(ctx, ctx.game.scripts[0]!);
+      },
+    });
+    const initialState = createInitialState(game);
+    initialState.baseline.currentScriptId = "opening";
+
+    const failed = await runLoop(game, initialState, []);
+    expect(failed).toMatchObject({
+      reason: "error",
+      error: "opening hook snapped",
+      failure: {
+        phase: "prime",
+        name: "RangeError",
+        message: "opening hook snapped",
+        moduleIds: ["broken-hooks"],
+        hook: { moduleId: "broken-hooks", name: "onScriptStart" },
+      },
+    });
+    expect(failed.finalState.runtime.firedScriptStarts).toEqual([]);
+    expect(failed.finalState.baseline.variables.earlyHookRuns).toBeUndefined();
+
+    shouldThrow = false;
+    const repaired = await runLoop(game, failed.finalState, [], { maxSteps: 0 });
+    expect(repaired.reason).toBe("max-steps");
+    expect(repaired.trace[0]?.output).toMatchObject({
+      type: "narration",
+      text: "The repaired scene begins.",
+    });
+    expect(repaired.finalState.runtime.firedScriptStarts).toEqual(["opening"]);
+    expect(repaired.finalState.baseline.variables.earlyHookRuns).toBe(1);
+    expect(calls).toBe(2);
   });
 
   test("stops at a caller-owned observable condition without claiming game completion", async () => {

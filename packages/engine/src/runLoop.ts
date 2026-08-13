@@ -15,7 +15,15 @@ import {
   createInitialState,
   ModuleInitializationError,
 } from "./state";
-import type { ComposedState, Game, Input, Output } from "./types";
+import { ModuleHookExecutionError } from "./primitives/hooks";
+import type {
+  ComposedState,
+  Game,
+  Input,
+  ModuleHookName,
+  ModuleHookContext,
+  Output,
+} from "./types";
 
 export interface TraceEntry {
   index: number;
@@ -78,6 +86,8 @@ export interface LoopFailure {
   stack?: string;
   /** Author-owned modules whose setup contract caused the failure. */
   moduleIds?: string[];
+  /** Exact project module hook that threw inside the engine boundary. */
+  hook?: { moduleId: string; name: ModuleHookName } & ModuleHookContext;
 }
 
 export type InputSource =
@@ -146,6 +156,7 @@ export async function runLoop(
   let failureInput: Input | null = null;
   let failureOutput: Output | null = null;
   let engine: Engine | undefined;
+  let transitionStartState: ComposedState | undefined;
 
   try {
     engine = new Engine(game, startState);
@@ -155,6 +166,11 @@ export async function runLoop(
       failurePhase = priming ? "prime" : "input";
       failureInput = !priming && lastInput ? structuredClone(lastInput) : null;
       failureOutput = lastOutput ? structuredClone(lastOutput) : null;
+      // A generator advance is the engine's write transaction. If project
+      // code throws anywhere inside it, publish the pre-transition state so a
+      // GUI or Headless client can safely retry the same semantic input after
+      // a hot repair instead of inheriting half-applied hook/action effects.
+      transitionStartState = engine.getState();
       const classifiedInput: InputResult | undefined = !priming && lastOutput && lastInput
         ? classifyInput(lastOutput, lastInput)
         : undefined;
@@ -321,25 +337,40 @@ export async function runLoop(
     }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
+    const hookError = error instanceof ModuleHookExecutionError ? error : null;
     const attemptedInput = failurePhase === "input" && failureInput
       ? failureInput
       : null;
     const semanticOutput = failureOutput;
+    const failedTransitionState =
+      (failurePhase === "prime" || failurePhase === "input") &&
+        transitionStartState
+        ? transitionStartState
+        : engine?.getState() ?? cloneState(startState);
     return {
       trace,
-      finalState: engine?.getState() ?? cloneState(startState),
+      finalState: failedTransitionState,
       done: false,
       reason: "error",
-      error: error.message,
+      error: hookError?.causeMessage ?? error.message,
       failure: {
         phase: failurePhase,
-        name: error.name,
-        message: error.message,
+        name: hookError?.causeName ?? error.name,
+        message: hookError?.causeMessage ?? error.message,
         input: attemptedInput,
         output: semanticOutput,
         ...failureDecisionContext(semanticOutput, attemptedInput),
         ...(error instanceof ModuleContractError
           ? { moduleIds: error.moduleIds }
+          : hookError
+          ? {
+              moduleIds: [hookError.moduleId],
+              hook: {
+                moduleId: hookError.moduleId,
+                name: hookError.hookName,
+                ...hookError.context,
+              },
+            }
           : {}),
         ...(error.stack ? { stack: error.stack } : {}),
       },

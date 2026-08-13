@@ -275,6 +275,106 @@ describe("autoplay issue verification", () => {
     });
   });
 
+  test("resolves a module hook crash from the exact hook-owned source", async () => {
+    const gameDir = await temporaryRepairableHookErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 41,
+      session: "original-hook-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a hook issue");
+    expect(original).toMatchObject({
+      reason: "error",
+      error: "opening hook snapped",
+      failure: {
+        phase: "prime",
+        name: "RangeError",
+        message: "opening hook snapped",
+        moduleIds: ["broken-hooks"],
+        hook: { moduleId: "broken-hooks", name: "onScriptStart" },
+      },
+    });
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/hooks.ts",
+      title: "Autoplay greedy failed in broken-hooks.onScriptStart",
+      evidence: {
+        failure: {
+          hook: { moduleId: "broken-hooks", name: "onScriptStart" },
+        },
+        sourceTargets: [
+          {
+            kind: "preset",
+            file: "modules/run.ts",
+            runtimePhase: "prime",
+          },
+          {
+            kind: "script",
+            file: "scripts/opening.md",
+            scriptId: "opening",
+          },
+          {
+            kind: "module-hook",
+            file: "modules/hooks.ts",
+            moduleId: "broken-hooks",
+            hookName: "onScriptStart",
+            scriptId: "opening",
+          },
+        ],
+      },
+    });
+    expect(report.details).toContain(
+      "module hook: `broken-hooks.onScriptStart`",
+    );
+    expect((await collectDevelopmentWorklist(gameDir)).items).toContainEqual(
+      expect.objectContaining({
+        key: `report/${report.id}`,
+        actionability: "executable",
+        target: "modules/hooks.ts",
+        operation: {
+          command: "verify-autoplay",
+          args: { reportId: report.id, sessionPrefix: "<new-session>" },
+        },
+      }),
+    );
+
+    await writeFile(path.join(gameDir, "modules", "hooks.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const module: Module = {",
+      '  id: "broken-hooks",',
+      '  onScriptStart(ctx) { ctx.state.runtime.pendingNarrations.push("Hook repaired."); },',
+      "};",
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "hook-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      result: {
+        reason: "completed",
+        ending: "opening",
+        webPath: "/?session=hook-fixed-run",
+      },
+      resolvedReport: {
+        status: "resolved",
+        verification: {
+          kind: "autoplay",
+          originalStopReason: "error",
+          result: { ending: "opening" },
+        },
+      },
+    });
+  });
+
   test("resolves a project persona crash only after its repaired policy reaches gameEnd", async () => {
     const gameDir = await temporaryRepairablePersonaErrorGame();
     const original = await runAutoplay({
@@ -710,6 +810,56 @@ async function temporaryRepairablePresetErrorGame(): Promise<string> {
     "const run: RunFunction = async function* () {",
     '  throw new TypeError("preset bootstrap failed");',
     '  yield { type: "gameEnd", endingId: "unreachable" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairableHookErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-hook-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable hook error",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/hooks.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "opening.md"), [
+    "---",
+    "id: opening",
+    "title: Opening",
+    "characters: []",
+    "---",
+    "",
+    "The scene opens.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "hooks.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "broken-hooks",',
+    '  onScriptStart() { throw new RangeError("opening hook snapped"); },',
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import { runScript } from "@rpg-harness/engine";',
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  const script = ctx.scriptMap.get("opening")!;',
+    '  ctx.state.baseline.currentScriptId = "opening";',
+    "  const finished = yield* runScript(ctx, script);",
+    "  if (!finished) return;",
+    '  ctx.state.baseline.completionOrder.push("opening");',
+    '  yield { type: "gameEnd", endingId: "opening", reason: "hook route completed" };',
     "};",
     "export default run;",
     "",

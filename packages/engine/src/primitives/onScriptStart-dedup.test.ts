@@ -119,4 +119,23 @@ describe("fireOnScriptStart — dedup contract", () => {
       ctx.state.runtime.pendingNarrations.filter((n) => n === "HEADER"),
     ).toHaveLength(1);
   });
+
+  test("a reentrant hook cannot recursively fire the same script entry", () => {
+    let calls = 0;
+    const game = makeGame({
+      modules: [{
+        id: "reentrant",
+        onScriptStart: (ctx, scriptId) => {
+          calls += 1;
+          fireOnScriptStart(ctx, scriptId);
+        },
+      }],
+    });
+    const ctx = makeCtx(game);
+
+    fireOnScriptStart(ctx, "letter_01");
+
+    expect(calls).toBe(1);
+    expect(ctx.state.runtime.firedScriptStarts).toEqual(["letter_01"]);
+  });
 });
