@@ -45,6 +45,10 @@ export interface SessionLockOptions {
   onLeaseMetadataOpened?: () => void | Promise<void>;
   /** Pauses after the atomic owner link is published, before operation entry. */
   onLockPublished?: () => void | Promise<void>;
+  /** Pauses after recovery-claim scan, immediately before owner publication. */
+  onBeforeLockPublication?: () => void | Promise<void>;
+  /** Pauses stale recovery after exact inode verification, before unlink. */
+  onStaleOwnerVerifiedBeforeUnlink?: () => void | Promise<void>;
   /** Pauses a release after exact ownership verification, before unlink. */
   onOwnedLeaseVerifiedBeforeUnlink?: () => void | Promise<void>;
 }
@@ -170,6 +174,7 @@ export async function withSessionLock<T>(
         await delay(retryMs);
         continue;
       }
+      await options.onBeforeLockPublication?.();
       try {
         await link(prepared.preparedFile, lockFile);
         linked = true;
@@ -182,6 +187,7 @@ export async function withSessionLock<T>(
             options.onStaleLeaseConfirmed,
             options.onRecoveryClaimAcquired,
             options.onStaleOwnerPinned,
+            options.onStaleOwnerVerifiedBeforeUnlink,
             options.onStaleOwnerDisplaced,
           )
         ) continue;
@@ -194,22 +200,34 @@ export async function withSessionLock<T>(
         continue;
       }
 
-      await options.onLockPublished?.();
-      await verifyOwnedSessionLock(lockFile, prepared);
-      // A recovery fence can appear only by pinning an older public inode or
-      // by pinning this fresh inode after a stale observation. In the latter
-      // case its exact revalidation removes the fence without moving us. Do
-      // not enter the operation until either case has settled.
-      while (await recoverAbandonedSessionClaims(sessionDir, staleAfterMs)) {
+      try {
+        await options.onLockPublished?.();
         await verifyOwnedSessionLock(lockFile, prepared);
-        if (Date.now() - started >= timeoutMs) {
-          throw new Error(
-            `Timed out waiting for interrupted session lock recovery: ${session}`,
-          );
+        // A recovery fence can appear only by pinning an older public inode or
+        // by pinning this fresh inode after a stale observation. In the latter
+        // case its exact revalidation removes the fence without moving us. Do
+        // not enter the operation until either case has settled.
+        while (await recoverAbandonedSessionClaims(sessionDir, staleAfterMs)) {
+          await verifyOwnedSessionLock(lockFile, prepared);
+          if (Date.now() - started >= timeoutMs) {
+            throw new Error(
+              `Timed out waiting for interrupted session lock recovery: ${session}`,
+            );
+          }
+          await delay(retryMs);
         }
+        await verifyOwnedSessionLock(lockFile, prepared);
+      } catch (error) {
+        // A stale reclaimer may have verified the previous public inode before
+        // this owner linked, then unlink this still-fenced publication by name.
+        // The operation has not started and our private prepared inode remains
+        // authoritative, so treat this as acquisition contention and retry.
+        if (!(await canRetryLostPublication(lockFile, prepared))) throw error;
+        linked = false;
+        if (Date.now() - started >= timeoutMs) throw error;
         await delay(retryMs);
+        continue;
       }
-      await verifyOwnedSessionLock(lockFile, prepared);
       break;
     }
 
@@ -247,6 +265,31 @@ export async function withSessionLock<T>(
       await rm(prepared.preparedFile, { force: true });
     }
   }
+}
+
+async function canRetryLostPublication(
+  lockFile: string,
+  prepared: PreparedSessionLease,
+): Promise<boolean> {
+  const [current, privateOwner, serialized] = await Promise.all([
+    statIfPresent(lockFile),
+    statIfPresent(prepared.preparedFile),
+    readFile(prepared.preparedFile, "utf-8").catch(() => null),
+  ]);
+  if (
+    privateOwner === null ||
+    privateOwner.dev !== prepared.ownerStat.dev ||
+    privateOwner.ino !== prepared.ownerStat.ino ||
+    serialized === null ||
+    !sameSessionLeaseOwner(serialized, prepared.owner)
+  ) {
+    return false;
+  }
+  return (
+    current === null ||
+    current.dev !== prepared.ownerStat.dev ||
+    current.ino !== prepared.ownerStat.ino
+  );
 }
 
 async function prepareSessionLease(
@@ -706,6 +749,7 @@ async function removeIfStale(
   onStaleLeaseConfirmed?: () => void | Promise<void>,
   onRecoveryClaimAcquired?: () => void | Promise<void>,
   onStaleOwnerPinned?: () => void | Promise<void>,
+  onStaleOwnerVerifiedBeforeUnlink?: () => void | Promise<void>,
   onStaleOwnerDisplaced?: () => void | Promise<void>,
 ): Promise<boolean> {
   const sessionDir = path.dirname(lockFile);
@@ -766,6 +810,7 @@ async function removeIfStale(
       pinnedBeforeUnlink.dev !== confirmed.lockDev ||
       pinnedBeforeUnlink.ino !== confirmed.lockIno
     ) return false;
+    await onStaleOwnerVerifiedBeforeUnlink?.();
     await unlink(lockFile);
     await onStaleOwnerDisplaced?.();
     return true;

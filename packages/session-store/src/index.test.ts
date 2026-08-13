@@ -290,6 +290,102 @@ describe("withSessionLock", () => {
     expect(maximumActive).toBe(1);
   });
 
+  test("a publication displaced by overlapping reclaimers retries transparently", async () => {
+    const gameDir = await temporaryGame();
+    const lockFile = sessionLockDir(gameDir, "web");
+    await writeDeadLease(gameDir, "web", "dead-before-overlapping-reclaimers");
+
+    let publicationReady!: () => void;
+    const publicationReadyGate = new Promise<void>((resolve) => {
+      publicationReady = resolve;
+    });
+    let publishReplacement!: () => void;
+    const publishReplacementGate = new Promise<void>((resolve) => {
+      publishReplacement = resolve;
+    });
+    let publicationAttempts = 0;
+    let replacementEntered = 0;
+    const replacement = withSessionLock(gameDir, "web", async () => {
+      replacementEntered += 1;
+    }, {
+      staleAfterMs: 10,
+      retryMs: 1,
+      timeoutMs: 500,
+      onBeforeLockPublication: async () => {
+        publicationAttempts += 1;
+        if (publicationAttempts !== 1) return;
+        publicationReady();
+        await publishReplacementGate;
+      },
+    });
+    await publicationReadyGate;
+
+    let bothConfirmed!: () => void;
+    const bothConfirmedGate = new Promise<void>((resolve) => {
+      bothConfirmed = resolve;
+    });
+    let confirmations = 0;
+    let verified = 0;
+    let firstVerified!: () => void;
+    const firstVerifiedGate = new Promise<void>((resolve) => {
+      firstVerified = resolve;
+    });
+    let releaseFirst!: () => void;
+    const releaseFirstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let secondVerified!: () => void;
+    const secondVerifiedGate = new Promise<void>((resolve) => {
+      secondVerified = resolve;
+    });
+    let releaseSecond!: () => void;
+    const releaseSecondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const reclaimerOptions = {
+      staleAfterMs: 10,
+      retryMs: 1,
+      timeoutMs: 500,
+      onStaleLeaseConfirmed: async () => {
+        confirmations += 1;
+        if (confirmations === 2) bothConfirmed();
+        await bothConfirmedGate;
+      },
+      onStaleOwnerVerifiedBeforeUnlink: async () => {
+        verified += 1;
+        if (verified === 1) {
+          firstVerified();
+          await releaseFirstGate;
+        } else if (verified === 2) {
+          secondVerified();
+          await releaseSecondGate;
+        }
+      },
+    };
+    let firstEntered = 0;
+    const first = withSessionLock(gameDir, "web", async () => {
+      firstEntered += 1;
+    }, reclaimerOptions);
+    let secondEntered = 0;
+    const second = withSessionLock(gameDir, "web", async () => {
+      secondEntered += 1;
+    }, reclaimerOptions);
+    await firstVerifiedGate;
+    await secondVerifiedGate;
+
+    releaseFirst();
+    await waitFor(async () => !(await pathExists(lockFile)));
+    publishReplacement();
+    await waitFor(async () => await pathExists(lockFile));
+    releaseSecond();
+
+    await Promise.all([replacement, first, second]);
+    expect(replacementEntered).toBe(1);
+    expect(firstEntered).toBe(1);
+    expect(secondEntered).toBe(1);
+    expect(publicationAttempts).toBeGreaterThan(1);
+  });
+
   test("a short owner published after stale confirmation leaves no dead restored lease", async () => {
     const gameDir = await temporaryGame();
     const lockDir = sessionLockDir(gameDir, "web");
@@ -675,9 +771,9 @@ async function temporaryGame(): Promise<string> {
   return dir;
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
   for (let i = 0; i < 100; i++) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
   throw new Error("condition was not reached");
