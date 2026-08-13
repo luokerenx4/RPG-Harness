@@ -131,6 +131,14 @@ export interface WebFeedbackFeed {
     resolution?: string;
     supersededAt?: string;
     supersededReason?: string;
+    verification?: {
+      kind: "player-feedback";
+      verifiedAt: string;
+      originalInputRevision: string;
+      fixedInputRevision: string;
+      certificateRevision: string;
+      certificateCreatedAt: string;
+    };
   }>;
 }
 

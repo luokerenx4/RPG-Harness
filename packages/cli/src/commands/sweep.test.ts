@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 1,
+        schemaVersion: 2,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -501,6 +501,10 @@ describe("bounded development sweep", () => {
           { surface: "hub-activity", input: { type: "doActivity", id: "invite:kasumi" } },
           { surface: "script-select", input: { type: "select", scriptId: "ending" } },
         ],
+        projections: [{
+          surface: "player-feedback-proof",
+          text: "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc",
+        }],
       }],
     });
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);

@@ -39,6 +39,7 @@ import {
   reproduceCommand,
   resolveCommand,
   supersedeCommand,
+  verifyFeedbackCommand,
 } from "./commands/report";
 import {
   PLAYTEST_AREAS,
@@ -109,6 +110,10 @@ COMMANDS
   project-status <game-dir> [--pretty]
       Compact machine-readable AI development state: pending coding work and
       whether current game/runtime inputs have a valid quality certificate.
+
+  verify-feedback <game-dir> <report-id> --session-prefix PREFIX --resolution TEXT
+      Close new Web player feedback only after project inputs changed, no
+      unrelated work remains, and the current AI quality matrix is certified.
 
   work <game-dir> [--key WORK-KEY] [--session SOURCE]
        [--new-session NAME] [--persona NAME] [--max-steps N]
@@ -368,6 +373,8 @@ async function main(): Promise<void> {
       return runReport(rest);
     case "reports":
       return runReports(rest);
+    case "verify-feedback":
+      return runVerifyFeedback(rest);
     case "inspect-report":
       return runInspectReport(rest);
     case "resolve":
@@ -1286,6 +1293,34 @@ async function runResolve(args: string[]): Promise<void> {
     ...(values.resolution !== undefined
       ? { resolution: values.resolution }
       : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runVerifyFeedback(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      "session-prefix": { type: "string" },
+      resolution: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (
+    positionals.length !== 2 || !positionals[0] || !positionals[1] ||
+    !values["session-prefix"] || !values.resolution?.trim()
+  ) {
+    process.stderr.write(
+      "Usage: rpgh verify-feedback <game-dir> <report-id> --session-prefix PREFIX --resolution TEXT [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await verifyFeedbackCommand({
+    gameDir: positionals[0],
+    reportId: positionals[1],
+    sessionPrefix: values["session-prefix"],
+    resolution: values.resolution,
     pretty: Boolean(values.pretty),
   });
 }

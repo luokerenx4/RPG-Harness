@@ -394,6 +394,13 @@ export function FeedbackOverlay({
                 </div>
                 {item.resolution && <p><strong>AI:</strong> {item.resolution}</p>}
                 {item.supersededReason && <p><strong>AI:</strong> {item.supersededReason}</p>}
+                {item.verification && (
+                  <div className="feedback-proof">
+                    <strong>検証済み</strong>
+                    <span>project {shortRevision(item.verification.originalInputRevision)} → {shortRevision(item.verification.fixedInputRevision)}</span>
+                    <span>certificate {shortRevision(item.verification.certificateRevision)}</span>
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -401,6 +408,10 @@ export function FeedbackOverlay({
       </div>
     </div>
   );
+}
+
+function shortRevision(revision: string): string {
+  return revision.slice(0, 10);
 }
 
 export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {

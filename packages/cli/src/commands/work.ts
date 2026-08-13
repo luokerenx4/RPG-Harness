@@ -11,6 +11,7 @@ import {
 import { runReachScript, type ReachScriptSummary } from "./reach-script";
 import { verifyAuditReport } from "./verify-audit";
 import { verifyAutoplayReport } from "./verify-autoplay";
+import { verifyFeedbackReport } from "./verify-feedback";
 import { collectSessionTranscript } from "./transcript";
 import {
   attachDevelopmentBranchHandoff,
@@ -153,6 +154,19 @@ export async function executeDevelopmentWorkItem(
         gameDir: args.gameDir,
         reportId: operation.args.reportId,
         sessionPrefix: target,
+      });
+      return result.status === "verified"
+        ? executed(selection, operation, "isolated-session", true, target, result)
+        : failedAfterWrite(selection, operation, target, result);
+    }
+    case "verify-feedback": {
+      const target = requireNewSession(args, item);
+      const report = await getPlaytestReport(args.gameDir, operation.args.reportId);
+      const result = await verifyFeedbackReport({
+        gameDir: args.gameDir,
+        reportId: operation.args.reportId,
+        sessionPrefix: target,
+        resolution: `AI changed the project after this feedback and passed the current project quality gate.`,
       });
       return result.status === "verified"
         ? executed(selection, operation, "isolated-session", true, target, result)

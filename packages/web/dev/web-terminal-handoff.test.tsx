@@ -8,7 +8,7 @@ import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 describe("Web terminal handoff", () => {
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -18,6 +18,10 @@ describe("Web terminal handoff", () => {
         { surface: "hub-activity", input: { type: "doActivity", id: "invite:kasumi" } },
         { surface: "script-select", input: { type: "select", scriptId: "ending" } },
       ],
+      projections: [{
+        surface: "player-feedback-proof",
+        text: "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc",
+      }],
     });
   });
 
@@ -230,6 +234,14 @@ describe("Web terminal handoff", () => {
             severity: "minor",
             title: "Line is too explicit",
             resolution: "Replaced exposition with a pause and replayed the scene.",
+            verification: {
+              kind: "player-feedback",
+              verifiedAt: "2026-08-13T00:01:00.000Z",
+              originalInputRevision: "a".repeat(64),
+              fixedInputRevision: "b".repeat(64),
+              certificateRevision: "c".repeat(64),
+              certificateCreatedAt: "2026-08-13T00:00:30.000Z",
+            },
             evidence: {
               logEntry: 7,
               currentScriptId: "scene",
@@ -247,5 +259,8 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("このセッションのフィードバック");
     expect(html).toContain("対応済み");
     expect(html).toContain("Replaced exposition with a pause and replayed the scene.");
+    expect(html).toContain("検証済み");
+    expect(html).toContain("project aaaaaaaaaa → bbbbbbbbbb");
+    expect(html).toContain("certificate cccccccccc");
   });
 });

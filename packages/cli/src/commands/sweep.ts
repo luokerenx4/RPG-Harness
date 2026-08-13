@@ -5,11 +5,12 @@ import { assertSessionName } from "@rpg-harness/session-store";
 import { getPlaytestReport } from "../playtest-reports";
 import { sessionDir } from "../session";
 import { loadGame } from "../loader";
-import { runAudit, type AuditSummary } from "./audit";
+import type { AuditSummary } from "./audit";
 import {
-  qualityAuditInputRevision,
-  readQualityAuditCertificate,
-  writeQualityAuditCertificate,
+  type ProjectQualityAuditSummary,
+  type ProjectQualityFuzzAuditSummary,
+  projectQualityGateTargetSessions,
+  runProjectQualityGate,
 } from "./quality-certificate";
 import { assertTargetEmpty } from "./fork";
 import {
@@ -155,35 +156,10 @@ export interface SweepConvergenceResult {
   }>;
 }
 
-export interface ProjectQualityAuditSummary {
-  source: AuditSummary["source"];
-  seed: number;
-  maxSteps: number;
-  maxSegments: number;
-  totals: AuditSummary["totals"];
-  endings: Record<string, number>;
-  diversity: Pick<
-    AuditSummary["diversity"],
-    "classification" | "uniqueEndings" | "uniqueDecisionPaths"
-  >;
-  qualityGate: AuditSummary["qualityGate"];
-  lanes: Array<Pick<
-    AuditSummary["lanes"][number],
-    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
-  > & { pathRevision: string; semanticActivityCounts: Record<string, number> }>;
-}
-
-export interface ProjectQualityFuzzAuditSummary {
-  source: AuditSummary["source"];
-  seed: number;
-  maxSteps: number;
-  maxSegments: number;
-  totals: AuditSummary["totals"];
-  lanes: Array<Pick<
-    AuditSummary["lanes"][number],
-    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
-  > & { pathRevision: string }>;
-}
+export type {
+  ProjectQualityAuditSummary,
+  ProjectQualityFuzzAuditSummary,
+} from "./quality-certificate";
 
 interface PersistedSweepSnapshot {
   schemaVersion: 1;
@@ -393,197 +369,24 @@ async function evaluateProjectQualityGate(
   finalReason: SweepConvergenceResult["reason"];
   qualityGate: NonNullable<SweepConvergenceResult["qualityGate"]>;
 }> {
-  const game = await loadGame(args.gameDir);
-  const policy = game.aiAudit;
   const sessionPrefix = `${args.sessionPrefix}-quality-gate-g${String(generation).padStart(2, "0")}`;
-  if (!policy) {
-    return {
-      finalStatus: "clean",
-      finalReason: "clean",
-      qualityGate: { status: "not-configured", mode: "not-configured", sessionPrefix },
-    };
-  }
-  const personas = policy.personas ?? [];
-  const fuzzPersonas = policy.fuzzPersonas ?? [];
-  if (personas.length === 0) {
-    throw new Error(
-      "sweep --until-clean requires ai_audit.personas for its final project quality gate",
-    );
-  }
-  const maxSteps = args.auditMaxSteps ?? 1000;
-  const maxSegments = args.auditMaxSegments ?? 4;
-  const seeds = policy.seeds ?? [args.auditSeed ?? 1_592_597_881];
-  const inputRevision = await qualityAuditInputRevision(args.gameDir, {
-    personas,
-    fuzzPersonas,
-    policy,
-    maxSteps,
-    maxSegments,
-    seeds,
+  const qualityGate = await runProjectQualityGate({
+    gameDir: args.gameDir,
+    sessionPrefix,
+    ...(args.auditMaxSteps !== undefined ? { maxSteps: args.auditMaxSteps } : {}),
+    ...(args.auditMaxSegments !== undefined
+      ? { maxSegments: args.auditMaxSegments }
+      : {}),
+    ...(args.auditSeed !== undefined ? { auditSeed: args.auditSeed } : {}),
+    force: args.forceAudit ?? false,
   });
-  if (!args.forceAudit) {
-    const cached = await readQualityAuditCertificate(args.gameDir, inputRevision);
-    if (cached) {
-      return {
-        finalStatus: "clean",
-        finalReason: "clean",
-        qualityGate: {
-          status: "passed",
-          mode: "certificate",
-          sessionPrefix: cached.certificate.sessionPrefix,
-          inputRevision,
-          certificate: {
-            revision: cached.certificate.revision,
-            file: cached.file,
-          },
-          audits: cached.certificate.audits,
-          fuzzAudits: cached.certificate.fuzzAudits,
-        },
-      };
-    }
-  }
-  // Treat the author-declared seed matrix as one batch. A collision in a later
-  // seed must fail before the first source/lane/report session is materialized,
-  // otherwise a retry sees a misleading half-written quality run.
-  for (const seed of seeds) {
-    const seedPrefix = `${sessionPrefix}-seed-${seed}`;
-    for (const target of [
-      `${seedPrefix}-source`,
-      ...personas.map((persona) => `${seedPrefix}-${persona}`),
-      ...(fuzzPersonas.length > 0
-        ? [`${seedPrefix}-fuzz-source`, `${seedPrefix}-fuzz-quality-gate`]
-        : []),
-      ...fuzzPersonas.map((persona) => `${seedPrefix}-fuzz-${persona}`),
-      `${seedPrefix}-quality-gate`,
-    ]) {
-      assertSessionName(target);
-      await assertTargetEmpty(args.gameDir, target);
-    }
-  }
-  const audits: ProjectQualityAuditSummary[] = [];
-  const fuzzAudits: ProjectQualityFuzzAuditSummary[] = [];
-  for (const seed of seeds) {
-    const audit = await runAudit({
-      gameDir: args.gameDir,
-      sessionPrefix: `${sessionPrefix}-seed-${seed}`,
-      personas,
-      maxSteps,
-      maxSegments,
-      seed,
-      reportOnStop: true,
-      pretty: false,
-    });
-    audits.push(compactProjectQualityAudit(audit));
-    if (fuzzPersonas.length > 0) {
-      const fuzz = await runAudit({
-        gameDir: args.gameDir,
-        sessionPrefix: `${sessionPrefix}-seed-${seed}-fuzz`,
-        personas: fuzzPersonas,
-        maxSteps,
-        maxSegments,
-        seed,
-        // The matrix report below is the causal project-quality issue. Avoid
-        // filing a second per-lane stall for the same seeded fuzz failure.
-        reportOnStop: false,
-        qualityFloor: { personas: fuzzPersonas },
-        pretty: false,
-      });
-      fuzzAudits.push(compactProjectQualityFuzzAudit(fuzz));
-    }
-  }
-  const status = audits.every((audit) => audit.qualityGate?.status === "passed") &&
-      fuzzAudits.every((audit) =>
-        audit.totals.completed === audit.totals.lanes &&
-        audit.totals.errors === 0 &&
-        audit.totals.rejectedInputs === 0 &&
-        audit.totals.openReports === 0 &&
-        audit.lanes.every((lane) => lane.reason === "completed" && lane.ending !== null)
-      )
-    ? "passed" as const
-    : "failed" as const;
-  if (status === "passed") {
-    const certified = await writeQualityAuditCertificate(args.gameDir, {
-      inputRevision,
-      sessionPrefix,
-      audits,
-      fuzzAudits,
-    });
-    return {
-      finalStatus: "clean",
-      finalReason: "clean",
-      qualityGate: {
-        status,
-        mode: "executed",
-        sessionPrefix,
-        inputRevision,
-        certificate: {
-          revision: certified.certificate.revision,
-          file: certified.file,
-        },
-        audits,
-        fuzzAudits,
-      },
-    };
+  if (qualityGate.status === "passed" || qualityGate.status === "not-configured") {
+    return { finalStatus: "clean", finalReason: "clean", qualityGate };
   }
   return {
     finalStatus: "stopped",
     finalReason: "quality-gate-failed",
-    qualityGate: {
-      status,
-      mode: "executed",
-      sessionPrefix,
-      inputRevision,
-      audits,
-      fuzzAudits,
-    },
-  };
-}
-
-function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSummary {
-  return {
-    source: audit.source,
-    seed: audit.seed,
-    maxSteps: audit.maxSteps,
-    maxSegments: audit.maxSegments,
-    totals: audit.totals,
-    endings: audit.endings,
-    diversity: {
-      classification: audit.diversity.classification,
-      uniqueEndings: audit.diversity.uniqueEndings,
-      uniqueDecisionPaths: audit.diversity.uniqueDecisionPaths,
-    },
-    qualityGate: audit.qualityGate,
-    lanes: audit.lanes.map((lane) => ({
-      persona: lane.persona,
-      session: lane.session,
-      webPath: lane.webPath,
-      segments: lane.segments,
-      reason: lane.reason,
-      ending: lane.ending,
-      decisions: lane.decisions,
-      pathRevision: lane.path.revision,
-      semanticActivityCounts: lane.path.semanticActivityCounts,
-    })),
-  };
-}
-
-function compactProjectQualityFuzzAudit(audit: AuditSummary): ProjectQualityFuzzAuditSummary {
-  return {
-    source: audit.source,
-    seed: audit.seed,
-    maxSteps: audit.maxSteps,
-    maxSegments: audit.maxSegments,
-    totals: audit.totals,
-    lanes: audit.lanes.map((lane) => ({
-      persona: lane.persona,
-      session: lane.session,
-      webPath: lane.webPath,
-      segments: lane.segments,
-      reason: lane.reason,
-      ending: lane.ending,
-      decisions: lane.decisions,
-      pathRevision: lane.path.revision,
-    })),
+    qualityGate,
   };
 }
 
@@ -1139,7 +942,7 @@ function branchTarget(
 }
 
 function createsBranch(item: DevelopmentWorkItem): boolean {
-  return ["reproduce", "verify-audit", "verify-autoplay", "cover", "reach", "reach-script"]
+  return ["reproduce", "verify-audit", "verify-autoplay", "verify-feedback", "cover", "reach", "reach-script"]
     .includes(item.operation.command);
 }
 
@@ -1165,6 +968,12 @@ async function preflightTargets(
       );
     } else if (item.operation.command === "verify-autoplay") {
       expanded.push(`${target}-source`, `${target}-run`);
+    } else if (item.operation.command === "verify-feedback") {
+      expanded.push(...await projectQualityGateTargetSessions(
+        args.gameDir,
+        target,
+        args.auditSeed ?? 1_592_597_881,
+      ));
     } else {
       expanded.push(target);
     }

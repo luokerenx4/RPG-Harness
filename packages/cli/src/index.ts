@@ -31,7 +31,11 @@ export type {
   SweepConvergenceResult,
   SweepResult,
 } from "./commands/sweep";
-export { findCurrentQualityAuditCertificate } from "./commands/quality-certificate";
+export {
+  currentQualityAuditInputRevision,
+  findCurrentQualityAuditCertificate,
+  runProjectQualityGate,
+} from "./commands/quality-certificate";
 export type {
   CurrentQualityAuditCertificate,
   QualityAuditCertificate,
@@ -86,6 +90,11 @@ export type {
   VerifyAutoplayArgs,
   VerifyAutoplaySummary,
 } from "./commands/verify-autoplay";
+export { verifyFeedbackReport } from "./commands/verify-feedback";
+export type {
+  VerifyFeedbackArgs,
+  VerifyFeedbackSummary,
+} from "./commands/verify-feedback";
 export type {
   CoverChoiceArgs,
   CoverChoiceSummary,
@@ -148,6 +157,7 @@ export type {
   PlaytestAuditVerification,
   PlaytestAutoplayEvidence,
   PlaytestAutoplayVerification,
+  PlaytestPlayerFeedbackVerification,
   PlaytestVerification,
   PlaytestAuditMatrixEvidence,
   RecordPlaytestReportArgs,

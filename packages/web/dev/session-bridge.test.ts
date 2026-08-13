@@ -235,6 +235,16 @@ describe("Web development session bridge", () => {
       status: "resolved",
       resolvedAt: "2026-08-13T01:00:00.000Z",
       resolution: "Made Mio pause before answering and replayed the choice.",
+      verification: {
+        kind: "player-feedback",
+        verifiedAt: "2026-08-13T00:59:00.000Z",
+        originalInputRevision: "a".repeat(64),
+        fixedInputRevision: "b".repeat(64),
+        certificateRevision: "c".repeat(64),
+        certificateCreatedAt: "2026-08-13T00:58:00.000Z",
+        worklistRevision: "d".repeat(16),
+        unrelatedWorkItems: 0,
+      },
     };
     await writeFile(
       path.join(gameDir, ".rpg-harness", "sessions", "player-branch", "issues.jsonl"),
@@ -249,6 +259,12 @@ describe("Web development session bridge", () => {
         id: report.id,
         status: "resolved",
         resolution: "Made Mio pause before answering and replayed the choice.",
+        verification: {
+          kind: "player-feedback",
+          originalInputRevision: "a".repeat(64),
+          fixedInputRevision: "b".repeat(64),
+          certificateRevision: "c".repeat(64),
+        },
       }],
     });
     expect(resolvedFeed.revision).not.toBe(openFeed.revision);
@@ -527,5 +543,10 @@ describe("Web development session bridge", () => {
 async function temporaryGame(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-web-bridge-"));
   temporaryDirectories.push(dir);
+  await writeFile(
+    path.join(dir, "game.yaml"),
+    "title: Web bridge fixture\n",
+    "utf-8",
+  );
   return dir;
 }

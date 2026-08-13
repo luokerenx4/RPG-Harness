@@ -206,6 +206,7 @@ rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI pla
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close an ordinary finding (structured findings require verification)
+rpgh verify-feedback <game-dir> <report-id> --session-prefix RUN --resolution TEXT # prove changed + clean + certified repair
 rpgh supersede <game-dir> <report-id> --reason TEXT            # retire unreplayable evidence without claiming a verified fix
 rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
@@ -808,7 +809,11 @@ browser builds omit the control because they have no local development bridge.
 Web submissions carry a structured player-feedback origin, so the same HUD can
 poll the session's issue history without mixing in autonomous audit findings.
 Players see whether AI is still working, resolved the concern, or explicitly
-superseded it, together with the AI's recorded resolution.
+superseded it, together with the AI's recorded resolution. New Web feedback
+freezes the current project-input revision; it cannot be closed by prose alone.
+`rpgh verify-feedback` requires a changed revision, no unrelated pending work,
+and a matching project quality certificate, then the GUI shows the before/after
+revision and certificate as player-visible repair proof.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

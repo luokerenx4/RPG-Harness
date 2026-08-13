@@ -93,6 +93,14 @@ export interface BridgeFeedbackFeed {
     resolution?: string;
     supersededAt?: string;
     supersededReason?: string;
+    verification?: {
+      kind: "player-feedback";
+      verifiedAt: string;
+      originalInputRevision: string;
+      fixedInputRevision: string;
+      certificateRevision: string;
+      certificateCreatedAt: string;
+    };
     evidence: {
       logEntry: number | null;
       currentScriptId: string | null;
@@ -170,6 +178,18 @@ export async function loadBridgeFeedbackFeed(
       ...(typeof report.supersededAt === "string" ? { supersededAt: report.supersededAt } : {}),
       ...(typeof report.supersededReason === "string"
         ? { supersededReason: report.supersededReason }
+        : {}),
+      ...(isPlayerFeedbackVerification(report.verification)
+        ? {
+            verification: {
+              kind: "player-feedback" as const,
+              verifiedAt: report.verification.verifiedAt,
+              originalInputRevision: report.verification.originalInputRevision,
+              fixedInputRevision: report.verification.fixedInputRevision,
+              certificateRevision: report.verification.certificateRevision,
+              certificateCreatedAt: report.verification.certificateCreatedAt,
+            },
+          }
         : {}),
       evidence: {
         logEntry: Number.isInteger(report.evidence.logEntry)
@@ -708,6 +728,7 @@ function isPlayerFeedbackReport(value: unknown): value is {
   resolution?: unknown;
   supersededAt?: unknown;
   supersededReason?: unknown;
+  verification?: unknown;
   evidence: Record<string, unknown>;
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -725,6 +746,27 @@ function isPlayerFeedbackReport(value: unknown): value is {
     (origin as Record<string, unknown>).surface === "web" &&
     report.evidence !== null && typeof report.evidence === "object" &&
     !Array.isArray(report.evidence);
+}
+
+function isPlayerFeedbackVerification(value: unknown): value is {
+  kind: "player-feedback";
+  verifiedAt: string;
+  originalInputRevision: string;
+  fixedInputRevision: string;
+  certificateRevision: string;
+  certificateCreatedAt: string;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const verification = value as Record<string, unknown>;
+  return verification.kind === "player-feedback" &&
+    typeof verification.verifiedAt === "string" &&
+    typeof verification.certificateCreatedAt === "string" &&
+    typeof verification.originalInputRevision === "string" &&
+    /^[a-f0-9]{64}$/.test(verification.originalInputRevision) &&
+    typeof verification.fixedInputRevision === "string" &&
+    /^[a-f0-9]{64}$/.test(verification.fixedInputRevision) &&
+    typeof verification.certificateRevision === "string" &&
+    /^[a-f0-9]{64}$/.test(verification.certificateRevision);
 }
 
 function isFeedbackCheckpoint(value: unknown): value is { revision: string } {

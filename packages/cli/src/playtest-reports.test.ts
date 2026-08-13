@@ -850,7 +850,7 @@ describe("playtest reports", () => {
         lanes: [],
         choiceDivergences: [],
       },
-    })).rejects.toThrow("cannot combine autoplay and AI audit evidence");
+    })).rejects.toThrow("cannot combine multiple structured causes");
     expect(await listPlaytestReports(gameDir, session)).toEqual([]);
   });
 

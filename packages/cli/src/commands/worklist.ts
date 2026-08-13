@@ -15,6 +15,7 @@ import {
   type ChoiceCoverageReport,
 } from "./choice-coverage";
 import { sessionFamily } from "../session-lineage";
+import { currentQualityAuditInputRevision } from "./quality-certificate";
 
 export type DevelopmentWorkPriority = "P0" | "P1" | "P2" | "P3";
 export type DevelopmentWorkKind =
@@ -39,6 +40,10 @@ export type DevelopmentOperation =
     }
   | {
       command: "verify-autoplay";
+      args: { reportId: string; sessionPrefix: "<new-session>" };
+    }
+  | {
+      command: "verify-feedback";
       args: { reportId: string; sessionPrefix: "<new-session>" };
     }
   | {
@@ -162,20 +167,25 @@ export async function collectDevelopmentWorklist(
     collectChoiceCoverage(gameDir, session, session !== undefined),
     listPlaytestReports(gameDir),
   ]);
+  const openReports = reports.filter((report) =>
+    report.status === "open" &&
+    (
+      evidenceSessions === null ||
+      evidenceSessions.has(report.session) ||
+      report.evidence.auditMatrix !== undefined
+    )
+  );
+  const projectInputRevision = openReports.some((report) =>
+      report.origin?.kind === "player-feedback" &&
+      report.origin.projectInputRevision !== undefined
+    )
+    ? await currentQualityAuditInputRevision(gameDir)
+    : null;
   return analyzeDevelopmentWorklist({
     story,
     choices,
-    reports: reports.filter((report) =>
-      report.status === "open" &&
-      (
-        evidenceSessions === null ||
-        evidenceSessions.has(report.session) ||
-        // Acceptance-matrix findings describe the whole authored project,
-        // not one save lineage. They must remain visible while an agent is
-        // developing from any player/GUI branch.
-        report.evidence.auditMatrix !== undefined
-      )
-    ),
+    reports: openReports,
+    ...(projectInputRevision ? { projectInputRevision } : {}),
     ...(session !== undefined ? { session } : {}),
   });
 }
@@ -185,6 +195,7 @@ export function analyzeDevelopmentWorklist(input: {
   choices: ChoiceCoverageReport;
   reports: PlaytestReport[];
   session?: string;
+  projectInputRevision?: string;
 }): DevelopmentWorklist {
   const items: DevelopmentWorkItemDraft[] = [];
 
@@ -224,16 +235,33 @@ export function analyzeDevelopmentWorklist(input: {
   for (const report of input.reports) {
     const auditVerifiable = hasVerifiableAuditReport(report);
     const autoplayVerifiable = hasCausallyVerifiableAutoplayReport(report);
+    const feedbackBaseline = report.origin?.kind === "player-feedback"
+      ? report.origin.projectInputRevision
+      : undefined;
+    const feedbackVerifiable = feedbackBaseline !== undefined &&
+      input.projectInputRevision !== undefined &&
+      feedbackBaseline !== input.projectInputRevision;
+    const feedbackNeedsAuthoring = feedbackBaseline !== undefined &&
+      !feedbackVerifiable;
     const recoverable = hasRecoverableIssueCheckpoint(report);
     items.push({
       key: `report/${report.id}`,
       kind: "playtest-report",
       priority: reportPriority(report.severity),
-      actionability: recoverable ? "executable" : "diagnostic",
+      actionability: feedbackNeedsAuthoring
+        ? "authoring"
+        : feedbackVerifiable || recoverable
+          ? "executable"
+          : "diagnostic",
       title: report.title,
       ...(report.target ? { target: report.target } : {}),
       detail: `${report.severity} ${report.area} finding in ${report.session}`,
-      operation: auditVerifiable
+      operation: feedbackVerifiable
+        ? {
+            command: "verify-feedback",
+            args: { reportId: report.id, sessionPrefix: "<new-session>" },
+          }
+        : auditVerifiable
         ? {
             command: "verify-audit",
             args: { reportId: report.id, sessionPrefix: "<new-session>" },
@@ -242,6 +270,14 @@ export function analyzeDevelopmentWorklist(input: {
         ? {
             command: "verify-autoplay",
             args: { reportId: report.id, sessionPrefix: "<new-session>" },
+          }
+        : feedbackNeedsAuthoring
+        ? {
+            command: "edit",
+            args: {
+              target: report.target ?? "project",
+              key: `report/${report.id}`,
+            },
           }
         : recoverable
         ? {
@@ -553,7 +589,8 @@ function executionCost(
   ) return "inspection";
   if (
     operation.command === "verify-autoplay" ||
-    operation.command === "verify-audit"
+    operation.command === "verify-audit" ||
+    operation.command === "verify-feedback"
   ) return "verification";
   if (operation.command === "reproduce" || operation.command === "cover") {
     return "checkpoint";
@@ -602,6 +639,7 @@ function workExecutor(
   const createsBranch = item.operation.command === "reproduce" ||
     item.operation.command === "verify-audit" ||
     item.operation.command === "verify-autoplay" ||
+    item.operation.command === "verify-feedback" ||
     item.operation.command === "cover" ||
     item.operation.command === "reach" ||
     item.operation.command === "reach-script";

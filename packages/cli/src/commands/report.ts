@@ -9,6 +9,8 @@ import {
   type PlaytestArea,
   type PlaytestSeverity,
 } from "../playtest-reports";
+import { currentQualityAuditInputRevision } from "./quality-certificate";
+import { verifyFeedbackReport } from "./verify-feedback";
 
 interface ReportArgs {
   gameDir: string;
@@ -53,6 +55,14 @@ interface ReproduceArgs {
   pretty: boolean;
 }
 
+interface VerifyFeedbackCommandArgs {
+  gameDir: string;
+  reportId: string;
+  sessionPrefix: string;
+  resolution: string;
+  pretty: boolean;
+}
+
 interface InspectReportArgs {
   gameDir: string;
   id: string;
@@ -62,10 +72,19 @@ interface InspectReportArgs {
 
 export async function reportCommand(args: ReportArgs): Promise<void> {
   const { origin, pretty: _pretty, ...reportArgs } = args;
+  const projectInputRevision = origin === "player-feedback/web"
+    ? await currentQualityAuditInputRevision(args.gameDir)
+    : null;
   const report = await recordPlaytestReport({
     ...reportArgs,
     ...(origin === "player-feedback/web"
-      ? { origin: { kind: "player-feedback" as const, surface: "web" as const } }
+      ? {
+          origin: {
+            kind: "player-feedback" as const,
+            surface: "web" as const,
+            ...(projectInputRevision ? { projectInputRevision } : {}),
+          },
+        }
       : {}),
   });
   process.stdout.write(
@@ -108,6 +127,16 @@ export async function supersedeCommand(args: SupersedeArgs): Promise<void> {
     (args.pretty ? JSON.stringify(report, null, 2) : JSON.stringify(report)) +
       "\n",
   );
+}
+
+export async function verifyFeedbackCommand(
+  args: VerifyFeedbackCommandArgs,
+): Promise<void> {
+  const result = await verifyFeedbackReport(args);
+  process.stdout.write(
+    (args.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n",
+  );
+  if (result.status === "failed") process.exitCode = 1;
 }
 
 export async function reproduceCommand(args: ReproduceArgs): Promise<void> {

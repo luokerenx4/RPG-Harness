@@ -1,16 +1,21 @@
 import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
-import { StageView } from "../src/WebPlayScreen";
+import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: "web-input-contract";
   status: "passed";
   revision: string;
   interactions: Array<{
     surface: "narration" | "choice" | "hub-activity" | "script-select";
     input: Input;
+  }>;
+  projections: Array<{
+    surface: "player-feedback-proof";
+    text: string;
   }>;
 }
 
@@ -99,15 +104,56 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     observed.push({ surface: entry.surface, input: inputs[0]! });
   }
 
+  const proofMarkup = renderToStaticMarkup(React.createElement(FeedbackOverlay, {
+    feedbackFeed: {
+      revision: "proof",
+      open: 0,
+      resolved: 1,
+      items: [{
+        id: "pt-proof",
+        session: "quality-surface",
+        createdAt: "2026-08-13T00:00:00.000Z",
+        status: "resolved",
+        area: "tooling",
+        severity: "minor",
+        title: "Proof is visible",
+        evidence: { logEntry: 1, currentScriptId: "scene" },
+        verification: {
+          kind: "player-feedback",
+          verifiedAt: "2026-08-13T00:00:01.000Z",
+          originalInputRevision: "a".repeat(64),
+          fixedInputRevision: "b".repeat(64),
+          certificateRevision: "c".repeat(64),
+          certificateCreatedAt: "2026-08-13T00:00:00.500Z",
+        },
+      }],
+    },
+    onSubmit: async () => { throw new Error("quality surface does not submit"); },
+    onClose: () => {},
+  }));
+  const expectedProof = "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc";
+  if (
+    !proofMarkup.includes("検証済み") ||
+    !proofMarkup.includes("project aaaaaaaaaa → bbbbbbbbbb") ||
+    !proofMarkup.includes("certificate cccccccccc")
+  ) {
+    throw new Error("Web quality surface is missing player feedback repair proof");
+  }
+  const projections = [{
+    surface: "player-feedback-proof" as const,
+    text: expectedProof,
+  }];
+
   const revision = createHash("sha256")
-    .update(JSON.stringify(observed))
+    .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
+    projections,
   };
 }
 

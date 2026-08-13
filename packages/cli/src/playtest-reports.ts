@@ -237,6 +237,7 @@ export interface PlaytestReport {
   origin?: {
     kind: "player-feedback";
     surface: "web";
+    projectInputRevision?: string;
   };
   details?: string;
   target?: string;
@@ -339,9 +340,21 @@ export interface PlaytestAutoplayVerification {
   };
 }
 
+export interface PlaytestPlayerFeedbackVerification {
+  kind: "player-feedback";
+  verifiedAt: string;
+  originalInputRevision: string;
+  fixedInputRevision: string;
+  certificateRevision: string;
+  certificateCreatedAt: string;
+  worklistRevision: string;
+  unrelatedWorkItems: 0;
+}
+
 export type PlaytestVerification =
   | PlaytestAuditVerification
-  | PlaytestAutoplayVerification;
+  | PlaytestAutoplayVerification
+  | PlaytestPlayerFeedbackVerification;
 
 export type RecordPlaytestAutoplayEvidence = Omit<
   PlaytestAutoplayEvidence,
@@ -408,13 +421,22 @@ export async function recordPlaytestReport(
   if (!args.title.trim()) throw new Error("Playtest report title cannot be empty");
   if (
     args.origin &&
-    (args.origin.kind !== "player-feedback" || args.origin.surface !== "web")
+    (
+      args.origin.kind !== "player-feedback" ||
+      args.origin.surface !== "web" ||
+      (args.origin.projectInputRevision !== undefined &&
+        !/^[a-f0-9]{64}$/.test(args.origin.projectInputRevision))
+    )
   ) {
     throw new Error("Invalid playtest report origin");
   }
-  if (args.autoplay && args.auditMatrix) {
+  if (
+    Number(Boolean(args.autoplay)) +
+        Number(Boolean(args.auditMatrix)) +
+        Number(Boolean(args.origin?.projectInputRevision)) > 1
+  ) {
     throw new Error(
-      "A playtest report cannot combine autoplay and AI audit evidence",
+      "A playtest report cannot combine multiple structured causes",
     );
   }
   if ((args.autoplay || args.auditMatrix) && !args.evidenceSnapshot) {
@@ -689,7 +711,14 @@ function assertVerificationMatchesReport(
 ): void {
   const autoplay = report.evidence.autoplay;
   const audit = report.evidence.auditMatrix;
-  if (autoplay && audit) {
+  const playerFeedbackRevision = report.origin?.kind === "player-feedback"
+    ? report.origin.projectInputRevision
+    : undefined;
+  if (
+    Number(Boolean(autoplay)) +
+        Number(Boolean(audit)) +
+        Number(Boolean(playerFeedbackRevision)) > 1
+  ) {
     throw new Error(
       `Playtest report has conflicting structured evidence and cannot be resolved: ${report.id}`,
     );
@@ -754,6 +783,25 @@ function assertVerificationMatchesReport(
     throw new Error(
       `Legacy AI audit report ${report.id} needs an explicit review or supersession reason before manual resolution`,
     );
+  }
+  if (playerFeedbackRevision) {
+    if (verification?.kind !== "player-feedback") {
+      throw new Error(
+        `Player feedback report ${report.id} requires project revision and quality-certificate verification; run verify-feedback instead of resolving it manually`,
+      );
+    }
+    if (
+      verification.originalInputRevision !== playerFeedbackRevision ||
+      verification.fixedInputRevision === playerFeedbackRevision ||
+      !/^[a-f0-9]{64}$/.test(verification.fixedInputRevision) ||
+      !/^[a-f0-9]{64}$/.test(verification.certificateRevision) ||
+      !/^[a-f0-9]{16}$/.test(verification.worklistRevision) ||
+      verification.unrelatedWorkItems !== 0
+    ) {
+      throw new Error(
+        `Player feedback verification does not prove a changed, clean, certified project for report ${report.id}`,
+      );
+    }
   }
 }
 

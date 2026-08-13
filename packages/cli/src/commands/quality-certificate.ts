@@ -5,10 +5,38 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { AiAuditConfig } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import type {
-  ProjectQualityAuditSummary,
-  ProjectQualityFuzzAuditSummary,
-} from "./sweep";
+import { runAudit, type AuditSummary } from "./audit";
+import { assertTargetEmpty } from "./fork";
+
+export interface ProjectQualityAuditSummary {
+  source: AuditSummary["source"];
+  seed: number;
+  maxSteps: number;
+  maxSegments: number;
+  totals: AuditSummary["totals"];
+  endings: Record<string, number>;
+  diversity: Pick<
+    AuditSummary["diversity"],
+    "classification" | "uniqueEndings" | "uniqueDecisionPaths"
+  >;
+  qualityGate: AuditSummary["qualityGate"];
+  lanes: Array<Pick<
+    AuditSummary["lanes"][number],
+    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
+  > & { pathRevision: string; semanticActivityCounts: Record<string, number> }>;
+}
+
+export interface ProjectQualityFuzzAuditSummary {
+  source: AuditSummary["source"];
+  seed: number;
+  maxSteps: number;
+  maxSegments: number;
+  totals: AuditSummary["totals"];
+  lanes: Array<Pick<
+    AuditSummary["lanes"][number],
+    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
+  > & { pathRevision: string }>;
+}
 
 export interface QualityAuditInputs {
   personas: string[];
@@ -17,6 +45,215 @@ export interface QualityAuditInputs {
   maxSteps: number;
   maxSegments: number;
   seeds: number[];
+}
+
+export async function currentQualityAuditInputRevision(
+  gameDir: string,
+  options: {
+    maxSteps?: number;
+    maxSegments?: number;
+    auditSeed?: number;
+  } = {},
+): Promise<string | null> {
+  const game = await loadGame(gameDir);
+  const policy = game.aiAudit;
+  const personas = policy?.personas ?? [];
+  if (!policy || personas.length === 0) return null;
+  return qualityAuditInputRevision(gameDir, {
+    personas,
+    fuzzPersonas: policy.fuzzPersonas ?? [],
+    policy,
+    maxSteps: options.maxSteps ?? 1000,
+    maxSegments: options.maxSegments ?? 4,
+    seeds: policy.seeds ?? [options.auditSeed ?? 1_592_597_881],
+  });
+}
+
+export async function projectQualityGateTargetSessions(
+  gameDir: string,
+  sessionPrefix: string,
+  auditSeed = 1_592_597_881,
+): Promise<string[]> {
+  const game = await loadGame(gameDir);
+  const policy = game.aiAudit;
+  if (!policy) return [];
+  const personas = policy.personas ?? [];
+  const fuzzPersonas = policy.fuzzPersonas ?? [];
+  const seeds = policy.seeds ?? [auditSeed];
+  return seeds.flatMap((seed) => {
+    const seedPrefix = `${sessionPrefix}-seed-${seed}`;
+    return [
+      `${seedPrefix}-source`,
+      ...personas.map((persona) => `${seedPrefix}-${persona}`),
+      ...(fuzzPersonas.length > 0
+        ? [`${seedPrefix}-fuzz-source`, `${seedPrefix}-fuzz-quality-gate`]
+        : []),
+      ...fuzzPersonas.map((persona) => `${seedPrefix}-fuzz-${persona}`),
+      `${seedPrefix}-quality-gate`,
+    ];
+  });
+}
+
+export async function runProjectQualityGate(
+  args: RunProjectQualityGateArgs,
+): Promise<ProjectQualityGateResult> {
+  const game = await loadGame(args.gameDir);
+  const policy = game.aiAudit;
+  if (!policy) {
+    return {
+      status: "not-configured",
+      mode: "not-configured",
+      sessionPrefix: args.sessionPrefix,
+    };
+  }
+  const personas = policy.personas ?? [];
+  const fuzzPersonas = policy.fuzzPersonas ?? [];
+  if (personas.length === 0) {
+    throw new Error("project quality verification requires ai_audit.personas");
+  }
+  const maxSteps = args.maxSteps ?? 1000;
+  const maxSegments = args.maxSegments ?? 4;
+  const seeds = policy.seeds ?? [args.auditSeed ?? 1_592_597_881];
+  const inputRevision = await qualityAuditInputRevision(args.gameDir, {
+    personas,
+    fuzzPersonas,
+    policy,
+    maxSteps,
+    maxSegments,
+    seeds,
+  });
+  if (!args.force) {
+    const cached = await readQualityAuditCertificate(args.gameDir, inputRevision);
+    if (cached) {
+      return {
+        status: "passed",
+        mode: "certificate",
+        sessionPrefix: cached.certificate.sessionPrefix,
+        inputRevision,
+        certificate: { revision: cached.certificate.revision, file: cached.file },
+        audits: cached.certificate.audits,
+        fuzzAudits: cached.certificate.fuzzAudits,
+      };
+    }
+  }
+  for (const target of await projectQualityGateTargetSessions(
+    args.gameDir,
+    args.sessionPrefix,
+    args.auditSeed,
+  )) await assertTargetEmpty(args.gameDir, target);
+
+  const audits: ProjectQualityAuditSummary[] = [];
+  const fuzzAudits: ProjectQualityFuzzAuditSummary[] = [];
+  for (const seed of seeds) {
+    const audit = await runAudit({
+      gameDir: args.gameDir,
+      sessionPrefix: `${args.sessionPrefix}-seed-${seed}`,
+      personas,
+      maxSteps,
+      maxSegments,
+      seed,
+      reportOnStop: true,
+      pretty: false,
+    });
+    audits.push(compactProjectQualityAudit(audit));
+    if (fuzzPersonas.length > 0) {
+      const fuzz = await runAudit({
+        gameDir: args.gameDir,
+        sessionPrefix: `${args.sessionPrefix}-seed-${seed}-fuzz`,
+        personas: fuzzPersonas,
+        maxSteps,
+        maxSegments,
+        seed,
+        reportOnStop: false,
+        qualityFloor: { personas: fuzzPersonas },
+        pretty: false,
+      });
+      fuzzAudits.push(compactProjectQualityFuzzAudit(fuzz));
+    }
+  }
+  const passed = audits.every((audit) => audit.qualityGate?.status === "passed") &&
+    fuzzAudits.every((audit) =>
+      audit.totals.completed === audit.totals.lanes &&
+      audit.totals.errors === 0 &&
+      audit.totals.rejectedInputs === 0 &&
+      audit.totals.openReports === 0 &&
+      audit.lanes.every((lane) => lane.reason === "completed" && lane.ending !== null)
+    );
+  if (!passed) {
+    return {
+      status: "failed",
+      mode: "executed",
+      sessionPrefix: args.sessionPrefix,
+      inputRevision,
+      audits,
+      fuzzAudits,
+    };
+  }
+  const certified = await writeQualityAuditCertificate(args.gameDir, {
+    inputRevision,
+    sessionPrefix: args.sessionPrefix,
+    audits,
+    fuzzAudits,
+  });
+  return {
+    status: "passed",
+    mode: "executed",
+    sessionPrefix: args.sessionPrefix,
+    inputRevision,
+    certificate: { revision: certified.certificate.revision, file: certified.file },
+    audits,
+    fuzzAudits,
+  };
+}
+
+function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSummary {
+  return {
+    source: audit.source,
+    seed: audit.seed,
+    maxSteps: audit.maxSteps,
+    maxSegments: audit.maxSegments,
+    totals: audit.totals,
+    endings: audit.endings,
+    diversity: {
+      classification: audit.diversity.classification,
+      uniqueEndings: audit.diversity.uniqueEndings,
+      uniqueDecisionPaths: audit.diversity.uniqueDecisionPaths,
+    },
+    qualityGate: audit.qualityGate,
+    lanes: audit.lanes.map((lane) => ({
+      persona: lane.persona,
+      session: lane.session,
+      webPath: lane.webPath,
+      segments: lane.segments,
+      reason: lane.reason,
+      ending: lane.ending,
+      decisions: lane.decisions,
+      pathRevision: lane.path.revision,
+      semanticActivityCounts: lane.path.semanticActivityCounts,
+    })),
+  };
+}
+
+function compactProjectQualityFuzzAudit(
+  audit: AuditSummary,
+): ProjectQualityFuzzAuditSummary {
+  return {
+    source: audit.source,
+    seed: audit.seed,
+    maxSteps: audit.maxSteps,
+    maxSegments: audit.maxSegments,
+    totals: audit.totals,
+    lanes: audit.lanes.map((lane) => ({
+      persona: lane.persona,
+      session: lane.session,
+      webPath: lane.webPath,
+      segments: lane.segments,
+      reason: lane.reason,
+      ending: lane.ending,
+      decisions: lane.decisions,
+      pathRevision: lane.path.revision,
+    })),
+  };
 }
 
 export interface QualityAuditCertificate {
@@ -35,6 +272,25 @@ export interface CurrentQualityAuditCertificate {
   file: string;
 }
 
+export interface ProjectQualityGateResult {
+  status: "passed" | "failed" | "not-configured";
+  mode: "executed" | "certificate" | "not-configured";
+  sessionPrefix: string;
+  inputRevision?: string;
+  certificate?: { revision: string; file: string };
+  audits?: ProjectQualityAuditSummary[];
+  fuzzAudits?: ProjectQualityFuzzAuditSummary[];
+}
+
+export interface RunProjectQualityGateArgs {
+  gameDir: string;
+  sessionPrefix: string;
+  maxSteps?: number;
+  maxSegments?: number;
+  auditSeed?: number;
+  force?: boolean;
+}
+
 interface QualityAuditCertificatePayload {
   schemaVersion: 4;
   inputRevision: string;
@@ -46,11 +302,12 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: "web-input-contract";
   status: "passed";
   revision: string;
   interactions: Array<{ surface: string; input: unknown }>;
+  projections: Array<{ surface: "player-feedback-proof"; text: string }>;
 }
 
 const execFileAsync = promisify(execFile);
@@ -69,6 +326,10 @@ const REQUIRED_WEB_INTERACTIONS = [
     input: { type: "select", scriptId: "ending" },
   },
 ] as const;
+const REQUIRED_WEB_PROJECTIONS = [{
+  surface: "player-feedback-proof",
+  text: "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc",
+}] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
   ".avif",
@@ -386,14 +647,21 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 1 &&
+    value.schemaVersion === 2 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&
-    Array.isArray(value.interactions))) return false;
-  const serialized = JSON.stringify(value.interactions);
-  return serialized === JSON.stringify(REQUIRED_WEB_INTERACTIONS) &&
-    value.revision === createHash("sha256").update(serialized).digest("hex");
+    Array.isArray(value.interactions) &&
+    Array.isArray(value.projections))) return false;
+  if (
+    JSON.stringify(value.interactions) !== JSON.stringify(REQUIRED_WEB_INTERACTIONS) ||
+    JSON.stringify(value.projections) !== JSON.stringify(REQUIRED_WEB_PROJECTIONS)
+  ) return false;
+  const serialized = JSON.stringify({
+    interactions: value.interactions,
+    projections: value.projections,
+  });
+  return value.revision === createHash("sha256").update(serialized).digest("hex");
 }
 
 function qualityAuditCertificateReferenceFile(
