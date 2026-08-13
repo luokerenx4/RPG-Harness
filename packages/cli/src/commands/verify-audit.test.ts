@@ -148,6 +148,54 @@ describe("AI audit issue verification", () => {
       .not.toContainEqual(expect.objectContaining({ key: `report/${reportId}` }));
   });
 
+  test("exposes audit verification as a failing and then closing CLI operation", async () => {
+    const { gameDir, reportId } = await createAuditIssue(4);
+    const failed = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "verify-audit",
+      gameDir,
+      reportId,
+      "--session-prefix",
+      "cli-audit-still-bad",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [failedCode, failedStdout] = await Promise.all([
+      failed.exited,
+      new Response(failed.stdout).text(),
+    ]);
+    expect(failedCode).toBe(1);
+    expect(JSON.parse(failedStdout)).toMatchObject({
+      status: "failed",
+      reportId,
+      qualityGate: { status: "failed" },
+    });
+
+    await writeDiverseIntro(gameDir);
+    const fixed = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "verify-audit",
+      gameDir,
+      reportId,
+      "--session-prefix",
+      "cli-audit-fixed",
+      "--pretty",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [fixedCode, fixedStdout] = await Promise.all([
+      fixed.exited,
+      new Response(fixed.stdout).text(),
+    ]);
+    expect(fixedCode).toBe(0);
+    expect(JSON.parse(fixedStdout)).toMatchObject({
+      status: "verified",
+      reportId,
+      resolvedReport: {
+        status: "resolved",
+        verification: { kind: "ai-audit" },
+      },
+    });
+  });
+
   test("preflights every verification lane before reproducing the source", async () => {
     const { gameDir, reportId } = await createAuditIssue(4);
     const game = await loadGame(gameDir);

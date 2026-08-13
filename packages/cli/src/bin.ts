@@ -21,6 +21,8 @@ import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
 import { personasCommand } from "./commands/personas";
 import { auditCommand, DEFAULT_AUDIT_PERSONAS } from "./commands/audit";
+import { verifyAuditReport } from "./commands/verify-audit";
+import { verifyAutoplayReport } from "./commands/verify-autoplay";
 import { coverChoiceCommand } from "./commands/cover-choice";
 import { reachChoiceCommand } from "./commands/reach-choice";
 import { reachScriptCommand } from "./commands/reach-script";
@@ -115,6 +117,14 @@ COMMANDS
   verify-feedback <game-dir> <report-id> --session-prefix PREFIX --resolution TEXT
       Close new Web player feedback only after project inputs changed, no
       unrelated work remains, and the current AI quality matrix is certified.
+
+  verify-autoplay <game-dir> <report-id> --session-prefix PREFIX [--pretty]
+      Re-run one structured autoplay failure from its immutable causal source.
+      The report closes only after the same persona reaches a public gameEnd.
+
+  verify-audit <game-dir> <report-id> --session-prefix PREFIX [--pretty]
+      Re-run one structured quality finding from its frozen audit checkpoint.
+      The report closes only when the original policy passes unchanged.
 
   work <game-dir> [--key WORK-KEY] [--session SOURCE]
        [--new-session NAME] [--persona NAME] [--max-steps N]
@@ -385,6 +395,10 @@ async function main(): Promise<void> {
       return runReports(rest);
     case "verify-feedback":
       return runVerifyFeedback(rest);
+    case "verify-autoplay":
+      return runVerifyAutoplay(rest);
+    case "verify-audit":
+      return runVerifyAudit(rest);
     case "inspect-report":
       return runInspectReport(rest);
     case "resolve":
@@ -1357,6 +1371,58 @@ async function runVerifyFeedback(args: string[]): Promise<void> {
     resolution: values.resolution,
     pretty: Boolean(values.pretty),
   });
+}
+
+async function runVerifyAutoplay(args: string[]): Promise<void> {
+  const parsed = parseVerificationArgs(args, "verify-autoplay");
+  const result = await verifyAutoplayReport(parsed);
+  process.stdout.write(
+    (parsed.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n",
+  );
+  if (result.status === "failed") process.exitCode = 1;
+}
+
+async function runVerifyAudit(args: string[]): Promise<void> {
+  const parsed = parseVerificationArgs(args, "verify-audit");
+  const result = await verifyAuditReport(parsed);
+  process.stdout.write(
+    (parsed.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n",
+  );
+  if (result.status === "failed") process.exitCode = 1;
+}
+
+function parseVerificationArgs(
+  args: string[],
+  command: "verify-autoplay" | "verify-audit",
+): {
+  gameDir: string;
+  reportId: string;
+  sessionPrefix: string;
+  pretty: boolean;
+} {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      "session-prefix": { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (
+    positionals.length !== 2 || !positionals[0] || !positionals[1] ||
+    !values["session-prefix"]?.trim()
+  ) {
+    process.stderr.write(
+      `Usage: rpgh ${command} <game-dir> <report-id> --session-prefix PREFIX [--pretty]\n`,
+    );
+    process.exit(2);
+  }
+  return {
+    gameDir: positionals[0],
+    reportId: positionals[1],
+    sessionPrefix: values["session-prefix"],
+    pretty: Boolean(values.pretty),
+  };
 }
 
 async function runSupersede(args: string[]): Promise<void> {

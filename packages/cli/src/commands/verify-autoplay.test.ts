@@ -607,6 +607,55 @@ describe("autoplay issue verification", () => {
     expect((await listPlaytestReports(gameDir))[0]?.status).toBe("resolved");
   });
 
+  test("exposes causal autoplay verification as a public CLI operation", async () => {
+    const gameDir = await temporaryRepairableActionErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 7,
+      session: "cli-original-action-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create an action failure issue");
+    await writeFile(path.join(gameDir, "modules", "actions.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const actions: Module = {",
+      '  id: "broken-actions",',
+      "  actionHandlers: { explode: () => ({}) },",
+      "};",
+      "export default actions;",
+      "",
+    ].join("\n"), "utf-8");
+
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "verify-autoplay",
+      gameDir,
+      report.id,
+      "--session-prefix",
+      "cli-action-fixed",
+      "--pretty",
+    ], { stdout: "pipe", stderr: "pipe" });
+    const [exitCode, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+    ]);
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      status: "verified",
+      reportId: report.id,
+      result: { ending: "forge-fixed" },
+      resolvedReport: {
+        status: "resolved",
+        verification: { kind: "autoplay" },
+      },
+    });
+  });
+
   test("rejects a final-state-only patch and resolves only after a full causal replay", async () => {
     const gameDir = await temporaryRepairableStallGame();
     const original = await runAutoplay({
