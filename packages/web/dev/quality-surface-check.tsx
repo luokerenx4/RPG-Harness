@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
-import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 8;
+  schemaVersion: 9;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -21,7 +21,8 @@ export interface WebQualitySurfaceEvidence {
       | "machine-effect-hidden"
       | "forecast-unit-hidden"
       | "forecast-detail-hidden"
-      | "terminal-ai-branch";
+      | "terminal-ai-branch"
+      | "ai-choice-backlog";
     text: string;
   }>;
 }
@@ -152,17 +153,39 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection(),
   forecastUnitProjection(), forecastDetailProjection()];
   projections.push(terminalExplorationProjection());
+  projections.push(aiChoiceBacklogProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function aiChoiceBacklogProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const markup = renderToStaticMarkup(React.createElement(BacklogOverlay, {
+    entries: [{
+      kind: "choice",
+      prompt: "What do you promise?",
+      optionText: "Stay until dawn",
+      selectedBy: "ai",
+    }],
+    onClose: () => {},
+  }));
+  if (
+    !markup.includes("What do you promise?") ||
+    !markup.includes("AI 選択") ||
+    !markup.includes("Stay until dawn")
+  ) throw new Error("Web backlog is missing AI choice narrative context");
+  return {
+    surface: "ai-choice-backlog",
+    text: "What do you promise?AI 選択Stay until dawn",
   };
 }
 

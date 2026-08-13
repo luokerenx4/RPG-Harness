@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 8,
+        schemaVersion: 9,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -522,6 +522,9 @@ describe("bounded development sweep", () => {
         }, {
           surface: "terminal-ai-branch",
           text: "AI BRANCH · 3 PATHS次: Remember the others",
+        }, {
+          surface: "ai-choice-backlog",
+          text: "What do you promise?AI 選択Stay until dawn",
         }],
       }],
     });

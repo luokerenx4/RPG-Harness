@@ -28,7 +28,8 @@ rpgh test .                                  # fixture 回帰
 元の結末を残したまま checkpoint から独立セッションを作り、その場で別の
 返答へ deep-link する。AI は裏側の proof branch で脚本完走まで検証する一方、
 Web は選んだ直後の最初の台詞で止めた premiere branch を渡すため、プレイヤーは
-新しい場面を見逃さず自分で続きを送れる。一周目は上書きされず、AI の分岐結果は
+新しい場面を見逃さず自分で続きを送れる。回看には元の問いと **AI 選択** も残り、
+返答の文脈を HUD の開発情報から推測する必要はない。一周目は上書きされず、AI の分岐結果は
 次回の family coverage にそのまま戻る。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。

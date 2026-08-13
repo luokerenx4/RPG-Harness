@@ -15,6 +15,8 @@ import { loadGame } from "../loader";
 import { appendLog, loadSession, saveSession } from "../session";
 import {
   applyOutput,
+  applyChoiceSelection,
+  appendChoiceBacklog,
   applyUiAction,
   initialModel,
   makeErrorModel,
@@ -34,6 +36,7 @@ import { ScriptCompleteStage } from "./stages/ScriptCompleteStage";
 import { EndedStage } from "./stages/EndedStage";
 import { ErrorStage } from "./stages/ErrorStage";
 import { LoadingStage } from "./stages/LoadingStage";
+import { loadDevelopmentBranchHandoff } from "../commands/fork";
 
 const RELOAD_DEBOUNCE_MS = 200;
 const RELOAD_INDICATOR_MS = 1500;
@@ -56,11 +59,15 @@ interface Props {
 type ModelAction =
   | { kind: "reset"; model: ScreenModel }
   | { kind: "apply"; output: Output }
+  | { kind: "choose"; input: Input; selectedBy: "player" | "ai" }
   | { kind: "ui"; action: UiAction };
 
 function modelReducer(model: ScreenModel, action: ModelAction): ScreenModel {
   if (action.kind === "reset") return action.model;
   if (action.kind === "ui") return applyUiAction(model, action.action);
+  if (action.kind === "choose") {
+    return applyChoiceSelection(model, action.input, action.selectedBy);
+  }
   return applyOutput(model, action.output);
 }
 
@@ -97,6 +104,16 @@ export function PlayScreen({
     (async () => {
       try {
         const initialState = await loadSession(gameDir, sessionName, initialGame);
+        const handoff = await loadDevelopmentBranchHandoff(gameDir, sessionName);
+        if (handoff?.premiere) {
+          dispatch({
+            kind: "reset",
+            model: appendChoiceBacklog(initialModel, {
+              ...handoff.premiere,
+              selectedBy: "ai",
+            }),
+          });
+        }
         const engine = new Engine(initialGame, initialState);
         const runner = engine.run();
         gameRef.current = initialGame;
@@ -233,6 +250,7 @@ export function PlayScreen({
       try {
         const decision = choiceDecisionContext(outputRef.current, input);
         const { value, done: isDone } = await runner.next(input);
+        dispatch({ kind: "choose", input, selectedBy: "player" });
         const finalState = engine.getState();
         stateRef.current = finalState;
         await saveSession(gameDir, sessionName, finalState);

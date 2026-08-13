@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readSessionLog } from "./fork";
+import { loadDevelopmentBranchHandoff, readSessionLog } from "./fork";
 import { peek } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { loadSession } from "../session";
@@ -117,8 +117,16 @@ describe("coverage-driven autoplay", () => {
       handoff: {
         workKey: "choice-branch/intro/opening/beta",
         state: "covered",
+        premiere: {
+          prompt: "Pick one.",
+          optionText: "Beta",
+        },
       },
     });
+    expect(await loadDevelopmentBranchHandoff(gameDir, "premiere-beta"))
+      .toMatchObject({
+        premiere: { prompt: "Pick one.", optionText: "Beta" },
+      });
   });
 
   test("refuses a stale work item instead of selecting the same array index", async () => {

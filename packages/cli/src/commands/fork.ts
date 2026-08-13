@@ -59,6 +59,11 @@ export interface DevelopmentBranchHandoff {
     choiceId?: string;
     optionId?: string;
   };
+  /** Narrative context injected when this fork starts after an AI selection. */
+  premiere?: {
+    prompt?: string;
+    optionText: string;
+  };
 }
 
 export async function forkCommand(args: ForkArgs): Promise<void> {
@@ -226,6 +231,35 @@ export async function attachDevelopmentBranchHandoff(
     await rename(temporary, file);
     return handoff;
   });
+}
+
+export async function loadDevelopmentBranchHandoff(
+  gameDir: string,
+  session: string,
+): Promise<DevelopmentBranchHandoff | null> {
+  assertSessionName(session);
+  try {
+    const value = JSON.parse(await readFile(
+      path.join(sessionDir(gameDir, session), "fork.json"),
+      "utf-8",
+    )) as Record<string, unknown>;
+    const handoff = value.handoff as DevelopmentBranchHandoff | undefined;
+    if (handoff?.schemaVersion !== 1) return null;
+    if (
+      handoff.premiere !== undefined &&
+      (
+        !handoff.premiere ||
+        typeof handoff.premiere.optionText !== "string" ||
+        !handoff.premiere.optionText.trim() ||
+        (handoff.premiere.prompt !== undefined &&
+          (typeof handoff.premiere.prompt !== "string" || !handoff.premiere.prompt.trim()))
+      )
+    ) throw new Error(`Invalid premiere handoff for session: ${session}`);
+    return handoff;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 export async function readSessionLog(

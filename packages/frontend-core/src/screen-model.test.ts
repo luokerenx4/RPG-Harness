@@ -3,6 +3,8 @@ import type { HubSnapshot, Output } from "@rpg-harness/engine";
 import {
   BACKLOG_CAP,
   applyOutput,
+  applyChoiceSelection,
+  appendChoiceBacklog,
   applyUiAction,
   initialModel,
   makeErrorModel,
@@ -130,6 +132,58 @@ describe("backlog cap", () => {
     expect(m.backlog.length).toBe(BACKLOG_CAP);
     // The very oldest narrations should have been trimmed.
     expect(m.backlog[0]).toEqual({ kind: "narration", text: "line 4" });
+  });
+});
+
+describe("choice backlog", () => {
+  test("records the stable selected answer as narrative context", () => {
+    const choice = applyOutput(initialModel, {
+      type: "choice",
+      scriptId: "scene",
+      choiceId: "reply",
+      prompt: "What do you say?",
+      options: [
+        { id: "wait", text: "Wait.", available: true },
+        { id: "go", text: "Go now.", available: true },
+      ],
+    });
+    const selected = applyChoiceSelection(choice, {
+      type: "choose",
+      choiceId: "reply",
+      optionId: "go",
+    });
+    expect(selected.backlog).toEqual([{
+      kind: "choice",
+      prompt: "What do you say?",
+      optionText: "Go now.",
+      selectedBy: "player",
+    }]);
+  });
+
+  test("rejects a stale stable identity instead of recording the wrong row", () => {
+    const choice = applyOutput(initialModel, {
+      type: "choice",
+      choiceId: "reply",
+      options: [{ id: "go", text: "Go now.", available: true }],
+    });
+    expect(applyChoiceSelection(choice, {
+      type: "choose",
+      choiceId: "other",
+      optionId: "go",
+    })).toBe(choice);
+  });
+
+  test("can seed an AI selection when a premiere branch starts after the choice", () => {
+    expect(appendChoiceBacklog(initialModel, {
+      prompt: "What do you say?",
+      optionText: "Go now.",
+      selectedBy: "ai",
+    }).backlog).toEqual([{
+      kind: "choice",
+      prompt: "What do you say?",
+      optionText: "Go now.",
+      selectedBy: "ai",
+    }]);
   });
 });
 

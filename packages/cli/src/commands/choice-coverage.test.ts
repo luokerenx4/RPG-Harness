@@ -154,6 +154,7 @@ describe("choice branch coverage", () => {
       key: "ending/final-tether/friends",
       scriptId: "ending",
       choiceId: "final-tether",
+      prompt: "Who remains?",
       optionId: "friends",
       optionText: "With friends",
       evidence: {

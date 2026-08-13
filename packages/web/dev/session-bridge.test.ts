@@ -326,6 +326,10 @@ describe("Web development session bridge", () => {
           choiceId: "opening",
           optionId: "beta",
         },
+        premiere: {
+          prompt: "Pick one.",
+          optionText: "Beta",
+        },
       },
       // The premiere branch begins on the first authored response; selection
       // evidence remains in the autonomous proof parent.

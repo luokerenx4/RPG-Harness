@@ -330,6 +330,10 @@ export interface BridgeBranchContext {
       choiceId?: string;
       optionId?: string;
     };
+    premiere?: {
+      prompt?: string;
+      optionText: string;
+    };
   } | null;
   outcome: {
     kind: "choice-selected";
@@ -969,11 +973,22 @@ function parseBridgeHandoff(value: unknown): BridgeBranchContext["handoff"] {
     typeof handoff.state !== "string" || !states.has(handoff.state) ||
     typeof handoff.preparedAt !== "string" || !handoff.preparedAt.trim() ||
     (handoff.target !== undefined && typeof handoff.target !== "string") ||
-    !isBridgeHandoffCoordinates(handoff.coordinates)
+    !isBridgeHandoffCoordinates(handoff.coordinates) ||
+    !isBridgeHandoffPremiere(handoff.premiere)
   ) {
     throw new Error("Invalid development branch handoff");
   }
   return handoff as unknown as NonNullable<BridgeBranchContext["handoff"]>;
+}
+
+function isBridgeHandoffPremiere(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const premiere = value as Record<string, unknown>;
+  return typeof premiere.optionText === "string" && premiere.optionText.trim().length > 0 &&
+    (premiere.prompt === undefined ||
+      (typeof premiere.prompt === "string" && premiere.prompt.trim().length > 0)) &&
+    Object.keys(premiere).every((key) => key === "prompt" || key === "optionText");
 }
 
 function isBridgeHandoffCoordinates(value: unknown): boolean {

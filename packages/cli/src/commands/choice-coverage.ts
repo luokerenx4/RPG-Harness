@@ -44,6 +44,7 @@ export interface ChoiceCoverageWorkItem {
   scriptId: string;
   source?: string;
   choiceId: string;
+  prompt: string | null;
   optionId: string;
   optionText: string;
   evidence: ChoiceCoverageEvidence;
@@ -467,6 +468,7 @@ export function analyzeChoiceCoverage(
               ? { source: authoredSources.get(choice.key)! }
               : {}),
             choiceId: choice.choiceId,
+            prompt: choice.prompt,
             optionId: option.id,
             optionText: option.text,
             evidence: option.evidence,

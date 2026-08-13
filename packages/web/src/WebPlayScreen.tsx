@@ -22,6 +22,8 @@ import type {
 } from "@rpg-harness/engine";
 import {
   applyOutput,
+  applyChoiceSelection,
+  appendChoiceBacklog,
   applyUiAction,
   buildHubView,
   formatForecastMetricValue,
@@ -56,11 +58,15 @@ import type {
 type ModelAction =
   | { kind: "reset"; model: ScreenModel }
   | { kind: "apply"; output: Output }
+  | { kind: "choose"; input: Input; selectedBy: "player" | "ai" }
   | { kind: "ui"; action: UiAction };
 
 function modelReducer(model: ScreenModel, action: ModelAction): ScreenModel {
   if (action.kind === "reset") return action.model;
   if (action.kind === "ui") return applyUiAction(model, action.action);
+  if (action.kind === "choose") {
+    return applyChoiceSelection(model, action.input, action.selectedBy);
+  }
   return applyOutput(model, action.output);
 }
 
@@ -114,7 +120,16 @@ export function WebPlayScreen({
   onExplore,
   onExit,
 }: Props) {
-  const [model, dispatch] = useReducer(modelReducer, initialModel);
+  const [model, dispatch] = useReducer(
+    modelReducer,
+    branchContext,
+    (context): ScreenModel => context?.handoff?.premiere
+      ? appendChoiceBacklog(initialModel, {
+          ...context.handoff.premiere,
+          selectedBy: "ai",
+        })
+      : initialModel,
+  );
   const engineRef = useRef<Engine | null>(null);
   const runnerRef = useRef<AsyncGenerator<Output, void, Input> | null>(null);
   const processingRef = useRef(false);
@@ -237,6 +252,7 @@ export function WebPlayScreen({
           return;
         }
         setInputNotice(null);
+        dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(submitted.result!, input, submitted.inputResult);
       } catch (err) {
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
@@ -792,7 +808,7 @@ function StatusBar({ snapshot }: { snapshot: HubSnapshot }) {
   );
 }
 
-function BacklogOverlay({
+export function BacklogOverlay({
   entries,
   onClose,
 }: {
@@ -816,6 +832,16 @@ function BacklogOverlay({
                 <p key={i} className="backlog-dialogue">
                   <strong>{entry.speakerName}</strong>：{entry.text}
                 </p>
+              );
+            if (entry.kind === "choice")
+              return (
+                <div key={i} className="backlog-choice">
+                  {entry.prompt && <div className="backlog-choice-prompt">{entry.prompt}</div>}
+                  <div className="backlog-choice-answer">
+                    <span>{entry.selectedBy === "ai" ? "AI 選択" : "選択"}</span>
+                    {entry.optionText}
+                  </div>
+                </div>
               );
             return (
               <p key={i} className="backlog-narration">

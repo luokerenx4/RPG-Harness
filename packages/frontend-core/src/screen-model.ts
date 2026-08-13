@@ -9,6 +9,7 @@
 
 import type {
   HubSnapshot,
+  Input,
   Output,
   RenderedChoice,
   ScriptInfo,
@@ -51,6 +52,12 @@ export type Stage =
 export type BacklogEntry =
   | { kind: "narration"; text: string }
   | { kind: "dialogue"; speakerName: string; text: string }
+  | {
+      kind: "choice";
+      prompt?: string;
+      optionText: string;
+      selectedBy: "player" | "ai";
+    }
   | { kind: "sceneBreak" };
 
 export interface ScreenModel {
@@ -175,6 +182,45 @@ export function applyOutput(model: ScreenModel, output: Output): ScreenModel {
         visuals,
       };
   }
+}
+
+/**
+ * Preserve a committed narrative choice before the next engine Output replaces
+ * its stage. Stable option ids win over array positions, matching the engine's
+ * input contract. Menus are normally transient UI, but the selected answer is
+ * story: Web, TUI, and AI-premiere handoffs all project it into one backlog
+ * shape instead of forcing a player to reconstruct context from dev metadata.
+ */
+export function applyChoiceSelection(
+  model: ScreenModel,
+  input: Input,
+  selectedBy: "player" | "ai" = "player",
+): ScreenModel {
+  const stage = model.stage;
+  if (stage.kind !== "choice" || input.type !== "choose") return model;
+  const index = "choiceId" in input
+    ? stage.choiceId === input.choiceId
+      ? stage.options.findIndex((option) => option.id === input.optionId)
+      : -1
+    : input.index;
+  const option = stage.options[index];
+  if (!option?.available) return model;
+  return appendChoiceBacklog(model, {
+    ...(stage.prompt ? { prompt: stage.prompt } : {}),
+    optionText: option.text,
+    selectedBy,
+  });
+}
+
+export function appendChoiceBacklog(
+  model: ScreenModel,
+  selection: Omit<Extract<BacklogEntry, { kind: "choice" }>, "kind">,
+): ScreenModel {
+  if (!selection.optionText.trim()) return model;
+  return {
+    ...model,
+    backlog: capBacklog([...model.backlog, { kind: "choice", ...selection }]),
+  };
 }
 
 // Push the outgoing stage into the backlog IFF it was a transient

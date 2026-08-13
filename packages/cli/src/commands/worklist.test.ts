@@ -556,6 +556,7 @@ function choiceReport(): ChoiceCoverageReport {
       scriptId: "ending",
       source: "scripts/ending.md",
       choiceId: "coda",
+      prompt: "What comes next?",
       optionId: "friends",
       optionText: "Friends",
       evidence: {

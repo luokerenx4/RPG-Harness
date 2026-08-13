@@ -2,13 +2,30 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
+  test("renders player and AI stable selections as story context in backlog", () => {
+    const html = renderToStaticMarkup(
+      <BacklogOverlay
+        entries={[{
+          kind: "choice",
+          prompt: "それでも、答える。",
+          optionText: "「眠らない」",
+          selectedBy: "ai",
+        }]}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain("それでも、答える。");
+    expect(html).toContain("AI 選択");
+    expect(html).toContain("「眠らない」");
+  });
+
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 8,
+      schemaVersion: 9,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -39,6 +56,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "terminal-ai-branch",
         text: "AI BRANCH · 3 PATHS次: Remember the others",
+      }, {
+        surface: "ai-choice-backlog",
+        text: "What do you promise?AI 選択Stay until dawn",
       }],
     });
   });

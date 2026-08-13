@@ -148,7 +148,13 @@ export async function runChoiceCoverageWorkItem(
       at: selectedLogEntry,
       pretty: false,
     });
-    await attachDevelopmentBranchHandoff(args.gameDir, args.playerSession, handoff);
+    await attachDevelopmentBranchHandoff(args.gameDir, args.playerSession, {
+      ...handoff,
+      premiere: {
+        ...(workItem.prompt ? { prompt: workItem.prompt } : {}),
+        optionText: workItem.optionText,
+      },
+    });
     playerHandoff = {
       session: args.playerSession,
       webPath: `/?session=${encodeURIComponent(args.playerSession)}`,

@@ -806,6 +806,13 @@ When the handoff names a stable choice, the bridge derives the player's selected
 option and display text from the locked session log. The HUD updates in place,
 while `log.jsonl` remains the single evidence source that also removes that
 option from the player's structured worklist family.
+Choice selection is also narrative history, not disposable menu state. Both Web
+and TUI add the presented prompt plus the committed answer to their shared
+backlog. A player-premiere fork carries the authoritative prompt/text captured
+at its proof checkpoint and marks it as an **AI selection**, so opening the
+branch after the choice still explains the character's first response. The Web
+quality certificate executes and requires this projection before it can turn
+green.
 The local shared-session HUD also exposes **AIへフィードバック**. A player can
 classify a narrative, gameplay, engine, UI, or tooling concern without leaving
 the scene. The bridge routes the form through the same public `rpgh report`

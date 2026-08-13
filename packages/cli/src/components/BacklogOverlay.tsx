@@ -113,6 +113,17 @@ function Entry({ entry }: { entry: BacklogEntry }) {
       </Box>
     );
   }
+  if (entry.kind === "choice") {
+    return (
+      <Box flexDirection="column" marginY={1} borderStyle="single" borderColor="yellow" paddingX={1}>
+        {entry.prompt && <Text dimColor>{entry.prompt}</Text>}
+        <Text>
+          <Text color="yellow">{entry.selectedBy === "ai" ? "AI 选择" : "选择"}: </Text>
+          {entry.optionText}
+        </Text>
+      </Box>
+    );
+  }
   // Single Text node so ink can wrap CJK content cleanly. Nested
   // <Box flexDirection="row"> with mixed cyan/dim/normal spans was
   // garbling speaker names ("narrato" missing the trailing 'r') on

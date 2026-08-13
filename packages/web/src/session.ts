@@ -48,6 +48,10 @@ export interface WebBranchContext {
       choiceId?: string;
       optionId?: string;
     };
+    premiere?: {
+      prompt?: string;
+      optionText: string;
+    };
   } | null;
   outcome: {
     kind: "choice-selected";
