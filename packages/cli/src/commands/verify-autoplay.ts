@@ -18,8 +18,10 @@ export interface VerifyAutoplayArgs {
 export interface VerifyAutoplaySummary {
   status: "verified" | "failed";
   reportId: string;
-  sourceSession: string;
-  runSession: string;
+  /** Null when proof must rerun fresh initialization rather than fork a save. */
+  sourceSession: string | null;
+  /** Null when the attempted proof failed before a playable run save existed. */
+  runSession: string | null;
   original: {
     persona: string;
     maxSteps: number;
@@ -36,7 +38,7 @@ export interface VerifyAutoplaySummary {
     decisionPathRevision: string;
     completedScripts: string[];
     objectiveChanges: number;
-    webPath: string;
+    webPath: string | null;
   };
   resolvedReport?: {
     id: string;
@@ -73,21 +75,25 @@ export async function verifyAutoplayReport(
 
   const sourceSession = `${args.sessionPrefix}-source`;
   const runSession = `${args.sessionPrefix}-run`;
-  await assertTargetEmpty(args.gameDir, sourceSession);
   await assertTargetEmpty(args.gameDir, runSession);
-  const replaySource = await loadPlaytestReportCheckpointSource(
-    args.gameDir,
-    report,
-    "autoplay-replay",
-  );
-  await reproducePlaytestReport({
-    gameDir: args.gameDir,
-    id: report.id,
-    session: report.session,
-    to: sourceSession,
-    checkpoint: "autoplay-replay",
-  });
-  await hooks.afterSourceMaterialized?.(sourceSession);
+  const freshInitialization = evidence.replayMode === "fresh-initialization";
+  let replaySource: Awaited<ReturnType<typeof loadPlaytestReportCheckpointSource>> | undefined;
+  if (!freshInitialization) {
+    await assertTargetEmpty(args.gameDir, sourceSession);
+    replaySource = await loadPlaytestReportCheckpointSource(
+      args.gameDir,
+      report,
+      "autoplay-replay",
+    );
+    await reproducePlaytestReport({
+      gameDir: args.gameDir,
+      id: report.id,
+      session: report.session,
+      to: sourceSession,
+      checkpoint: "autoplay-replay",
+    });
+    await hooks.afterSourceMaterialized?.(sourceSession);
+  }
   const autoplay = await runAutoplay({
     gameDir: args.gameDir,
     persona: evidence.persona,
@@ -95,15 +101,19 @@ export async function verifyAutoplayReport(
     maxSteps: evidence.maxSteps,
     ...(evidence.seed !== undefined ? { seed: evidence.seed } : {}),
     session: runSession,
-    preparedForkSource: {
-      fromSession: sourceSession,
-      source: {
-        state: replaySource.state,
-        selectedEntry: replaySource.sourceLogEntry,
-        sourceEntries: replaySource.sourceLogEntry,
-        mode: "checkpoint",
-      },
-    },
+    ...(!freshInitialization
+      ? {
+          preparedForkSource: {
+            fromSession: sourceSession,
+            source: {
+              state: replaySource!.state,
+              selectedEntry: replaySource!.sourceLogEntry,
+              sourceEntries: replaySource!.sourceLogEntry,
+              mode: "checkpoint" as const,
+            },
+          },
+        }
+      : {}),
     reportOnStop: false,
     pretty: false,
   });
@@ -123,7 +133,7 @@ export async function verifyAutoplayReport(
     decisionPathRevision: autoplay.decisionPath.revision,
     completedScripts: autoplay.progress.completedScripts,
     objectiveChanges: autoplay.progress.objectiveChanges.length,
-    webPath: autoplay.webPath!,
+    webPath: autoplay.webPath ?? null,
   };
   // A generator can return without yielding gameEnd. runLoop classifies that
   // exhaustion as completed, but it is not evidence that the authored route
@@ -133,8 +143,8 @@ export async function verifyAutoplayReport(
     return {
       status: "failed",
       reportId: report.id,
-      sourceSession,
-      runSession,
+      sourceSession: freshInitialization ? null : sourceSession,
+      runSession: autoplay.webPath ? runSession : null,
       original,
       result,
     };
@@ -143,8 +153,16 @@ export async function verifyAutoplayReport(
   const verification: PlaytestAutoplayVerification = {
     kind: "autoplay",
     verifiedAt: new Date().toISOString(),
-    replayCheckpointRevision: evidence.replayCheckpoint.revision,
-    issueCheckpointRevision: report.evidence.checkpoint!.revision,
+    replayMode: freshInitialization ? "fresh-initialization" : "checkpoint",
+    ...(freshInitialization
+      ? { initializationModuleId: evidence.initializationModuleId }
+      : {}),
+    ...(!freshInitialization
+      ? {
+          replayCheckpointRevision: evidence.replayCheckpoint!.revision,
+          issueCheckpointRevision: report.evidence.checkpoint!.revision,
+        }
+      : {}),
     originalStopReason: evidence.stopReason,
     persona: evidence.persona,
     maxSteps: evidence.maxSteps,
@@ -166,7 +184,9 @@ export async function verifyAutoplayReport(
     gameDir: args.gameDir,
     id: report.id,
     session: report.session,
-    resolution: `Autoplay ${evidence.persona} reached terminal ending ${autoplay.ending} in a causal replay from the immutable pre-run checkpoint after ${autoplay.decisions} decisions.`,
+    resolution: freshInitialization
+      ? `Autoplay ${evidence.persona} re-ran fresh initialization with seed ${evidence.seed} and reached terminal ending ${autoplay.ending} after ${autoplay.decisions} decisions.`
+      : `Autoplay ${evidence.persona} reached terminal ending ${autoplay.ending} in a causal replay from the immutable pre-run checkpoint after ${autoplay.decisions} decisions.`,
     verification,
   });
   if (resolved.verification?.kind !== "autoplay") {
@@ -175,7 +195,7 @@ export async function verifyAutoplayReport(
   return {
     status: "verified",
     reportId: report.id,
-    sourceSession,
+    sourceSession: freshInitialization ? null : sourceSession,
     runSession,
     original,
     result,

@@ -607,7 +607,7 @@ describe("playtest reports", () => {
       verification: {
         kind: "autoplay",
         verifiedAt: new Date().toISOString(),
-        replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+        replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint!.revision,
         issueCheckpointRevision: open.evidence.checkpoint!.revision,
         originalStopReason: "stalled",
         persona: "greedy",
@@ -632,7 +632,7 @@ describe("playtest reports", () => {
     const validVerification: PlaytestAutoplayVerification = {
       kind: "autoplay",
       verifiedAt: new Date().toISOString(),
-      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint!.revision,
       issueCheckpointRevision: open.evidence.checkpoint!.revision,
       originalStopReason: "stalled",
       persona: "greedy",
@@ -784,7 +784,7 @@ describe("playtest reports", () => {
     mutableArgs.verification = {
       kind: "autoplay",
       verifiedAt: new Date().toISOString(),
-      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint!.revision,
       issueCheckpointRevision: open.evidence.checkpoint!.revision,
       originalStopReason: "stalled",
       persona: "greedy",

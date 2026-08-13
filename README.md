@@ -42,6 +42,13 @@ executes a newly edited module/preset/helper immediately rather than silently
 reusing Bun's earlier ESM namespace; unchanged content still shares one module
 identity inside the process.
 
+Failures before the first public output are development work too. Static module
+contract errors retain every implicated module, while a throwing
+`Module.initialize` records its module id and fresh-world seed without
+publishing a partial player save. `verify-autoplay` reruns that initializer from
+the original seed after an edit; only a real terminal `gameEnd` closes the
+issue, so a half-built state can never masquerade as repair evidence.
+
 ## Make your own
 
 ```bash

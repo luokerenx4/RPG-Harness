@@ -1,4 +1,4 @@
-import { Engine } from "./engine";
+import { Engine, ModuleContractError } from "./engine";
 import {
   activityDecisionContext,
   choiceDecisionContext,
@@ -10,7 +10,11 @@ import {
   retargetAcceptedInputResult,
   type InputResult,
 } from "./input";
-import { cloneState, createInitialState } from "./state";
+import {
+  cloneState,
+  createInitialState,
+  ModuleInitializationError,
+} from "./state";
 import type { ComposedState, Game, Input, Output } from "./types";
 
 export interface TraceEntry {
@@ -62,7 +66,7 @@ export interface LoopResult {
 }
 
 export interface LoopFailure {
-  phase: "prime" | "input" | "decision" | "observer";
+  phase: "setup" | "prime" | "input" | "decision" | "observer";
   name: string;
   message: string;
   /** The attempted input is present only when the engine failed consuming it. */
@@ -72,6 +76,8 @@ export interface LoopFailure {
   decision?: ChoiceDecisionContext;
   activityDecision?: ActivityDecisionContext;
   stack?: string;
+  /** Author-owned modules whose setup contract caused the failure. */
+  moduleIds?: string[];
 }
 
 export type InputSource =
@@ -100,16 +106,35 @@ export async function runLoop(
   inputs: InputSource,
   options: RunLoopOptions = {},
 ): Promise<LoopResult> {
-  const startState = initialState
-    ? cloneState(initialState)
-    : createInitialState(game);
-  const engine = new Engine(game, startState);
-  const runner = engine.run();
   const trace: TraceEntry[] = [];
   const fingerprints: string[] = [];
   const behaviorFingerprints: string[] = [];
   const stateSnapshots: string[] = [];
   const maxSteps = options.maxSteps ?? 5000;
+  let startState: ComposedState;
+  try {
+    startState = initialState
+      ? cloneState(initialState)
+      : createInitialState(game);
+  } catch (error) {
+    if (!(error instanceof ModuleInitializationError)) throw error;
+    return {
+      trace,
+      finalState: error.partialState,
+      done: false,
+      reason: "error",
+      error: error.message,
+      failure: {
+        phase: "setup",
+        name: error.name,
+        message: error.message,
+        input: null,
+        output: null,
+        moduleIds: [error.moduleId],
+        ...(error.stack ? { stack: error.stack } : {}),
+      },
+    };
+  }
 
   const inputsArray: Input[] | null = Array.isArray(inputs) ? inputs : null;
   const inputsFn = !Array.isArray(inputs) ? inputs : null;
@@ -117,11 +142,14 @@ export async function runLoop(
   let lastInput: Input | null = null;
   let lastOutput: Output | null = null;
   let stepIndex = 0;
-  let failurePhase: LoopFailure["phase"] = "prime";
+  let failurePhase: LoopFailure["phase"] = "setup";
   let failureInput: Input | null = null;
   let failureOutput: Output | null = null;
+  let engine: Engine | undefined;
 
   try {
+    engine = new Engine(game, startState);
+    const runner = engine.run();
     let priming = true;
     while (true) {
       failurePhase = priming ? "prime" : "input";
@@ -299,7 +327,7 @@ export async function runLoop(
     const semanticOutput = failureOutput;
     return {
       trace,
-      finalState: engine.getState(),
+      finalState: engine?.getState() ?? cloneState(startState),
       done: false,
       reason: "error",
       error: error.message,
@@ -310,6 +338,9 @@ export async function runLoop(
         input: attemptedInput,
         output: semanticOutput,
         ...failureDecisionContext(semanticOutput, attemptedInput),
+        ...(error instanceof ModuleContractError
+          ? { moduleIds: error.moduleIds }
+          : {}),
         ...(error.stack ? { stack: error.stack } : {}),
       },
     };

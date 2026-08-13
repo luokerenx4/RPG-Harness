@@ -22,6 +22,36 @@ const terminalGame: Game = {
 };
 
 describe("runLoop terminal output", () => {
+  test("returns module contract failures before the first public output", async () => {
+    const game = makeGame({
+      modules: [{
+        id: "broken-contract",
+        source: "modules/broken.ts",
+        provides: ["missing"],
+        actionHandlers: {},
+      }],
+      runFn: async function* () {
+        yield { type: "gameEnd" as const };
+      },
+    });
+    const initialState = createInitialState(game);
+    const result = await runLoop(game, initialState, []);
+
+    expect(result).toMatchObject({
+      reason: "error",
+      done: false,
+      trace: [],
+      finalState: initialState,
+      failure: {
+        phase: "setup",
+        name: "ModuleContractError",
+        input: null,
+        output: null,
+        moduleIds: ["broken-contract"],
+      },
+    });
+  });
+
   test("retains the failed public action outside the successful trace", async () => {
     const game = makeGame({
       modules: [{

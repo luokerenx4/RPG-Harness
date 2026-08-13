@@ -1,4 +1,4 @@
-export { Engine, buildPresetContext } from "./engine";
+export { Engine, ModuleContractError, buildPresetContext } from "./engine";
 export { evaluateCondition, explainCondition } from "./condition";
 export {
   activityDecisionContext,
@@ -24,6 +24,7 @@ export {
   markScriptCompleted,
   resolveModules,
   resolveRunFn,
+  ModuleInitializationError,
 } from "./state";
 export type { InitialStateOptions } from "./state";
 export { makeScriptState, emptyVisualState } from "./types";

@@ -1,6 +1,7 @@
 import {
   createInitialState,
   emptyVisualState,
+  ModuleInitializationError,
   runLoop,
 } from "@rpg-harness/engine";
 import type {
@@ -13,6 +14,7 @@ import type {
   ComposedState,
   Game,
   LoopFailure,
+  LoopResult,
 } from "@rpg-harness/engine";
 import {
   buildHubView,
@@ -496,6 +498,7 @@ export async function runAutoplay(
   };
 
   let autoplayInitialState: Awaited<ReturnType<typeof loadSession>> | undefined;
+  let initializationFailure: ModuleInitializationError | undefined;
   let autoplayReplayLogEntry: number | undefined;
   let incidentEvidence: PlaytestEvidenceSnapshot | undefined;
   const play = async () => {
@@ -513,14 +516,21 @@ export async function runAutoplay(
     autoplayReplayLogEntry = args.session
       ? (await readSessionLog(args.gameDir, args.session)).length
       : 0;
-    const initialState = args.session
-      ? await loadSession(
-          args.gameDir,
-          args.session,
-          game,
-          { seed: effectiveSeed },
-        )
-      : createInitialState(game, { seed: effectiveSeed });
+    let initialState: ComposedState;
+    try {
+      initialState = args.session
+        ? await loadSession(
+            args.gameDir,
+            args.session,
+            game,
+            { seed: effectiveSeed },
+          )
+        : createInitialState(game, { seed: effectiveSeed });
+    } catch (error) {
+      if (!(error instanceof ModuleInitializationError)) throw error;
+      initializationFailure = error;
+      initialState = error.partialState;
+    }
     if (args.session && args.seed === undefined) {
       const control = await loadBoundSessionCoPlayControl(
         args.gameDir,
@@ -541,7 +551,9 @@ export async function runAutoplay(
       }
     }
     autoplayInitialState = initialState;
-    const result = await runLoop(game, initialState, targetedPersona, {
+    const result = initializationFailure
+      ? initializationFailureResult(initializationFailure)
+      : await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,
       stallDetection: { repetitions: 3, maxCycleLength: 20 },
       onStep: async (entry, state) => {
@@ -589,12 +601,12 @@ export async function runAutoplay(
               state.baseline.scripts[args.targetChoice!.scriptId]?.completed === true,
           }
         : {}),
-    });
+      });
     // Persist the exact terminal state as well as each successful step. This
     // matters when a run stops between public outputs (max-steps) or an input
     // throws after mutating state: the issue checkpoint must capture the
     // actual stop site rather than the previous log entry's state.
-    if (args.session) {
+    if (args.session && !initializationFailure) {
       await saveSession(args.gameDir, args.session, result.finalState);
       if (countDecisions(result.trace) > 0) {
         const lastAction = summarizeLastPublicAction(result.trace);
@@ -617,6 +629,8 @@ export async function runAutoplay(
           args.session,
         );
       }
+    } else if (args.session && args.reportOnStop && isReportableAutoplayStop(result)) {
+      incidentEvidence = emptyInitializationEvidenceSnapshot(args.session);
     }
     return result;
   };
@@ -679,6 +693,7 @@ export async function runAutoplay(
       result.finalState.baseline.currentScriptId,
       result.failure,
       args.persona,
+      initializationFailure ? "initialize" : undefined,
     );
     const failureTarget = result.failure
       ? [...sourceTargets].reverse().find((target) =>
@@ -701,6 +716,8 @@ export async function runAutoplay(
           : result.failure?.phase === "decision" &&
               failureTarget?.kind === "module-persona"
           ? `Autoplay persona ${args.persona} failed while deciding`
+          : result.failure?.phase === "setup" && failureTarget
+          ? `Autoplay setup failed in ${failureTarget.moduleId}`
           : result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
@@ -737,14 +754,23 @@ export async function runAutoplay(
               `AI branch \`${args.session}\` was forked from player session \`${fork.fromSession}\` at source log entry ${fork.sourceLogEntry}.`,
             ]
           : []),
-        "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
+        initializationFailure
+          ? "Re-run fresh initialization with the recorded seed after repairing the module; no partial save was published."
+          : "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
       ...(result.failure ? { failure: result.failure } : {}),
       evidenceSnapshot: incidentEvidence,
       autoplay: {
-        replayState: autoplayInitialState,
+        ...(initializationFailure
+          ? {
+              replayMode: "fresh-initialization" as const,
+              initializationModuleId: initializationFailure.moduleId,
+            }
+          : {
+              replayState: autoplayInitialState,
+            }),
         replayLogEntry: autoplayReplayLogEntry,
         persona: args.persona,
         maxSteps: args.maxSteps,
@@ -764,7 +790,7 @@ export async function runAutoplay(
     });
   }
 
-  const choiceCoverage = args.session
+  const choiceCoverage = args.session && !initializationFailure
     ? await collectChoiceCoverage(args.gameDir, args.session)
     : undefined;
 
@@ -787,7 +813,9 @@ export async function runAutoplay(
     ...(args.session
       ? {
           session: args.session,
-          webPath: `/?session=${encodeURIComponent(args.session)}`,
+          ...(!initializationFailure
+            ? { webPath: `/?session=${encodeURIComponent(args.session)}` }
+            : {}),
         }
       : {}),
     ...(fork ? { fork } : {}),
@@ -802,6 +830,43 @@ export async function runAutoplay(
         }
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
+  };
+}
+
+function initializationFailureResult(
+  failure: ModuleInitializationError,
+): LoopResult {
+  return {
+    trace: [],
+    finalState: failure.partialState,
+    done: false,
+    reason: "error",
+    error: failure.message,
+    failure: {
+      phase: "setup",
+      name: failure.name,
+      message: failure.message,
+      input: null,
+      output: null,
+      moduleIds: [failure.moduleId],
+      ...(failure.stack ? { stack: failure.stack } : {}),
+    },
+  };
+}
+
+function emptyInitializationEvidenceSnapshot(
+  session: string,
+): PlaytestEvidenceSnapshot {
+  return {
+    statePath: "state.json",
+    logPath: "log.jsonl",
+    logEntry: 0,
+    currentScriptId: null,
+    lastCompletedScriptId: null,
+    lastEvent: null,
+    captureErrors: [
+      `No playable state was published for ${session}: module initialization failed before session creation.`,
+    ],
   };
 }
 
@@ -823,6 +888,7 @@ export function collectAutoplaySourceTargets(
   terminalScriptId?: string | null,
   failure?: LoopFailure,
   personaName?: string,
+  setupPhase?: "initialize" | "engine",
 ): PlaytestSourceTarget[] {
   const firstIndex = diagnostic?.firstTraceIndex ?? Math.max(0, trace.length - 20);
   const lastIndex = diagnostic?.lastTraceIndex ?? trace.length - 1;
@@ -933,6 +999,18 @@ export function collectAutoplaySourceTargets(
       });
     }
   }
+  if (failure?.phase === "setup") {
+    for (const moduleId of failure.moduleIds ?? []) {
+      const owner = game.modules?.find((mod) => mod.id === moduleId);
+      if (!owner?.source) continue;
+      targets.push({
+        kind: "module-setup",
+        file: normalizeAuthoringSource(gameDir, owner.source),
+        moduleId,
+        setupPhase: setupPhase ?? "engine",
+      });
+    }
+  }
   addScript(terminalScriptId ?? undefined);
 
   const unique = new Map<string, PlaytestSourceTarget>();
@@ -974,6 +1052,10 @@ function sourceTargetMatchesFailure(
 ): boolean {
   if (target.kind === "module-persona") {
     return failure.phase === "decision" && target.persona === personaName;
+  }
+  if (target.kind === "module-setup") {
+    return failure.phase === "setup" &&
+      (failure.moduleIds ?? []).includes(target.moduleId ?? "");
   }
   if (target.kind === "module-action" && failure.activityDecision) {
     return target.actionKind === failure.activityDecision.actionKind &&

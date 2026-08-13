@@ -82,12 +82,13 @@ export interface PlaytestEvidence {
 }
 
 export interface PlaytestSourceTarget {
-  kind: "module-action" | "module-persona" | "script";
+  kind: "module-action" | "module-persona" | "module-setup" | "script";
   file: string;
   moduleId?: string;
   actionKind?: string;
   activityId?: string;
   persona?: string;
+  setupPhase?: "initialize" | "engine";
   scriptId?: string;
   scriptRevision?: string;
   choiceId?: string;
@@ -102,6 +103,7 @@ export interface PlaytestFailureEvidence {
   decision?: LoopFailure["decision"];
   activityDecision?: LoopFailure["activityDecision"];
   stack?: string;
+  moduleIds?: string[];
 }
 
 /**
@@ -117,8 +119,10 @@ export type PlaytestEvidenceSnapshot = Omit<
 >;
 
 export interface PlaytestAutoplayEvidence {
-  /** Frozen state from immediately before the reported autoplay began. */
-  replayCheckpoint: PlaytestCheckpointRef;
+  /** Checkpoint replay for playable runs; fresh initialization reruns from seed. */
+  replayMode?: "checkpoint" | "fresh-initialization";
+  replayCheckpoint?: PlaytestCheckpointRef;
+  initializationModuleId?: string;
   /** Log boundary in the report session at that instant (0 before its first entry). */
   replayLogEntry: number;
   persona: string;
@@ -138,12 +142,16 @@ export interface PlaytestAutoplayEvidence {
 export function hasCausalAutoplayEvidence(
   evidence: PlaytestAutoplayEvidence | undefined,
 ): evidence is PlaytestAutoplayEvidence {
-  return evidence !== undefined &&
-    isPlaytestCheckpointRef(evidence.replayCheckpoint) &&
+  const validReplay = evidence?.replayMode === "fresh-initialization"
+    ? typeof evidence.initializationModuleId === "string" &&
+      evidence.initializationModuleId.trim().length > 0
+    : isPlaytestCheckpointRef(evidence?.replayCheckpoint);
+  return evidence !== undefined && validReplay &&
     Number.isInteger(evidence.replayLogEntry) && evidence.replayLogEntry >= 0 &&
     typeof evidence.persona === "string" && evidence.persona.trim().length > 0 &&
     Number.isInteger(evidence.maxSteps) && evidence.maxSteps >= 0 &&
     Number.isInteger(evidence.seed) && evidence.seed! >= 0 &&
+    evidence.seed! <= 0xffff_ffff &&
     typeof evidence.decisionPathRevision === "string" &&
     /^[a-f0-9]{64}$/.test(evidence.decisionPathRevision);
 }
@@ -275,8 +283,21 @@ export function hasRecoverableIssueCheckpoint(report: PlaytestReport): boolean {
 export function hasCausallyVerifiableAutoplayReport(
   report: PlaytestReport,
 ): boolean {
-  return hasRecoverableIssueCheckpoint(report) &&
-    hasCausalAutoplayEvidence(report.evidence.autoplay);
+  const autoplay = report.evidence.autoplay;
+  const freshInitialization = autoplay?.replayMode === "fresh-initialization";
+  return hasCausalAutoplayEvidence(autoplay) && (
+    freshInitialization
+      ? report.evidence.failure?.phase === "setup" &&
+        report.evidence.failure.moduleIds?.includes(
+          autoplay.initializationModuleId!,
+        ) === true &&
+        report.evidence.sourceTargets?.some((target) =>
+          target.kind === "module-setup" &&
+          target.setupPhase === "initialize" &&
+          target.moduleId === autoplay.initializationModuleId
+        ) === true
+      : hasRecoverableIssueCheckpoint(report)
+  );
 }
 
 export function hasVerifiableAuditReport(report: PlaytestReport): boolean {
@@ -338,9 +359,11 @@ export interface PlaytestAutoplayVerification {
   kind: "autoplay";
   verifiedAt: string;
   /** Causal replay start, before any input that contributed to the finding. */
-  replayCheckpointRevision: string;
+  replayMode?: "checkpoint" | "fresh-initialization";
+  initializationModuleId?: string;
+  replayCheckpointRevision?: string;
   /** Exact stopped state retained for GUI/headless incident inspection. */
-  issueCheckpointRevision: string;
+  issueCheckpointRevision?: string;
   originalStopReason: LoopReason;
   persona: string;
   maxSteps: number;
@@ -380,7 +403,7 @@ export type RecordPlaytestAutoplayEvidence = Omit<
   "replayCheckpoint"
 > & {
   /** Internal state payload; persisted content-addressably and never embedded in the report. */
-  replayState: ComposedState;
+  replayState?: ComposedState;
 };
 
 export interface RecordPlaytestReportArgs {
@@ -518,6 +541,7 @@ function compactLoopFailure(failure: LoopFailure): PlaytestFailureEvidence {
       ? { activityDecision: structuredClone(failure.activityDecision) }
       : {}),
     ...(failure.stack ? { stack: failure.stack } : {}),
+    ...(failure.moduleIds?.length ? { moduleIds: [...failure.moduleIds] } : {}),
   };
 }
 
@@ -527,6 +551,15 @@ async function persistAutoplayEvidence(
   input: RecordPlaytestAutoplayEvidence,
 ): Promise<PlaytestAutoplayEvidence> {
   const { replayState, ...evidence } = input;
+  if (evidence.replayMode === "fresh-initialization") {
+    if (replayState !== undefined) {
+      throw new Error("Fresh initialization evidence cannot embed a replay state");
+    }
+    return evidence;
+  }
+  if (replayState === undefined) {
+    throw new Error("Checkpoint autoplay evidence requires a replay state");
+  }
   const replayCheckpoint = await persistPlaytestCheckpoint(
     gameDir,
     session,
@@ -765,20 +798,35 @@ function assertVerificationMatchesReport(
         `Structured autoplay report ${report.id} requires causal autoplay verification; run verify-autoplay instead of resolving it manually`,
       );
     }
-    const issueCheckpoint = report.evidence.checkpoint;
-    if (!isPlaytestCheckpointRef(issueCheckpoint)) {
-      throw new Error(`Autoplay report has no recoverable issue checkpoint: ${report.id}`);
-    }
-    if (!isPlaytestCheckpointRef(autoplay.replayCheckpoint)) {
-      throw new Error(`Autoplay report has no recoverable replay checkpoint: ${report.id}`);
-    }
-    if (
-      verification.replayCheckpointRevision !== autoplay.replayCheckpoint.revision ||
-      verification.issueCheckpointRevision !== issueCheckpoint.revision
-    ) {
-      throw new Error(
-        `Autoplay verification checkpoint mismatch for report ${report.id}`,
-      );
+    const freshInitialization = autoplay.replayMode === "fresh-initialization";
+    if (freshInitialization) {
+      if (
+        verification.replayMode !== "fresh-initialization" ||
+        verification.initializationModuleId !== autoplay.initializationModuleId ||
+        verification.replayCheckpointRevision !== undefined ||
+        verification.issueCheckpointRevision !== undefined
+      ) {
+        throw new Error(
+          `Fresh initialization verification mode mismatch for report ${report.id}`,
+        );
+      }
+    } else {
+      const issueCheckpoint = report.evidence.checkpoint;
+      if (!isPlaytestCheckpointRef(issueCheckpoint)) {
+        throw new Error(`Autoplay report has no recoverable issue checkpoint: ${report.id}`);
+      }
+      if (!isPlaytestCheckpointRef(autoplay.replayCheckpoint)) {
+        throw new Error(`Autoplay report has no recoverable replay checkpoint: ${report.id}`);
+      }
+      if (
+        verification.replayMode === "fresh-initialization" ||
+        verification.replayCheckpointRevision !== autoplay.replayCheckpoint.revision ||
+        verification.issueCheckpointRevision !== issueCheckpoint.revision
+      ) {
+        throw new Error(
+          `Autoplay verification checkpoint mismatch for report ${report.id}`,
+        );
+      }
     }
     if (
       verification.originalStopReason !== autoplay.stopReason ||

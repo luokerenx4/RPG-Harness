@@ -778,7 +778,7 @@ describe("autoplay autonomous development lane", () => {
       output: { type: "narration", text: "GUI moved after autoplay." },
     });
     expect(report.evidence.currentScriptId).not.toBe("gui-followup");
-    expect(report.evidence.autoplay?.replayCheckpoint.revision)
+    expect(report.evidence.autoplay?.replayCheckpoint?.revision)
       .not.toBe(issueCheckpoint.revision);
   });
 

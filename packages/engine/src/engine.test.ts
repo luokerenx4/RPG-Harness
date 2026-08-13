@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildPresetContext, Engine } from "./engine";
+import { buildPresetContext, Engine, ModuleContractError } from "./engine";
 import { makeCharacter, makeGame, makeScript } from "./test-utils";
 import type { Module } from "./types";
 
@@ -147,6 +147,27 @@ describe("buildPresetContext", () => {
         }),
       ),
     ).toThrow(/duplicate trigger id "dup"/);
+  });
+
+  test("duplicate trigger diagnostics retain both responsible modules", () => {
+    const duplicate = (id: string): Module => ({
+      id,
+      triggers: [{
+        id: "dup",
+        when: { switch: { name: "x", eq: true } },
+        do: () => ({}),
+      }],
+    });
+    try {
+      buildPresetContext(makeGame({
+        characters: [makeCharacter("alice")],
+        modules: [duplicate("modA"), duplicate("modB")],
+      }));
+      throw new Error("expected duplicate trigger contract failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ModuleContractError);
+      expect((error as ModuleContractError).moduleIds).toEqual(["modA", "modB"]);
+    }
   });
 
   test("builds lookup maps from game registries", () => {

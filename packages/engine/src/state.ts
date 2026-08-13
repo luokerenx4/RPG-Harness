@@ -19,6 +19,28 @@ export interface InitialStateOptions {
   seed?: number;
 }
 
+/** Author-owned world initialization failed before a playable save existed. */
+export class ModuleInitializationError extends Error {
+  readonly moduleId: string;
+  readonly seed: number;
+  readonly partialState: ComposedState;
+
+  constructor(
+    moduleId: string,
+    seed: number,
+    partialState: ComposedState,
+    cause: unknown,
+  ) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(`Module ${moduleId} initialization failed: ${reason}`, { cause });
+    this.name = "ModuleInitializationError";
+    this.moduleId = moduleId;
+    this.seed = seed;
+    this.partialState = structuredClone(partialState);
+    if (cause instanceof Error && cause.stack) this.stack = cause.stack;
+  }
+}
+
 export function defaultModules(): Module[] {
   return [baselineModule, runtimeModule];
 }
@@ -67,7 +89,18 @@ export function createInitialState(
   };
   for (const mod of modules) {
     if (!mod.initialize) continue;
-    const slice = mod.initialize(game, context);
+    let slice: unknown;
+    try {
+      slice = mod.initialize(game, context);
+    } catch (error) {
+      // Built-ins establish the minimum ComposedState contract. Once those
+      // slices exist, preserve them for diagnostics but never persist them as
+      // a playable save: verification must re-run this initializer from seed.
+      if (composed.baseline && composed.runtime) {
+        throw new ModuleInitializationError(mod.id, seed, composed, error);
+      }
+      throw error;
+    }
     if (slice !== undefined) composed[mod.id] = slice;
   }
   // Author module initialization may consume the shared stream after the

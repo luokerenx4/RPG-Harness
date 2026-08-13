@@ -250,7 +250,7 @@ export function analyzeDevelopmentWorklist(input: {
       priority: reportPriority(report.severity),
       actionability: feedbackNeedsAuthoring
         ? "authoring"
-        : feedbackVerifiable || recoverable
+        : feedbackVerifiable || auditVerifiable || autoplayVerifiable || recoverable
           ? "executable"
           : "diagnostic",
       title: report.title,

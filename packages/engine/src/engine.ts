@@ -27,6 +27,17 @@ import type {
   Trigger,
 } from "./types";
 
+/** A module's static runtime contract prevents Engine construction. */
+export class ModuleContractError extends Error {
+  readonly moduleIds: string[];
+
+  constructor(message: string, moduleIds: string[]) {
+    super(message);
+    this.name = "ModuleContractError";
+    this.moduleIds = [...new Set(moduleIds)];
+  }
+}
+
 // Build a PresetContext from a Game + (optional pre-built) state.
 // Same logic the Engine constructor uses; exported so tests can drive
 // primitives (dispatchActivity, checkTriggers, applyActionResult, ...)
@@ -77,18 +88,20 @@ export function buildPresetContext(
         if (extra.length > 0) {
           parts.push(`handler but not declared: ${extra.join(", ")}`);
         }
-        throw new Error(
+        throw new ModuleContractError(
           `Engine: module "${mod.id}" provides/actionHandlers mismatch — ${parts.join(
             "; ",
           )}`,
+          [mod.id],
         );
       }
     }
     for (const [kind, handler] of handlerEntries) {
       const qualified = `${mod.id}:${kind}`;
       if (actionHandlerRegistry[qualified]) {
-        throw new Error(
+        throw new ModuleContractError(
           `Engine: duplicate qualified action handler "${qualified}"`,
+          [mod.id],
         );
       }
       actionHandlerRegistry[qualified] = handler;
@@ -108,15 +121,17 @@ export function buildPresetContext(
   }
 
   const triggerRegistry: Trigger[] = [];
-  const seenTriggerIds = new Set<string>();
+  const triggerOwnerById = new Map<string, string>();
   for (const mod of modules) {
     for (const trig of mod.triggers ?? []) {
-      if (seenTriggerIds.has(trig.id)) {
-        throw new Error(
+      const previousOwner = triggerOwnerById.get(trig.id);
+      if (previousOwner) {
+        throw new ModuleContractError(
           `Engine: duplicate trigger id "${trig.id}" (module ${mod.id})`,
+          [previousOwner, mod.id],
         );
       }
-      seenTriggerIds.add(trig.id);
+      triggerOwnerById.set(trig.id, mod.id);
       triggerRegistry.push(trig);
     }
   }

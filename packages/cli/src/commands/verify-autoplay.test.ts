@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { listPlaytestReports } from "../playtest-reports";
@@ -17,6 +17,179 @@ afterEach(async () => {
 });
 
 describe("autoplay issue verification", () => {
+  test("re-runs a repaired module initializer from the original fresh seed", async () => {
+    const gameDir = await temporaryRepairableInitializationErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 29,
+      session: "original-initialization-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create an initialization issue");
+    expect(original).toMatchObject({
+      reason: "error",
+      failure: {
+        phase: "setup",
+        name: "ModuleInitializationError",
+        moduleIds: ["world-seed"],
+      },
+    });
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/world.ts",
+      evidence: {
+        autoplay: {
+          replayMode: "fresh-initialization",
+          initializationModuleId: "world-seed",
+          seed: 29,
+        },
+        sourceTargets: [{
+          kind: "module-setup",
+          file: "modules/world.ts",
+          moduleId: "world-seed",
+          setupPhase: "initialize",
+        }],
+      },
+    });
+    expect(report.evidence).not.toHaveProperty("checkpoint");
+    expect(report.evidence.autoplay).not.toHaveProperty("replayCheckpoint");
+    expect((await collectDevelopmentWorklist(gameDir)).items).toContainEqual(
+      expect.objectContaining({
+        key: `report/${report.id}`,
+        actionability: "executable",
+        target: "modules/world.ts",
+        operation: {
+          command: "verify-autoplay",
+          args: { reportId: report.id, sessionPrefix: "<new-session>" },
+        },
+      }),
+    );
+    await expect(access(path.join(
+      gameDir,
+      ".rpg-harness/sessions/original-initialization-error/state.json",
+    ))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const stillBroken = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "initialization-still-broken",
+    });
+    expect(stillBroken).toMatchObject({
+      status: "failed",
+      sourceSession: null,
+      runSession: null,
+      result: { reason: "error", ending: null, webPath: null },
+    });
+    await expect(access(path.join(
+      gameDir,
+      ".rpg-harness/sessions/initialization-still-broken-run/state.json",
+    ))).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+
+    await writeFile(path.join(gameDir, "modules", "world.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const module: Module = {",
+      '  id: "world-seed",',
+      "  initialize(_game, context) { return { seed: context.seed }; },",
+      "};",
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "initialization-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      sourceSession: null,
+      original: { stopReason: "error", seed: 29 },
+      result: { reason: "completed", ending: "world-ready" },
+      resolvedReport: {
+        verification: {
+          kind: "autoplay",
+          replayMode: "fresh-initialization",
+          initializationModuleId: "world-seed",
+          result: { ending: "world-ready" },
+        },
+      },
+    });
+    expect(verified.resolvedReport?.verification)
+      .not.toHaveProperty("replayCheckpointRevision");
+    expect(verified.resolvedReport?.verification)
+      .not.toHaveProperty("issueCheckpointRevision");
+    const fixedState = JSON.parse(await readFile(path.join(
+      gameDir,
+      ".rpg-harness/sessions/initialization-fixed-run/state.json",
+    ), "utf-8"));
+    expect(fixedState["world-seed"]).toEqual({ seed: 29 });
+  });
+
+  test("repairs an Engine module contract before the first public output", async () => {
+    const gameDir = await temporaryRepairableModuleContractGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 31,
+      session: "original-contract-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a setup contract issue");
+    expect(report).toMatchObject({
+      target: "modules/contract.ts",
+      evidence: {
+        checkpoint: expect.objectContaining({ revision: expect.any(String) }),
+        autoplay: {
+          replayCheckpoint: expect.objectContaining({ revision: expect.any(String) }),
+          seed: 31,
+        },
+        failure: {
+          phase: "setup",
+          name: "ModuleContractError",
+          moduleIds: ["broken-contract"],
+        },
+        sourceTargets: [{
+          kind: "module-setup",
+          file: "modules/contract.ts",
+          moduleId: "broken-contract",
+          setupPhase: "engine",
+        }],
+      },
+    });
+    await writeFile(path.join(gameDir, "modules", "contract.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const module: Module = {",
+      '  id: "broken-contract",',
+      '  provides: ["ready"],',
+      "  actionHandlers: { ready: () => ({}) },",
+      "};",
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "contract-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      result: { reason: "completed", ending: "contract-ready" },
+      resolvedReport: {
+        verification: {
+          kind: "autoplay",
+          result: { ending: "contract-ready" },
+        },
+      },
+    });
+  });
+
   test("resolves a project persona crash only after its repaired policy reaches gameEnd", async () => {
     const gameDir = await temporaryRepairablePersonaErrorGame();
     const original = await runAutoplay({
@@ -368,6 +541,69 @@ async function temporaryRepairableStallGame(): Promise<string> {
     "    }",
     '    yield { type: "narration", text: "Still blocked." };',
     "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairableInitializationErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-initialize-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable initialization error",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/world.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "world.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "world-seed",',
+    '  initialize() { throw new Error("world generation collapsed"); },',
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  yield { type: "gameEnd", endingId: "world-ready", reason: "initialized" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairableModuleContractGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-contract-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable module contract",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/contract.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "contract.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "broken-contract",',
+    '  provides: ["missing"],',
+    "  actionHandlers: {},",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  yield { type: "gameEnd", endingId: "contract-ready", reason: "valid" };',
     "};",
     "export default run;",
     "",
