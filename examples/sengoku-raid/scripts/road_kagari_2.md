@@ -2,6 +2,10 @@
 id: road_kagari_2
 title: 道中 ・ 篝 ・ 二
 characters: [kagari]
+requires:
+  all:
+    - { switch: { name: befriended_kagari } }
+    - { switch: { name: road_kagari_seen } }
 ai:
   relatedActivityIds:
     - invite:kagari

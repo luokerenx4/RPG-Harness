@@ -31,8 +31,10 @@ assertions:
     present: true
     available: false
     lockedReasonIncludes: 公儀
+    requires: { scriptCompleted: bond_mio_04 }
   - kind: activity
     id: invite:kagari
     present: true
     available: false
     lockedReasonIncludes: 公儀
+    requires: { scriptCompleted: bond_mio_04 }

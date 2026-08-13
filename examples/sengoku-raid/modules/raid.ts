@@ -1106,6 +1106,13 @@ function buildHubMenu(ctx: Ctx): Output {
         ? "公儀の見立てが済むまでは澪の同行を解けない。"
         : "澪が公儀の査問役に就いている。見立てが済むまでは他の同行者を選べない。"
       : null;
+    // lockedReason is for people; requires is the same gate as an executable
+    // machine contract. Goal-directed play can now discover that finishing
+    // Mio's inspection is a prerequisite instead of repeatedly attempting a
+    // socially eligible but legally impossible party change.
+    const inspectionRequirement: Condition | undefined = inspectionLock
+      ? { scriptCompleted: "bond_mio_04" }
+      : undefined;
     activities.push({
       id: `${companionAction}:${charId}`,
       kind: "action",
@@ -1130,6 +1137,7 @@ function buildHubMenu(ctx: Ctx): Output {
         : {}),
       cost: 0,
       available: inspectionLock === null,
+      ...(inspectionRequirement ? { requires: inspectionRequirement } : {}),
       ...(inspectionLock ? { lockedReason: inspectionLock } : {}),
     });
   }

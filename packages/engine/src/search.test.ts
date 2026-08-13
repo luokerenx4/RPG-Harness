@@ -275,6 +275,155 @@ describe("choice state-space search", () => {
     expect(result.state.baseline.variables.churn).toBe(0);
   });
 
+  test("expands a guidance script gate into its authored prerequisites", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("mio")],
+      scripts: [
+        makeScript("conclusion", {
+          requires: { affection: { character: "mio", min: 3 } },
+        }),
+        makeScript("target", {
+          ai: { relatedActivityIds: ["invite:kagari"] },
+        }),
+      ],
+      runFn: async function* () {
+        while (true) {
+          yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: [{
+                id: "invite:kagari",
+                kind: "action" as const,
+                title: "Invite",
+                cost: 0,
+                available: false,
+                requires: { scriptCompleted: "conclusion" },
+              }],
+            },
+          };
+        }
+      },
+    });
+    const state = makeState(game);
+    state.baseline.characters.mio!.stats.affection = 1;
+
+    const result = await searchForScript(
+      game,
+      state,
+      { scriptId: "target" },
+      { maxNodes: 1, maxSteps: 5 },
+    );
+
+    expect(result.closest.guidanceRequirement).toMatchObject({
+      activityId: "invite:kagari",
+      satisfiedRequirements: 0,
+      totalRequirements: 1,
+      progress: 1 / 6,
+    });
+
+    const completedState = makeState(game);
+    completedState.baseline.characters.mio!.stats.affection = 0;
+    completedState.baseline.scripts.conclusion = {
+      completed: true,
+      selfSwitches: { A: false, B: false, C: false, D: false },
+    };
+    const completed = await searchForScript(
+      game,
+      completedState,
+      { scriptId: "target" },
+      { maxNodes: 1, maxSteps: 5 },
+    );
+    expect(completed.closest.guidanceRequirement).toMatchObject({
+      satisfied: true,
+      progress: 1,
+    });
+  });
+
+  test("prioritizes an available script that resolves the active guidance gate", async () => {
+    const game = makeGame({
+      scripts: [
+        makeScript("conclusion"),
+        makeScript("target", {
+          ai: { relatedActivityIds: ["invite:kagari"] },
+        }),
+      ],
+      runFn: async function* (ctx) {
+        while (ctx.state.baseline.scripts.target?.completed !== true) {
+          const concluded = ctx.state.baseline.scripts.conclusion?.completed === true;
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: [
+                {
+                  id: "churn",
+                  kind: "action" as const,
+                  title: "Churn",
+                  cost: 0,
+                  available: true,
+                },
+                {
+                  id: "script:conclusion",
+                  kind: "script" as const,
+                  title: "Conclude",
+                  cost: 0,
+                  available: !concluded,
+                },
+                {
+                  id: "invite:kagari",
+                  kind: "action" as const,
+                  title: "Invite",
+                  cost: 0,
+                  available: concluded,
+                  requires: { scriptCompleted: "conclusion" },
+                },
+              ],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "script:conclusion") {
+            ctx.state.baseline.scripts.conclusion = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+          if (input.id === "invite:kagari" && concluded) {
+            ctx.state.baseline.scripts.target = {
+              completed: true,
+              selfSwitches: { A: false, B: false, C: false, D: false },
+            };
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 4, maxSteps: 5 },
+    );
+
+    expect(result.found).toBe(true);
+    expect(result.inputs).toEqual([
+      { type: "doActivity", id: "script:conclusion" },
+      { type: "doActivity", id: "invite:kagari" },
+    ]);
+  });
+
   test("remembers an authored gate while preparation moves to another surface", async () => {
     const game = makeGame({
       scripts: [makeScript("target", {
@@ -424,6 +573,91 @@ describe("choice state-space search", () => {
     ]);
   });
 
+  test("materializes a continuation boundary beyond a completed breadcrumb route", async () => {
+    const game = makeGame({
+      variables: [{ id: "phase", type: "number", initial: 0 }],
+      scripts: [makeScript("target", {
+        ai: { relatedActivityIds: ["invite", "depart"] },
+      })],
+      runFn: async function* (ctx) {
+        while (true) {
+          const phase = Number(ctx.state.baseline.variables.phase ?? 0);
+          if (phase >= 4) {
+            yield {
+              type: "choice" as const,
+              scriptId: "target",
+              choiceId: "promise",
+              prompt: "Promise?",
+              options: [{ id: "yes", text: "Yes", available: true }],
+            };
+            continue;
+          }
+          const activityId = ["invite", "depart", "strike", "cross"][phase]!;
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: [{
+                id: activityId,
+                kind: "action" as const,
+                title: activityId,
+                cost: 0,
+                available: true,
+              }, {
+                id: "wait",
+                kind: "action" as const,
+                title: "wait",
+                cost: 0,
+                available: true,
+              }],
+            },
+          };
+          if (input.type === "doActivity" && input.id === activityId) {
+            ctx.state.baseline.variables.phase = phase + 1;
+          }
+        }
+      },
+    });
+
+    const first = await searchForChoice(
+      game,
+      makeState(game),
+      { scriptId: "target", choiceId: "promise" },
+      { maxNodes: 4, maxSteps: 20 },
+    );
+    expect(first).toMatchObject({
+      found: false,
+      reason: "max-nodes",
+      closest: {
+        guidanceProgress: 2,
+        guidanceTotal: 2,
+        guidancePlateauSteps: 1,
+        steps: 3,
+      },
+    });
+    expect(first.closest.inputs).toEqual([
+      { type: "doActivity", id: "invite" },
+      { type: "doActivity", id: "depart" },
+      { type: "doActivity", id: "strike" },
+    ]);
+    expect(first.state.baseline.variables.phase).toBe(3);
+
+    const resumed = await searchForChoice(
+      game,
+      first.state,
+      { scriptId: "target", choiceId: "promise" },
+      { maxNodes: 3, maxSteps: 20 },
+    );
+    expect(resumed.found).toBe(true);
+    expect(resumed.inputs).toEqual([{ type: "doActivity", id: "cross" }]);
+  });
+
   test("reports a bounded miss without mutating the source state", async () => {
     const game = makeGame({
       characters: [makeCharacter("alice")],
@@ -490,6 +724,10 @@ describe("choice state-space search", () => {
 
     expect(compareChoiceSearchAssessment(deep, shallow)).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
+      { ...deep, inputs: Array(120).fill({ type: "next" as const }), steps: 120 },
+      { ...deep, inputs: Array(96).fill({ type: "next" as const }), steps: 96 },
+    )).toBeLessThan(0);
+    expect(compareChoiceSearchAssessment(
       { ...deep, satisfiedRequirements: 1 },
       { ...shallow, satisfiedRequirements: 1 },
     )).toBeLessThan(0);
@@ -497,6 +735,59 @@ describe("choice state-space search", () => {
       { ...deep, totalRequirements: 0 },
       { ...shallow, totalRequirements: 0 },
     )).toBeLessThan(0);
+    const blockedGuidanceRequirement = {
+      activityId: "invite:kagari",
+      condition: { not: { switch: { name: "official_duty" } } } as const,
+      satisfied: false,
+      progress: 0,
+      satisfiedRequirements: 0,
+      totalRequirements: 1,
+      regressionsFromSource: 0,
+    };
+    expect(compareChoiceSearchAssessment(
+      {
+        ...deep,
+        totalRequirements: 0,
+        guidanceRequirement: blockedGuidanceRequirement,
+      },
+      {
+        ...shallow,
+        totalRequirements: 0,
+        guidanceRequirement: blockedGuidanceRequirement,
+      },
+    )).toBeGreaterThan(0);
+    expect(compareChoiceSearchAssessment(
+      {
+        ...shallow,
+        totalRequirements: 0,
+        guidanceRequirement: blockedGuidanceRequirement,
+      },
+      { ...deep, totalRequirements: 0 },
+    )).toBeGreaterThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...deep, totalRequirements: 0 },
+      {
+        ...shallow,
+        totalRequirements: 0,
+        guidanceRequirement: blockedGuidanceRequirement,
+      },
+    )).toBeLessThan(0);
+    expect(compareChoiceSearchAssessment(
+      {
+        ...deep,
+        totalRequirements: 0,
+        guidanceProgress: 2,
+        guidanceTotal: 2,
+        guidancePlateauSteps: 3,
+      },
+      {
+        ...shallow,
+        totalRequirements: 0,
+        guidanceProgress: 2,
+        guidanceTotal: 2,
+        guidancePlateauSteps: 0,
+      },
+    )).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
       { ...deep, outputType: "gameEnd" },
       deep,

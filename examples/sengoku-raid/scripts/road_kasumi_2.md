@@ -2,6 +2,10 @@
 id: road_kasumi_2
 title: 道中 ・ 霞 ・ 二
 characters: [kasumi]
+requires:
+  all:
+    - { switch: { name: befriended_kasumi } }
+    - { switch: { name: road_kasumi_seen } }
 ai:
   relatedActivityIds:
     - invite:kasumi

@@ -67,6 +67,10 @@ export interface ChoiceSearchClosest {
   outputType: Output["type"] | null;
   /** Ordered authored activity breadcrumbs currently followed by this path. */
   guidanceProgress?: number;
+  /** Number of authored activity breadcrumbs in the target route. */
+  guidanceTotal?: number;
+  /** Steps taken after the last authored breadcrumb, bounded for tie-breaking. */
+  guidancePlateauSteps?: number;
   /** Low-risk cycle recovery taken while the next authored activity is closed. */
   guidancePreparation?: number;
   /** Progress toward the exact gate on the next authored hub activity. */
@@ -176,7 +180,7 @@ async function searchForTarget(
     maxSteps,
   );
   const queue: SearchNode[] = [start];
-  rememberGuidanceGates(start.output, target, start.guidanceGates);
+  rememberGuidanceGates(game, start.output, target, start.guidanceGates);
   rememberSatisfiedGuidanceLeaves(start, target);
   const visited = new Set<string>();
   let exploredNodes = 0;
@@ -268,7 +272,7 @@ async function searchForTarget(
           node.satisfiedGuidanceLeaves,
           node.guidanceGates,
         );
-        rememberGuidanceGates(child.output, target, child.guidanceGates);
+        rememberGuidanceGates(game, child.output, target, child.guidanceGates);
         rememberSatisfiedGuidanceLeaves(child, target);
         queue.push(child);
       } catch {
@@ -379,6 +383,12 @@ function candidateInputs(
           .flatMap((objective) => objective.relatedActivityIds ?? [])
           .map((id, index) => [id, index]),
       );
+      const prerequisiteScriptRank = new Map(
+        guidanceCondition && state
+          ? incompletePrerequisiteScripts(guidanceCondition, state)
+              .map((id, index) => [`script:${id}`, index])
+          : [],
+      );
       return output.snapshot.activities
         .filter((activity) => activity.available)
         .sort((left, right) => {
@@ -390,6 +400,13 @@ function candidateInputs(
             Number(right.id === nextGuidanceId) -
             Number(left.id === nextGuidanceId);
           if (guidanceDifference !== 0) return guidanceDifference;
+          const leftPrerequisiteRank =
+            prerequisiteScriptRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+          const rightPrerequisiteRank =
+            prerequisiteScriptRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+          if (leftPrerequisiteRank !== rightPrerequisiteRank) {
+            return leftPrerequisiteRank - rightPrerequisiteRank;
+          }
           const leftAuthoredRank = authoredActivityRank.get(left.id) ?? Number.MAX_SAFE_INTEGER;
           const rightAuthoredRank = authoredActivityRank.get(right.id) ?? Number.MAX_SAFE_INTEGER;
           if (leftAuthoredRank !== rightAuthoredRank) return leftAuthoredRank - rightAuthoredRank;
@@ -416,6 +433,35 @@ function candidateInputs(
     case "gameEnd":
       return [];
   }
+}
+
+function incompletePrerequisiteScripts(
+  condition: Condition,
+  state: ComposedState,
+): string[] {
+  const ids: string[] = [];
+  const visit = (candidate: Condition): void => {
+    if ("all" in candidate) {
+      candidate.all.forEach(visit);
+      return;
+    }
+    if ("any" in candidate) {
+      candidate.any.forEach(visit);
+      return;
+    }
+    if ("not" in candidate) {
+      return;
+    }
+    if (
+      "scriptCompleted" in candidate &&
+      state.baseline.scripts[candidate.scriptCompleted]?.completed !== true &&
+      !ids.includes(candidate.scriptCompleted)
+    ) {
+      ids.push(candidate.scriptCompleted);
+    }
+  };
+  visit(condition);
+  return ids;
 }
 
 function relatedActivities(game: Game, scriptId: string): string[] {
@@ -487,6 +533,10 @@ function assessNode(
     node.inputs,
     target.relatedActivityIds,
   );
+  const guidanceCompletionStep = orderedGuidanceCompletionStep(
+    node.inputs,
+    target.relatedActivityIds,
+  );
   const nextGuidanceActivityId = target.relatedActivityIds[guidanceProgress];
   const guidanceCondition = nextGuidanceActivityId
     ? node.guidanceGates.get(nextGuidanceActivityId)
@@ -509,6 +559,10 @@ function assessNode(
     requirements,
     outputType: node.output?.type ?? null,
     guidanceProgress,
+    guidanceTotal: target.relatedActivityIds.length,
+    ...(guidanceCompletionStep !== null
+      ? { guidancePlateauSteps: node.inputs.length - guidanceCompletionStep }
+      : {}),
     ...(guidanceRequirement && nextGuidanceActivityId
       ? {
           guidanceRequirement: {
@@ -532,6 +586,7 @@ function assessNode(
 }
 
 function rememberGuidanceGates(
+  game: Game,
   output: Output | null,
   target: SearchTarget,
   gates: Map<string, Condition>,
@@ -539,9 +594,35 @@ function rememberGuidanceGates(
   if (output?.type !== "hubMenu") return;
   for (const activity of output.snapshot.activities) {
     if (activity.requires && target.relatedActivityIds.includes(activity.id)) {
-      gates.set(activity.id, activity.requires);
+      gates.set(activity.id, expandScriptRequirements(game, activity.requires));
     }
   }
+}
+
+function expandScriptRequirements(game: Game, condition: Condition): Condition {
+  const visiting = new Set<string>();
+  const expand = (candidate: Condition): Condition => {
+    if ("all" in candidate) return { all: candidate.all.map(expand) };
+    if ("any" in candidate) return { any: candidate.any.map(expand) };
+    // A negated completion gate means "the script must remain incomplete";
+    // expanding its positive prerequisites would invert a different claim.
+    if ("not" in candidate) return candidate;
+    if ("scriptCompleted" in candidate && !visiting.has(candidate.scriptCompleted)) {
+      const script = game.scripts.find((item) => item.id === candidate.scriptCompleted);
+      if (script?.requires) {
+        visiting.add(candidate.scriptCompleted);
+        const requirements = expand(script.requires);
+        visiting.delete(candidate.scriptCompleted);
+        // Preserve the exact boolean meaning of `scriptCompleted` while making
+        // its prerequisites visible to the progress scorer. The second branch
+        // cannot become true without the original completion leaf, but it can
+        // contribute fractional causal progress before completion.
+        return { any: [candidate, { all: [requirements, candidate] }] };
+      }
+    }
+    return candidate;
+  };
+  return expand(condition);
 }
 
 function rememberSatisfiedGuidanceLeaves(
@@ -605,6 +686,14 @@ export function compareChoiceSearchAssessment(
   if ((left.guidancePreparation ?? 0) !== (right.guidancePreparation ?? 0)) {
     return (left.guidancePreparation ?? 0) - (right.guidancePreparation ?? 0);
   }
+  // Give hook-driven routes a small, replayable bridge across combat/travel
+  // states that do not change the authored target score. Capping this signal
+  // prevents an impossible route from selecting a thousand-step churn path as
+  // its continuation checkpoint.
+  const plateauBridgeLimit = 32;
+  const leftPlateau = Math.min(left.guidancePlateauSteps ?? 0, plateauBridgeLimit);
+  const rightPlateau = Math.min(right.guidancePlateauSteps ?? 0, plateauBridgeLimit);
+  if (leftPlateau !== rightPlateau) return leftPlateau - rightPlateau;
   const leftTerminal = left.outputType === "gameEnd";
   const rightTerminal = right.outputType === "gameEnd";
   if (leftTerminal !== rightTerminal) return leftTerminal ? -1 : 1;
@@ -613,11 +702,36 @@ export function compareChoiceSearchAssessment(
   // plateau deeper. Once every authored requirement is satisfied, however,
   // extra depth is only churn: prefer the shortest route to the now-open
   // script activity.
-  const requirementsStillBlocked = left.totalRequirements > 0 &&
+  const leftScriptRequirementsStillBlocked = left.totalRequirements > 0 &&
     left.satisfiedRequirements < left.totalRequirements;
-  return requirementsStillBlocked
-    ? left.steps - right.steps
-    : right.steps - left.steps;
+  const rightScriptRequirementsStillBlocked = right.totalRequirements > 0 &&
+    right.satisfiedRequirements < right.totalRequirements;
+  const leftGuidanceRequirementStillBlocked =
+    (left.guidanceRequirement?.totalRequirements ?? 0) > 0 &&
+    (left.guidanceRequirement?.satisfiedRequirements ?? 0) <
+      (left.guidanceRequirement?.totalRequirements ?? 0);
+  const rightGuidanceRequirementStillBlocked =
+    (right.guidanceRequirement?.totalRequirements ?? 0) > 0 &&
+    (right.guidanceRequirement?.satisfiedRequirements ?? 0) <
+      (right.guidanceRequirement?.totalRequirements ?? 0);
+  const leftRequirementsStillBlocked =
+    leftScriptRequirementsStillBlocked || leftGuidanceRequirementStillBlocked;
+  const rightRequirementsStillBlocked =
+    rightScriptRequirementsStillBlocked || rightGuidanceRequirementStillBlocked;
+  if (leftRequirementsStillBlocked !== rightRequirementsStillBlocked) {
+    return leftRequirementsStillBlocked ? 1 : -1;
+  }
+  if (leftRequirementsStillBlocked) {
+    // Closed gates often need a sizeable authored loop (bond scene, raid,
+    // return) before their score can move. Follow that plateau far enough to
+    // persist a useful continuation, but never prefer an arbitrarily long
+    // churn path once the bounded bridge has been crossed.
+    const blockedBridgeLimit = 96;
+    const leftBridge = Math.min(left.steps, blockedBridgeLimit);
+    const rightBridge = Math.min(right.steps, blockedBridgeLimit);
+    if (leftBridge !== rightBridge) return leftBridge - rightBridge;
+  }
+  return right.steps - left.steps;
 }
 
 function rememberedGuidanceCondition(
@@ -725,6 +839,21 @@ function orderedGuidanceProgress(inputs: Input[], relatedActivityIds: string[]):
     // only the next authored activity advances the route.
   }
   return progress;
+}
+
+function orderedGuidanceCompletionStep(
+  inputs: Input[],
+  relatedActivityIds: string[],
+): number | null {
+  if (relatedActivityIds.length === 0) return null;
+  let progress = 0;
+  for (const [index, input] of inputs.entries()) {
+    if (input.type !== "doActivity") continue;
+    if (input.id !== relatedActivityIds[progress]) continue;
+    progress += 1;
+    if (progress === relatedActivityIds.length) return index + 1;
+  }
+  return null;
 }
 
 function topLevelRequirements(condition: Condition | undefined): Condition[] {
