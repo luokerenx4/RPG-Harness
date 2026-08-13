@@ -125,6 +125,31 @@ describe("structured development work execution", () => {
       .toEqual(expect.arrayContaining(["fork.json", "log.jsonl", "state.json"]));
   });
 
+  test("does not leak nested autoplay telemetry from the work CLI", async () => {
+    const gameDir = await temporaryExecutableChoiceGame();
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "work",
+      gameDir,
+      "--session",
+      "player",
+      "--key",
+      "choice-branch/scene/reply/stay",
+      "--new-session",
+      "ai-cover-quiet",
+      "--max-steps",
+      "5",
+    ], { stdout: "pipe", stderr: "pipe" });
+
+    expect(await child.exited).toBe(0);
+    expect(JSON.parse(await new Response(child.stdout).text())).toMatchObject({
+      status: "executed",
+      result: { targetChoice: { optionId: "stay", status: "selected" } },
+    });
+    expect(await new Response(child.stderr).text()).toBe("");
+  });
+
   test("routes a broken-session P0 into read-only state and log diagnosis", async () => {
     const gameDir = await temporaryWorkGame(false);
     const brokenRoot = sessionDir(gameDir, "broken");

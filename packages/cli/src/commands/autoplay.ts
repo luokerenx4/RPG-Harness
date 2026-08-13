@@ -189,7 +189,11 @@ export interface AutoplayProgress {
 }
 
 export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
-  const summary = await runAutoplay(args);
+  const summary = await runAutoplay(args, {
+    writeTelemetry: (text) => {
+      process.stderr.write(text);
+    },
+  });
   const output = args.full ? summary : compactAutoplaySummary(summary);
   process.stdout.write(
     (args.pretty ? JSON.stringify(output, null, 2) : JSON.stringify(output)) +
@@ -272,12 +276,15 @@ interface RunAutoplayInternalHooks {
   afterSessionTransaction?: () => Promise<void>;
   /** Runs after fork initialization while the same target transaction remains held. */
   afterForkInitializedWhileLocked?: () => void | Promise<void>;
+  /** Presentation sink. Library callers are silent unless they opt in. */
+  writeTelemetry?: (text: string) => void;
 }
 
 export async function runAutoplay(
   args: AutoplayArgs,
   internalHooks: RunAutoplayInternalHooks = {},
 ): Promise<AutoplaySummary> {
+  const writeTelemetry = internalHooks.writeTelemetry ?? (() => {});
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
     throw new Error("--max-steps must be a non-negative integer");
   }
@@ -365,7 +372,7 @@ export async function runAutoplay(
   // overwrite one another's stream).
   const personaRng = createPersonaRng(effectiveSeed);
 
-  process.stderr.write(
+  writeTelemetry(
     `\n=== autoplay: ${game.title} (persona: ${args.persona}) ===\n\n`,
   );
 
@@ -473,7 +480,7 @@ export async function runAutoplay(
             nextVisuals,
             assetMap,
           )) {
-            process.stderr.write("  " + line + "\n");
+            writeTelemetry("  " + line + "\n");
           }
           // Snapshot: the engine mutates state.baseline.visuals
           // in place, so without a deep copy `prevVisuals` would
@@ -486,7 +493,7 @@ export async function runAutoplay(
           };
         }
         const line = formatOutput(entry.output);
-        if (line) process.stderr.write(line + "\n");
+        if (line) writeTelemetry(line + "\n");
       },
       ...(args.stopAfterTargetScript && args.targetChoice
         ? {
@@ -521,13 +528,13 @@ export async function runAutoplay(
     await internalHooks.afterSessionTransaction();
   }
 
-  process.stderr.write(
+  writeTelemetry(
     `\n=== done: ${result.reason} after ${countDecisions(result.trace)} decisions / ${countRejectedInputs(result.trace)} rejected inputs / ${result.trace.length} visible outputs ===\n`,
   );
-  if (result.error) process.stderr.write(`error: ${result.error}\n`);
+  if (result.error) writeTelemetry(`error: ${result.error}\n`);
 
   const ending = detectTerminalScriptId(result);
-  if (ending) process.stderr.write(`ending: ${ending}\n`);
+  if (ending) writeTelemetry(`ending: ${ending}\n`);
   const progress = summarizeAutoplayProgress(
     autoplayInitialState,
     result.finalState,

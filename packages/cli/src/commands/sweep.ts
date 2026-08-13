@@ -49,7 +49,6 @@ export interface SweepResult {
     completedItems: number;
     remainingItems: number;
     nextKey: string | null;
-    remainingKeys: string[];
   };
   safety: {
     immutableWorklist: true;
@@ -68,7 +67,10 @@ export interface SweepResult {
     key: string;
     targetSession: string | null;
     status: WorkResult["status"];
-    result: WorkResult;
+    evidence: {
+      safety: WorkResult["safety"];
+      output: unknown;
+    };
   }>;
 }
 
@@ -199,7 +201,10 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
       key: item.key,
       targetSession,
       status: result.status,
-      result,
+      evidence: {
+        safety: result.safety,
+        output: compactSweepOutput(result),
+      },
     });
     const consumedNodes = searchNodes(result);
     usedNodes += consumedNodes;
@@ -368,7 +373,6 @@ function resultEnvelope(
       completedItems,
       remainingItems: remainingKeys.length,
       nextKey: remainingKeys[0] ?? null,
-      remainingKeys,
     },
     safety: {
       immutableWorklist: true,
@@ -395,8 +399,8 @@ function pausedSearchContinuation(
   runs: SweepResult["runs"],
 ): ReachChoiceContinuation["next"] | ReachScriptContinuation["next"] | null {
   const last = runs.at(-1);
-  if (last?.status !== "paused" || !isRecord(last.result.result)) return null;
-  const continuation = last.result.result.continuation;
+  if (last?.status !== "paused" || !isRecord(last.evidence.output)) return null;
+  const continuation = last.evidence.output.continuation;
   if (!isRecord(continuation) || !isRecord(continuation.next)) return null;
   const next = continuation.next;
   if (next.command !== "reach" && next.command !== "reach-script") return null;
@@ -404,6 +408,49 @@ function pausedSearchContinuation(
   return next as unknown as
     | ReachChoiceContinuation["next"]
     | ReachScriptContinuation["next"];
+}
+
+function compactSweepOutput(result: WorkResult): unknown {
+  if (result.operation?.command !== "cover" || !isRecord(result.result)) {
+    return result.result;
+  }
+  const output = result.result;
+  const progress = isRecord(output.progress)
+    ? {
+        madeProgress: output.progress.madeProgress,
+        completedScripts: boundedSweepList(output.progress.completedScripts),
+        objectiveChanges: boundedSweepList(output.progress.objectiveChanges),
+      }
+    : undefined;
+  const decisionPath = isRecord(output.decisionPath) &&
+      typeof output.decisionPath.revision === "string"
+    ? { revision: output.decisionPath.revision }
+    : undefined;
+  const targetChoice = isRecord(output.targetChoice)
+    ? {
+        key: output.targetChoice.key,
+        optionId: output.targetChoice.optionId,
+        status: output.targetChoice.status,
+      }
+    : undefined;
+  return {
+    reason: output.reason,
+    ...(progress ? { progress } : {}),
+    ...(decisionPath ? { decisionPath } : {}),
+    inputs: output.inputs,
+    rejectedInputs: output.rejectedInputs,
+    visibleOutputs: output.visibleOutputs,
+    ending: output.ending,
+    session: output.session,
+    webPath: output.webPath,
+    ...(targetChoice ? { targetChoice } : {}),
+    targetScriptCompleted: output.targetScriptCompleted,
+  };
+}
+
+function boundedSweepList(value: unknown): { count: number; recent: unknown[] } {
+  const items = Array.isArray(value) ? value : [];
+  return { count: items.length, recent: items.slice(-10) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

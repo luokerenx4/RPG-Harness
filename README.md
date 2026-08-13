@@ -294,6 +294,10 @@ revision prevents a changed queue from silently continuing at the wrong item.
 Diagnostics and
 checkpoint-backed branch coverage cost no search nodes, while unreachable
 searches return their closest requirements as development evidence.
+Sweep output is an orchestration envelope rather than a transcript: it omits
+the snapshot's full remaining-key list and nested coverage response traces,
+retaining the exact next key, revision, write boundary, causal result identity,
+and GUI-compatible branch session where complete evidence remains available.
 Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
 detailed artifacts are actually needed.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:

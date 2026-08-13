@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createInitialState } from "@rpg-harness/engine";
+import { createInitialState, peek, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import { saveSession, sessionDir } from "../session";
+import { appendLog, saveSession, sessionDir } from "../session";
 import { runDevelopmentSweep } from "./sweep";
 
 const temporaryDirectories: string[] = [];
@@ -41,7 +41,6 @@ describe("bounded development sweep", () => {
         completedItems: 1,
         remainingItems: 1,
         nextKey: "story/scene-b",
-        remainingKeys: ["story/scene-b"],
       },
       safety: {
         immutableWorklist: true,
@@ -57,9 +56,9 @@ describe("bounded development sweep", () => {
         key: "story/scene-a",
         targetSession: "ai-sweep-001",
         status: "executed",
-        result: {
+        evidence: {
           safety: { mode: "isolated-session", targetSession: "ai-sweep-001" },
-          result: { found: true, replayVerified: true },
+          output: { found: true, replayVerified: true },
         },
       }],
     });
@@ -105,7 +104,6 @@ describe("bounded development sweep", () => {
       snapshot: {
         completedItems: 1,
         nextKey: "story/scene-b",
-        remainingKeys: ["story/scene-b"],
       },
       safety: {
         nodeBudget: { limit: 2, used: 2, remaining: 0 },
@@ -133,7 +131,6 @@ describe("bounded development sweep", () => {
       snapshot: {
         completedItems: 0,
         nextKey: "story/scene-a",
-        remainingKeys: ["story/scene-a", "story/scene-b"],
       },
       safety: {
         nodeBudget: { limit: 20, used: 1, remaining: 19 },
@@ -155,13 +152,13 @@ describe("bounded development sweep", () => {
       runs: [{
         key: "story/scene-a",
         status: "paused",
-        result: {
+        evidence: {
           safety: {
             mode: "isolated-session",
             writes: true,
             targetSession: "per-item-budget-001",
           },
-          result: {
+          output: {
             reason: "max-nodes",
             continuation: {
               sourceSession: "per-item-budget-001",
@@ -265,6 +262,51 @@ describe("bounded development sweep", () => {
     await expect(readdir(sessionDir(gameDir, "skip-resolved-001")))
       .rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  test("keeps checkpoint coverage batches bounded and points details at the branch", async () => {
+    const gameDir = await temporarySweepChoiceGame();
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "sweep",
+      gameDir,
+      "--session",
+      "player",
+      "--session-prefix",
+      "choice-sweep",
+      "--limit",
+      "1",
+      "--max-steps",
+      "20",
+    ], { stdout: "pipe", stderr: "pipe" });
+    expect(await child.exited).toBe(0);
+    const stdout = await new Response(child.stdout).text();
+    const result = JSON.parse(stdout) as Awaited<ReturnType<typeof runDevelopmentSweep>>;
+    expect(await new Response(child.stderr).text()).toBe("");
+
+    expect(result).toMatchObject({
+      status: "completed",
+      snapshot: { remainingItems: 1, nextKey: expect.any(String) },
+      runs: [{
+        status: "executed",
+        evidence: {
+          safety: { mode: "isolated-session", writes: true },
+          output: {
+            reason: "completed",
+            decisionPath: { revision: expect.stringMatching(/^[a-f0-9]{64}$/) },
+            session: "choice-sweep-001",
+            webPath: "/?session=choice-sweep-001",
+            targetChoice: { status: "selected" },
+            targetScriptCompleted: true,
+          },
+        },
+      }],
+    });
+    expect(result.snapshot).not.toHaveProperty("remainingKeys");
+    expect(result.runs[0]?.evidence.output).not.toHaveProperty("responseTrace");
+    expect(result.runs[0]?.evidence.output).not.toHaveProperty("choiceCoverage");
+    expect(stdout.length).toBeLessThan(2_500);
+  });
 });
 
 async function temporarySweepGame(): Promise<string> {
@@ -288,6 +330,42 @@ async function temporarySweepGame(): Promise<string> {
   }
   const game = await loadGame(dir);
   await saveSession(dir, "player", createInitialState(game));
+  return dir;
+}
+
+async function temporarySweepChoiceGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-choice-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), "title: Sweep choice test\n", "utf-8");
+  await writeFile(path.join(dir, "scripts", "scene.md"), [
+    "---",
+    "id: scene",
+    "title: Scene",
+    "characters: []",
+    "---",
+    "",
+    "? Reply. {id: reply}",
+    "- Stay {id: stay, ai: social}",
+    "- Leave {id: leave, ai: independent}",
+    "",
+    "A deliberately long response that belongs in the persisted branch transcript.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  const game = await loadGame(dir);
+  const ready = await peek(game, createInitialState(game));
+  const presented = await step(
+    game,
+    ready.state,
+    { type: "select", scriptId: "scene" },
+  );
+  await saveSession(dir, "player", presented.state);
+  await appendLog(dir, "player", {
+    input: { type: "select", scriptId: "scene" },
+    output: presented.output,
+  }, presented.state);
   return dir;
 }
 

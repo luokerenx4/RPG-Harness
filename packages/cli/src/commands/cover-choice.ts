@@ -30,7 +30,11 @@ export interface CoverChoiceSummary extends AutoplaySummary {
 }
 
 export async function coverChoiceCommand(args: CoverChoiceArgs): Promise<void> {
-  const summary = await runChoiceCoverageWorkItem(args);
+  const summary = await runChoiceCoverageWorkItem(args, {
+    writeTelemetry: (text) => {
+      process.stderr.write(text);
+    },
+  });
   process.stdout.write(
     (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) +
       "\n",
@@ -39,6 +43,7 @@ export async function coverChoiceCommand(args: CoverChoiceArgs): Promise<void> {
 
 export async function runChoiceCoverageWorkItem(
   args: CoverChoiceArgs,
+  internalHooks: { writeTelemetry?: (text: string) => void } = {},
 ): Promise<CoverChoiceSummary> {
   if (!args.session) throw new Error("--session is required");
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 1) {
@@ -53,23 +58,28 @@ export async function runChoiceCoverageWorkItem(
     );
   }
   const workItem = selectWorkItem(coverage.workItems, args.key);
-  const summary = await runAutoplay({
-    gameDir: args.gameDir,
-    persona: args.persona,
-    verbose: args.verbose,
-    maxSteps: args.maxSteps,
-    session: args.session,
-    fromSession: workItem.evidence.fork.from,
-    fromLogEntry: workItem.evidence.fork.at,
-    targetChoice: {
-      key: workItem.key,
-      scriptId: workItem.scriptId,
-      choiceId: workItem.choiceId,
-      optionId: workItem.optionId,
-      optionText: workItem.optionText,
+  const summary = await runAutoplay(
+    {
+      gameDir: args.gameDir,
+      persona: args.persona,
+      verbose: args.verbose,
+      maxSteps: args.maxSteps,
+      session: args.session,
+      fromSession: workItem.evidence.fork.from,
+      fromLogEntry: workItem.evidence.fork.at,
+      targetChoice: {
+        key: workItem.key,
+        scriptId: workItem.scriptId,
+        choiceId: workItem.choiceId,
+        optionId: workItem.optionId,
+        optionText: workItem.optionText,
+      },
+      stopAfterTargetScript: true,
     },
-    stopAfterTargetScript: true,
-  });
+    internalHooks.writeTelemetry
+      ? { writeTelemetry: internalHooks.writeTelemetry }
+      : {},
+  );
   if (summary.targetChoice?.status !== "selected") {
     throw new Error(
       `Choice coverage work item was not selected: ${workItem.key}${

@@ -94,6 +94,35 @@ describe("coverage-driven autoplay", () => {
       (entry.decision as { optionId?: string } | undefined)?.optionId !== undefined
     )).toBe(false);
   });
+
+  test("keeps direct cover telemetry while returning JSON on stdout", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await seedFirstBranch(gameDir);
+    const child = Bun.spawn([
+      process.execPath,
+      path.resolve(import.meta.dir, "../bin.ts"),
+      "cover",
+      gameDir,
+      "--session",
+      "cover-cli",
+      "--source-session",
+      "seed-alpha",
+      "--key",
+      "intro/opening/beta",
+      "--persona",
+      "greedy",
+      "--max-steps",
+      "20",
+    ], { stdout: "pipe", stderr: "pipe" });
+
+    expect(await child.exited).toBe(0);
+    expect(JSON.parse(await new Response(child.stdout).text())).toMatchObject({
+      targetChoice: { optionId: "beta", status: "selected" },
+    });
+    const telemetry = await new Response(child.stderr).text();
+    expect(telemetry).toContain("=== autoplay: Choice coverage test");
+    expect(telemetry).toContain("=== done: completed");
+  });
 });
 
 async function temporaryChoiceGame(): Promise<string> {
