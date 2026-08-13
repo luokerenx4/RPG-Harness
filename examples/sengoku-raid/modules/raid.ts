@@ -161,6 +161,7 @@ function negotiationWindowConsumed(
 // crucially, "what map am I on now" is not stored here, it lives in
 // `state.baseline.currentMapId` (engine-canonical).
 interface RaidInstance {
+  id: number;
   chain: string;
   entryMapId: string;
   visited: Record<string, MapInstance>;
@@ -174,6 +175,7 @@ interface RaidInstance {
 }
 
 interface RaidModuleState {
+  nextRaidId: number;
   // "In a raid?" is equivalent to `raid !== null`. The previous explicit
   // `mode: "hub" | "raid"` flag was redundant with the raid sub-state
   // pointer; collapsed in the flat-map migration.
@@ -209,6 +211,8 @@ function moduleState(ctx: Ctx): RaidModuleState {
   if (!s) throw new Error(`${MODULE_ID}: module state missing`);
   // Live saves from before deferred trigger delivery had no queue.
   s.pendingScripts ??= [];
+  s.nextRaidId ??= 1;
+  if (s.raid && !Number.isInteger(s.raid.id)) s.raid.id = s.nextRaidId++;
   return s;
 }
 
@@ -228,6 +232,14 @@ function currentMapInstance(ctx: Ctx): MapInstance | undefined {
   const id = ctx.state.baseline.currentMapId;
   if (id === null) return undefined;
   return m.raid.visited[id];
+}
+
+function combatPacingInstanceId(ctx: Ctx): string | undefined {
+  const m = moduleState(ctx);
+  const mapId = ctx.state.baseline.currentMapId;
+  const encounter = currentMapInstance(ctx)?.encounter;
+  if (!m.raid || !mapId || !encounter) return undefined;
+  return `raid:${m.raid.id}/map:${mapId}/enemy:${encounter.enemyId}`;
 }
 
 function ensureMapInstance(ctx: Ctx, mapId: string): MapInstance {
@@ -1302,6 +1314,7 @@ function buildRaidMenu(ctx: Ctx): Output {
   }
 
   if (inst.encounter) {
+    const pacingInstanceId = combatPacingInstanceId(ctx);
     const companionRefusesAttack =
       m.raid.companionAttackRefused === true &&
       m.companion !== null &&
@@ -1338,10 +1351,17 @@ function buildRaidMenu(ctx: Ctx): Output {
       inst.encounter.enemyHpMax,
     );
     const fleeChance = fleeSuccessChancePercent(ctx);
-    const fleeFailureDamage = Math.max(
-      2,
-      enemyAttackPower(ctx, inst.encounter.enemyId) + 1,
+    const fleeFailureDamage = failedFleeDamage(ctx, inst.encounter.enemyId);
+    const carriedLootAtRisk = Object.values(m.raid.pendingLoot).some(
+      (quantity) => quantity > 0,
     );
+    // This is semantic guidance, not a persona special case: when another
+    // non-lethal attack can expose the player to a fatal counter, carried loot
+    // makes withdrawal an economic action. GUI and Headless clients receive
+    // the same recommendation and can still choose to gamble.
+    const withdrawalProtectsLoot = carriedLootAtRisk &&
+      normalKillForecast !== "確定" &&
+      counterDamage.player.max >= playerStat(ctx, "hp");
     activities.push({
       id: "attack",
       kind: "action",
@@ -1349,6 +1369,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       title: `斬る — ${enemyName(ctx, inst.encounter.enemyId)}（HP ${inst.encounter.enemyHp}/${inst.encounter.enemyHpMax}）`,
       description: "妖刀威力 × (1 + 霊体化×0.04) × ばらつき",
       category: "combat",
+      ...(pacingInstanceId ? { pacingInstanceId } : {}),
       cost: 0,
       available: !companionRefusesAttack,
       ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
@@ -1434,6 +1455,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       title: "不意打ちを狙う",
       description: "学識+霊体化と敵の狡知で判定。成功で大ダメージ、失敗で外す",
       category: "combat",
+      ...(pacingInstanceId ? { pacingInstanceId } : {}),
       cost: 0,
       available: !companionRefusesAttack,
       ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
@@ -1515,6 +1537,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: "峰を返して押さえ込む",
         description: "交渉できる体力まで留める。威力に関係なく敵の反撃を受ける",
         category: "combat",
+        ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
         forecast: {
@@ -1557,8 +1580,14 @@ function buildRaidMenu(ctx: Ctx): Output {
       kind: "action",
       actionKind: "flee",
       title: "逃げる",
-      description: "霊体化判定。失敗で一発被弾",
+      description: withdrawalProtectsLoot
+        ? "このまま斬れば反撃で倒れる恐れがある。携行品を守るなら今退け"
+        : "霊体化判定。失敗で一発被弾",
       category: "combat",
+      ...(pacingInstanceId ? { pacingInstanceId } : {}),
+      ...(withdrawalProtectsLoot
+        ? { aiTags: ["economic", "profit", "cautious"], recommended: true }
+        : {}),
       cost: 0,
       available: true,
       forecast: {
@@ -1590,6 +1619,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: `聞き出す — ${enemyName(ctx, inst.encounter.enemyId)}`,
         description: `成功率 ${negotiateDropChance(cunning)}%（cunning ${cunning}）。失敗でも斬り直せる`,
         category: "combat",
+        ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
       });
@@ -1600,6 +1630,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: `逃がす — ${enemyName(ctx, inst.encounter.enemyId)}`,
         description: "霊体化 -2、戦利品なし。撤退して大名府へ戻ると、その鬼種の回想が現れる",
         category: "combat",
+        ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
       });
@@ -1614,6 +1645,7 @@ function buildRaidMenu(ctx: Ctx): Output {
           : "妖刀の声（霊体化が低くて聞こえない）",
         description: "4 倍の威力で必ず止め。脈絡選択は強制「鬼」",
         category: "combat",
+        ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: voiceAvailable,
         lockedReason: voiceAvailable
@@ -1875,6 +1907,11 @@ function fleeSuccessChancePercent(ctx: Ctx): number {
   return Math.max(0, Math.min(100, 80 - playerStat(ctx, "spectral")));
 }
 
+function failedFleeDamage(ctx: Ctx, enemyId: string): number {
+  const incoming = Math.max(2, enemyAttackPower(ctx, enemyId) + 1);
+  return Math.min(incoming, Math.max(0, playerStat(ctx, "hp") - 1));
+}
+
 function counterAttackDamageRange(ctx: Ctx, enemyId: string): NumericRange {
   const power = enemyAttackPower(ctx, enemyId);
   const ordinary = boundedFloorRange(power, 0.8, 1.2);
@@ -1964,6 +2001,7 @@ function startRaid(ctx: Ctx, chain: string, entryId: string): void {
 
   enterMap(ctx.state, ctx.game, entryId);
   m.raid = {
+    id: m.nextRaidId++,
     chain,
     entryMapId: entryId,
     visited: {},
@@ -2340,11 +2378,15 @@ function doFlee(ctx: Ctx): void {
     zone.encounterCleared = true;
     setPlayerStat(ctx, "mental", Math.max(0, playerStat(ctx, "mental") - 1));
   } else {
-    const dmg = Math.max(2, enemyAttackPower(ctx, enemyId) + 1);
+    // Flee is the combat menu's survival valve. A failed attempt still costs
+    // HP, but cannot itself kill the player; choosing another attack remains
+    // the deliberate lethal gamble. This keeps the public "escape" action
+    // executable even at critical HP instead of presenting a false way out.
+    const dmg = failedFleeDamage(ctx, enemyId);
     setPlayerStat(ctx, "hp", playerStat(ctx, "hp") - dmg);
-    ctx.state.runtime.pendingNarrations.push(
-      `背を見せた瞬間、${enemyName(ctx, enemyId)}に追いつかれた——${dmg} のダメージ。`,
-    );
+    ctx.state.runtime.pendingNarrations.push(dmg > 0
+      ? `背を見せた瞬間、${enemyName(ctx, enemyId)}に追いつかれた——${dmg} のダメージ。辛うじて踏み留まった。`
+      : `背を見せた瞬間、${enemyName(ctx, enemyId)}の刃が迫る。お主は最後の一歩で受け流した——もう退くしかない。`);
   }
 }
 
@@ -3584,6 +3626,7 @@ const raidModule: Module = {
   aiPersonas: raidAiPersonas,
 
   initialize: (_game: Game): RaidModuleState => ({
+    nextRaidId: 1,
     raid: null,
     metCharacters: [],
     companion: null,

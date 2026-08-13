@@ -199,6 +199,36 @@ describe("greedy persona progress tie-breaker", () => {
       personas.greedy!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "conclude:rite" });
   });
+
+  test("protects carried value when a risky game marks withdrawal as economic", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "attack",
+        kind: "action",
+        title: "Risk another counterattack",
+        cost: 0,
+        available: true,
+      },
+      {
+        id: "flee",
+        kind: "action",
+        title: "Protect carried loot",
+        cost: 0,
+        available: true,
+        aiTags: ["economic", "profit", "cautious"],
+        recommended: true,
+      },
+    ];
+    output.snapshot.resourceGroups = [{
+      id: "carried-loot",
+      title: "Carried loot",
+      resources: [{ id: "oni_horn", name: "Horn", quantity: 1 }],
+    }];
+    await expect(
+      personas.greedy!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "flee" });
+  });
 });
 
 describe("charmer persona exploration", () => {

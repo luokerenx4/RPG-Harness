@@ -194,6 +194,9 @@ function checkActivity(
   ) {
     return `activity ${a.id}: expected aiTags to exclude "${a.aiTagsExcludes}", got ${JSON.stringify(act.aiTags ?? [])}`;
   }
+  if (a.recommended !== undefined && act.recommended !== a.recommended) {
+    return `activity ${a.id}: expected recommended=${a.recommended}, got ${String(act.recommended)}`;
+  }
   if (a.requires !== undefined && !deepEqual(act.requires, a.requires)) {
     return `activity ${a.id}: expected requires=${JSON.stringify(a.requires)}, got ${JSON.stringify(act.requires)}`;
   }

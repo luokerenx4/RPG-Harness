@@ -57,6 +57,7 @@ export interface ActivityAssertion {
   effectsHintIncludes?: string;
   aiTagsIncludes?: string;
   aiTagsExcludes?: string;
+  recommended?: boolean;
   requires?: unknown;
   forecastMetric?: string;
   forecastMetricPresent?: boolean;

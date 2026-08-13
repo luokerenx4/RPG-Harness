@@ -47,6 +47,7 @@ describe("presentHeadlessOutput", () => {
           kind: "action",
           title: "Depart",
           category: "raid",
+          pacingInstanceId: "raid:7/map:gate",
           cost: 0,
           available: true,
         },
@@ -103,6 +104,7 @@ describe("presentHeadlessOutput", () => {
           candidates: [
             {
               activityId: "depart",
+              pacingInstanceId: "raid:7/map:gate",
               input: { type: "doActivity", id: "depart" },
               title: "Depart",
             },

@@ -177,6 +177,7 @@ export type AutoplaySemanticDecision =
       type: "doActivity";
       id: string;
       actionKind?: string;
+      pacingInstanceId?: string;
       aiTags?: string[];
       /** Active public objectives that explicitly offered this activity. */
       linkedObjectiveIds?: string[];
@@ -866,6 +867,9 @@ export function summarizeDecisionPath(
           type: "doActivity",
           id: activityId,
           ...(activity?.actionKind ? { actionKind: activity.actionKind } : {}),
+          ...(activity?.pacingInstanceId
+            ? { pacingInstanceId: activity.pacingInstanceId }
+            : {}),
           ...(activity?.aiTags?.length ? { aiTags: [...activity.aiTags] } : {}),
           ...(linkedObjectiveIds?.length ? { linkedObjectiveIds } : {}),
         });

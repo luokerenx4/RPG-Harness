@@ -130,7 +130,11 @@ The compact matrix does not equate an ending with a route. `runAutoplay`
 content-addresses the accepted semantic inputs (`choose` by authored identity,
 `select` by script id, and `doActivity` by activity id plus its `aiTags`), while
 `audit` reports unique path and ending counts, executed activity-tag coverage,
-and persona-grouped stable-choice divergences. A project may require critical
+distinct semantic pacing events, raw accepted activity totals, and
+persona-grouped stable-choice divergences. Activities can share a stable
+`pacingInstanceId` when several actions belong to one encounter or transaction;
+an omitted id deliberately counts every dispatch as a separate pacing event.
+A project may require critical
 activity tags and newly completed script ids in `ai_audit`, turning skipped
 gameplay surfaces or unreachable deep authored events into replayable
 quality-gate work instead of trusting path hashes as an indirect proxy.

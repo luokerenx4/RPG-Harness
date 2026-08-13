@@ -11,6 +11,7 @@ interface HeadlessActivityCandidate {
   input: { type: "doActivity"; id: string };
   title: string;
   description?: string;
+  pacingInstanceId?: string;
   forecast?: ActivityForecast;
 }
 
@@ -252,6 +253,9 @@ function summarizeCandidates(
         title: activity.title,
         ...(activity.description !== undefined
           ? { description: activity.description }
+          : {}),
+        ...(activity.pacingInstanceId !== undefined
+          ? { pacingInstanceId: activity.pacingInstanceId }
           : {}),
         ...(activity.forecast !== undefined
           ? { forecast: activity.forecast }

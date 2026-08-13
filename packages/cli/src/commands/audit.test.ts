@@ -621,6 +621,36 @@ describe("autoplay audit matrix", () => {
     });
   });
 
+  test("separates multi-round action intensity from distinct pacing events", async () => {
+    const gameDir = await temporaryRepetitionGame("attack", "encounter:one");
+    const summary = await runAudit({
+      gameDir,
+      sessionPrefix: "pacing-instance-matrix",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: 23,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.lanes[0]?.path).toMatchObject({
+      semanticActivityCounts: { attack: 1 },
+      semanticActivityActionCounts: { attack: 3 },
+    });
+    expect(summary.qualityGate).toMatchObject({
+      status: "passed",
+      observed: {
+        maxActivityRepetition: {
+          activityKind: "attack",
+          count: 1,
+          limit: 2,
+        },
+      },
+      violations: [],
+    });
+    expect(await listPlaytestReports(gameDir)).toEqual([]);
+  });
+
   test("fails when no acceptance lane completes a required deep script", async () => {
     const gameDir = await temporaryRequiredScriptGame();
     const game = await loadGame(gameDir);
@@ -1200,7 +1230,10 @@ async function temporaryActivityGame(): Promise<string> {
   return dir;
 }
 
-async function temporaryRepetitionGame(activityKind = "search"): Promise<string> {
+async function temporaryRepetitionGame(
+  activityKind = "search",
+  pacingInstanceId?: string,
+): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-repetition-"));
   temporaryDirectories.push(dir);
   await mkdir(path.join(dir, "modules"), { recursive: true });
@@ -1217,7 +1250,7 @@ async function temporaryRepetitionGame(activityKind = "search"): Promise<string>
     "  for (let index = 0; index < 3; index += 1) {",
     `    const id = \`${activityKind}:zone-\${index}\`;`,
     `    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "${activityKind}-loop", title: "Repeat activity", scope: "main", terminal: false, status: "active", relatedActivityIds: [id] }], activities: [`,
-    `      { id, kind: "action", actionKind: "${activityKind}", title: "Act", cost: 0, available: true },`,
+    `      { id, kind: "action", actionKind: "${activityKind}", title: "Act", cost: 0, available: true${pacingInstanceId ? `, pacingInstanceId: "${pacingInstanceId}"` : ""} },`,
     "    ] } };",
     "  }",
     '  ctx.state.baseline.completionOrder.push("ending");',

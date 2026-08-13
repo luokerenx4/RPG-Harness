@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createInitialState } from "@rpg-harness/engine";
+import { createInitialState, type Output } from "@rpg-harness/engine";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import {
@@ -54,6 +54,43 @@ describe("autoplay ending summary", () => {
 });
 
 describe("autoplay semantic decision paths", () => {
+  test("retains the authored pacing-instance identity in semantic evidence", () => {
+    const hub: Output = {
+      type: "hubMenu",
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "attack",
+          kind: "action",
+          actionKind: "attack",
+          pacingInstanceId: "encounter:oni-1",
+          title: "Attack",
+          cost: 0,
+          available: true,
+        }],
+      },
+    };
+    expect(summarizeDecisionPath([
+      { input: null, output: hub },
+      {
+        input: { type: "doActivity", id: "attack" },
+        inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
+        output: { type: "narration", text: "Hit" },
+      },
+    ]).decisions).toEqual([{
+      type: "doActivity",
+      id: "attack",
+      actionKind: "attack",
+      pacingInstanceId: "encounter:oni-1",
+    }]);
+  });
+
   test("keeps default CLI output bounded while pointing at exact details", () => {
     const full = {
       reason: "completed",

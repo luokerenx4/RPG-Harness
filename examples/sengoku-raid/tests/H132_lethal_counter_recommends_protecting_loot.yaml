@@ -1,0 +1,49 @@
+name: a lethal counter forecast marks withdrawal as economic loot protection
+description: |
+  GUI and Headless players must receive the same semantic recommendation when
+  another non-lethal attack can lose carried loot to a fatal counterattack.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_drowned_shrine
+    weapons:
+      ancestor_yaodao: { power: 6 }
+    characters:
+      player:
+        stats:
+          hp: 3
+          mental: 4
+          spectral: 2
+          intellect: 20
+        custom: {}
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 4
+      pendingLoot: { oni_horn: 1 }
+      visited:
+        sumida_river_drowned_shrine:
+          visited: true
+          searched: true
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 8
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: attack
+    forecastMetric: kill_outcome
+    metricValue: 可能
+  - kind: activity
+    id: attack
+    forecastMetric: counter_damage
+    metricMax: 8
+  - kind: activity
+    id: flee
+    aiTagsIncludes: economic
+    recommended: true

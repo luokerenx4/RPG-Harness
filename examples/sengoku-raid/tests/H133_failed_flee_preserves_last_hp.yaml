@@ -1,0 +1,54 @@
+name: a failed flee remains a costly but executable survival action
+description: |
+  Flee is the only universal escape action during combat. Even when its roll
+  fails at critical HP it may wound the player, but it must leave one HP so
+  that the player can try again instead of dying through the escape button.
+state:
+  runtime:
+    rng:
+      algorithm: mulberry32
+      state: 7
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: sumida_river_drowned_shrine
+    weapons:
+      ancestor_yaodao: { power: 6 }
+    characters:
+      player:
+        stats:
+          hp: 3
+          mental: 4
+          spectral: 79
+          intellect: 20
+        custom: {}
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: sumida_river
+      entryMapId: sumida_river_bridge_foot
+      turnsTaken: 4
+      pendingLoot: { oni_horn: 1 }
+      visited:
+        sumida_river_drowned_shrine:
+          visited: true
+          searched: true
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 8
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: flee }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.characters.player.stats.hp
+    eq: 1
+  - kind: state
+    path: sengoku-raid.raid.visited.sumida_river_drowned_shrine.encounter.enemyHp
+    eq: 8
+  - kind: activity
+    id: flee
+    forecastMetric: failure_damage
+    metricValue: 0

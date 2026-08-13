@@ -714,8 +714,11 @@ not exceed the declared matrix size. `max_activity_repetitions` is the default
 semantic pacing budget for one activity kind in one lane; exact
 `max_activity_repetitions_by_kind` entries override it. This lets a game budget
 multi-round combat separately from route-level movement without weakening the
-default applied to search, travel, or future activity kinds. The gate is
-evaluated only when every lane
+default applied to search, travel, or future activity kinds. Dynamic activities
+may also publish a stable `pacingInstanceId`: multiple accepted rounds against
+one encounter remain visible as raw action intensity, while the repetition gate
+counts that encounter once. Without an instance id, every dispatch remains a
+distinct pacing event. The gate is evaluated only when every lane
 reaches a terminal ending. Passing matrices stay silent. A completed matrix
 below either threshold, missing a required activity tag, or never completing a
 required script creates one

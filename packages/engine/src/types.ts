@@ -1246,6 +1246,13 @@ export interface HubActivity {
   // distinct from array order: use it only when the game genuinely recommends
   // an activity, not merely to choose a default for a meaningful decision.
   recommended?: boolean;
+  /**
+   * Stable identity of the gameplay event this action advances for pacing
+   * analysis. Repeated actions with the same actionKind + pacingInstanceId
+   * count as one encounter/transaction instead of several route repetitions.
+   * Omit it when every dispatch is itself a distinct pacing event.
+   */
+  pacingInstanceId?: string;
   // Machine-readable runtime forecast for decisions whose odds or effects can
   // be calculated before dispatch. Metrics are intentionally generic so games
   // can expose combat damage, escape chance, cost, duration, reputation, etc.

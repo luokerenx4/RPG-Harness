@@ -69,7 +69,10 @@ export interface AuditLaneSummary {
     semanticDecisions: number;
     choices: number;
     activityTags: string[];
+    /** Distinct semantic pacing events (encounters, transactions, route steps). */
     semanticActivityCounts: Record<string, number>;
+    /** Raw accepted actions, retained when one event takes multiple rounds. */
+    semanticActivityActionCounts: Record<string, number>;
     /** Public objective ids observed linking each executed semantic activity. */
     semanticActivityObjectives: Record<string, string[]>;
   };
@@ -456,6 +459,7 @@ export async function runAudit(
           activityTags: lane.path.activityTags,
           completedScripts: lane.progress.completedScripts,
           semanticActivityCounts: lane.path.semanticActivityCounts,
+          semanticActivityActionCounts: lane.path.semanticActivityActionCounts,
           semanticActivityObjectives: lane.path.semanticActivityObjectives,
         })),
         choiceDivergences,
@@ -594,13 +598,23 @@ function summarizeAuditLane(
           decision.type === "doActivity" ? decision.aiTags ?? [] : []
         ))].sort(),
         semanticActivityCounts: Object.fromEntries(
+          [...decisions.reduce((counts, decision, index) => {
+            if (decision.type === "doActivity") {
+              const semanticActivity = decision.actionKind ?? decision.id;
+              const instances = counts.get(semanticActivity) ?? new Set<string>();
+              instances.add(decision.pacingInstanceId ?? `action:${index}`);
+              counts.set(semanticActivity, instances);
+            }
+            return counts;
+          }, new Map<string, Set<string>>())]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([activityKind, instances]) => [activityKind, instances.size]),
+        ),
+        semanticActivityActionCounts: Object.fromEntries(
           [...decisions.reduce((counts, decision) => {
             if (decision.type === "doActivity") {
               const semanticActivity = decision.actionKind ?? decision.id;
-              counts.set(
-                semanticActivity,
-                (counts.get(semanticActivity) ?? 0) + 1,
-              );
+              counts.set(semanticActivity, (counts.get(semanticActivity) ?? 0) + 1);
             }
             return counts;
           }, new Map<string, number>())]
