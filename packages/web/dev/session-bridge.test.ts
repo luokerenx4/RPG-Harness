@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   clearBridgeSession,
+  createBridgeExploration,
   createBridgeFeedback,
   developmentStatusInvalidation,
   installDevelopmentStatusInvalidation,
   loadBridgeBranchContext,
   loadBridgeDevelopmentStatus,
+  loadBridgeExplorationStatus,
   loadBridgeFeedbackFeed,
   loadBridgeSession,
   loadBridgeSnapshot,
@@ -268,6 +270,72 @@ describe("Web development session bridge", () => {
       }],
     });
     expect(resolvedFeed.revision).not.toBe(openFeed.revision);
+  });
+
+  test("continues a completed playthrough on an isolated AI choice branch", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, [
+      "autoplay", gameDir,
+      "--persona", "greedy",
+      "--session", "finished-player",
+      "--max-steps", "20",
+    ]);
+    const sourceDir = path.join(gameDir, ".rpg-harness", "sessions", "finished-player");
+    const sourceState = await readFile(path.join(sourceDir, "state.json"), "utf-8");
+    const sourceLog = await readFile(path.join(sourceDir, "log.jsonl"), "utf-8");
+
+    const status = await loadBridgeExplorationStatus(gameDir, "finished-player");
+    expect(status).toMatchObject({
+      revision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      pendingOptions: 1,
+      next: {
+        key: "intro/opening/beta",
+        scriptId: "intro",
+        choiceId: "opening",
+        optionId: "beta",
+        optionText: "Beta",
+      },
+    });
+
+    const branch = await createBridgeExploration(
+      gameDir,
+      "finished-player",
+      status.next!.key,
+      () => 1234,
+    );
+    expect(branch.sourceSession).toBe("finished-player");
+    expect(branch.session).toMatch(/^explore-finished-player-ya-[a-f0-9]{8}$/);
+    expect(branch.workItem).toEqual(status.next);
+    expect(branch.webPath).toBe(
+      `/?session=${branch.session}&game=${encodeURIComponent(path.basename(gameDir))}`,
+    );
+    expect(await readFile(path.join(sourceDir, "state.json"), "utf-8")).toBe(sourceState);
+    expect(await readFile(path.join(sourceDir, "log.jsonl"), "utf-8")).toBe(sourceLog);
+    expect(await loadBridgeBranchContext(gameDir, branch.session)).toMatchObject({
+      fromSession: "finished-player",
+      sourceLogEntry: 2,
+      mode: "checkpoint",
+      handoff: {
+        workKey: "choice-branch/intro/opening/beta",
+        kind: "choice-branch",
+        operation: "cover",
+        state: "covered",
+        coordinates: {
+          scriptId: "intro",
+          choiceId: "opening",
+          optionId: "beta",
+        },
+      },
+      // The autonomous cover run records its stable selection in the branch
+      // log; the handoff title/coordinates are sufficient even though there
+      // is no later player decision to project as an outcome.
+      outcome: null,
+    });
+    // A child lineage stops its source evidence at the fork checkpoint, so it
+    // still offers the original sibling answer. The player's family combines
+    // both branches and is complete.
+    expect((await loadBridgeExplorationStatus(gameDir, branch.session)).pendingOptions).toBe(1);
+    expect((await loadBridgeExplorationStatus(gameDir, "finished-player")).pendingOptions).toBe(0);
   });
 
   test("rejects malformed player feedback before writing an issue", async () => {
@@ -549,4 +617,43 @@ async function temporaryGame(): Promise<string> {
     "utf-8",
   );
   return dir;
+}
+
+async function temporaryChoiceGame(): Promise<string> {
+  const dir = await temporaryGame();
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "scripts", "intro.md"), [
+    "---",
+    "id: intro",
+    "title: Intro",
+    "characters: []",
+    "---",
+    "",
+    "Before.",
+    "",
+    "? Pick one. {id: opening}",
+    "- Alpha {id: alpha}",
+    "- Beta {id: beta}",
+    "",
+    "After.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function runCli(gameDir: string, args: string[]): Promise<unknown> {
+  const child = Bun.spawn([
+    process.execPath,
+    path.resolve(import.meta.dir, "../../cli/src/bin.ts"),
+    ...args,
+  ], { stdout: "pipe", stderr: "pipe" });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (exitCode !== 0) throw new Error(`CLI failed for ${gameDir}: ${stderr}`);
+  return JSON.parse(stdout);
 }

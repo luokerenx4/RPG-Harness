@@ -8,7 +8,7 @@ import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 describe("Web terminal handoff", () => {
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -36,6 +36,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "forecast-detail-hidden",
         text: "ダメージ 14–21 HP",
+      }, {
+        surface: "terminal-ai-branch",
+        text: "AI BRANCH · 3 PATHS次: Remember the others",
       }],
     });
   });
@@ -68,6 +71,34 @@ describe("Web terminal handoff", () => {
 
     expect(html).toContain("― 終 ―");
     expect(html).not.toContain("ended-ending-id");
+  });
+
+  test("hands a recoverable choice branch back to the player after an ending", () => {
+    let explored = false;
+    const html = renderToStaticMarkup(
+      <StageView
+        stage={{ kind: "ended", endingId: "ending_oni_self" }}
+        game={{ scripts: [{ id: "ending_oni_self", title: "鬼の器" }] } as unknown as Game}
+        onInput={() => {}}
+        exploration={{
+          revision: "choices",
+          pendingOptions: 17,
+          next: {
+            key: "ending_oni_self/final-tether/kagari",
+            scriptId: "ending_oni_self",
+            choiceId: "final-tether",
+            optionId: "kagari",
+            optionText: "篝の槍の拍を思い出す",
+          },
+        }}
+        onExplore={() => { explored = true; }}
+      />,
+    );
+
+    expect(html).toContain("AI BRANCH · 17 PATHS");
+    expect(html).toContain("篝の槍の拍を思い出す");
+    expect(html).toContain("この結末は残したまま");
+    expect(explored).toBe(false);
   });
 
   test("explains why an AI-prepared branch was handed to the player", () => {

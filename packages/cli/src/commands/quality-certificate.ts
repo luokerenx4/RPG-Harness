@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 7;
+  schemaVersion: 8;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -314,7 +314,8 @@ export interface QualitySurfaceEvidence {
       | "locked-condition"
       | "machine-effect-hidden"
       | "forecast-unit-hidden"
-      | "forecast-detail-hidden";
+      | "forecast-detail-hidden"
+      | "terminal-ai-branch";
     text: string;
   }>;
 }
@@ -353,6 +354,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "forecast-detail-hidden",
   text: "ダメージ 14–21 HP",
+}, {
+  surface: "terminal-ai-branch",
+  text: "AI BRANCH · 3 PATHS次: Remember the others",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -671,7 +675,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 7 &&
+    value.schemaVersion === 8 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

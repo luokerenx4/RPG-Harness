@@ -109,6 +109,25 @@ export interface BridgeFeedbackFeed {
   }>;
 }
 
+export interface BridgeExplorationStatus {
+  revision: string;
+  pendingOptions: number;
+  next: {
+    key: string;
+    scriptId: string;
+    choiceId: string;
+    optionId: string;
+    optionText: string;
+  } | null;
+}
+
+export interface BridgeExplorationReceipt {
+  sourceSession: string;
+  session: string;
+  webPath: string;
+  workItem: NonNullable<BridgeExplorationStatus["next"]>;
+}
+
 export async function createBridgeFeedback(
   args: CreateBridgeFeedbackArgs,
 ): Promise<BridgeFeedbackReport> {
@@ -213,6 +232,74 @@ export async function loadBridgeFeedbackFeed(
     open: items.filter((item) => item.status === "open").length,
     resolved: items.filter((item) => item.status === "resolved").length,
     items,
+  };
+}
+
+export async function loadBridgeExplorationStatus(
+  gameDir: string,
+  session: string,
+): Promise<BridgeExplorationStatus> {
+  assertSegment(session, "session");
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const { stdout } = await execFileAsync("bun", [
+    cli,
+    "choices",
+    gameDir,
+    "--session",
+    session,
+    "--family",
+    "--status",
+    "pending",
+    "--format",
+    "json",
+  ], { maxBuffer: 8 * 1024 * 1024 });
+  const report = parseChoiceCoveragePayload(stdout);
+  const workItems = report.workItems.map(parseExplorationWorkItem);
+  return {
+    revision: createHash("sha256")
+      .update(JSON.stringify(workItems))
+      .digest("hex")
+      .slice(0, 16),
+    pendingOptions: workItems.length,
+    next: workItems[0] ?? null,
+  };
+}
+
+export async function createBridgeExploration(
+  gameDir: string,
+  sourceSession: string,
+  key: string,
+  now: () => number = Date.now,
+): Promise<BridgeExplorationReceipt> {
+  assertSegment(sourceSession, "source session");
+  if (!key.trim()) throw new RequestError(400, "Exploration work key cannot be empty");
+  const status = await loadBridgeExplorationStatus(gameDir, sourceSession);
+  const workItem = status.next?.key === key
+    ? status.next
+    : await findBridgeExplorationWorkItem(gameDir, sourceSession, key);
+  if (!workItem) throw new RequestError(409, `Pending exploration branch not found: ${key}`);
+  const session = explorationSessionName(sourceSession, now(), randomUUID());
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  await execFileAsync("bun", [
+    cli,
+    "cover",
+    gameDir,
+    "--session",
+    session,
+    "--source-session",
+    sourceSession,
+    "--key",
+    key,
+    "--persona",
+    "objective",
+    "--max-steps",
+    "1000",
+  ], { maxBuffer: 8 * 1024 * 1024 });
+  return {
+    sourceSession,
+    session,
+    webPath: `/?session=${encodeURIComponent(session)}&game=${encodeURIComponent(path.basename(gameDir))}`,
+    workItem,
   };
 }
 
@@ -621,6 +708,29 @@ async function handleBridgeRequest(
       return true;
     }
 
+    const explorationMatch = url.pathname.match(
+      /^\/__rpgh\/session-bridge\/exploration\/([^/]+)\/([^/]+)$/,
+    );
+    if (explorationMatch) {
+      if (req.method !== "GET" && req.method !== "POST") {
+        return methodNotAllowed(res, ["GET", "POST"]);
+      }
+      const gameId = decodeURIComponent(explorationMatch[1] ?? "");
+      const session = decodeURIComponent(explorationMatch[2] ?? "");
+      assertSegment(gameId, "game id");
+      assertSegment(session, "session");
+      const gameDir = path.join(examplesRoot, gameId);
+      await access(path.join(gameDir, "game.yaml"));
+      if (req.method === "GET") {
+        sendJson(res, 200, await loadBridgeExplorationStatus(gameDir, session));
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const key = typeof body.key === "string" ? body.key : "";
+      sendJson(res, 201, await createBridgeExploration(gameDir, session, key));
+      return true;
+    }
+
     const feedbackMatch = url.pathname.match(
       /^\/__rpgh\/session-bridge\/feedback\/([^/]+)\/([^/]+)$/,
     );
@@ -746,6 +856,65 @@ function isPlayerFeedbackReport(value: unknown): value is {
     (origin as Record<string, unknown>).surface === "web" &&
     report.evidence !== null && typeof report.evidence === "object" &&
     !Array.isArray(report.evidence);
+}
+
+function parseChoiceCoveragePayload(stdout: string): {
+  workItems: unknown[];
+} {
+  const payload = JSON.parse(stdout) as unknown;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Invalid choice coverage payload");
+  }
+  const workItems = (payload as Record<string, unknown>).workItems;
+  if (!Array.isArray(workItems)) throw new Error("Invalid choice coverage work items");
+  return { workItems };
+}
+
+function parseExplorationWorkItem(value: unknown): NonNullable<BridgeExplorationStatus["next"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid exploration work item");
+  }
+  const item = value as Record<string, unknown>;
+  for (const field of ["key", "scriptId", "choiceId", "optionId", "optionText"] as const) {
+    if (typeof item[field] !== "string" || !item[field].trim()) {
+      throw new Error(`Invalid exploration work item ${field}`);
+    }
+  }
+  return {
+    key: item.key as string,
+    scriptId: item.scriptId as string,
+    choiceId: item.choiceId as string,
+    optionId: item.optionId as string,
+    optionText: item.optionText as string,
+  };
+}
+
+async function findBridgeExplorationWorkItem(
+  gameDir: string,
+  sourceSession: string,
+  key: string,
+): Promise<NonNullable<BridgeExplorationStatus["next"]> | null> {
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const { stdout } = await execFileAsync("bun", [
+    cli,
+    "choices",
+    gameDir,
+    "--session",
+    sourceSession,
+    "--family",
+    "--status",
+    "pending",
+    "--format",
+    "json",
+  ], { maxBuffer: 8 * 1024 * 1024 });
+  return parseChoiceCoveragePayload(stdout).workItems
+    .map(parseExplorationWorkItem)
+    .find((item) => item.key === key) ?? null;
+}
+
+function explorationSessionName(sourceSession: string, timestamp: number, uuid: string): string {
+  const source = sourceSession.replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 36);
+  return `explore-${source}-${timestamp.toString(36)}-${uuid.slice(0, 8)}`;
 }
 
 function isPlayerFeedbackVerification(value: unknown): value is {

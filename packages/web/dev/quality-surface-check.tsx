@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 7;
+  schemaVersion: 8;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -20,7 +20,8 @@ export interface WebQualitySurfaceEvidence {
       | "locked-condition"
       | "machine-effect-hidden"
       | "forecast-unit-hidden"
-      | "forecast-detail-hidden";
+      | "forecast-detail-hidden"
+      | "terminal-ai-branch";
     text: string;
   }>;
 }
@@ -150,17 +151,53 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     text: expectedProof,
   }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection(),
   forecastUnitProjection(), forecastDetailProjection()];
+  projections.push(terminalExplorationProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function terminalExplorationProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  let explored = false;
+  const tree = StageView({
+    stage: { kind: "ended", endingId: "ending" },
+    game: { scripts: [{ id: "ending", title: "Ending" }] } as unknown as Game,
+    onInput: () => {},
+    exploration: {
+      revision: "branch-proof",
+      pendingOptions: 3,
+      next: {
+        key: "ending/final/friends",
+        scriptId: "ending",
+        choiceId: "final",
+        optionId: "friends",
+        optionText: "Remember the others",
+      },
+    },
+    onExplore: () => { explored = true; },
+  });
+  const control = findElement(tree, (element) =>
+    typeof element.props.onClick === "function" &&
+    nodeText(element.props.children).includes("AI に別の分岐を探索させる")
+  );
+  if (!control) throw new Error("Web terminal surface is missing AI branch control");
+  (control.props.onClick as () => void)();
+  const text = nodeText(tree);
+  if (!explored || !text.includes("AI BRANCH · 3 PATHS") || !text.includes("Remember the others")) {
+    throw new Error("Web terminal surface does not expose recoverable branch evidence");
+  }
+  return {
+    surface: "terminal-ai-branch",
+    text: "AI BRANCH · 3 PATHS次: Remember the others",
   };
 }
 

@@ -142,6 +142,25 @@ export interface WebFeedbackFeed {
   }>;
 }
 
+export interface WebExplorationStatus {
+  revision: string;
+  pendingOptions: number;
+  next: {
+    key: string;
+    scriptId: string;
+    choiceId: string;
+    optionId: string;
+    optionText: string;
+  } | null;
+}
+
+export interface WebExplorationReceipt {
+  sourceSession: string;
+  session: string;
+  webPath: string;
+  workItem: NonNullable<WebExplorationStatus["next"]>;
+}
+
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
 
@@ -241,6 +260,38 @@ export async function loadFeedbackFeed(gameId: string): Promise<WebFeedbackFeed 
   );
   if (!response.ok) throw await bridgeError(response);
   return await response.json() as WebFeedbackFeed;
+}
+
+export async function loadExplorationStatus(
+  gameId: string,
+): Promise<WebExplorationStatus | null> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return null;
+  const response = await fetch(
+    `${BRIDGE_ROOT}/exploration/${encodeURIComponent(gameId)}/${encodeURIComponent(info.session)}`,
+  );
+  if (!response.ok) throw await bridgeError(response);
+  return await response.json() as WebExplorationStatus;
+}
+
+export async function startNextExploration(
+  gameId: string,
+  key: string,
+): Promise<WebExplorationReceipt> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") {
+    throw new Error("AI branch exploration requires the local shared-session bridge");
+  }
+  const response = await fetch(
+    `${BRIDGE_ROOT}/exploration/${encodeURIComponent(gameId)}/${encodeURIComponent(info.session)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    },
+  );
+  if (!response.ok) throw await bridgeError(response);
+  return await response.json() as WebExplorationReceipt;
 }
 
 export async function saveState(

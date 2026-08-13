@@ -1,4 +1,5 @@
 import {
+  attachDevelopmentBranchHandoff,
   readSessionLog,
   type LoggedStep,
 } from "./fork";
@@ -94,6 +95,22 @@ export async function runChoiceCoverageWorkItem(
       `Choice coverage response did not finish target script: ${workItem.scriptId}`,
     );
   }
+  await attachDevelopmentBranchHandoff(args.gameDir, args.session, {
+    schemaVersion: 1,
+    workKey: `choice-branch/${workItem.key}`,
+    priority: "P3",
+    kind: "choice-branch",
+    title: `Explore authored choice: ${workItem.optionText}`,
+    operation: "cover",
+    state: "covered",
+    preparedAt: new Date().toISOString(),
+    ...(workItem.source ? { target: workItem.source } : {}),
+    coordinates: {
+      scriptId: workItem.scriptId,
+      choiceId: workItem.choiceId,
+      optionId: workItem.optionId,
+    },
+  });
   return {
     ...summary,
     workItem,

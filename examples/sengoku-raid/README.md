@@ -23,6 +23,12 @@ rpgh transcript . --session NAME --tail 40            # fork 元を含む実プ�
 rpgh test .                                  # fixture 回帰
 ```
 
+共有 Web セッションで結末へ到達すると、同じ `choices --family` 証拠が
+**AI BRANCH** として終局画面に現れる。未探索の安定 option を一つ選ぶたび、
+元の結末を残したまま checkpoint から独立セッションを作り、その場で別の
+返答の後へ deep-link する。プレイヤーの一周目は上書きされず、AI の分岐結果は
+次回の family coverage にそのまま戻る。
+
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
 密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。
 Web と Headless は同じ共有 view から main の候補を案内し、AI persona も目標の

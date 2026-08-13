@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readSessionLog } from "./fork";
@@ -72,6 +72,25 @@ describe("coverage-driven autoplay", () => {
     expect((await readSessionLog(gameDir, "cover-beta")).some((entry) =>
       (entry.decision as { optionId?: string } | undefined)?.optionId === "beta"
     )).toBe(true);
+    expect(JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "cover-beta", "fork.json"),
+      "utf-8",
+    ))).toMatchObject({
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-branch/intro/opening/beta",
+        priority: "P3",
+        kind: "choice-branch",
+        title: "Explore authored choice: Beta",
+        operation: "cover",
+        state: "covered",
+        coordinates: {
+          scriptId: "intro",
+          choiceId: "opening",
+          optionId: "beta",
+        },
+      },
+    });
   });
 
   test("refuses a stale work item instead of selecting the same array index", async () => {

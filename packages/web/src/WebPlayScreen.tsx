@@ -40,6 +40,7 @@ import { VisualLayer } from "./VisualLayer";
 import type {
   WebBranchContext,
   WebDevelopmentStatus,
+  WebExplorationStatus,
   WebFeedbackArea,
   WebFeedbackFeed,
   WebFeedbackInput,
@@ -77,6 +78,9 @@ interface Props {
   feedbackEnabled?: boolean;
   onFeedback?: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
   feedbackFeed?: WebFeedbackFeed;
+  explorationEnabled?: boolean;
+  onLoadExploration?: () => Promise<WebExplorationStatus | null>;
+  onExplore?: (key: string) => Promise<void>;
   onExit?: () => void;
 }
 
@@ -105,6 +109,9 @@ export function WebPlayScreen({
   feedbackEnabled = false,
   onFeedback,
   feedbackFeed,
+  explorationEnabled = false,
+  onLoadExploration,
+  onExplore,
   onExit,
 }: Props) {
   const [model, dispatch] = useReducer(modelReducer, initialModel);
@@ -116,10 +123,42 @@ export function WebPlayScreen({
   const [showArtBook, setShowArtBook] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
+  const [exploration, setExploration] = useState<WebExplorationStatus | null>(null);
+  const [exploring, setExploring] = useState(false);
+  const [explorationError, setExplorationError] = useState<string | null>(null);
 
   const assetMap = useRef(
     new Map((game.assets ?? []).map((a) => [a.path, a] as const)),
   ).current;
+
+  useEffect(() => {
+    if (model.stage.kind !== "ended" || !explorationEnabled || !onLoadExploration) {
+      return;
+    }
+    let cancelled = false;
+    setExplorationError(null);
+    void onLoadExploration().then((status) => {
+      if (!cancelled) setExploration(status);
+    }).catch((cause) => {
+      if (!cancelled) {
+        setExplorationError(cause instanceof Error ? cause.message : String(cause));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [model.stage.kind, explorationEnabled, onLoadExploration]);
+
+  const exploreNextBranch = useCallback(async () => {
+    const next = exploration?.next;
+    if (!next || !onExplore || exploring) return;
+    setExploring(true);
+    setExplorationError(null);
+    try {
+      await onExplore(next.key);
+    } catch (cause) {
+      setExplorationError(cause instanceof Error ? cause.message : String(cause));
+      setExploring(false);
+    }
+  }, [exploration, exploring, onExplore]);
 
   const commit = useCallback(
     async (
@@ -235,7 +274,15 @@ export function WebPlayScreen({
         <StatusBar snapshot={model.stage.snapshot} />
       )}
       <div className="stage-area">
-        <StageView stage={model.stage} game={game} onInput={sendInput} />
+        <StageView
+          stage={model.stage}
+          game={game}
+          onInput={sendInput}
+          exploration={exploration}
+          exploring={exploring}
+          explorationError={explorationError}
+          onExplore={onExplore ? () => void exploreNextBranch() : undefined}
+        />
       </div>
       {inputNotice && !inputNotice.accepted && (
         <div className="input-notice" role="status">
@@ -491,10 +538,18 @@ export function StageView({
   stage,
   game,
   onInput,
+  exploration,
+  exploring = false,
+  explorationError,
+  onExplore,
 }: {
   stage: Stage;
   game: Game;
   onInput: (input: Input) => void;
+  exploration?: WebExplorationStatus | null;
+  exploring?: boolean;
+  explorationError?: string | null;
+  onExplore?: () => void;
 }) {
   switch (stage.kind) {
     case "loading":
@@ -694,6 +749,25 @@ export function StageView({
           {endingTitle && <div className="ended-ending-title">{endingTitle}</div>}
           {stage.endingId && <code className="ended-ending-id">{stage.endingId}</code>}
           {stage.reason && <div className="ended-reason">{stage.reason}</div>}
+          {exploration?.next && (
+            <div className="ended-exploration">
+              <div className="ended-exploration-kicker">AI BRANCH · {exploration.pendingOptions} PATHS</div>
+              <div className="ended-exploration-title">別の選択から、物語を続ける</div>
+              <div className="ended-exploration-next">次: {exploration.next.optionText}</div>
+              <button
+                className="ended-exploration-btn"
+                disabled={exploring}
+                onClick={onExplore}
+              >
+                {exploring ? "AI が分岐を探索中…" : "AI に別の分岐を探索させる"}
+              </button>
+              <div className="ended-exploration-note">この結末は残したまま、checkpoint から独立した共有セッションを作ります。</div>
+            </div>
+          )}
+          {exploration && !exploration.next && (
+            <div className="ended-exploration-complete">この lineage の選択分岐はすべて探索済みです。</div>
+          )}
+          {explorationError && <div className="ended-exploration-error" role="alert">{explorationError}</div>}
         </div>
       );
   }

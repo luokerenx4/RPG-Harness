@@ -786,7 +786,9 @@ because a sample is not evidence of authored intent.
 `cover` is the execution half of that contract: it consumes an available branch
 without requiring an agent to manually translate evidence into `fork` and
 `step` commands, and fails closed if live authoring removed, locked, or replaced
-the targeted stable option.
+the targeted stable option. Every covered branch now persists the same stable
+choice coordinates and source target as an AI handoff, so GUI and Headless agree
+on why that isolated save exists.
 `work` adds a development handoff to every playable isolated branch it materializes:
 the stable work key, priority, intent, operation, source fork, and whether the
 target was reached, only a closest state was found, the issue was reproduced,
@@ -814,6 +816,13 @@ freezes the current project-input revision; it cannot be closed by prose alone.
 `rpgh verify-feedback` requires a changed revision, no unrelated pending work,
 and a matching project quality certificate, then the GUI shows the before/after
 revision and certificate as player-visible repair proof.
+At a shared-session ending, Web also projects the current lineage's recoverable
+choice work instead of reducing the save to a dead **The End** screen. It shows
+the pending branch count and next authored option; one click invokes the public
+`cover` workflow, creates a uniquely named checkpoint fork, and deep-links
+directly into that GUI-compatible session. The completed save and its log stay
+byte-for-byte unchanged, while `--family` coverage observes the new branch and
+removes it from the parent's remaining queue.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

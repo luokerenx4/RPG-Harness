@@ -8,9 +8,11 @@ import {
   loadBranchContext,
   loadState,
   loadDevelopmentStatus,
+  loadExplorationStatus,
   loadFeedbackFeed,
   pollExternalState,
   saveState,
+  startNextExploration,
   submitFeedback,
   type WebSessionInfo,
   type WebBranchContext,
@@ -37,6 +39,11 @@ export function App() {
   const [sessionInfo, setSessionInfo] = useState<WebSessionInfo | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoStartConsumed, setAutoStartConsumed] = useState(false);
+  const requestedGame = useMemo(
+    () => new URLSearchParams(window.location.search).get("game"),
+    [],
+  );
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -81,6 +88,15 @@ export function App() {
       setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
     }
   }, []);
+
+  useEffect(() => {
+    if (
+      autoStartConsumed || savedGames === null || loaded || !requestedGame ||
+      !games.some((game) => game.id === requestedGame)
+    ) return;
+    setAutoStartConsumed(true);
+    void start(requestedGame, false);
+  }, [autoStartConsumed, games, loaded, requestedGame, savedGames, start]);
 
   useEffect(() => {
     if (!loaded || loaded.sessionInfo.mode !== "shared") return;
@@ -249,6 +265,12 @@ export function App() {
         feedbackEnabled={loaded.sessionInfo.mode === "shared"}
         onFeedback={(input) => submitFeedback(loaded.id, input)}
         feedbackFeed={loaded.feedbackFeed}
+        explorationEnabled={loaded.sessionInfo.mode === "shared"}
+        onLoadExploration={() => loadExplorationStatus(loaded.id)}
+        onExplore={async (key) => {
+          const branch = await startNextExploration(loaded.id, key);
+          window.location.assign(branch.webPath);
+        }}
         onExit={exit}
       />
     );
