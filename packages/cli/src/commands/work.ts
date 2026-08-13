@@ -31,7 +31,7 @@ export interface WorkArgs {
 
 export interface WorkResult {
   schemaVersion: 1;
-  status: "clean" | "executed" | "prepared" | "failed";
+  status: "clean" | "executed" | "paused" | "prepared" | "failed";
   selection: {
     key: string;
     priority: DevelopmentWorkItem["priority"];
@@ -194,14 +194,28 @@ export async function executeDevelopmentWorkItem(
         pretty: false,
       });
       const wroteSession = result.session !== undefined;
-      return result.found ? executed(
-        selection,
-        operation,
-        wroteSession ? "isolated-session" : "read-only",
-        wroteSession,
-        result.session ?? null,
-        compactReachResult(result),
-      ) : failed(selection, operation, compactReachResult(result));
+      return result.found
+        ? executed(
+            selection,
+            operation,
+            wroteSession ? "isolated-session" : "read-only",
+            wroteSession,
+            result.session ?? null,
+            compactReachResult(result),
+          )
+        : result.status === "paused"
+          ? pausedAfterWrite(
+              selection,
+              operation,
+              result.session ?? target,
+              compactReachResult(result),
+            )
+          : failedAfterWrite(
+              selection,
+              operation,
+              result.session ?? target,
+              compactReachResult(result),
+            );
     }
     case "reach-script": {
       const target = requireNewSession(args, item);
@@ -231,7 +245,19 @@ export async function executeDevelopmentWorkItem(
             result.session ?? null,
             compactReachScriptResult(result),
           )
-        : failed(selection, operation, compactReachScriptResult(result));
+        : result.status === "paused"
+          ? pausedAfterWrite(
+              selection,
+              operation,
+              result.session ?? target,
+              compactReachScriptResult(result),
+            )
+          : failedAfterWrite(
+              selection,
+              operation,
+              result.session ?? target,
+              compactReachScriptResult(result),
+            );
     }
     case "edit": {
       const scriptId = typeof item.coordinates.scriptId === "string"
@@ -321,6 +347,7 @@ function compactReachResult(result: ReachChoiceSummary) {
     replayVerified: result.replayVerified,
     ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
     ...(result.report ? { report: result.report } : {}),
+    ...(result.continuation ? { continuation: result.continuation } : {}),
   };
 }
 
@@ -340,6 +367,7 @@ function compactReachScriptResult(result: ReachScriptSummary) {
     output: compactOutput(result.output),
     replayVerified: result.replayVerified,
     ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
+    ...(result.continuation ? { continuation: result.continuation } : {}),
   };
 }
 
@@ -381,21 +409,6 @@ function compactClosest(closest: ReachChoiceSummary["closest"]) {
   };
 }
 
-function failed(
-  selection: NonNullable<WorkResult["selection"]>,
-  operation: DevelopmentOperation,
-  result: unknown,
-): WorkResult {
-  return {
-    schemaVersion: 1,
-    status: "failed",
-    selection,
-    operation,
-    safety: { mode: "read-only", writes: false, targetSession: null },
-    result,
-  };
-}
-
 function failedAfterWrite(
   selection: NonNullable<WorkResult["selection"]>,
   operation: DevelopmentOperation,
@@ -405,6 +418,26 @@ function failedAfterWrite(
   return {
     schemaVersion: 1,
     status: "failed",
+    selection,
+    operation,
+    safety: {
+      mode: "isolated-session",
+      writes: true,
+      targetSession,
+    },
+    result,
+  };
+}
+
+function pausedAfterWrite(
+  selection: NonNullable<WorkResult["selection"]>,
+  operation: DevelopmentOperation,
+  targetSession: string,
+  result: unknown,
+): WorkResult {
+  return {
+    schemaVersion: 1,
+    status: "paused",
     selection,
     operation,
     safety: {

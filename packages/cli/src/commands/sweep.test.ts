@@ -141,11 +141,34 @@ describe("bounded development sweep", () => {
       resume: {
         fromKey: "story/scene-a",
         snapshotRevision: expect.any(String),
+        next: {
+          command: "reach-script",
+          args: {
+            scriptId: "scene-a",
+            fromSession: "per-item-budget-001",
+            session: "<new-session>",
+            maxNodes: 1,
+            maxSteps: 20,
+          },
+        },
       },
       runs: [{
         key: "story/scene-a",
-        status: "failed",
-        result: { result: { reason: "max-nodes" } },
+        status: "paused",
+        result: {
+          safety: {
+            mode: "isolated-session",
+            writes: true,
+            targetSession: "per-item-budget-001",
+          },
+          result: {
+            reason: "max-nodes",
+            continuation: {
+              sourceSession: "per-item-budget-001",
+              next: { command: "reach-script" },
+            },
+          },
+        },
       }],
     });
   });

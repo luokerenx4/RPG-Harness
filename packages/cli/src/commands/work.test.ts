@@ -299,7 +299,7 @@ describe("structured development work execution", () => {
     expect(await snapshotTree(sessionDir(gameDir, "fresh-player"))).toEqual(sourceBefore);
   });
 
-  test("reports an unreachable authored choice as failed without creating a branch", async () => {
+  test("reports an exhausted authored choice from its closest isolated branch", async () => {
     const gameDir = await temporaryImpossibleReachGame();
     const game = await loadGame(gameDir);
     await saveSession(gameDir, "player", createInitialState(game));
@@ -316,19 +316,67 @@ describe("structured development work execution", () => {
 
     expect(result).toMatchObject({
       status: "failed",
-      safety: { mode: "read-only", writes: false, targetSession: null },
+      safety: {
+        mode: "isolated-session",
+        writes: true,
+        targetSession: "ai-unreachable",
+      },
       result: {
         status: "not-reached",
         found: false,
-        replayVerified: false,
+        replayVerified: true,
+        session: "ai-unreachable",
         closest: {
           path: { inputs: 0, decisions: 0, forcedAdvances: 0 },
         },
       },
     });
     expect(result.result).not.toHaveProperty("closest.inputs");
-    await expect(readdir(sessionDir(gameDir, "ai-unreachable"))).rejects.toMatchObject({
-      code: "ENOENT",
+    expect(await readdir(sessionDir(gameDir, "ai-unreachable")))
+      .toContain("state.json");
+  });
+
+  test("pauses max-node work with an executable closest-state continuation", async () => {
+    const gameDir = await temporaryImpossibleReachGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const result = await runDevelopmentWorkItem({
+      gameDir,
+      session: "player",
+      key: "choice-authoring/target/reply",
+      newSession: "ai-paused",
+      maxNodes: 1,
+      maxSteps: 10,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "paused",
+      safety: {
+        mode: "isolated-session",
+        writes: true,
+        targetSession: "ai-paused",
+      },
+      result: {
+        status: "paused",
+        found: false,
+        reason: "max-nodes",
+        replayVerified: true,
+        continuation: {
+          kind: "search-budget-exhausted",
+          sourceSession: "ai-paused",
+          next: {
+            command: "reach",
+            args: {
+              fromSession: "ai-paused",
+              session: "<new-session>",
+              maxNodes: 1,
+              maxSteps: 10,
+            },
+          },
+        },
+      },
     });
   });
 

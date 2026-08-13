@@ -28,8 +28,7 @@ import {
 } from "./choice-coverage";
 import {
   assertTargetEmpty,
-  createForkFromSource,
-  forkSession,
+  createForkFromSourceWithLockHeld,
   loadForkSource,
   type ForkSource,
 } from "./fork";
@@ -48,7 +47,7 @@ export interface ReachChoiceArgs {
 }
 
 export interface ReachChoiceSummary {
-  status: "reached" | "not-reached";
+  status: "reached" | "paused" | "not-reached";
   found: boolean;
   reason: "found" | "exhausted" | "max-nodes";
   target: Extract<ChoiceAuthoringWorkItem, { kind: "reach-choice" }>;
@@ -67,11 +66,28 @@ export interface ReachChoiceSummary {
     historyFallback: boolean;
   };
   attemptedSources: number;
-  fork?: Awaited<ReturnType<typeof forkSession>>;
+  fork?: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
   output: Output | null;
   replayVerified: boolean;
   closest: ChoiceSearchClosest;
   report?: PlaytestReport;
+  continuation?: ReachChoiceContinuation;
+}
+
+export interface ReachChoiceContinuation {
+  kind: "search-budget-exhausted";
+  sourceSession: string;
+  webPath: string;
+  next: {
+    command: "reach";
+    args: {
+      key: string;
+      fromSession: string;
+      session: "<new-session>";
+      maxNodes: number;
+      maxSteps: number;
+    };
+  };
 }
 
 export interface ReachChoicePathSummary {
@@ -98,7 +114,7 @@ export async function reachChoiceCommand(args: ReachChoiceArgs): Promise<void> {
     (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) +
       "\n",
   );
-  if (!summary.found) process.exitCode = 1;
+  if (summary.status === "not-reached") process.exitCode = 1;
 }
 
 export async function runReachChoice(
@@ -205,59 +221,41 @@ export async function runReachChoice(
     deepestSteps,
   };
 
+  const replayInputs = search.found ? search.inputs : search.closest.inputs;
+  const materialized = await materializeReachChoicePath(
+    args,
+    game,
+    sourceSession,
+    source,
+    replayInputs,
+  );
   let replayVerified = false;
-  let output = search.output;
-  let fork: Awaited<ReturnType<typeof forkSession>> | undefined;
+  let output = materialized.replay.output;
+  const fork = materialized.fork;
   let report: PlaytestReport | undefined;
   if (search.found) {
-    fork = await createForkFromSource({
-      gameDir: args.gameDir,
-      from: sourceSession,
-      to: args.session,
-      at: source.selectedEntry,
-      pretty: false,
-    }, source);
-    const replay = await replayPath(
-      args.gameDir,
-      args.session,
-      game,
-      search.inputs,
-    );
-    output = replay.output;
     if (!isTarget(output, target)) {
       throw new Error(
         `Reach replay missed target ${target.scriptId}/${target.choiceId}; got ${describeOutput(output)}`,
       );
     }
-    if (canonicalJson(replay.state) !== canonicalJson(search.state)) {
-      const difference = firstDifference(search.state, replay.state);
+    if (canonicalJson(materialized.replay.state) !== canonicalJson(search.state)) {
+      const difference = firstDifference(search.state, materialized.replay.state);
       throw new Error(
         `Reach replay diverged from search result for ${target.key} at ${difference}; persisted RNG or transition purity is broken`,
       );
     }
     replayVerified = true;
-  } else if (args.reportOnMiss) {
-    fork = await createForkFromSource({
-      gameDir: args.gameDir,
-      from: sourceSession,
-      to: args.session,
-      at: source.selectedEntry,
-      pretty: false,
-    }, source);
-    const replay = await replayPath(
-      args.gameDir,
-      args.session,
-      game,
-      search.closest.inputs,
-    );
-    output = replay.output;
-    if (canonicalJson(replay.state) !== canonicalJson(search.state)) {
-      const difference = firstDifference(search.state, replay.state);
+  } else {
+    if (canonicalJson(materialized.replay.state) !== canonicalJson(search.state)) {
+      const difference = firstDifference(search.state, materialized.replay.state);
       throw new Error(
         `Reach miss replay diverged from closest search state for ${target.key} at ${difference}`,
       );
     }
     replayVerified = true;
+  }
+  if (!search.found && args.reportOnMiss) {
     report = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: args.session,
@@ -269,13 +267,31 @@ export async function runReachChoice(
     });
   }
 
+  const continuation: ReachChoiceContinuation | undefined = search.reason === "max-nodes"
+    ? {
+        kind: "search-budget-exhausted",
+        sourceSession: args.session,
+        webPath: `/?session=${encodeURIComponent(args.session)}`,
+        next: {
+          command: "reach",
+          args: {
+            key: target.key,
+            fromSession: args.session,
+            session: "<new-session>",
+            maxNodes: args.maxNodes,
+            maxSteps: args.maxSteps,
+          },
+        },
+      }
+    : undefined;
+
   return {
-    status: search.found ? "reached" : "not-reached",
+    status: search.found ? "reached" : search.reason === "max-nodes" ? "paused" : "not-reached",
     found: search.found,
     reason: search.reason,
     target,
-    inputs: search.inputs,
-    path: summarizeReachPath(search.inputs),
+    inputs: replayInputs,
+    path: summarizeReachPath(replayInputs),
     exploredNodes: search.exploredNodes,
     visitedStates: search.visitedStates,
     deepestSteps: search.deepestSteps,
@@ -299,6 +315,7 @@ export async function runReachChoice(
     replayVerified,
     closest: search.closest,
     ...(report ? { report } : {}),
+    ...(continuation ? { continuation } : {}),
   };
 }
 
@@ -322,23 +339,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-async function replayPath(
-  gameDir: string,
-  session: string,
+async function materializeReachChoicePath(
+  args: ReachChoiceArgs,
   game: Awaited<ReturnType<typeof loadGame>>,
+  sourceSession: string,
+  source: ForkSource,
   inputs: Input[],
-): Promise<{ output: Output | null; state: ComposedState }> {
-  return withSessionLock(gameDir, session, async () => {
-    let state = await loadSession(gameDir, session, game);
+): Promise<{
+  fork: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
+  replay: { output: Output | null; state: ComposedState };
+}> {
+  return withSessionLock(args.gameDir, args.session, async () => {
+    const fork = await createForkFromSourceWithLockHeld({
+      gameDir: args.gameDir,
+      from: sourceSession,
+      to: args.session,
+      at: source.selectedEntry,
+      pretty: false,
+    }, source);
+    let state = await loadSession(args.gameDir, args.session, game);
     let current = await peek(game, state);
     state = current.state;
     for (const input of inputs) {
       const before = current.output;
       current = await step(game, state, input);
       state = current.state;
-      await saveSession(gameDir, session, state);
+      await saveSession(args.gameDir, args.session, state);
       const decision = choiceDecisionContext(before, input);
-      await appendLog(gameDir, session, {
+      await appendLog(args.gameDir, args.session, {
         t: Date.now(),
         source: "reach-choice",
         input,
@@ -347,14 +375,14 @@ async function replayPath(
       }, state);
     }
     if (inputs.length === 0 && current.output !== null) {
-      await saveSession(gameDir, session, state);
-      await appendLog(gameDir, session, {
+      await saveSession(args.gameDir, args.session, state);
+      await appendLog(args.gameDir, args.session, {
         t: Date.now(),
         source: "reach-choice:checkpoint",
         output: current.output,
       }, state);
     }
-    return { output: current.output, state };
+    return { fork, replay: { output: current.output, state } };
   });
 }
 

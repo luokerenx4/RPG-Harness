@@ -8,6 +8,8 @@ import {
   executeDevelopmentWorkItem,
   type WorkResult,
 } from "./work";
+import type { ReachChoiceContinuation } from "./reach-choice";
+import type { ReachScriptContinuation } from "./reach-script";
 import {
   collectDevelopmentWorklist,
   type DevelopmentWorkItem,
@@ -58,6 +60,8 @@ export interface SweepResult {
   resume: {
     fromKey: string;
     snapshotRevision: string;
+    /** Continue the paused search from its materialized closest branch first. */
+    next?: ReachChoiceContinuation["next"] | ReachScriptContinuation["next"];
   } | null;
   runs: Array<{
     index: number;
@@ -207,6 +211,10 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
         : "work-failed";
       break;
     }
+    if (result.status === "paused") {
+      stoppedReason = "search-budget-exhausted";
+      break;
+    }
     if (result.status === "prepared") {
       stoppedReason = "authoring-required";
       break;
@@ -346,6 +354,7 @@ function resultEnvelope(
   const remainingKeys = pendingItems
     .slice(completedItems)
     .map((item) => item.key);
+  const next = pausedSearchContinuation(runs);
   return {
     schemaVersion: 1,
     ...outcome,
@@ -372,10 +381,33 @@ function resultEnvelope(
       },
     },
     resume: remainingKeys[0]
-      ? { fromKey: remainingKeys[0], snapshotRevision: revision }
+      ? {
+          fromKey: remainingKeys[0],
+          snapshotRevision: revision,
+          ...(next ? { next } : {}),
+        }
       : null,
     runs,
   };
+}
+
+function pausedSearchContinuation(
+  runs: SweepResult["runs"],
+): ReachChoiceContinuation["next"] | ReachScriptContinuation["next"] | null {
+  const last = runs.at(-1);
+  if (last?.status !== "paused" || !isRecord(last.result.result)) return null;
+  const continuation = last.result.result.continuation;
+  if (!isRecord(continuation) || !isRecord(continuation.next)) return null;
+  const next = continuation.next;
+  if (next.command !== "reach" && next.command !== "reach-script") return null;
+  if (!isRecord(next.args)) return null;
+  return next as unknown as
+    | ReachChoiceContinuation["next"]
+    | ReachScriptContinuation["next"];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function sweepSnapshotRelativePath(revision: string): string {

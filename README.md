@@ -271,8 +271,12 @@ item. Read-only diagnoses execute immediately; `reproduce`, `verify-audit`,
 `cover`, and `reach` require an explicit unused `--new-session`; authoring
 operations return source,
 beat, choice, and optional live-hook context without claiming an edit occurred.
-If an executable item cannot reach its declared target, `work` returns
-`status: "failed"`, keeps the attempted branch unwritten, and exits non-zero.
+If search exhausts the declared state space without reaching its target, `work`
+returns `status: "failed"` but preserves the replay-verified closest state in
+the requested isolated branch for GUI/Headless diagnosis. If only the node
+budget is exhausted, it returns `status: "paused"` plus an executable
+continuation rooted at that closest session instead of repeating the same
+search from the original checkpoint.
 Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.
@@ -282,9 +286,12 @@ checkpoint work before spending the shared budget on state-space search, so a
 hard `reach-script` cannot starve dozens of one-step choice branches.
 It preflights every generated branch before its first write, shares one total
 search-node budget across the batch, and pauses normally when that budget is
-spent. The result carries the frozen SHA-256 revision and exact next work key;
-resume with both `--from-key` and `--snapshot-revision`, so a changed queue is
-re-read instead of silently continuing at the wrong item. Diagnostics and
+spent. A paused search also exposes `resume.next`, an executable continuation
+rooted at the materialized closest branch. The result carries the frozen
+SHA-256 revision and exact next work key. After finishing that continuation,
+resume the batch with both `--from-key` and `--snapshot-revision`; the frozen
+revision prevents a changed queue from silently continuing at the wrong item.
+Diagnostics and
 checkpoint-backed branch coverage cost no search nodes, while unreachable
 searches return their closest requirements as development evidence.
 Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
@@ -314,9 +321,11 @@ Its `path` separates all public inputs from semantic decisions (`choose`,
 `doActivity`, and `select`) and forced `next` advances, avoiding inflated
 decision counts on narration-heavy or grinding routes.
 On a bounded miss, `closest` reports the best path plus each satisfied/blocked
-target requirement. Add `--report-on-miss` to persist that closest state and
-turn the diagnosis into a reproducible playtest issue; without it, a miss stays
-strictly read-only and creates no session. Either miss mode exits non-zero.
+target requirement and persists that state in the requested GUI-compatible
+session. Node-budget exhaustion is a normal pause with an executable
+continuation from that session; a fully exhausted state space exits non-zero.
+Add `--report-on-miss` to also turn the closest diagnosis into a reproducible
+playtest issue.
 `reach-script` applies the same contract to a whole authored script, including
 scripts with no choices. A script may declare ordered
 `ai.relatedActivityIds` breadcrumbs in frontmatter when its top-level condition

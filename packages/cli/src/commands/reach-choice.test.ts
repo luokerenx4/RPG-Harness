@@ -63,7 +63,7 @@ describe("reach-choice", () => {
     ))).toMatchObject({ fromSession: "source" });
   });
 
-  test("does not create the target session when the bounded search misses", async () => {
+  test("materializes the closest verified state when bounded search misses", async () => {
     const gameDir = await temporaryGame(true);
     await seedSession(gameDir, "source");
 
@@ -78,13 +78,14 @@ describe("reach-choice", () => {
     });
 
     expect(result.found).toBe(false);
-    expect(result.replayVerified).toBe(false);
-    expect(result.session).toBeUndefined();
-    expect(result.webPath).toBeUndefined();
+    expect(result.replayVerified).toBe(true);
+    expect(result.session).toBe("ai-miss");
+    expect(result.webPath).toBe("/?session=ai-miss");
     expect(result.requestedSession).toBe("ai-miss");
-    await expect(readFile(
+    expect(JSON.parse(await readFile(
       path.join(sessionDir(gameDir, "ai-miss"), "state.json"),
-    )).rejects.toMatchObject({ code: "ENOENT" });
+      "utf-8",
+    ))).toBeDefined();
   });
 
   test("exits non-zero when the bounded CLI search misses", async () => {

@@ -22,7 +22,7 @@ import {
 import { collectScriptCoverage } from "./coverage";
 import {
   assertTargetEmpty,
-  createForkFromSource,
+  createForkFromSourceWithLockHeld,
   loadForkSource,
   type ForkSource,
 } from "./fork";
@@ -41,7 +41,7 @@ export interface ReachScriptArgs {
 }
 
 export interface ReachScriptSummary {
-  status: "reached" | "not-reached";
+  status: "reached" | "paused" | "not-reached";
   found: boolean;
   reason: "found" | "exhausted" | "max-nodes";
   target: { scriptId: string; title: string; source?: string };
@@ -62,10 +62,32 @@ export interface ReachScriptSummary {
   };
   session?: string;
   webPath?: string;
-  fork?: Awaited<ReturnType<typeof createForkFromSource>>;
+  fork?: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
   output: Output | null;
   replayVerified: boolean;
   closest: ChoiceSearchClosest;
+  continuation?: ReachScriptContinuation;
+}
+
+export interface ReachScriptContinuation {
+  kind: "search-budget-exhausted";
+  sourceSession: string;
+  webPath: string;
+  next: {
+    command: "reach-script";
+    args: {
+      scriptId: string;
+      fromSession: string;
+      session: "<new-session>";
+      maxNodes: number;
+      maxSteps: number;
+    };
+  };
+}
+
+interface RunReachScriptInternalHooks {
+  /** Test seam: the target transaction is still held and replay has not begun. */
+  afterForkInitializedWhileLocked?: () => void | Promise<void>;
 }
 
 export async function reachScriptCommand(args: ReachScriptArgs): Promise<void> {
@@ -81,10 +103,13 @@ export async function reachScriptCommand(args: ReachScriptArgs): Promise<void> {
   process.stdout.write(
     (args.pretty ? JSON.stringify(summary, null, 2) : JSON.stringify(summary)) + "\n",
   );
-  if (!summary.found) process.exitCode = 1;
+  if (summary.status === "not-reached") process.exitCode = 1;
 }
 
-export async function runReachScript(args: ReachScriptArgs): Promise<ReachScriptSummary> {
+export async function runReachScript(
+  args: ReachScriptArgs,
+  internalHooks: RunReachScriptInternalHooks = {},
+): Promise<ReachScriptSummary> {
   await assertTargetEmpty(args.gameDir, args.session);
   const game = await loadGame(args.gameDir);
   const script = game.scripts.find((candidate) => candidate.id === args.scriptId);
@@ -186,31 +211,54 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
   const visitedStates = attempts.reduce((sum, attempt) => sum + attempt.search.visitedStates, 0);
   const deepestSteps = Math.max(...attempts.map((attempt) => attempt.search.deepestSteps));
 
+  const materialized = await materializeReachScriptPath(
+    args,
+    game,
+    sourceSession,
+    source,
+    inputs,
+    internalHooks,
+  );
+  const fork = materialized.fork;
+  const replayState = materialized.replay.state;
+  const output = materialized.replay.output;
   let replayVerified = false;
-  let output = selectedSearch.output;
-  let fork: Awaited<ReturnType<typeof createForkFromSource>> | undefined;
   if (found) {
-    fork = await createForkFromSource({
-      gameDir: args.gameDir,
-      from: sourceSession,
-      to: args.session,
-      at: source.selectedEntry,
-      pretty: false,
-    }, source);
-    const replay = await replayPath(args, game, inputs);
-    output = replay.output;
-    const completed = replay.state.baseline.scripts[args.scriptId];
+    const completed = replayState.baseline.scripts[args.scriptId];
     if (completed?.completed !== true || completed.completedRevision !== scriptRevision(script)) {
       throw new Error(`Reach replay did not complete script ${args.scriptId}`);
     }
-    if (canonicalJson(replay.state) !== canonicalJson(foundAttempt.search.state)) {
+    if (canonicalJson(replayState) !== canonicalJson(foundAttempt.search.state)) {
       throw new Error(`Reach replay diverged from search result for script ${args.scriptId}`);
+    }
+    replayVerified = true;
+  } else {
+    if (canonicalJson(replayState) !== canonicalJson(selectedSearch.state)) {
+      throw new Error(`Reach closest replay diverged from search result for script ${args.scriptId}`);
     }
     replayVerified = true;
   }
 
+  const continuation: ReachScriptContinuation | undefined = reason === "max-nodes"
+    ? {
+        kind: "search-budget-exhausted",
+        sourceSession: args.session,
+        webPath: `/?session=${encodeURIComponent(args.session)}`,
+        next: {
+          command: "reach-script",
+          args: {
+            scriptId: args.scriptId,
+            fromSession: args.session,
+            session: "<new-session>",
+            maxNodes: args.maxNodes,
+            maxSteps: args.maxSteps,
+          },
+        },
+      }
+    : undefined;
+
   return {
-    status: found ? "reached" : "not-reached",
+    status: found ? "reached" : reason === "max-nodes" ? "paused" : "not-reached",
     found,
     reason,
     target: {
@@ -220,8 +268,8 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
         ? { source: normalizeAuthoringSource(args.gameDir, script.source) }
         : {}),
     },
-    inputs: found ? foundAttempt.search.inputs : [],
-    path: summarizeReachPath(found ? foundAttempt.search.inputs : []),
+    inputs,
+    path: summarizeReachPath(inputs),
     search: { exploredNodes, visitedStates, deepestSteps, attemptedSources: attempts.length },
     requestedSession: args.session,
     source: {
@@ -235,15 +283,33 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     output,
     replayVerified,
     closest: selectedSearch.closest,
+    ...(continuation ? { continuation } : {}),
   };
 }
 
-async function replayPath(
+async function materializeReachScriptPath(
   args: ReachScriptArgs,
   game: Awaited<ReturnType<typeof loadGame>>,
+  sourceSession: string,
+  source: ForkSource,
   inputs: Input[],
-): Promise<{ output: Output | null; state: ComposedState }> {
+  internalHooks: RunReachScriptInternalHooks,
+): Promise<{
+  fork: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
+  replay: { output: Output | null; state: ComposedState };
+}> {
   return withSessionLock(args.gameDir, args.session, async () => {
+    const fork = await createForkFromSourceWithLockHeld({
+      gameDir: args.gameDir,
+      from: sourceSession,
+      to: args.session,
+      at: source.selectedEntry,
+      pretty: false,
+    }, source, {
+      ...(internalHooks.afterForkInitializedWhileLocked
+        ? { onCreatedWhileLocked: internalHooks.afterForkInitializedWhileLocked }
+        : {}),
+    });
     let state = await loadSession(args.gameDir, args.session, game);
     const targetScript = game.scripts.find((script) => script.id === args.scriptId)!;
     const prior = state.baseline.scripts[args.scriptId];
@@ -268,7 +334,15 @@ async function replayPath(
         ...(decision ? { decision } : {}),
       }, state);
     }
-    return { output: current.output, state };
+    if (inputs.length === 0 && current.output !== null) {
+      await saveSession(args.gameDir, args.session, state);
+      await appendLog(args.gameDir, args.session, {
+        t: Date.now(),
+        source: "reach-script:checkpoint",
+        output: current.output,
+      }, state);
+    }
+    return { fork, replay: { output: current.output, state } };
   });
 }
 

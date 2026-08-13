@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState, peek, step } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { appendLog, saveSession, sessionDir } from "../session";
 import { forkSession } from "./fork";
@@ -77,7 +78,7 @@ describe("reach-script", () => {
     ).text())).toMatchObject({ fromSession: "gui-player", sourceLogEntry: 2 });
   });
 
-  test("CLI miss is read-only and exits non-zero", async () => {
+  test("CLI exhausted miss preserves its closest GUI branch and exits non-zero", async () => {
     const gameDir = await temporaryReachScriptGame(true);
     const game = await loadGame(gameDir);
     await saveSession(gameDir, "player", createInitialState(game));
@@ -102,11 +103,43 @@ describe("reach-script", () => {
     expect(JSON.parse(await new Response(child.stdout).text())).toMatchObject({
       status: "not-reached",
       found: false,
-      replayVerified: false,
+      replayVerified: true,
+      session: "ai-miss",
+      webPath: "/?session=ai-miss",
     });
-    await expect(readdir(sessionDir(gameDir, "ai-miss"))).rejects.toMatchObject({
-      code: "ENOENT",
+    expect(await readdir(sessionDir(gameDir, "ai-miss"))).toContain("state.json");
+  });
+
+  test("keeps fork initialization and replay in one target transaction", async () => {
+    const gameDir = await temporaryReachScriptGame(false);
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+    let contenderEntered = false;
+    let contender: Promise<void> | undefined;
+    let observedFence = false;
+
+    const result = await runReachScript({
+      gameDir,
+      fromSession: "player",
+      session: "atomic-target",
+      scriptId: "target",
+      maxNodes: 100,
+      maxSteps: 20,
+      pretty: false,
+    }, {
+      afterForkInitializedWhileLocked: async () => {
+        contender = withSessionLock(gameDir, "atomic-target", async () => {
+          contenderEntered = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        observedFence = !contenderEntered;
+      },
     });
+
+    expect(result).toMatchObject({ found: true, replayVerified: true });
+    expect(observedFence).toBe(true);
+    await contender;
+    expect(contenderEntered).toBe(true);
   });
 });
 
