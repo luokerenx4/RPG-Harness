@@ -262,7 +262,7 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
   const label = !clean
     ? `AI Dev · ${status.worklist.total} pending${status.worklist.highestPriority ? ` · ${status.worklist.highestPriority}` : ""}`
     : certified
-      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths · ${status.quality.seeds.length} seeds${pacing ? ` · loop ${pacing.count}/${pacing.limit}` : ""}`
+      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths · ${status.quality.seeds.length} seeds${status.quality.fuzzLanes ? ` · ${status.quality.fuzzLanes} fuzz` : ""}${pacing ? ` · loop ${pacing.count}/${pacing.limit}` : ""}`
       : "AI Dev · clean · audit pending";
   const detail = !clean
     ? [
@@ -275,6 +275,9 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
       ? [
           "Current game/runtime inputs passed AI audit.",
           `Fresh-world seeds: ${status.quality.seeds.join(", ")}.`,
+          status.quality.fuzzLanes
+            ? `Seeded fuzz survival: ${status.quality.fuzzLanes} lanes (${status.quality.fuzzPersonas.join(", ")}); slowest ${status.quality.fuzzMaxDecisions?.decisions ?? 0} decisions.`
+            : undefined,
           pacing
             ? `Heaviest semantic loop: seed ${pacing.seed}, ${pacing.persona}/${pacing.activityKind} ×${pacing.count} (limit ${pacing.limit}).`
             : undefined,

@@ -146,6 +146,7 @@ describe("parseManifest — AI audit quality gate", () => {
       "title: t",
       "ai_audit:",
       "  personas: [objective, charmer, rude]",
+      "  fuzz_personas: [random]",
       "  seeds: [1, 17, 38173]",
       "  min_unique_endings: 2",
       "  min_unique_decision_paths: 3",
@@ -157,6 +158,7 @@ describe("parseManifest — AI audit quality gate", () => {
 
     expect(manifest.aiAudit).toEqual({
       personas: ["objective", "charmer", "rude"],
+      fuzzPersonas: ["random"],
       seeds: [1, 17, 38173],
       minUniqueEndings: 2,
       minUniqueDecisionPaths: 3,
@@ -197,6 +199,12 @@ describe("parseManifest — AI audit quality gate", () => {
     expect(() => parseManifest(
       "title: t\nai_audit:\n  personas: [rude, rude]\n  min_unique_endings: 2\n",
     )).toThrow(/duplicates/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  personas: [random]\n  fuzz_personas: [random]\n  min_unique_endings: 1\n",
+    )).toThrow(/separate from acceptance personas/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  personas: [objective]\n  fuzz_personas: []\n  min_unique_endings: 1\n",
+    )).toThrow(/non-empty array/);
     expect(() => parseManifest(
       "title: t\nai_audit:\n  personas: [charmer, rude]\n  min_unique_decision_paths: 3\n",
     )).toThrow(/cannot exceed/);

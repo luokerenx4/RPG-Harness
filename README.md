@@ -694,6 +694,7 @@ Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
 ```yaml
 ai_audit:
   personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
+  fuzz_personas: [random]
   seeds: [1, 17, 2718, 65535]
   min_unique_endings: 2
   min_unique_decision_paths: 3
@@ -703,10 +704,13 @@ ai_audit:
   required_scripts: [deep_route_coda]
 ```
 
-Projects may declare the acceptance `personas` and independent fresh-world
-`seeds` beside their thresholds. `sweep --until-clean` runs the full persona
-matrix once per declared seed; one failed seed blocks the v3 project certificate
-and creates its own replayable audit issue. With no
+Projects may declare the acceptance `personas`, seeded `fuzz_personas`, and
+independent fresh-world `seeds` beside their thresholds. `sweep --until-clean`
+runs both matrices once per declared seed. Strategy personas own diversity,
+coverage, and pacing thresholds; fuzz personas instead prove bounded terminal
+reachability with no engine errors, rejected inputs, or open reports, so
+intentional random wandering cannot dilute gameplay-quality budgets. One failed
+lane blocks the v4 project certificate and creates replayable audit work. With no
 `--personas` override, `audit` runs that project-owned matrix; an explicit
 diagnostic subset remains runnable but is `not-evaluated` against the project
 gate, so an impossible subset cannot create false quality debt. Thresholds may

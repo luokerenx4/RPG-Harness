@@ -71,6 +71,9 @@ describe("Web terminal handoff", () => {
           endings: 3,
           paths: 7,
           seeds: [1, 17, 38173],
+          fuzzPersonas: ["random"],
+          fuzzLanes: 3,
+          fuzzMaxDecisions: { seed: 17, persona: "random", decisions: 611 },
           maxActivityRepetitions: 30,
           maxActivityRepetitionsByKind: null,
           maxActivityRepetition: {
@@ -83,8 +86,9 @@ describe("Web terminal handoff", () => {
         },
       }} />,
     );
-    expect(html).toContain("AI Dev · certified · 3 endings / 7 paths · 3 seeds · loop 27/30");
+    expect(html).toContain("AI Dev · certified · 3 endings / 7 paths · 3 seeds · 3 fuzz · loop 27/30");
     expect(html).toContain("Fresh-world seeds: 1, 17, 38173.");
+    expect(html).toContain("Seeded fuzz survival: 3 lanes (random); slowest 611 decisions.");
     expect(html).toContain("seed 17, greedy/attack ×27 (limit 30)");
     expect(html).toContain("certificate-revision");
   });
@@ -109,6 +113,9 @@ describe("Web terminal handoff", () => {
           endings: 3,
           paths: 7,
           seeds: [1, 17, 38173],
+          fuzzPersonas: ["random"],
+          fuzzLanes: 3,
+          fuzzMaxDecisions: { seed: 17, persona: "random", decisions: 611 },
           maxActivityRepetitions: 30,
           maxActivityRepetitionsByKind: null,
           maxActivityRepetition: {

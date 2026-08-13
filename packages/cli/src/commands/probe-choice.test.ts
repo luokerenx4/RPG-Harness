@@ -142,7 +142,7 @@ describe("read-only choice policy probe", () => {
       "utf-8",
     );
     await expect(loadGame(gameDir)).rejects.toThrow(
-      "ai_audit.personas references unknown persona missing-policy",
+      "ai_audit references unknown persona missing-policy",
     );
   });
 });

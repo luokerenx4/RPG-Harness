@@ -540,11 +540,21 @@ export function collectAiPersonas(game: Game): Record<string, AiPersonaRegistryE
 /** Validate that a project's acceptance matrix names runnable policies. */
 export function validateAiPersonaConfig(game: Game): void {
   const registry = collectAiPersonas(game);
-  for (const name of game.aiAudit?.personas ?? []) {
+  for (const name of [
+    ...(game.aiAudit?.personas ?? []),
+    ...(game.aiAudit?.fuzzPersonas ?? []),
+  ]) {
     if (!registry[name]) {
       throw new Error(
-        `game.yaml ai_audit.personas references unknown persona ${name}. ` +
+        `game.yaml ai_audit references unknown persona ${name}. ` +
           `Available: ${Object.keys(registry).join(", ")}`,
+      );
+    }
+  }
+  for (const name of game.aiAudit?.fuzzPersonas ?? []) {
+    if (registry[name]?.deterministic !== false) {
+      throw new Error(
+        `game.yaml ai_audit.fuzz_personas requires a stochastic persona, but ${name} is deterministic`,
       );
     }
   }

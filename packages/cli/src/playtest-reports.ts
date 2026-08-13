@@ -139,6 +139,7 @@ export interface PlaytestAuditMatrixEvidence {
   seed?: number;
   policy: {
     personas?: string[];
+    fuzzPersonas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     maxActivityRepetitions?: number;
@@ -270,6 +271,7 @@ export interface PlaytestAuditVerification {
   seed: number;
   policy: {
     personas?: string[];
+    fuzzPersonas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     maxActivityRepetitions?: number;

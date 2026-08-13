@@ -93,6 +93,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   const obj = raw as Record<string, unknown>;
   const known = new Set([
     "personas",
+    "fuzz_personas",
     "seeds",
     "min_unique_endings",
     "min_unique_decision_paths",
@@ -121,6 +122,25 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
       throw new ManifestParseError("ai_audit.personas must not contain duplicates");
     }
     config.personas = personas;
+  }
+  if (obj.fuzz_personas !== undefined) {
+    if (
+      !Array.isArray(obj.fuzz_personas) ||
+      obj.fuzz_personas.length === 0 ||
+      obj.fuzz_personas.some((persona) =>
+        typeof persona !== "string" || persona.trim().length === 0
+      )
+    ) {
+      throw new ManifestParseError("ai_audit.fuzz_personas must be a non-empty array of strings");
+    }
+    const personas = obj.fuzz_personas.map((persona) => (persona as string).trim());
+    if (new Set(personas).size !== personas.length) {
+      throw new ManifestParseError("ai_audit.fuzz_personas must not contain duplicates");
+    }
+    if (personas.some((persona) => config.personas?.includes(persona))) {
+      throw new ManifestParseError("ai_audit.fuzz_personas must be separate from acceptance personas");
+    }
+    config.fuzzPersonas = personas;
   }
   if (obj.seeds !== undefined) {
     if (

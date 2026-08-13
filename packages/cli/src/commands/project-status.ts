@@ -20,6 +20,9 @@ export interface ProjectDevelopmentStatus {
     endings: number;
     paths: number;
     seeds: number[];
+    fuzzPersonas: string[];
+    fuzzLanes: number;
+    fuzzMaxDecisions: { seed: number; persona: string; decisions: number } | null;
     maxActivityRepetitions: number | null;
     maxActivityRepetitionsByKind: Record<string, number> | null;
     maxActivityRepetition: {
@@ -64,6 +67,23 @@ export async function collectProjectDevelopmentStatus(
             (audit) => audit.diversity.uniqueDecisionPaths,
           )),
           seeds: currentCertificate.certificate.audits.map((audit) => audit.seed),
+          fuzzPersonas:
+            currentCertificate.certificate.audits[0]?.qualityGate?.policy.fuzzPersonas ?? [],
+          fuzzLanes: currentCertificate.certificate.fuzzAudits.reduce(
+            (total, audit) => total + audit.lanes.length,
+            0,
+          ),
+          fuzzMaxDecisions: currentCertificate.certificate.fuzzAudits
+            .flatMap((audit) => audit.lanes.map((lane) => ({
+              seed: audit.seed,
+              persona: lane.persona,
+              decisions: lane.decisions,
+            })))
+            .sort((left, right) =>
+              right.decisions - left.decisions ||
+              left.seed - right.seed ||
+              left.persona.localeCompare(right.persona)
+            )[0] ?? null,
           maxActivityRepetitions:
             currentCertificate.certificate.audits[0]?.qualityGate?.policy.maxActivityRepetitions ?? null,
           maxActivityRepetitionsByKind:
@@ -89,6 +109,9 @@ export async function collectProjectDevelopmentStatus(
           endings: 0,
           paths: 0,
           seeds: [],
+          fuzzPersonas: [],
+          fuzzLanes: 0,
+          fuzzMaxDecisions: null,
           maxActivityRepetitions: null,
           maxActivityRepetitionsByKind: null,
           maxActivityRepetition: null,

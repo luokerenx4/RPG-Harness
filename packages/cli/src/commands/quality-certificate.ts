@@ -5,10 +5,14 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { AiAuditConfig } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import type { ProjectQualityAuditSummary } from "./sweep";
+import type {
+  ProjectQualityAuditSummary,
+  ProjectQualityFuzzAuditSummary,
+} from "./sweep";
 
 export interface QualityAuditInputs {
   personas: string[];
+  fuzzPersonas: string[];
   policy: AiAuditConfig;
   maxSteps: number;
   maxSegments: number;
@@ -16,12 +20,13 @@ export interface QualityAuditInputs {
 }
 
 export interface QualityAuditCertificate {
-  schemaVersion: 3;
+  schemaVersion: 4;
   revision: string;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
   audits: ProjectQualityAuditSummary[];
+  fuzzAudits: ProjectQualityFuzzAuditSummary[];
   surfaces: QualitySurfaceEvidence[];
 }
 
@@ -31,11 +36,12 @@ export interface CurrentQualityAuditCertificate {
 }
 
 interface QualityAuditCertificatePayload {
-  schemaVersion: 3;
+  schemaVersion: 4;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
   audits: ProjectQualityAuditSummary[];
+  fuzzAudits: ProjectQualityFuzzAuditSummary[];
   surfaces: QualitySurfaceEvidence[];
 }
 
@@ -196,7 +202,7 @@ export async function readQualityAuditCertificate(
   }
   if (
     !isRecord(reference) ||
-    reference.schemaVersion !== 3 ||
+    reference.schemaVersion !== 4 ||
     reference.inputRevision !== inputRevision ||
     !isSha256(reference.certificateRevision)
   ) return null;
@@ -213,13 +219,14 @@ export async function readQualityAuditCertificate(
     }
     throw error;
   }
-  if (!isRecord(value) || value.schemaVersion !== 3) return null;
+  if (!isRecord(value) || value.schemaVersion !== 4) return null;
   const certificate = value as unknown as QualityAuditCertificate;
   if (
     certificate.inputRevision !== inputRevision ||
     !isSha256(certificate.revision) ||
     certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
     !hasPassingAudits(certificate.audits) ||
+    !hasPassingFuzzAudits(certificate.fuzzAudits, certificate.audits) ||
     !hasRequiredQualitySurfaces(certificate.surfaces)
   ) return null;
   return { certificate, file };
@@ -256,13 +263,14 @@ export async function findCurrentQualityAuditCertificate(
     } catch {
       continue;
     }
-    if (!isRecord(value) || value.schemaVersion !== 3) continue;
+    if (!isRecord(value) || value.schemaVersion !== 4) continue;
     const certificate = value as unknown as QualityAuditCertificate;
     const filenameRevision = entry.slice(0, -".json".length);
     if (
       certificate.revision !== filenameRevision ||
       certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
       !hasPassingAudits(certificate.audits) ||
+      !hasPassingFuzzAudits(certificate.fuzzAudits, certificate.audits) ||
       !hasRequiredQualitySurfaces(certificate.surfaces)
     ) continue;
     const firstAudit = certificate.audits[0]!;
@@ -275,6 +283,7 @@ export async function findCurrentQualityAuditCertificate(
     ) continue;
     const inputs: QualityAuditInputs = {
       personas,
+      fuzzPersonas: game.aiAudit.fuzzPersonas ?? [],
       policy,
       maxSteps: firstAudit.maxSteps,
       maxSegments: firstAudit.maxSegments,
@@ -302,18 +311,23 @@ export async function writeQualityAuditCertificate(
     inputRevision: string;
     sessionPrefix: string;
     audits: ProjectQualityAuditSummary[];
+    fuzzAudits: ProjectQualityFuzzAuditSummary[];
   },
 ): Promise<{ certificate: QualityAuditCertificate; file: string }> {
   if (!hasPassingAudits(args.audits)) {
     throw new Error("Only a non-empty matrix of passed project audits can be certified");
   }
+  if (!hasPassingFuzzAudits(args.fuzzAudits, args.audits)) {
+    throw new Error("Only completed project fuzz audits can be certified");
+  }
   const surfaces = await runQualitySurfaceChecks();
   const payload: QualityAuditCertificatePayload = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     inputRevision: args.inputRevision,
     createdAt: new Date().toISOString(),
     sessionPrefix: args.sessionPrefix,
     audits: args.audits,
+    fuzzAudits: args.fuzzAudits,
     surfaces,
   };
   const certificate: QualityAuditCertificate = {
@@ -329,7 +343,7 @@ export async function writeQualityAuditCertificate(
   );
   await mkdir(path.dirname(referenceFile), { recursive: true });
   await writeJsonAtomically(referenceFile, {
-    schemaVersion: 3,
+    schemaVersion: 4,
     inputRevision: args.inputRevision,
     certificateRevision: certificate.revision,
   });
@@ -521,6 +535,39 @@ function hasPassingAudits(
       canonicalJson(firstPersonas) &&
     audit.maxSteps === first.maxSteps &&
     audit.maxSegments === first.maxSegments
+  );
+}
+
+function hasPassingFuzzAudits(
+  value: unknown,
+  audits: ProjectQualityAuditSummary[],
+): value is ProjectQualityFuzzAuditSummary[] {
+  if (!Array.isArray(value)) return false;
+  const expectedSeeds = audits.map((audit) => audit.seed);
+  if (value.length === 0) {
+    return (audits[0]?.qualityGate?.policy.fuzzPersonas?.length ?? 0) === 0;
+  }
+  const expectedPersonas = audits[0]?.qualityGate?.policy.fuzzPersonas ?? [];
+  return value.length === expectedSeeds.length && value.every((audit, index) =>
+    isRecord(audit) &&
+    audit.seed === expectedSeeds[index] &&
+    audit.maxSteps === audits[index]?.maxSteps &&
+    audit.maxSegments === audits[index]?.maxSegments &&
+    isRecord(audit.source) &&
+    audit.source.stateRevision === audits[index]?.source.stateRevision &&
+    isRecord(audit.totals) &&
+    audit.totals.completed === expectedPersonas.length &&
+    audit.totals.lanes === expectedPersonas.length &&
+    audit.totals.errors === 0 &&
+    audit.totals.rejectedInputs === 0 &&
+    audit.totals.openReports === 0 &&
+    Array.isArray(audit.lanes) &&
+    canonicalJson(audit.lanes.map((lane) => isRecord(lane) ? lane.persona : null)) ===
+      canonicalJson(expectedPersonas) &&
+    audit.lanes.every((lane) => isRecord(lane) && lane.reason === "completed" &&
+      typeof lane.ending === "string" && lane.ending.length > 0 &&
+      Number.isInteger(lane.decisions) && (lane.decisions as number) >= 0 &&
+      isSha256(lane.pathRevision))
   );
 }
 

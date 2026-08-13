@@ -489,7 +489,7 @@ describe("bounded development sweep", () => {
       },
     });
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       surfaces: [{
         schemaVersion: 1,
         id: "web-input-contract",
@@ -504,6 +504,75 @@ describe("bounded development sweep", () => {
       }],
     });
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
+  });
+
+  test("certifies seeded stochastic survival separately from strategy scoring", async () => {
+    const gameDir = await temporaryQualitySweepGame(1, [11, 13], ["random"]);
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-fuzz-pass",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "clean",
+      qualityGate: {
+        status: "passed",
+        audits: [
+          { seed: 11, totals: { lanes: 1, completed: 1 } },
+          { seed: 13, totals: { lanes: 1, completed: 1 } },
+        ],
+        fuzzAudits: [
+          { seed: 11, totals: { lanes: 1, completed: 1 }, lanes: [{ persona: "random", ending: "intro" }] },
+          { seed: 13, totals: { lanes: 1, completed: 1 }, lanes: [{ persona: "random", ending: "intro" }] },
+        ],
+      },
+    });
+    const certificateFile = result.qualityGate?.certificate?.file;
+    if (!certificateFile) throw new Error("quality gate did not emit a certificate");
+    expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
+      schemaVersion: 4,
+      fuzzAudits: [{ seed: 11 }, { seed: 13 }],
+    });
+  });
+
+  test("turns an incomplete fuzz survival lane into replayable coding work", async () => {
+    const gameDir = await temporaryFuzzFailureQualityGame();
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-fuzz-fail",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 1,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "stopped",
+      reason: "quality-gate-failed",
+      liveWorklist: { totalItems: 1, nextKey: expect.stringMatching(/^report\//) },
+      qualityGate: {
+        status: "failed",
+        fuzzAudits: [{
+          seed: 11,
+          totals: { lanes: 1, completed: 0, openReports: 1 },
+          lanes: [{ persona: "looper", reason: "stalled", ending: null }],
+        }],
+      },
+    });
   });
 
   test("one failing authored seed blocks certification and becomes coding work", async () => {
@@ -1007,6 +1076,7 @@ async function temporaryDiagnosticSweepGame(): Promise<string> {
 async function temporaryQualitySweepGame(
   minEndings: number,
   seeds?: number[],
+  fuzzPersonas?: string[],
 ): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-quality-"));
   temporaryDirectories.push(dir);
@@ -1015,6 +1085,7 @@ async function temporaryQualitySweepGame(
     "title: Quality sweep test",
     "ai_audit:",
     `  personas: [${minEndings > 1 ? "objective, greedy" : "objective"}]`,
+    ...(fuzzPersonas ? [`  fuzz_personas: [${fuzzPersonas.join(", ")}]`] : []),
     ...(seeds ? [`  seeds: [${seeds.join(", ")}]`] : []),
     `  min_unique_endings: ${minEndings}`,
     "",
@@ -1080,6 +1151,51 @@ async function temporarySeedSensitiveQualityGame(): Promise<string> {
     '  yield { type: "gameEnd", reason: "done", endingId: "ending" };',
     "};",
     "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryFuzzFailureQualityGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-fuzz-failure-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Fuzz failure quality sweep test",
+    "preset: ./modules/run.ts",
+    "ai_audit:",
+    "  personas: [objective]",
+    "  fuzz_personas: [looper]",
+    "  seeds: [11]",
+    "  min_unique_endings: 1",
+    "modules:",
+    "  - ./modules/persona.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    "  for (;;) {",
+    '    const input = yield { type: "hubMenu", snapshot: { day: 0, maxDay: 0, slot: 0, slotName: "", slotsPerDay: 0, stats: [], affections: [], objectives: [{ id: "finish", title: "Finish", scope: "main", terminal: true, status: "active", relatedActivityIds: ["end"] }], activities: [{ id: "end", kind: "action", title: "End", cost: 0, available: true }, { id: "loop", kind: "action", title: "Loop", cost: 0, available: true }] } };',
+    '    if (input?.type === "doActivity" && input.id === "end") break;',
+    "  }",
+    '  yield { type: "gameEnd", reason: "done", endingId: "ending" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "persona.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "fuzz-persona",',
+    '  version: "1",',
+    "  aiPersonas: { looper: {",
+    '    description: "Never chooses the terminal action",',
+    "    deterministic: false,",
+    '    decide: async () => ({ type: "doActivity", id: "loop" }),',
+    "  } },",
+    "};",
+    "export default module;",
     "",
   ].join("\n"), "utf-8");
   return dir;

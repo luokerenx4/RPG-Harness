@@ -140,6 +140,12 @@ gameplay surfaces or unreachable deep authored events into replayable
 quality-gate work instead of trusting path hashes as an indirect proxy.
 This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.
+Project certification also runs author-declared `fuzz_personas` as a separate
+seeded survival matrix. Those lanes must reach authored terminal outputs within
+the shared segmented budget without errors or rejected inputs, but do not
+participate in strategy diversity or repetition scoring. Their exact seed,
+decision count, path revision, GUI session, and ending remain certificate
+evidence, so stochastic exploration is reproducible rather than anecdotal.
 The final `sweep --until-clean` acceptance is also persisted as a project
 quality certificate. Its input revision covers authored behavior plus the
 Headless engine, parser, session-store, CLI evaluator, Web GUI/input bridge,

@@ -21,10 +21,12 @@ export interface VariableDef {
   description?: string;
 }
 
-/** Author-owned acceptance thresholds for a deterministic persona matrix. */
+/** Author-owned acceptance thresholds for strategy coverage plus stochastic survival. */
 export interface AiAuditConfig {
   /** Project-owned acceptance matrix. CLI defaults are only a fallback. */
   personas?: string[];
+  /** Stochastic policies checked for bounded terminal reachability, outside pacing/diversity scoring. */
+  fuzzPersonas?: string[];
   /** Independent fresh-world seeds that must all satisfy the acceptance matrix. */
   seeds?: number[];
   minUniqueEndings?: number;

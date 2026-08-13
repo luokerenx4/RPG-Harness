@@ -415,7 +415,7 @@ export async function runAudit(
       severity: "major",
       title: `AI audit quality gate failed (${uniqueEndings} endings, ${uniqueDecisionPaths} paths)`,
       details: [
-        `The deterministic persona matrix ran ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
+        `The seeded persona matrix ran ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
         `Observed endings: ${formatEndingCounts(endings)}.`,
         `Covered activity tags: ${coveredActivityTags.join(", ") || "none"}.`,
         `Completed scripts: ${completedScripts.join(", ") || "none"}.`,
@@ -693,6 +693,11 @@ function mergeQualityPolicies(
       ? { personas: [...floor.personas] }
       : current?.personas !== undefined
         ? { personas: [...current.personas] }
+        : {}),
+    ...(floor?.fuzzPersonas !== undefined
+      ? { fuzzPersonas: [...floor.fuzzPersonas] }
+      : current?.fuzzPersonas !== undefined
+        ? { fuzzPersonas: [...current.fuzzPersonas] }
         : {}),
     ...(floor?.seeds !== undefined
       ? { seeds: [...floor.seeds] }

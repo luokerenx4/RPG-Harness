@@ -37,6 +37,7 @@ describe("project quality certificate input", () => {
     const gameDir = path.join(workspaceRoot, "examples", "game");
     const inputs: QualityAuditInputs = {
       personas: ["objective"],
+      fuzzPersonas: [],
       policy: { personas: ["objective"], minUniqueEndings: 1 },
       maxSteps: 10,
       maxSegments: 2,

@@ -8,6 +8,9 @@ modules:
 # reproducible coding issue at the frozen audit source checkpoint.
 ai_audit:
   personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
+  # Random is a separate seeded survival lane: it must eventually finish, but
+  # its intentional wandering does not dilute strategy pacing/diversity gates.
+  fuzz_personas: [random]
   # Every seed is a separate fresh world. All must pass before sweep may issue
   # a project certificate; this keeps one lucky encounter sequence from hiding
   # a stochastic grind or soft lock.

@@ -46,6 +46,9 @@ export interface WebDevelopmentStatus {
     endings: number;
     paths: number;
     seeds: number[];
+    fuzzPersonas: string[];
+    fuzzLanes: number;
+    fuzzMaxDecisions: { seed: number; persona: string; decisions: number } | null;
     maxActivityRepetitions: number | null;
     maxActivityRepetitionsByKind: Record<string, number> | null;
     maxActivityRepetition: {

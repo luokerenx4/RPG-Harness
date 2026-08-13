@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ComposedState, Game, Output } from "@rpg-harness/engine";
-import { collectAiPersonas, personas } from "./personas";
+import { collectAiPersonas, personas, validateAiPersonaConfig } from "./personas";
 
 describe("AI persona registry", () => {
   test("merges an author-owned module persona with built-ins", async () => {
@@ -36,6 +36,17 @@ describe("AI persona registry", () => {
       }],
     } as unknown as Game;
     expect(() => collectAiPersonas(game)).toThrow("conflicts with builtin");
+  });
+
+  test("keeps stochastic fuzz policies separate from strategy personas", () => {
+    expect(() => validateAiPersonaConfig({
+      aiAudit: { personas: ["objective"], fuzzPersonas: ["random"] },
+      modules: [],
+    } as unknown as Game)).not.toThrow();
+    expect(() => validateAiPersonaConfig({
+      aiAudit: { personas: ["random"], fuzzPersonas: ["objective"] },
+      modules: [],
+    } as unknown as Game)).toThrow(/requires a stochastic persona/);
   });
 });
 

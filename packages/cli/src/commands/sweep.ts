@@ -145,6 +145,7 @@ export interface SweepConvergenceResult {
     inputRevision?: string;
     certificate?: { revision: string; file: string };
     audits?: ProjectQualityAuditSummary[];
+    fuzzAudits?: ProjectQualityFuzzAuditSummary[];
   };
   resume: SweepResult["resume"];
   generations: Array<{
@@ -170,6 +171,18 @@ export interface ProjectQualityAuditSummary {
     AuditSummary["lanes"][number],
     "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
   > & { pathRevision: string; semanticActivityCounts: Record<string, number> }>;
+}
+
+export interface ProjectQualityFuzzAuditSummary {
+  source: AuditSummary["source"];
+  seed: number;
+  maxSteps: number;
+  maxSegments: number;
+  totals: AuditSummary["totals"];
+  lanes: Array<Pick<
+    AuditSummary["lanes"][number],
+    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
+  > & { pathRevision: string }>;
 }
 
 interface PersistedSweepSnapshot {
@@ -391,6 +404,7 @@ async function evaluateProjectQualityGate(
     };
   }
   const personas = policy.personas ?? [];
+  const fuzzPersonas = policy.fuzzPersonas ?? [];
   if (personas.length === 0) {
     throw new Error(
       "sweep --until-clean requires ai_audit.personas for its final project quality gate",
@@ -401,6 +415,7 @@ async function evaluateProjectQualityGate(
   const seeds = policy.seeds ?? [args.auditSeed ?? 1_592_597_881];
   const inputRevision = await qualityAuditInputRevision(args.gameDir, {
     personas,
+    fuzzPersonas,
     policy,
     maxSteps,
     maxSegments,
@@ -422,6 +437,7 @@ async function evaluateProjectQualityGate(
             file: cached.file,
           },
           audits: cached.certificate.audits,
+          fuzzAudits: cached.certificate.fuzzAudits,
         },
       };
     }
@@ -434,6 +450,10 @@ async function evaluateProjectQualityGate(
     for (const target of [
       `${seedPrefix}-source`,
       ...personas.map((persona) => `${seedPrefix}-${persona}`),
+      ...(fuzzPersonas.length > 0
+        ? [`${seedPrefix}-fuzz-source`, `${seedPrefix}-fuzz-quality-gate`]
+        : []),
+      ...fuzzPersonas.map((persona) => `${seedPrefix}-fuzz-${persona}`),
       `${seedPrefix}-quality-gate`,
     ]) {
       assertSessionName(target);
@@ -441,6 +461,7 @@ async function evaluateProjectQualityGate(
     }
   }
   const audits: ProjectQualityAuditSummary[] = [];
+  const fuzzAudits: ProjectQualityFuzzAuditSummary[] = [];
   for (const seed of seeds) {
     const audit = await runAudit({
       gameDir: args.gameDir,
@@ -453,8 +474,31 @@ async function evaluateProjectQualityGate(
       pretty: false,
     });
     audits.push(compactProjectQualityAudit(audit));
+    if (fuzzPersonas.length > 0) {
+      const fuzz = await runAudit({
+        gameDir: args.gameDir,
+        sessionPrefix: `${sessionPrefix}-seed-${seed}-fuzz`,
+        personas: fuzzPersonas,
+        maxSteps,
+        maxSegments,
+        seed,
+        // The matrix report below is the causal project-quality issue. Avoid
+        // filing a second per-lane stall for the same seeded fuzz failure.
+        reportOnStop: false,
+        qualityFloor: { personas: fuzzPersonas },
+        pretty: false,
+      });
+      fuzzAudits.push(compactProjectQualityFuzzAudit(fuzz));
+    }
   }
-  const status = audits.every((audit) => audit.qualityGate?.status === "passed")
+  const status = audits.every((audit) => audit.qualityGate?.status === "passed") &&
+      fuzzAudits.every((audit) =>
+        audit.totals.completed === audit.totals.lanes &&
+        audit.totals.errors === 0 &&
+        audit.totals.rejectedInputs === 0 &&
+        audit.totals.openReports === 0 &&
+        audit.lanes.every((lane) => lane.reason === "completed" && lane.ending !== null)
+      )
     ? "passed" as const
     : "failed" as const;
   if (status === "passed") {
@@ -462,6 +506,7 @@ async function evaluateProjectQualityGate(
       inputRevision,
       sessionPrefix,
       audits,
+      fuzzAudits,
     });
     return {
       finalStatus: "clean",
@@ -476,6 +521,7 @@ async function evaluateProjectQualityGate(
           file: certified.file,
         },
         audits,
+        fuzzAudits,
       },
     };
   }
@@ -488,6 +534,7 @@ async function evaluateProjectQualityGate(
       sessionPrefix,
       inputRevision,
       audits,
+      fuzzAudits,
     },
   };
 }
@@ -516,6 +563,26 @@ function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSum
       decisions: lane.decisions,
       pathRevision: lane.path.revision,
       semanticActivityCounts: lane.path.semanticActivityCounts,
+    })),
+  };
+}
+
+function compactProjectQualityFuzzAudit(audit: AuditSummary): ProjectQualityFuzzAuditSummary {
+  return {
+    source: audit.source,
+    seed: audit.seed,
+    maxSteps: audit.maxSteps,
+    maxSegments: audit.maxSegments,
+    totals: audit.totals,
+    lanes: audit.lanes.map((lane) => ({
+      persona: lane.persona,
+      session: lane.session,
+      webPath: lane.webPath,
+      segments: lane.segments,
+      reason: lane.reason,
+      ending: lane.ending,
+      decisions: lane.decisions,
+      pathRevision: lane.path.revision,
     })),
   };
 }
