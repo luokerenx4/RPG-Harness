@@ -504,7 +504,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
     `Development worklist: ${summary.total} items · ${summary.byPriority.P0} P0 · ${summary.byPriority.P1} P1 · ${summary.byPriority.P2} P2 · ${summary.byPriority.P3} P3`,
     `Actionability: ${summary.byActionability.executable} executable · ${summary.byActionability.diagnostic} diagnostic · ${summary.byActionability.authoring} authoring`,
     `Sources: ${summary.openReports} open reports · ${summary.sessionErrors} session errors · ${summary.storyPending} story gaps · ${summary.choiceBranches} choice branches · ${summary.authoringItems} authoring items`,
-    `Evidence sessions: ${report.evidenceSessions.join(", ") || "none"}`,
+    `Evidence sessions: ${formatEvidenceSessions(report.evidenceSessions)}`,
   ];
   if (report.items.length === 0) {
     lines.push("(clean: no actionable development work)");
@@ -517,6 +517,16 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
     );
   }
   return lines.join("\n") + "\n";
+}
+
+const TABLE_EVIDENCE_SESSION_LIMIT = 5;
+
+function formatEvidenceSessions(sessions: string[]): string {
+  if (sessions.length === 0) return "none";
+  if (sessions.length <= TABLE_EVIDENCE_SESSION_LIMIT) return sessions.join(", ");
+  const visible = sessions.slice(0, TABLE_EVIDENCE_SESSION_LIMIT);
+  return `${visible.join(", ")} · … ${sessions.length - visible.length} more ` +
+    "(use --format json for complete provenance)";
 }
 
 function authoringItem(

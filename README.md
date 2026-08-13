@@ -320,6 +320,9 @@ as `reproduce`, `transcript`, `cover`, `reach`, `reach-script`, `inspect-script`
 `verify-autoplay`, `verify-audit`, or `edit`. Story gaps use the same bounded public-input search
 and exact replay contract as choices instead of being mislabeled as generic
 autoplay.
+The default table keeps long-lived projects readable by abbreviating large
+evidence-session histories; `--format json` retains the complete provenance
+array for audits and automation.
 Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
 `work` consumes that contract without asking the agent to translate camelCase

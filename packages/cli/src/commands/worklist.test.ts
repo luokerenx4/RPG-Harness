@@ -139,6 +139,33 @@ describe("AI development worklist", () => {
     expect(formatDevelopmentWorklist(report)).toContain("no actionable development work");
   });
 
+  test("keeps the default work view bounded when history contains many evidence sessions", () => {
+    const story = storyReport();
+    story.summary.started = 0;
+    story.summary.uncovered = 0;
+    story.sessionErrors = [];
+    story.scripts = [];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.workItems = [];
+    choices.authoring.workItems = [];
+    const report = analyzeDevelopmentWorklist({ story, choices, reports: [] });
+    report.evidenceSessions = Array.from(
+      { length: 12 },
+      (_, index) => `evidence-${String(index + 1).padStart(2, "0")}`,
+    );
+
+    const formatted = formatDevelopmentWorklist(report);
+
+    expect(formatted).toContain(
+      "Evidence sessions: evidence-01, evidence-02, evidence-03, evidence-04, evidence-05 · … 7 more",
+    );
+    expect(formatted).toContain("use --format json for complete provenance");
+    expect(formatted).not.toContain("evidence-06");
+    // The machine-readable contract remains lossless; only the table view is compact.
+    expect(JSON.parse(JSON.stringify(report)).evidenceSessions).toHaveLength(12);
+  });
+
   test("keeps legacy audit findings reproducible when replay parameters are absent", () => {
     const story = storyReport();
     story.summary.started = 0;
