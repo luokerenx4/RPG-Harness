@@ -313,10 +313,13 @@ from a source checkpoint, stops on the stable target id, and replays the found
 path into a named session usable by Web/TUI/Headless. It then compares the full
 searched and replayed states, so an apparently successful but non-reproducible
 route fails loudly instead of becoming misleading coverage evidence.
-When `--from-at` is omitted and the current save cannot progress (including a
-completed GUI playthrough), `reach` retries recoverable historical choice
-checkpoints newest-first. All attempts share the same `--max-nodes` budget, and
-the resulting fork records the exact checkpoint that produced the route.
+When `--from-at` is omitted, `reach` also inspects recoverable historical
+choice checkpoints. It simulates each available authored consequence on an
+isolated clone and prioritizes checkpoints whose effects satisfy the target
+script gate, so a completed GUI branch can rewind directly to the decision
+that unlocks a sibling ending. All attempts share the same `--max-nodes`
+budget, and the resulting fork records the exact checkpoint that produced the
+route.
 Its `path` separates all public inputs from semantic decisions (`choose`,
 `doActivity`, and `select`) and forced `next` advances, avoiding inflated
 decision counts on narration-heavy or grinding routes.

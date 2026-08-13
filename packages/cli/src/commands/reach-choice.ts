@@ -1,10 +1,13 @@
 import {
   choiceDecisionContext,
+  cloneState,
   compareChoiceSearchAssessment,
+  evaluateCondition,
   peek,
   searchForChoice,
   step,
   type ComposedState,
+  type Condition,
   type ChoiceSearchClosest,
   type ChoiceSearchProgress,
   type Input,
@@ -160,6 +163,7 @@ export async function runReachChoice(
     return search.found;
   };
 
+  const sourceCandidates: ReachChoiceSourceCandidate[] = [];
   const activeCheckpoint = await historicalActiveScriptCheckpoint(
     args.gameDir,
     args.fromSession,
@@ -168,32 +172,40 @@ export async function runReachChoice(
     "earliest",
   );
   if (activeCheckpoint) {
-    await runAttempt(
-      activeCheckpoint.session,
-      await loadForkSource(
+    sourceCandidates.push({
+      session: activeCheckpoint.session,
+      source: await loadForkSource(
         args.gameDir,
         activeCheckpoint.session,
         activeCheckpoint.logEntry,
       ),
-    );
+    });
   }
-  if (!attempts.some((attempt) => attempt.search.found) && remainingNodes > 0) {
-    await runAttempt(args.fromSession, primarySource);
-  }
-  if (!attempts.some((attempt) => attempt.search.found) && args.fromLogEntry === undefined && remainingNodes > 0) {
-    for (const coordinate of await historicalSessionCheckpoints(
+  sourceCandidates.push({ session: args.fromSession, source: primarySource });
+  if (args.fromLogEntry === undefined) {
+    const historical = await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
       primarySource.selectedEntry,
       new Set(["choice"]),
-    )) {
-      const source = await loadForkSource(
+    );
+    sourceCandidates.push(...await Promise.all(historical.map(async (coordinate) => ({
+      session: coordinate.session,
+      source: await loadForkSource(
         args.gameDir,
         coordinate.session,
         coordinate.logEntry,
-      );
-      if (await runAttempt(coordinate.session, source) || remainingNodes === 0) break;
-    }
+      ),
+    }))));
+  }
+
+  for (const candidate of await rankReachChoiceSources(
+    game,
+    targetCoordinates,
+    deduplicateReachChoiceSources(sourceCandidates),
+  )) {
+    if (remainingNodes === 0) break;
+    if (await runAttempt(candidate.session, candidate.source)) break;
   }
 
   const foundAttempt = attempts.find((attempt) => attempt.search.found);
@@ -317,6 +329,101 @@ export async function runReachChoice(
     ...(report ? { report } : {}),
     ...(continuation ? { continuation } : {}),
   };
+}
+
+interface ReachChoiceSourceCandidate {
+  session: string;
+  source: ForkSource;
+}
+
+function deduplicateReachChoiceSources(
+  candidates: ReachChoiceSourceCandidate[],
+): ReachChoiceSourceCandidate[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.session}:${candidate.source.selectedEntry}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Prefer recoverable choices whose authored consequences can satisfy the
+ * target script gate. A completed story branch is otherwise irreversible in
+ * the live state, so spending the whole node budget there can never discover
+ * a sibling ending that is already present in checkpoint history.
+ */
+async function rankReachChoiceSources(
+  game: Awaited<ReturnType<typeof loadGame>>,
+  target: { scriptId: string; choiceId: string },
+  candidates: ReachChoiceSourceCandidate[],
+): Promise<ReachChoiceSourceCandidate[]> {
+  const conditions = topLevelConditions(
+    game.scripts.find((script) => script.id === target.scriptId)?.requires,
+  );
+  const scored = await Promise.all(candidates.map(async (candidate, order) => {
+    const current = await peek(game, cloneState(candidate.source.state));
+    const exactTarget = current.output?.type === "choice" &&
+      current.output.scriptId === target.scriptId &&
+      current.output.choiceId === target.choiceId;
+    const currentSatisfied = satisfiedConditions(conditions, current.state);
+    let projectedSatisfied = currentSatisfied;
+    if (current.output?.type === "choice") {
+      for (const [index, option] of current.output.options.entries()) {
+        if (!option.available) continue;
+        try {
+          const transitioned = await step(
+            game,
+            cloneState(current.state),
+            current.output.choiceId && option.id
+              ? {
+                  type: "choose",
+                  choiceId: current.output.choiceId,
+                  optionId: option.id,
+                }
+              : { type: "choose", index },
+          );
+          projectedSatisfied = Math.max(
+            projectedSatisfied,
+            satisfiedConditions(conditions, transitioned.state),
+          );
+        } catch {
+          // A module-rejected historical option is not useful as a rewind
+          // source, but it must not hide other recoverable checkpoints.
+        }
+      }
+    }
+    return {
+      candidate,
+      order,
+      exactTarget,
+      viable: !current.done && current.output !== null,
+      currentSatisfied,
+      projectedSatisfied,
+    };
+  }));
+  return scored
+    .sort((left, right) =>
+      Number(right.exactTarget) - Number(left.exactTarget) ||
+      Number(right.viable) - Number(left.viable) ||
+      right.projectedSatisfied - left.projectedSatisfied ||
+      right.currentSatisfied - left.currentSatisfied ||
+      left.order - right.order
+    )
+    .map(({ candidate }) => candidate);
+}
+
+function topLevelConditions(condition: Condition | undefined): Condition[] {
+  if (!condition) return [];
+  return "all" in condition ? condition.all : [condition];
+}
+
+function satisfiedConditions(
+  conditions: Condition[],
+  state: ComposedState,
+): number {
+  return conditions.filter((condition) => evaluateCondition(condition, state).ok).length;
 }
 
 export function summarizeReachPath(inputs: Input[]): ReachChoicePathSummary {

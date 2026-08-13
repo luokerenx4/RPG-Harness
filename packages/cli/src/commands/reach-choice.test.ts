@@ -179,7 +179,7 @@ describe("reach-choice", () => {
     expect(await listPlaytestReports(gameDir, "ai-miss-report")).toHaveLength(1);
   });
 
-  test("rewinds a terminal GUI lineage to its latest choice checkpoint", async () => {
+  test("prioritizes historical choice effects that unlock the target gate", async () => {
     const gameDir = await temporaryHistoryFallbackGame();
     const game = await loadGame(gameDir);
     let current = await peek(game, createInitialState(game));
@@ -213,7 +213,7 @@ describe("reach-choice", () => {
       status: "reached",
       found: true,
       replayVerified: true,
-      attemptedSources: 2,
+      attemptedSources: 1,
       source: {
         session: "gui-player",
         logEntry: 2,
