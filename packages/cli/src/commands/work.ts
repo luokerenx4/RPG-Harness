@@ -191,6 +191,7 @@ export async function executeDevelopmentWorkItem(
         maxNodes: args.maxNodes ?? 5000,
         maxSteps: args.maxSteps ?? 250,
         reportOnMiss: false,
+        reportOnQuality: true,
         pretty: false,
       });
       const wroteSession = result.session !== undefined;

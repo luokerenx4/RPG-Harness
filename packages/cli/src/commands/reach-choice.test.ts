@@ -5,7 +5,7 @@ import path from "node:path";
 import { createInitialState, peek, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { appendLog, saveSession, sessionDir } from "../session";
-import { runReachChoice } from "./reach-choice";
+import { runReachChoice, summarizeReachPath } from "./reach-choice";
 import { listPlaytestReports } from "../playtest-reports";
 
 const temporaryDirectories: string[] = [];
@@ -19,6 +19,74 @@ afterEach(async () => {
 });
 
 describe("reach-choice", () => {
+  test("classifies repeated two-map navigation as path churn", () => {
+    const cycle = Array.from({ length: 6 }, () => [
+      { type: "doActivity" as const, id: "move:stone-path" },
+      { type: "next" as const },
+      { type: "doActivity" as const, id: "move:foothills" },
+      { type: "next" as const },
+    ]).flat();
+
+    expect(summarizeReachPath(cycle)).toMatchObject({
+      quality: {
+        status: "churn",
+        navigationCycle: {
+          activityIds: ["move:stone-path", "move:foothills"],
+          repetitions: 6,
+          activityStart: 1,
+          activityEnd: 12,
+        },
+      },
+    });
+    expect(summarizeReachPath(cycle.slice(0, -4)).quality).toEqual({
+      status: "clean",
+    });
+  });
+
+  test("files a reproducible coding issue for a verified churning path", async () => {
+    const gameDir = await temporaryNavigationChurnGame();
+    await seedSession(gameDir, "source");
+
+    const result = await runReachChoice({
+      gameDir,
+      fromSession: "source",
+      session: "ai-churn",
+      key: "target/crossroads",
+      maxNodes: 100,
+      maxSteps: 30,
+      reportOnQuality: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      found: true,
+      replayVerified: true,
+      path: {
+        inputs: 12,
+        decisions: 12,
+        activities: 12,
+        quality: {
+          status: "churn",
+          navigationCycle: {
+            activityIds: ["move:stone-path", "move:foothills"],
+            repetitions: 6,
+          },
+        },
+      },
+      report: {
+        status: "open",
+        area: "engine",
+        severity: "minor",
+        session: "ai-churn",
+        target: "packages/engine/src/search.ts",
+      },
+    });
+    expect(result.report?.title).toContain("target/crossroads");
+    expect(result.report?.details).toContain("6 consecutive rounds");
+    expect(result.report?.evidence.checkpoint).toBeDefined();
+    expect(await listPlaytestReports(gameDir, "ai-churn")).toHaveLength(1);
+  });
+
   test("searches read-only then persists a fully verified replay path", async () => {
     const gameDir = await temporaryGame(false);
     await seedSession(gameDir, "source");
@@ -293,6 +361,49 @@ async function temporaryHistoryFallbackGame(): Promise<string> {
     "? Other ending? {id: other-ending}",
     "- Stay {id: stay, ai: social}",
     "- Leave {id: leave, ai: independent}",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryNavigationChurnGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-reach-churn-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Navigation churn test",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "target.md"), [
+    "---",
+    "id: target",
+    "title: Target",
+    "characters: []",
+    "---",
+    "",
+    "The route finally opens.",
+    "",
+    "? Where? {id: crossroads}",
+    "- Left {id: left}",
+    "- Right {id: right}",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    "  while (Number(ctx.state.baseline.variables.moves ?? 0) < 12) {",
+    "    const moves = Number(ctx.state.baseline.variables.moves ?? 0);",
+    '    const id = moves % 2 === 0 ? "move:stone-path" : "move:foothills";',
+    '    const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "road", slotsPerDay: 1, stats: [], affections: [], activities: [{ id, kind: "move", title: id, cost: 0, available: true }] } };',
+    '    if (input?.type === "doActivity" && input.id === id) {',
+    "      ctx.state.baseline.variables.moves = moves + 1;",
+    "    }",
+    "  }",
+    '  yield { type: "choice", scriptId: "target", choiceId: "crossroads", prompt: "Where?", options: [{ id: "left", text: "Left", available: true }, { id: "right", text: "Right", available: true }] };',
+    "};",
+    "export default run;",
     "",
   ].join("\n"), "utf-8");
   return dir;

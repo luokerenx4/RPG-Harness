@@ -193,7 +193,7 @@ COMMANDS
 
   reach    <game-dir> --from-session NAME --session AI [--from-at N]
            [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N]
-           [--report-on-miss] [--pretty]
+           [--report-on-miss] [--report-on-quality] [--pretty]
       Search the public Headless state space for an unseen stable authored
       choice, then replay the discovered inputs into a GUI-compatible AI fork.
       Unless --from-at is explicit, a terminal source automatically retries
@@ -203,6 +203,8 @@ COMMANDS
       --report-on-miss persists only the closest state and files a structured
       coding issue with its path and unmet target requirements. A miss exits
       non-zero whether or not a report was requested.
+      --report-on-quality files a coding issue when a verified successful path
+      contains a repeated navigation cycle. Automated work/sweep enables it.
 
   reach-script <game-dir> --script ID --from-session NAME --session AI
                [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]
@@ -1032,13 +1034,14 @@ async function runReachChoice(args: string[]): Promise<void> {
       "max-nodes": { type: "string", default: "5000" },
       "max-steps": { type: "string", default: "250" },
       "report-on-miss": { type: "boolean", default: false },
+      "report-on-quality": { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh reach <game-dir> --from-session NAME --session AI [--from-at N] [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--report-on-miss] [--pretty]",
+    "rpgh reach <game-dir> --from-session NAME --session AI [--from-at N] [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--report-on-miss] [--report-on-quality] [--pretty]",
   );
   if (!values["from-session"] || !values.session) {
     process.stderr.write(
@@ -1057,6 +1060,7 @@ async function runReachChoice(args: string[]): Promise<void> {
     maxNodes: Number(values["max-nodes"] ?? "5000"),
     maxSteps: Number(values["max-steps"] ?? "250"),
     reportOnMiss: Boolean(values["report-on-miss"]),
+    reportOnQuality: Boolean(values["report-on-quality"]),
     pretty: Boolean(values.pretty),
   });
 }

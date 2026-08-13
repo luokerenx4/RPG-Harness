@@ -45,6 +45,7 @@ export interface ReachChoiceArgs {
   maxNodes: number;
   maxSteps: number;
   reportOnMiss?: boolean;
+  reportOnQuality?: boolean;
   pretty: boolean;
   onProgress?: (progress: ChoiceSearchProgress) => void;
 }
@@ -101,6 +102,17 @@ export interface ReachChoicePathSummary {
   choices: number;
   activities: number;
   scriptSelections: number;
+  quality: ReachChoicePathQuality;
+}
+
+export interface ReachChoicePathQuality {
+  status: "clean" | "churn";
+  navigationCycle?: {
+    activityIds: [string, string];
+    repetitions: number;
+    activityStart: number;
+    activityEnd: number;
+  };
 }
 
 export async function reachChoiceCommand(args: ReachChoiceArgs): Promise<void> {
@@ -234,6 +246,7 @@ export async function runReachChoice(
   };
 
   const replayInputs = search.found ? search.inputs : search.closest.inputs;
+  const pathSummary = summarizeReachPath(replayInputs);
   const materialized = await materializeReachChoicePath(
     args,
     game,
@@ -277,6 +290,26 @@ export async function runReachChoice(
       details: formatMissDetails(search.closest, search, args),
       ...(target.source ? { target: target.source } : {}),
     });
+  } else if (
+    search.found &&
+    args.reportOnQuality &&
+    pathSummary.quality.status === "churn"
+  ) {
+    const cycle = pathSummary.quality.navigationCycle!;
+    report = await recordPlaytestReport({
+      gameDir: args.gameDir,
+      session: args.session,
+      area: "engine",
+      severity: "minor",
+      title: `Reach path contains navigation churn: ${target.key}`,
+      details: [
+        `A verified successful reach path repeated ${cycle.activityIds.join(" ↔ ")} for ${cycle.repetitions} consecutive rounds.`,
+        `Activity decisions ${cycle.activityStart}–${cycle.activityEnd}; ${pathSummary.inputs} total inputs / ${pathSummary.decisions} decisions.`,
+        `Path revision: ${pathSummary.revision}. Search explored ${search.exploredNodes} nodes.`,
+        "Treat the route as successful evidence, but improve search ranking or authored progression so repeated navigation is not rewarded as development progress.",
+      ].join("\n"),
+      target: "packages/engine/src/search.ts",
+    });
   }
 
   const continuation: ReachChoiceContinuation | undefined = search.reason === "max-nodes"
@@ -303,7 +336,7 @@ export async function runReachChoice(
     reason: search.reason,
     target,
     inputs: replayInputs,
-    path: summarizeReachPath(replayInputs),
+    path: pathSummary,
     exploredNodes: search.exploredNodes,
     visitedStates: search.visitedStates,
     deepestSteps: search.deepestSteps,
@@ -439,7 +472,42 @@ export function summarizeReachPath(inputs: Input[]): ReachChoicePathSummary {
     choices,
     activities,
     scriptSelections,
+    quality: summarizeReachPathQuality(inputs),
   };
+}
+
+function summarizeReachPathQuality(inputs: Input[]): ReachChoicePathQuality {
+  const activities = inputs.flatMap((input) =>
+    input.type === "doActivity" ? [input.id] : []
+  );
+  let best: ReachChoicePathQuality["navigationCycle"];
+  for (let start = 0; start + 1 < activities.length; start += 1) {
+    const left = activities[start]!;
+    const right = activities[start + 1]!;
+    if (
+      left === right ||
+      !left.startsWith("move:") ||
+      !right.startsWith("move:")
+    ) continue;
+    let end = start + 2;
+    while (
+      end < activities.length &&
+      activities[end] === ((end - start) % 2 === 0 ? left : right)
+    ) {
+      end += 1;
+    }
+    const repetitions = Math.floor((end - start) / 2);
+    if (repetitions < 6 || (best && best.repetitions >= repetitions)) continue;
+    best = {
+      activityIds: [left, right],
+      repetitions,
+      activityStart: start + 1,
+      activityEnd: start + repetitions * 2,
+    };
+  }
+  return best
+    ? { status: "churn", navigationCycle: best }
+    : { status: "clean" };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
