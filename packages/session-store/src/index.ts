@@ -106,26 +106,33 @@ export async function appendCheckpointedSessionEvent(
   state: unknown,
 ): Promise<SessionCheckpointRef> {
   assertSessionName(session);
-  if (!state || typeof state !== "object" || Array.isArray(state)) {
-    throw new Error("checkpoint state must be a JSON object");
-  }
-  const serialized = JSON.stringify(state);
-  const revision = createHash("sha256").update(serialized).digest("hex");
-  const relativeFile = path.posix.join("checkpoints", `${revision}.json`);
   const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
   await mkdir(dir, { recursive: true });
-  await persistCheckpointObject(gameDir, revision, serialized);
-  const checkpoint: SessionCheckpointRef = {
-    schemaVersion: 1,
-    file: relativeFile,
-    revision,
-  };
+  const checkpoint = await storeCheckpointState(gameDir, state);
   await appendFile(
     path.join(dir, "log.jsonl"),
     JSON.stringify({ ...event, checkpoint }) + "\n",
     "utf-8",
   );
   return checkpoint;
+}
+
+/** Persist a recoverable state object without mutating any session log. */
+export async function storeCheckpointState(
+  gameDir: string,
+  state: unknown,
+): Promise<SessionCheckpointRef> {
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    throw new Error("checkpoint state must be a JSON object");
+  }
+  const serialized = JSON.stringify(state);
+  const revision = createHash("sha256").update(serialized).digest("hex");
+  await persistCheckpointObject(gameDir, revision, serialized);
+  return {
+    schemaVersion: 1,
+    file: path.posix.join("checkpoints", `${revision}.json`),
+    revision,
+  };
 }
 
 export async function loadSessionCheckpoint(

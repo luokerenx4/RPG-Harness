@@ -44,6 +44,12 @@ project stores each unique checkpoint body once under
 `.rpg-harness/objects/checkpoints/`, even when many GUI and Headless branches
 reference it. `rpgh compact-checkpoints <game-dir>` safely previews migration
 of older per-session copies; add `--apply` only after the hash preflight passes.
+A clean session family can be frozen with `rpgh certify`: the resulting compact
+certificate binds every tracked script completion and stable choice option to
+the current authored revision and a verified object. `rpgh verify-certificate`
+can validate that evidence without the original session directories, and any
+later story edit makes the affected facts stale instead of silently preserving
+an obsolete green check.
 A report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
 the observed state after the live save and ordinary replay log are cleared.
 The GUI watches content revisions and reloads when another surface advances the
@@ -195,6 +201,8 @@ rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh compact-checkpoints <game-dir> [--apply]                 # deduplicate immutable state objects
+rpgh certify  <game-dir> --session NAME [--family]            # freeze current strict coverage evidence
+rpgh verify-certificate <game-dir> <certificate.json>         # validate evidence without session logs
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue

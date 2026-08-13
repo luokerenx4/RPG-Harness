@@ -7,6 +7,7 @@ import {
   appendCheckpointedSessionEvent,
   compactSessionCheckpoints,
   loadSessionCheckpoint,
+  storeCheckpointState,
 } from "./index";
 
 const temporaryDirectories: string[] = [];
@@ -72,6 +73,16 @@ describe("session checkpoints", () => {
     await expect(access(path.join(root, ".rpg-harness/sessions/one/checkpoints")))
       .rejects.toThrow();
     expect(await loadSessionCheckpoint(root, "two", second)).toEqual(state);
+  });
+
+  test("stores a checkpoint without creating or mutating a session", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "rpgh-checkpoint-"));
+    temporaryDirectories.push(root);
+    const state = { certificate: "witness" };
+    const checkpoint = await storeCheckpointState(root, state);
+    expect(await loadSessionCheckpoint(root, "absent-session", checkpoint)).toEqual(state);
+    await expect(access(path.join(root, ".rpg-harness/sessions")))
+      .rejects.toThrow();
   });
 
   test("preflights and compacts legacy session checkpoint copies", async () => {

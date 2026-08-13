@@ -382,6 +382,13 @@ interface GameState {
 ```
 
 Saves are a single JSON file. AI playtester branching = snapshot + replay from a state. `git diff` on saves works. Hot-reload preserves state.
+Checkpoint bodies live in a project-level SHA-256 object store rather than
+inside each session, so branch fan-out reuses identical states. Session logs
+retain logical checkpoint references and fork provenance. A coverage
+certificate is a second, smaller layer: it indexes only current-revision story
+completion and stable option facts, with verified object witnesses. This lets
+CI validate the current authored game after bulky exploratory sessions are
+archived, while any content revision invalidates only the facts it changes.
 
 The local Web dev server exposes a same-origin session bridge. Its default
 `web` session is the same `.rpg-harness/sessions/web/state.json` and

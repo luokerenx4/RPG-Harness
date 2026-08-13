@@ -26,6 +26,16 @@ export {
   compactCheckpointsCommand,
   formatCheckpointCompaction,
 } from "./commands/compact-checkpoints";
+export {
+  createCoverageCertificate,
+  readCoverageCertificate,
+  verifyCoverageCertificate,
+} from "./commands/coverage-certificate";
+export type {
+  CoverageCertificate,
+  CoverageCertificateVerification,
+  CreateCoverageCertificateArgs,
+} from "./commands/coverage-certificate";
 export type { WorkArgs, WorkResult } from "./commands/work";
 export {
   DEFAULT_CHOICE_PROBE_PERSONAS,

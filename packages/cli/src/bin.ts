@@ -29,6 +29,10 @@ import { assetsListCommand, assetsPromptsCommand } from "./commands/assets";
 import { studioCommand } from "./commands/studio";
 import { compactCheckpointsCommand } from "./commands/compact-checkpoints";
 import {
+  coverageCertificateCommand,
+  verifyCoverageCertificateCommand,
+} from "./commands/coverage-certificate";
+import {
   reportCommand,
   reportsCommand,
   inspectReportCommand,
@@ -69,6 +73,14 @@ COMMANDS
       Preflight legacy per-session checkpoints and consolidate identical state
       bodies into the project content-addressed object store. Dry-run by default;
       --apply removes each legacy copy only after its global object is verified.
+
+  certify <game-dir> --session NAME [--family] [--out FILE] [--pretty]
+      Freeze strict, current-revision story and choice evidence into a compact
+      content-addressed certificate with independently verifiable checkpoints.
+
+  verify-certificate <game-dir> <certificate.json> [--pretty]
+      Verify certificate integrity, current authored revisions, AI intent,
+      story completion states, option facts, and all referenced state objects.
 
   coverage <game-dir> [--session NAME] [--family] [--status pending|completed|started|stale|uncovered|ignored|all]
            [--format table|json]
@@ -280,6 +292,10 @@ async function main(): Promise<void> {
       return runSessions(rest);
     case "compact-checkpoints":
       return runCompactCheckpoints(rest);
+    case "certify":
+      return runCertify(rest);
+    case "verify-certificate":
+      return runVerifyCertificate(rest);
     case "coverage":
       return runCoverage(rest);
     case "choices":
@@ -370,6 +386,52 @@ async function runCompactCheckpoints(args: string[]): Promise<void> {
   await compactCheckpointsCommand({
     gameDir,
     apply: Boolean(values.apply),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runCertify(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      session: { type: "string" },
+      family: { type: "boolean", default: false },
+      out: { type: "string" },
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh certify <game-dir> --session NAME [--family] [--out FILE] [--pretty]",
+  );
+  if (!values.session) throw new Error("certify requires --session NAME");
+  await coverageCertificateCommand({
+    gameDir,
+    session: values.session,
+    family: Boolean(values.family),
+    ...(values.out !== undefined ? { out: values.out } : {}),
+    pretty: Boolean(values.pretty),
+  });
+}
+
+async function runVerifyCertificate(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      pretty: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2 || !positionals[0] || !positionals[1]) {
+    process.stderr.write(
+      "Usage: rpgh verify-certificate <game-dir> <certificate.json> [--pretty]\n",
+    );
+    process.exit(2);
+  }
+  await verifyCoverageCertificateCommand({
+    gameDir: positionals[0],
+    file: positionals[1],
     pretty: Boolean(values.pretty),
   });
 }
