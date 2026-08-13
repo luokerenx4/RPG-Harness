@@ -43,6 +43,8 @@ import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
 import type {
   WebBranchContext,
+  WebAiPersona,
+  WebAiTurnReceipt,
   WebDevelopmentStatus,
   WebExplorationStatus,
   WebFeedbackArea,
@@ -90,6 +92,16 @@ interface Props {
     result: InputResult;
     source?: string;
   };
+  aiControlEnabled?: boolean;
+  aiTurnReceipt?: WebAiTurnReceipt;
+  aiTurnPending?: boolean;
+  initialAiPersona?: string;
+  initialAiSeeds?: Record<string, number>;
+  onLoadAiPersonas?: () => Promise<WebAiPersona[]>;
+  onAdvanceAiTurn?: (
+    persona: string,
+    seed?: number,
+  ) => Promise<WebAiTurnReceipt>;
   explorationEnabled?: boolean;
   onLoadExploration?: () => Promise<WebExplorationStatus | null>;
   onExplore?: (key: string) => Promise<void>;
@@ -117,9 +129,47 @@ export async function submitWebInput(
 }
 
 export function inputNoticeSourceLabel(source: string): string {
-  if (source === "cli" || source === "autoplay") return "HEADLESS";
+  if (source === "cli" || source.startsWith("autoplay:")) return "HEADLESS";
   if (source === "tui") return "TUI";
   return source.toUpperCase();
+}
+
+export function formatAiTurnReceipt(receipt: WebAiTurnReceipt): string {
+  const action = receipt.lastAction ? formatAiPublicAction(receipt.lastAction) : null;
+  if (receipt.advancedAfterTurn) {
+    return `${action ? `${action}；` : ""}AI 落子后其他界面又推进了会话；已显示最新画面，下一手归玩家。`;
+  }
+  if (receipt.ending) {
+    return `${action ? `${action}；` : ""}到达结局 ${receipt.ending}。下一手归玩家。`;
+  }
+  if (receipt.rejectedInputs > 0) {
+    return `输入被拒绝 ${receipt.rejectedInputs} 次，剧情未被覆盖。下一手归玩家。`;
+  }
+  const progress = receipt.progress.scriptProgress;
+  if (progress) {
+    return `${action ? `${action}；` : ""}推进 ${progress.from ?? "场景"}：${progress.beatIndexFrom} → ${progress.beatIndexTo}。下一手归玩家。`;
+  }
+  if (receipt.progress.madeProgress) {
+    return `${action ? `${action}；` : ""}推进了当前目标。下一手归玩家。`;
+  }
+  return `${action ?? `完成 ${receipt.decisions} 个决策（${receipt.reason}）`}。下一手归玩家。`;
+}
+
+function formatAiPublicAction(
+  action: NonNullable<WebAiTurnReceipt["lastAction"]>,
+): string {
+  switch (action.type) {
+    case "next":
+      return "推进文本";
+    case "choose":
+      return `选择「${action.text}」`;
+    case "select":
+      return `进入「${action.title ?? action.scriptId}」`;
+    case "doActivity":
+      return `执行「${action.title ?? action.id}」`;
+    case "quit":
+      return "选择退出";
+  }
 }
 
 export function WebPlayScreen({
@@ -134,6 +184,13 @@ export function WebPlayScreen({
   onFeedback,
   feedbackFeed,
   externalInputNotice,
+  aiControlEnabled = false,
+  aiTurnReceipt,
+  aiTurnPending = false,
+  initialAiPersona,
+  initialAiSeeds,
+  onLoadAiPersonas,
+  onAdvanceAiTurn,
   explorationEnabled = false,
   onLoadExploration,
   onExplore,
@@ -161,6 +218,16 @@ export function WebPlayScreen({
   const [exploration, setExploration] = useState<WebExplorationStatus | null>(null);
   const [exploring, setExploring] = useState(false);
   const [explorationError, setExplorationError] = useState<string | null>(null);
+  const [aiPersonas, setAiPersonas] = useState<WebAiPersona[]>([]);
+  const [aiPersona, setAiPersona] = useState(initialAiPersona ?? "objective");
+  const [aiSeeds, setAiSeeds] = useState<Record<string, number>>(
+    initialAiSeeds ?? {},
+  );
+  const [aiThinking, setAiThinking] = useState(false);
+  const [aiReceipt, setAiReceipt] = useState<WebAiTurnReceipt | null>(
+    aiTurnReceipt ?? null,
+  );
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const assetMap = useRef(
     new Map((game.assets ?? []).map((a) => [a.path, a] as const)),
@@ -175,6 +242,46 @@ export function WebPlayScreen({
     setInputNotice(null);
     setInputNoticeSource(null);
   }, [externalInputNotice]);
+
+  useEffect(() => {
+    if (aiTurnReceipt) setAiReceipt(aiTurnReceipt);
+  }, [aiTurnReceipt]);
+
+  useEffect(() => {
+    if (!aiControlEnabled || !onLoadAiPersonas) return;
+    let cancelled = false;
+    void onLoadAiPersonas().then((personas) => {
+      if (cancelled) return;
+      setAiPersonas(personas);
+      setAiPersona((current) =>
+        personas.some((persona) => persona.name === current)
+          ? current
+          : personas[0]?.name ?? ""
+      );
+    }).catch((cause) => {
+      if (!cancelled) setAiError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [aiControlEnabled, onLoadAiPersonas]);
+
+  const advanceAi = useCallback(async () => {
+    if (!onAdvanceAiTurn || !aiPersona || aiThinking || processingRef.current) return;
+    processingRef.current = true;
+    setAiThinking(true);
+    setAiError(null);
+    try {
+      const receipt = await onAdvanceAiTurn(aiPersona, aiSeeds[aiPersona]);
+      if (receipt.nextSeed !== null) {
+        setAiSeeds((current) => ({ ...current, [aiPersona]: receipt.nextSeed! }));
+      }
+      setAiReceipt(receipt);
+    } catch (cause) {
+      setAiError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      processingRef.current = false;
+      setAiThinking(false);
+    }
+  }, [aiPersona, aiSeeds, aiThinking, onAdvanceAiTurn]);
 
   useEffect(() => {
     if (model.stage.kind !== "ended" || !explorationEnabled || !onLoadExploration) {
@@ -267,7 +374,7 @@ export function WebPlayScreen({
 
   const sendInput = useCallback(
     async (input: Input) => {
-      if (processingRef.current) return;
+      if (processingRef.current || aiTurnPending) return;
       const runner = runnerRef.current;
       if (!runner) return;
       processingRef.current = true;
@@ -291,6 +398,7 @@ export function WebPlayScreen({
         }
         setInputNotice(null);
         setInputNoticeSource(null);
+        setAiReceipt(null);
         dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(
           submitted.result!,
@@ -304,7 +412,7 @@ export function WebPlayScreen({
         processingRef.current = false;
       }
     },
-    [commit, onCommit],
+    [aiTurnPending, commit, onCommit],
   );
 
   // Keyboard: Space/Enter advances text beats; Esc exits. Selection on
@@ -368,6 +476,29 @@ export function WebPlayScreen({
         )}
         {branchContext?.handoff && <BranchHandoffBadge branch={branchContext} />}
         {developmentStatus && <DevelopmentBadge status={developmentStatus} />}
+        {model.stage.kind !== "ended" && aiControlEnabled && onAdvanceAiTurn && (
+          <span className="hud-ai-control" title={aiPersonas.find((entry) => entry.name === aiPersona)?.description}>
+            <select
+              aria-label="AI人格"
+              value={aiPersona}
+              disabled={aiThinking || aiTurnPending || aiPersonas.length === 0}
+              onChange={(event) => setAiPersona(event.target.value)}
+            >
+              {aiPersonas.map((persona) => (
+                <option value={persona.name} key={persona.name}>
+                  {persona.source.startsWith("module:") ? "PROJECT · " : ""}{persona.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="hud-btn hud-ai-btn"
+              disabled={aiThinking || aiTurnPending || !aiPersona}
+              onClick={() => void advanceAi()}
+            >
+              {aiThinking || aiTurnPending ? "AI思考中…" : "一手交给 AI"}
+            </button>
+          </span>
+        )}
         {onExit && (
           <button className="hud-btn" onClick={onExit}>
             ← 主菜单
@@ -391,6 +522,24 @@ export function WebPlayScreen({
           </button>
         )}
       </div>
+      {(aiReceipt || aiError) && (
+        <div className={`ai-turn-receipt${aiError ? " error" : ""}`} role="status">
+          {aiError
+            ? (
+              <>
+                <span>AI 接管失败：{aiError}</span>
+                <button onClick={() => setAiError(null)} aria-label="AI错误通知を閉じる">×</button>
+              </>
+            )
+            : aiReceipt && (
+              <>
+                <strong>AI · {aiReceipt.persona}</strong>
+                <span>{formatAiTurnReceipt(aiReceipt)}</span>
+                <button onClick={() => setAiReceipt(null)} aria-label="AI操作通知を閉じる">×</button>
+              </>
+            )}
+        </div>
+      )}
       {showBacklog && (
         <BacklogOverlay entries={model.backlog} onClose={() => setShowBacklog(false)} />
       )}

@@ -174,6 +174,45 @@ export interface WebExplorationReceipt {
   workItem: NonNullable<WebExplorationStatus["next"]>;
 }
 
+export interface WebAiPersona {
+  name: string;
+  description: string;
+  deterministic: boolean;
+  source: "builtin" | `module:${string}`;
+}
+
+export interface WebAiTurnReceipt {
+  persona: string;
+  seed: number;
+  nextSeed: number | null;
+  reason: string;
+  decisions: number;
+  rejectedInputs: number;
+  steps: number;
+  ending: string | null;
+  lastAction: WebAiPublicAction | null;
+  progress: {
+    madeProgress: boolean;
+    completedScripts: { count: number; recent: string[] };
+    objectiveChanges: { count: number; recent: unknown[] };
+    scriptProgress?: {
+      from: string | null;
+      to: string | null;
+      beatIndexFrom: number;
+      beatIndexTo: number;
+    };
+  };
+  advancedAfterTurn: boolean;
+  state: ComposedState;
+}
+
+export type WebAiPublicAction =
+  | { type: "next" }
+  | { type: "choose"; choiceId?: string; optionId?: string; text: string }
+  | { type: "select"; scriptId: string; title?: string }
+  | { type: "doActivity"; id: string; title?: string }
+  | { type: "quit" };
+
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
 const bridgeLogCursors = new Map<string, number>();
@@ -346,6 +385,102 @@ export async function startNextExploration(
   );
   if (!response.ok) throw await bridgeError(response);
   return await response.json() as WebExplorationReceipt;
+}
+
+export async function loadAiPersonas(gameId: string): Promise<WebAiPersona[]> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return [];
+  const response = await fetch(aiEndpoint(gameId, info.session));
+  if (!response.ok) throw await bridgeError(response);
+  const payload = await response.json() as { personas?: unknown };
+  if (!Array.isArray(payload.personas)) {
+    throw new Error("session bridge did not return AI personas");
+  }
+  return payload.personas as WebAiPersona[];
+}
+
+export async function advanceAiTurn(
+  gameId: string,
+  persona: string,
+  seed?: number,
+): Promise<WebAiTurnReceipt> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") {
+    throw new Error("AI co-play requires the local shared-session bridge");
+  }
+  const expectedRevision = bridgeRevisions.get(gameId);
+  if (typeof expectedRevision !== "string") {
+    throw new Error("AI co-play requires a loaded shared save revision");
+  }
+  const response = await fetch(aiEndpoint(gameId, info.session), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      persona,
+      expectedRevision,
+      ...(seed !== undefined ? { seed } : {}),
+    }),
+  });
+  if (!response.ok) throw await bridgeError(response);
+  const payload = await response.json() as Record<string, unknown>;
+  const snapshot = payload.snapshot as Record<string, unknown> | undefined;
+  if (
+    !snapshot || typeof snapshot.revision !== "string" ||
+    !snapshot.state || typeof snapshot.state !== "object" ||
+    !Number.isSafeInteger(snapshot.logCursor) ||
+    (snapshot.logIdentity !== null && typeof snapshot.logIdentity !== "string")
+  ) throw new Error("session bridge returned an invalid AI turn snapshot");
+  if (
+    typeof payload.persona !== "string" ||
+    !Number.isInteger(payload.seed) ||
+    (payload.nextSeed !== null && !Number.isInteger(payload.nextSeed)) ||
+    typeof payload.reason !== "string" ||
+    !Number.isInteger(payload.decisions) ||
+    !Number.isInteger(payload.rejectedInputs) ||
+    !Number.isInteger(payload.steps) ||
+    (payload.ending !== null && typeof payload.ending !== "string") ||
+    typeof payload.advancedAfterTurn !== "boolean" ||
+    (payload.lastAction !== null && !isWebAiPublicAction(payload.lastAction))
+  ) throw new Error("session bridge returned an invalid AI turn receipt");
+  bridgeRevisions.set(gameId, snapshot.revision);
+  bridgeLogCursors.set(gameId, snapshot.logCursor as number);
+  bridgeLogIdentities.set(gameId, snapshot.logIdentity as string | null);
+  return {
+    persona: payload.persona as string,
+    seed: payload.seed as number,
+    nextSeed: payload.nextSeed as number | null,
+    reason: payload.reason as string,
+    decisions: payload.decisions as number,
+    rejectedInputs: payload.rejectedInputs as number,
+    steps: payload.steps as number,
+    ending: payload.ending as string | null,
+    lastAction: payload.lastAction as WebAiPublicAction | null,
+    progress: payload.progress as WebAiTurnReceipt["progress"],
+    advancedAfterTurn: payload.advancedAfterTurn as boolean,
+    state: snapshot.state as ComposedState,
+  };
+}
+
+function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const action = value as Record<string, unknown>;
+  switch (action.type) {
+    case "next":
+    case "quit":
+      return true;
+    case "choose":
+      return typeof action.text === "string" &&
+        (action.choiceId === undefined || typeof action.choiceId === "string") &&
+        (action.optionId === undefined || typeof action.optionId === "string");
+    case "select":
+      return typeof action.scriptId === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    case "doActivity":
+      return typeof action.id === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    default:
+      return false;
+  }
 }
 
 export async function saveState(
@@ -524,6 +659,10 @@ function isRejectedInputResult(value: unknown): value is InputResult {
 
 function bridgeEndpoint(gameId: string, session: string): string {
   return `${BRIDGE_ROOT}/session/${encodeURIComponent(gameId)}/${encodeURIComponent(session)}`;
+}
+
+function aiEndpoint(gameId: string, session: string): string {
+  return `${BRIDGE_ROOT}/ai/${encodeURIComponent(gameId)}/${encodeURIComponent(session)}`;
 }
 
 function localKey(gameId: string): string {

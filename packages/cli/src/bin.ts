@@ -19,6 +19,7 @@ import { forkCommand } from "./commands/fork";
 import { playCommand } from "./commands/play";
 import { testCommand } from "./commands/test";
 import { autoplayCommand } from "./commands/autoplay";
+import { personasCommand } from "./commands/personas";
 import { auditCommand, DEFAULT_AUDIT_PERSONAS } from "./commands/audit";
 import { coverChoiceCommand } from "./commands/cover-choice";
 import { reachChoiceCommand } from "./commands/reach-choice";
@@ -190,6 +191,10 @@ COMMANDS
       resumable continuation, including the next persona RNG state.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
+
+  personas <game-dir> [--pretty]
+      List the built-in and project-module AI policies available to autoplay
+      and GUI co-play, including provenance and determinism.
 
   audit    <game-dir> --session-prefix PREFIX
            [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--max-segments N] [--seed N]
@@ -364,6 +369,8 @@ async function main(): Promise<void> {
       return runTest(rest);
     case "autoplay":
       return runAutoplay(rest);
+    case "personas":
+      return runPersonas(rest);
     case "audit":
       return runAuditCommand(rest);
     case "cover":
@@ -436,6 +443,19 @@ async function runCompactCheckpoints(args: string[]): Promise<void> {
     apply: Boolean(values.apply),
     pretty: Boolean(values.pretty),
   });
+}
+
+async function runPersonas(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: { pretty: { type: "boolean", default: false } },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh personas <game-dir> [--pretty]",
+  );
+  await personasCommand({ gameDir, pretty: Boolean(values.pretty) });
 }
 
 async function runCertify(args: string[]): Promise<void> {
@@ -960,6 +980,7 @@ async function runAutoplay(args: string[]): Promise<void> {
       "report-on-stop": { type: "boolean", default: false },
       full: { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
+      "expected-initial-state-revision": { type: "string" },
     },
     allowPositionals: true,
   });
@@ -983,6 +1004,12 @@ async function runAutoplay(args: string[]): Promise<void> {
     reportOnStop: Boolean(values["report-on-stop"]),
     full: Boolean(values.full),
     pretty: Boolean(values.pretty),
+    ...(values["expected-initial-state-revision"] !== undefined
+      ? {
+          expectedInitialStateRevision:
+            values["expected-initial-state-revision"],
+        }
+      : {}),
   });
 }
 

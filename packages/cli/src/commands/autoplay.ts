@@ -66,7 +66,7 @@ export interface AutoplayArgs {
     fromSession: string;
     source: ForkSource;
   };
-  /** Internal resume fence checked under the target transaction lock. */
+  /** Resume/GUI ownership fence checked under the target transaction lock. */
   expectedInitialStateRevision?: string;
   // Internal execution target used by `rpgh cover`. The first decision is
   // only submitted after the recoverable checkpoint still presents this
@@ -101,6 +101,8 @@ export interface AutoplaySummary {
   behaviorCycle?: BehaviorCycleDiagnostic;
   progress: AutoplayProgress;
   decisionPath: AutoplayDecisionPath;
+  /** Last accepted player-visible action, suitable for compact co-play receipts. */
+  lastAction?: AutoplayPublicAction;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -189,6 +191,18 @@ export interface AutoplayDecisionPath {
   revision: string;
   decisions: AutoplaySemanticDecision[];
 }
+
+export type AutoplayPublicAction =
+  | { type: "next" }
+  | {
+      type: "choose";
+      choiceId?: string;
+      optionId?: string;
+      text: string;
+    }
+  | { type: "select"; scriptId: string; title?: string }
+  | { type: "doActivity"; id: string; title?: string }
+  | { type: "quit" };
 
 export interface AutoplayProgress {
   madeProgress: boolean;
@@ -580,6 +594,7 @@ export async function runAutoplay(
     result.trace,
   );
   const decisionPath = summarizeDecisionPath(result.trace);
+  const lastAction = summarizeLastPublicAction(result.trace);
   const continuation: AutoplayContinuation | undefined =
     args.session && result.reason === "max-steps" && !result.behaviorCycle
       ? {
@@ -698,6 +713,7 @@ export async function runAutoplay(
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
     progress,
     decisionPath,
+    ...(lastAction ? { lastAction } : {}),
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
@@ -916,6 +932,82 @@ export function summarizeDecisionPath(
     revision: createHash("sha256").update(JSON.stringify(decisions)).digest("hex"),
     decisions,
   };
+}
+
+/**
+ * Preserve the human-readable meaning of the final accepted input without
+ * exposing module payloads or the persona's private reasoning. Trace outputs
+ * are post-input, so labels are resolved against the preceding public view.
+ */
+export function summarizeLastPublicAction(
+  trace: ReadonlyArray<Pick<
+    TraceEntry,
+    "input" | "decision" | "activityDecision" | "inputResult" | "output"
+  >>,
+): AutoplayPublicAction | undefined {
+  let previousOutput: Output | undefined;
+  let lastAction: AutoplayPublicAction | undefined;
+  for (const entry of trace) {
+    const input = entry.input;
+    if (input && entry.inputResult?.accepted !== false) {
+      switch (input.type) {
+        case "next":
+          lastAction = { type: "next" };
+          break;
+        case "choose": {
+          const choice = previousOutput?.type === "choice"
+            ? previousOutput
+            : undefined;
+          const optionId = entry.decision?.optionId ??
+            ("optionId" in input ? input.optionId : undefined);
+          const option = choice?.options.find((candidate, index) =>
+            optionId !== undefined
+              ? candidate.id === optionId
+              : "index" in input && index === input.index
+          );
+          lastAction = {
+            type: "choose",
+            ...(entry.decision?.choiceId ?? choice?.choiceId
+              ? { choiceId: entry.decision?.choiceId ?? choice?.choiceId }
+              : {}),
+            ...(optionId !== undefined ? { optionId } : {}),
+            text: option?.text ?? optionId ?? "选项",
+          };
+          break;
+        }
+        case "select": {
+          const selected = previousOutput?.type === "scriptComplete"
+            ? previousOutput.nextAvailable.find(({ id }) => id === input.scriptId)
+            : undefined;
+          lastAction = {
+            type: "select",
+            scriptId: input.scriptId,
+            ...(selected?.title ? { title: selected.title } : {}),
+          };
+          break;
+        }
+        case "doActivity": {
+          const title = entry.activityDecision?.title ??
+            (previousOutput?.type === "hubMenu"
+              ? previousOutput.snapshot.activities.find(
+                  ({ id }) => id === input.id,
+                )?.title
+              : undefined);
+          lastAction = {
+            type: "doActivity",
+            id: entry.activityDecision?.activityId ?? input.id,
+            ...(title ? { title } : {}),
+          };
+          break;
+        }
+        case "quit":
+          lastAction = { type: "quit" };
+          break;
+      }
+    }
+    previousOutput = entry.output;
+  }
+  return lastAction;
 }
 
 export function summarizeAutoplayProgress(

@@ -16,6 +16,7 @@ import {
   detectTerminalScriptId,
   runAutoplay,
   summarizeDecisionPath,
+  summarizeLastPublicAction,
   type AutoplaySummary,
 } from "./autoplay";
 import { loadForkSource } from "./fork";
@@ -54,6 +55,48 @@ describe("autoplay ending summary", () => {
 });
 
 describe("autoplay semantic decision paths", () => {
+  test("keeps the last accepted choice's public text for GUI co-play", () => {
+    const choice: Output = {
+      type: "choice",
+      scriptId: "intro",
+      choiceId: "opening",
+      options: [
+        { id: "alpha", text: "Alpha", available: true },
+        { id: "beta", text: "Walk the moonlit road", available: true },
+      ],
+    };
+    expect(summarizeLastPublicAction([
+      { input: null, output: choice },
+      {
+        input: { type: "choose", choiceId: "opening", optionId: "beta" },
+        decision: { scriptId: "intro", choiceId: "opening", optionId: "beta" },
+        inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
+        output: { type: "narration", text: "Moonlight" },
+      },
+    ])).toEqual({
+      type: "choose",
+      choiceId: "opening",
+      optionId: "beta",
+      text: "Walk the moonlit road",
+    });
+  });
+
+  test("does not report a rejected input as the AI action", () => {
+    expect(summarizeLastPublicAction([
+      { input: null, output: { type: "narration", text: "Wait" } },
+      {
+        input: { type: "select", scriptId: "ending" },
+        inputResult: {
+          accepted: false,
+          code: "unexpected-input",
+          message: "Expected next",
+          expected: [{ type: "next" }],
+        },
+        output: { type: "narration", text: "Wait" },
+      },
+    ])).toBeUndefined();
+  });
+
   test("retains the authored pacing-instance identity in semantic evidence", () => {
     const hub: Output = {
       type: "hubMenu",

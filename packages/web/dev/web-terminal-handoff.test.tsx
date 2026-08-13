@@ -2,14 +2,41 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, inputNoticeSourceLabel, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, inputNoticeSourceLabel, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
   test("labels cross-surface input diagnostics by their actual controller", () => {
     expect(inputNoticeSourceLabel("cli")).toBe("HEADLESS");
-    expect(inputNoticeSourceLabel("autoplay")).toBe("HEADLESS");
+    expect(inputNoticeSourceLabel("autoplay:completionist")).toBe("HEADLESS");
     expect(inputNoticeSourceLabel("tui")).toBe("TUI");
+  });
+
+  test("explains a bounded AI turn and returns control to the player", () => {
+    expect(formatAiTurnReceipt({
+      persona: "completionist",
+      seed: 17,
+      nextSeed: 18,
+      reason: "max-steps",
+      decisions: 1,
+      rejectedInputs: 0,
+      steps: 2,
+      ending: null,
+      lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "月影を追う" },
+      progress: {
+        madeProgress: true,
+        completedScripts: { count: 0, recent: [] },
+        objectiveChanges: { count: 0, recent: [] },
+        scriptProgress: {
+          from: "intro",
+          to: "intro",
+          beatIndexFrom: 2,
+          beatIndexTo: 3,
+        },
+      },
+      advancedAfterTurn: false,
+      state: {} as never,
+    })).toBe("选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。");
   });
 
   test("renders player and AI stable selections as story context in backlog", () => {
@@ -31,7 +58,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 11,
+      schemaVersion: 12,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -68,6 +95,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "branch-control-handoff",
         text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+      }, {
+        surface: "bounded-ai-coplay",
+        text: "选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。",
       }, {
         surface: "feedback-live-routing",
         text: "scripts/current.mdRouting: live checkpoint / current runtime",

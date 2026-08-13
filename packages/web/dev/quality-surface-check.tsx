@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 11;
+  schemaVersion: 12;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -24,6 +24,7 @@ export interface WebQualitySurfaceEvidence {
       | "terminal-ai-branch"
       | "ai-choice-backlog"
       | "branch-control-handoff"
+      | "bounded-ai-coplay"
       | "feedback-live-routing";
     text: string;
   }>;
@@ -157,19 +158,55 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(terminalExplorationProjection());
   projections.push(aiChoiceBacklogProjection());
   projections.push(branchControlHandoffProjection());
+  projections.push(boundedAiCoplayProjection());
   projections.push(feedbackLiveRoutingProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 11,
+    schemaVersion: 12,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function boundedAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const text = formatAiTurnReceipt({
+    persona: "completionist",
+    seed: 17,
+    nextSeed: 18,
+    reason: "max-steps",
+    decisions: 1,
+    rejectedInputs: 0,
+    steps: 2,
+    ending: null,
+    lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "月影を追う" },
+    progress: {
+      madeProgress: true,
+      completedScripts: { count: 0, recent: [] },
+      objectiveChanges: { count: 0, recent: [] },
+      scriptProgress: {
+        from: "intro",
+        to: "intro",
+        beatIndexFrom: 2,
+        beatIndexTo: 3,
+      },
+    },
+    advancedAfterTurn: false,
+    state: {} as never,
+  });
+  if (
+    !text.includes("选择「月影を追う」") ||
+    !text.includes("推进 intro：2 → 3") ||
+    !text.includes("下一手归玩家")
+  ) {
+    throw new Error("Web AI co-play turn is not bounded or auditable");
+  }
+  return { surface: "bounded-ai-coplay", text };
 }
 
 function feedbackLiveRoutingProjection(): WebQualitySurfaceEvidence["projections"][number] {

@@ -13,6 +13,15 @@ bun run dev:web           # play the same game in the browser
 bun run autoplay          # watch an AI persona play through
 ```
 
+In the local shared Web shell, ordinary play is co-play: choose any built-in
+or project-module AI persona in the HUD and hand it exactly one decision. The
+turn is fenced to the save revision visible in the GUI, persists through the
+same Headless `autoplay:<persona>` log, and returns control immediately. A
+stochastic persona retains its continuation RNG cursor across successive
+hand-offs; the player's next click takes the next turn without a stop-task
+race. `rpgh personas <game-dir>` exposes the same project-extensible registry
+to other tools.
+
 ## Make your own
 
 ```bash

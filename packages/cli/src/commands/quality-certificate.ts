@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 11;
+  schemaVersion: 12;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -318,6 +318,7 @@ export interface QualitySurfaceEvidence {
       | "terminal-ai-branch"
       | "ai-choice-backlog"
       | "branch-control-handoff"
+      | "bounded-ai-coplay"
       | "feedback-live-routing";
     text: string;
   }>;
@@ -366,6 +367,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "branch-control-handoff",
   text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+}, {
+  surface: "bounded-ai-coplay",
+  text: "选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。",
 }, {
   surface: "feedback-live-routing",
   text: "scripts/current.mdRouting: live checkpoint / current runtime",
@@ -687,7 +691,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 11 &&
+    value.schemaVersion === 12 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

@@ -7,15 +7,18 @@ import {
   getSessionInfo,
   hasSave,
   loadBranchContext,
+  loadAiPersonas,
   loadState,
   loadDevelopmentStatus,
   loadExplorationStatus,
   loadFeedbackFeed,
   pollExternalState,
+  advanceAiTurn,
   saveState,
   startNextExploration,
   submitFeedback,
   type WebSessionInfo,
+  type WebAiTurnReceipt,
   type WebBranchContext,
   type WebDevelopmentStatus,
   type WebFeedbackFeed,
@@ -36,6 +39,9 @@ interface Loaded {
     result: InputResult;
     source?: string;
   };
+  aiTurnReceipt?: WebAiTurnReceipt;
+  aiPersona?: string;
+  aiSeeds?: Record<string, number>;
 }
 
 export function App() {
@@ -45,6 +51,7 @@ export function App() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoStartConsumed, setAutoStartConsumed] = useState(false);
+  const [aiTurnPending, setAiTurnPending] = useState(false);
   const requestedGame = useMemo(
     () => new URLSearchParams(window.location.search).get("game"),
     [],
@@ -275,7 +282,16 @@ export function App() {
         game={loaded.game}
         assetUrls={loaded.assetUrls}
         {...(loaded.initialState ? { initialState: loaded.initialState } : {})}
-        onCommit={(state, event) => saveState(loaded.id, state, event)}
+        onCommit={async (state, event) => {
+          await saveState(loaded.id, state, event);
+          if (event?.inputResult?.accepted) {
+            setLoaded((current) =>
+              current && current.id === loaded.id
+                ? { ...current, aiTurnReceipt: undefined }
+                : current
+            );
+          }
+        }}
         sessionLabel={loaded.sessionInfo.label}
         branchContext={loaded.branchContext}
         developmentStatus={loaded.developmentStatus}
@@ -283,6 +299,40 @@ export function App() {
         onFeedback={(input) => submitFeedback(loaded.id, input)}
         feedbackFeed={loaded.feedbackFeed}
         externalInputNotice={loaded.externalInputNotice}
+        aiTurnReceipt={loaded.aiTurnReceipt}
+        aiTurnPending={aiTurnPending}
+        initialAiPersona={loaded.aiPersona}
+        initialAiSeeds={loaded.aiSeeds}
+        aiControlEnabled={loaded.sessionInfo.mode === "shared"}
+        onLoadAiPersonas={() => loadAiPersonas(loaded.id)}
+        onAdvanceAiTurn={async (persona, seed) => {
+          setAiTurnPending(true);
+          try {
+            const receipt = await advanceAiTurn(loaded.id, persona, seed);
+            setLoaded((current) =>
+              current && current.id === loaded.id
+                ? {
+                    ...current,
+                    initialState: receipt.state,
+                    revision: current.revision + 1,
+                    aiTurnReceipt: receipt,
+                    aiPersona: persona,
+                    ...(receipt.nextSeed !== null
+                      ? {
+                          aiSeeds: {
+                            ...(current.aiSeeds ?? {}),
+                            [persona]: receipt.nextSeed,
+                          },
+                        }
+                      : {}),
+                  }
+                : current
+            );
+            return receipt;
+          } finally {
+            setAiTurnPending(false);
+          }
+        }}
         explorationEnabled={loaded.sessionInfo.mode === "shared"}
         onLoadExploration={() => loadExplorationStatus(loaded.id)}
         onExplore={async (key) => {

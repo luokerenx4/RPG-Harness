@@ -7,6 +7,7 @@ import {
   clearBridgeSession,
   createBridgeExploration,
   createBridgeFeedback,
+  advanceBridgeAiTurn,
   developmentStatusInvalidation,
   installDevelopmentStatusInvalidation,
   loadBridgeBranchContext,
@@ -15,6 +16,7 @@ import {
   loadBridgeFeedbackFeed,
   loadBridgeSession,
   loadBridgeSnapshot,
+  loadBridgeAiPersonas,
   saveBridgeSession,
 } from "./session-bridge";
 
@@ -333,6 +335,91 @@ describe("Web development session bridge", () => {
       source: "tui",
       inputResult: { accepted: false },
     });
+  });
+
+  test("discovers project personas and advances exactly one fenced AI turn", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, ["peek", gameDir, "--session", "shared"]);
+    const before = await loadBridgeSnapshot(gameDir, "shared");
+    expect(await loadBridgeAiPersonas(gameDir)).toContainEqual(
+      expect.objectContaining({ name: "objective", source: "builtin" }),
+    );
+
+    const turn = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "objective",
+      expectedRevision: before.revision!,
+      seed: 17,
+    });
+
+    expect(turn).toMatchObject({
+      persona: "objective",
+      seed: 17,
+      decisions: 1,
+      rejectedInputs: 0,
+      reason: "max-steps",
+      lastAction: { type: "select", scriptId: "intro", title: "Intro" },
+      advancedAfterTurn: false,
+      snapshot: { state: expect.any(Object) },
+    });
+    expect(turn.nextSeed).not.toBeNull();
+    expect(turn.snapshot.revision).not.toBe(before.revision);
+    const log = await readFile(path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "shared",
+      "log.jsonl",
+    ), "utf-8");
+    expect(log.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(log).source).toBe("autoplay:objective");
+  });
+
+  test("refuses an AI turn after player ownership moved", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, ["peek", gameDir, "--session", "shared"]);
+    const stale = await loadBridgeSnapshot(gameDir, "shared");
+    const state = stale.state as Record<string, unknown>;
+    await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { ...state, playerMoved: true },
+      expectedRevision: stale.revision,
+    });
+
+    await expect(advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "objective",
+      expectedRevision: stale.revision!,
+      seed: 17,
+    })).rejects.toThrow("revision conflict");
+  });
+
+  test("marks a concurrent player advance that lands after the AI turn", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, ["peek", gameDir, "--session", "shared"]);
+    const before = await loadBridgeSnapshot(gameDir, "shared");
+    const turn = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "objective",
+      expectedRevision: before.revision!,
+      seed: 17,
+    }, {
+      afterAutoplay: async () => {
+        const aiState = await loadBridgeSession(gameDir, "shared") as Record<string, unknown>;
+        await saveBridgeSession({
+          gameDir,
+          session: "shared",
+          state: { ...aiState, playerMovedAfterAi: true },
+        });
+      },
+    });
+
+    expect(turn.advancedAfterTurn).toBe(true);
+    expect(turn.snapshot.state).toMatchObject({ playerMovedAfterAi: true });
   });
 
   test("turns player feedback into a reproducible coding issue at the live GUI checkpoint", async () => {

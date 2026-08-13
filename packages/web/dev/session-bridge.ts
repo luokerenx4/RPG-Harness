@@ -150,6 +150,146 @@ export interface BridgeExplorationReceipt {
   workItem: NonNullable<BridgeExplorationStatus["next"]>;
 }
 
+export interface BridgeAiPersona {
+  name: string;
+  description: string;
+  deterministic: boolean;
+  source: "builtin" | `module:${string}`;
+}
+
+export interface BridgeAiTurnReceipt {
+  persona: string;
+  seed: number;
+  nextSeed: number | null;
+  reason: string;
+  decisions: number;
+  rejectedInputs: number;
+  steps: number;
+  ending: string | null;
+  lastAction: BridgeAiPublicAction | null;
+  progress: unknown;
+  advancedAfterTurn: boolean;
+  snapshot: BridgeSessionSnapshot;
+}
+
+export type BridgeAiPublicAction =
+  | { type: "next" }
+  | { type: "choose"; choiceId?: string; optionId?: string; text: string }
+  | { type: "select"; scriptId: string; title?: string }
+  | { type: "doActivity"; id: string; title?: string }
+  | { type: "quit" };
+
+export async function loadBridgeAiPersonas(
+  gameDir: string,
+): Promise<BridgeAiPersona[]> {
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const { stdout } = await execFileAsync("bun", [
+    cli,
+    "personas",
+    gameDir,
+  ], { maxBuffer: 1024 * 1024 });
+  const payload = JSON.parse(stdout) as unknown;
+  if (!Array.isArray(payload) || !payload.every(isBridgeAiPersona)) {
+    throw new Error("Invalid AI persona registry from CLI");
+  }
+  return payload;
+}
+
+export async function advanceBridgeAiTurn(args: {
+  gameDir: string;
+  session: string;
+  persona: string;
+  expectedRevision: string;
+  seed?: number;
+}, internalHooks: {
+  afterAutoplay?: () => void | Promise<void>;
+} = {}): Promise<BridgeAiTurnReceipt> {
+  assertSegment(args.session, "session");
+  if (!args.persona.trim()) throw new RequestError(400, "AI persona cannot be empty");
+  if (
+    args.seed !== undefined &&
+    (!Number.isInteger(args.seed) || args.seed < 0 || args.seed > 0xffff_ffff)
+  ) throw new RequestError(400, "AI seed must be a uint32 integer");
+
+  const state = await loadBridgeSession(args.gameDir, args.session);
+  if (state === null) throw new RequestError(409, "AI co-play requires an existing save");
+  const currentRevision = revisionOf(state);
+  if (currentRevision !== args.expectedRevision) {
+    throw new RequestError(
+      409,
+      `Session revision conflict: expected ${args.expectedRevision}, current ${currentRevision}`,
+    );
+  }
+  const fullRevision = createHash("sha256")
+    .update(JSON.stringify(state))
+    .digest("hex");
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync("bun", [
+      cli,
+      "autoplay",
+      args.gameDir,
+      "--persona",
+      args.persona,
+      "--session",
+      args.session,
+      "--max-steps",
+      "1",
+      "--expected-initial-state-revision",
+      fullRevision,
+      ...(args.seed !== undefined ? ["--seed", String(args.seed)] : []),
+    ], { maxBuffer: 8 * 1024 * 1024 }));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (detail.includes("ownership lost")) {
+      throw new RequestError(409, detail);
+    }
+    throw error;
+  }
+  const summary = JSON.parse(stdout) as Record<string, unknown>;
+  const continuation = summary.continuation as Record<string, unknown> | undefined;
+  const next = continuation?.next as Record<string, unknown> | undefined;
+  const nextArgs = next?.args as Record<string, unknown> | undefined;
+  const nextSeed = Number.isInteger(nextArgs?.seed)
+    ? nextArgs!.seed as number
+    : null;
+  if (
+    typeof summary.persona !== "string" ||
+    !Number.isInteger(summary.seed) ||
+    typeof summary.reason !== "string" ||
+    !Number.isInteger(summary.decisions) ||
+    !Number.isInteger(summary.rejectedInputs) ||
+    !Number.isInteger(summary.steps) ||
+    typeof summary.finalStateRevision !== "string" ||
+    (summary.ending !== null && typeof summary.ending !== "string") ||
+    (summary.lastAction !== undefined && !isBridgeAiPublicAction(summary.lastAction))
+  ) throw new Error("Invalid AI turn summary from CLI");
+
+  await internalHooks.afterAutoplay?.();
+  const snapshot = await loadBridgeSnapshot(args.gameDir, args.session);
+  const liveFullRevision = snapshot.state === null
+    ? null
+    : createHash("sha256")
+      .update(JSON.stringify(snapshot.state))
+      .digest("hex");
+
+  return {
+    persona: summary.persona,
+    seed: summary.seed as number,
+    nextSeed,
+    reason: summary.reason,
+    decisions: summary.decisions as number,
+    rejectedInputs: summary.rejectedInputs as number,
+    steps: summary.steps as number,
+    ending: summary.ending as string | null,
+    lastAction: summary.lastAction as BridgeAiPublicAction | undefined ?? null,
+    progress: summary.progress,
+    advancedAfterTurn: liveFullRevision !== summary.finalStateRevision,
+    snapshot,
+  };
+}
+
 export async function createBridgeFeedback(
   args: CreateBridgeFeedbackArgs,
 ): Promise<BridgeFeedbackReport> {
@@ -795,6 +935,40 @@ async function handleBridgeRequest(
       return true;
     }
 
+    const aiMatch = url.pathname.match(
+      /^\/__rpgh\/session-bridge\/ai\/([^/]+)\/([^/]+)$/,
+    );
+    if (aiMatch) {
+      if (req.method !== "GET" && req.method !== "POST") {
+        return methodNotAllowed(res, ["GET", "POST"]);
+      }
+      const gameId = decodeURIComponent(aiMatch[1] ?? "");
+      const session = decodeURIComponent(aiMatch[2] ?? "");
+      assertSegment(gameId, "game id");
+      assertSegment(session, "session");
+      const gameDir = path.join(examplesRoot, gameId);
+      await access(path.join(gameDir, "game.yaml"));
+      if (req.method === "GET") {
+        sendJson(res, 200, { personas: await loadBridgeAiPersonas(gameDir) });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      if (typeof body.persona !== "string") {
+        throw new RequestError(400, "persona must be a string");
+      }
+      if (typeof body.expectedRevision !== "string") {
+        throw new RequestError(400, "expectedRevision must be a string");
+      }
+      sendJson(res, 200, await advanceBridgeAiTurn({
+        gameDir,
+        session,
+        persona: body.persona,
+        expectedRevision: body.expectedRevision,
+        ...(body.seed !== undefined ? { seed: body.seed as number } : {}),
+      }));
+      return true;
+    }
+
     const explorationMatch = url.pathname.match(
       /^\/__rpgh\/session-bridge\/exploration\/([^/]+)\/([^/]+)$/,
     );
@@ -966,6 +1140,38 @@ function isPlayerFeedbackReport(value: unknown): value is {
     (origin as Record<string, unknown>).surface === "web" &&
     report.evidence !== null && typeof report.evidence === "object" &&
     !Array.isArray(report.evidence);
+}
+
+function isBridgeAiPersona(value: unknown): value is BridgeAiPersona {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const persona = value as Record<string, unknown>;
+  return typeof persona.name === "string" && persona.name.trim().length > 0 &&
+    typeof persona.description === "string" &&
+    typeof persona.deterministic === "boolean" &&
+    typeof persona.source === "string" &&
+    (persona.source === "builtin" || persona.source.startsWith("module:"));
+}
+
+function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const action = value as Record<string, unknown>;
+  switch (action.type) {
+    case "next":
+    case "quit":
+      return true;
+    case "choose":
+      return typeof action.text === "string" &&
+        (action.choiceId === undefined || typeof action.choiceId === "string") &&
+        (action.optionId === undefined || typeof action.optionId === "string");
+    case "select":
+      return typeof action.scriptId === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    case "doActivity":
+      return typeof action.id === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    default:
+      return false;
+  }
 }
 
 function parseChoiceCoveragePayload(stdout: string): {

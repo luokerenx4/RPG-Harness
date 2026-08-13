@@ -58,6 +58,8 @@ export type {
 } from "./commands/coverage-certificate";
 export type { WorkArgs, WorkResult } from "./commands/work";
 export { runAutoplay } from "./commands/autoplay";
+export { collectAiPersonaSummaries } from "./commands/personas";
+export type { AiPersonaSummary } from "./commands/personas";
 export type {
   AutoplayArgs,
   AutoplayContinuation,
