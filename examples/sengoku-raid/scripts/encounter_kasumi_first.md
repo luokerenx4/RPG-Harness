@@ -29,25 +29,29 @@ characters: [kasumi]
 :hide-cg
 
 ? どう答える？ {id: first-words-to-kasumi}
-- 「将軍家から命を受けている」 {id: serve-the-shogunate, ai: dutiful formal} -> +kasumi
-- 「いや、家業だ」 {id: name-it-family-trade, ai: blunt independent} -> +2kasumi
+- 「将軍家から命を受けている」 {id: serve-the-shogunate, ai: dutiful formal} -> +kasumi | goto shogunate
+- 「いや、家業だ」 {id: name-it-family-trade, ai: blunt independent} -> +2kasumi | goto family_trade
 - 「お前、命を救ってくれたな。礼を言う」 {id: thank-kasumi, ai: compassionate grateful} -> +2kasumi | goto thanked
 
-@kasumi 将軍家でも家業でも、鬼を斬る腕は同じか。——それより、あんたの妖刀、見せてもらっていいか？
+# shogunate
 
-霞はお主の刀の柄に指を這わせ、笑った。
+@kasumi 将軍家の命ね。お堅い割に、鬼を斬る立ち方は嫌いじゃない。——それより、あんたの妖刀、見せてもらっていいか？
 
-@kasumi 飢えてるね、これ。あたしは弓だから関係ないけど、あんた、気をつけな。
+:goto inspect_blade
 
-@kasumi 山で見かけたら声かけるよ。
+# family_trade
 
-:hide-cg
+@kasumi 家業か。じゃあ刀の癖まで身内みたいに知ってるわけだ。——それ、見せてもらっていいか？
 
-[end]
+:goto inspect_blade
 
 # thanked
 
 @kasumi 礼なんていい。背中ががら空きだったから射ただけだ。——それより、あんたの妖刀、見せてもらっていいか？
+
+:goto inspect_blade
+
+# inspect_blade
 
 霞はお主の刀の柄に指を這わせ、笑った。
 

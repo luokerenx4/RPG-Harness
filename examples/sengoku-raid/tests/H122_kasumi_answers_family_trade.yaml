@@ -1,0 +1,28 @@
+name: 霞は妖刀を家業と呼ぶ答えに専用の返答をする
+description: |
+  The stable family-trade answer must receive its own authored response before
+  converging on the shared blade inspection.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentScriptId: encounter_kasumi_first
+inputs:
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, choiceId: first-words-to-kasumi, optionId: name-it-family-trade }
+assertions:
+  - kind: output
+    type: dialogue
+    present: true
+    speaker: kasumi
+    textIncludes: 家業か
+  - kind: state
+    path: baseline.variables.kasumi_first_reply
+    eq: family-trade

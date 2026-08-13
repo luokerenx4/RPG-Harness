@@ -536,29 +536,40 @@ export function analyzeChoiceCoverage(
     authoringChoices.map((choice) => [`${choice.scriptId}/${choice.choiceId ?? ""}`, choice]),
   );
   for (const choice of choices.values()) {
-    const executable = [...choice.options.values()].filter((option) => option.everAvailable);
-    if (executable.length < 2 || executable.some((option) =>
-      option.selectedSessions.size === 0 || option.responseTraces.size !== 1
-    )) continue;
-    const responseKeys = new Set(executable.flatMap((option) => [...option.responseTraces.keys()]));
-    if (responseKeys.size !== 1) continue;
-    const responseTrace = executable[0]?.responseTraces.values().next().value as
-      | NarrativeResponse[]
-      | undefined;
-    if (!responseTrace) continue;
     const authored = authoredByKey.get(choice.key);
-    authoringWorkItems.push({
-      kind: "review-converged-response",
-      key: `${choice.key}/shared-response`,
-      scriptId: choice.scriptId,
-      choiceId: choice.choiceId,
-      ...(authored?.source ? { source: authored.source } : {}),
-      beatIndex: authored?.beatIndex ?? -1,
-      prompt: choice.prompt,
-      optionIds: executable.map((option) => option.id),
-      responseTrace,
-      action: "review whether distinct options should share the same narrative response trace",
-    });
+    const responseGroups = new Map<string, {
+      options: MutableOption[];
+      trace: NarrativeResponse[];
+    }>();
+    for (const option of choice.options.values()) {
+      if (
+        !option.everAvailable ||
+        option.selectedSessions.size === 0 ||
+        option.responseTraces.size !== 1
+      ) continue;
+      const [entry] = option.responseTraces.entries();
+      if (!entry) continue;
+      const [responseKey, trace] = entry;
+      const group = responseGroups.get(responseKey) ?? { options: [], trace };
+      group.options.push(option);
+      responseGroups.set(responseKey, group);
+    }
+    for (const group of responseGroups.values()) {
+      if (group.options.length < 2) continue;
+      const optionIds = group.options.map((option) => option.id);
+      authoringWorkItems.push({
+        kind: "review-converged-response",
+        key: `${choice.key}/shared-response/${optionIds.join("+")}`,
+        scriptId: choice.scriptId,
+        choiceId: choice.choiceId,
+        ...(authored?.source ? { source: authored.source } : {}),
+        beatIndex: authored?.beatIndex ?? -1,
+        prompt: choice.prompt,
+        optionIds,
+        responseTrace: group.trace,
+        action: "review whether distinct options should share the same narrative response trace",
+      });
+    }
   }
   const convergedResponses = authoringWorkItems.filter((item) =>
     item.kind === "review-converged-response"

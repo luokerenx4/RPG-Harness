@@ -402,7 +402,7 @@ describe("choice branch coverage", () => {
     expect(report.authoring.summary.convergedResponses).toBe(1);
     expect(report.authoring.workItems).toContainEqual({
       kind: "review-converged-response",
-      key: "ending/final-tether/shared-response",
+      key: "ending/final-tether/shared-response/alone+friends",
       scriptId: "ending",
       choiceId: "final-tether",
       source: "scripts/ending.md",
@@ -413,6 +413,57 @@ describe("choice branch coverage", () => {
       action: "review whether distinct options should share the same narrative response trace",
     });
     expect(formatChoiceCoverage(report, "pending")).toContain("review shared response");
+  });
+
+  test("flags a converged subset when another option has a distinct response", () => {
+    const threeWayChoice = {
+      ...choice,
+      options: [
+        ...choice.options,
+        { id: "wait", text: "Wait", available: true },
+      ],
+    };
+    const authored = [{
+      key: "ending/final-tether",
+      scriptId: "ending",
+      scriptTitle: "Ending",
+      source: "scripts/ending.md",
+      beatIndex: 4,
+      prompt: "Who remains?",
+      choiceId: "final-tether",
+      optionCount: 3,
+      optionIds: ["alone", "friends", "wait"],
+      optionIntents: [
+        { optionId: "alone", text: "Alone", aiTags: ["independent"] },
+        { optionId: "friends", text: "With friends", aiTags: ["social"] },
+        { optionId: "wait", text: "Wait", aiTags: ["restrained"] },
+      ],
+      intentStatus: "complete" as const,
+      status: "unseen" as const,
+    }];
+    const report = analyzeChoiceCoverage([{
+      session: "seed",
+      entries: [{ input: { type: "next" }, output: threeWayChoice, checkpoint: checkpoint("3".repeat(64)) }],
+    }, ...[
+      ["alone", 0, "Shared response"],
+      ["friends", 1, "Shared response"],
+      ["wait", 2, "Distinct response"],
+    ].map(([optionId, index, text]) => ({
+      session: String(optionId),
+      entries: [{
+        input: { type: "choose", index: Number(index) },
+        decision: { scriptId: "ending", choiceId: "final-tether", optionId: String(optionId) },
+        output: { type: "narration", text: String(text) },
+      }],
+    }))], [], authored);
+
+    expect(report.authoring.summary.convergedResponses).toBe(1);
+    expect(report.authoring.workItems).toContainEqual(expect.objectContaining({
+      kind: "review-converged-response",
+      key: "ending/final-tether/shared-response/alone+friends",
+      optionIds: ["alone", "friends"],
+      responseTrace: [{ type: "narration", text: "Shared response" }],
+    }));
   });
 
   test("does not flag a choice whose covered options receive distinct responses", () => {
