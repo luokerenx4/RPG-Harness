@@ -802,7 +802,9 @@ describe("autoplay audit matrix", () => {
       policy: { minUniqueEndings: 2 },
       status: "not-evaluated",
       observed: { uniqueEndings: 0, uniqueDecisionPaths: 1 },
-      violations: ["not every audit lane reached a terminal ending"],
+      violations: [
+        "audit lanes did not reach terminal endings: objective=max-steps, greedy=max-steps",
+      ],
     });
     expect(summary.totals.openReports).toBe(0);
     expect(await listPlaytestReports(gameDir)).toEqual([]);
@@ -823,7 +825,12 @@ describe("autoplay audit matrix", () => {
     expect(single).toMatchObject({
       maxSegments: 1,
       lanes: [{ reason: "max-steps", segments: 1, ending: null }],
-      qualityGate: { status: "not-evaluated" },
+      qualityGate: {
+        status: "failed",
+        violations: [
+          "audit lanes did not reach terminal endings: objective=max-steps",
+        ],
+      },
     });
 
     const resumedGameDir = await temporaryLongAuditGame();

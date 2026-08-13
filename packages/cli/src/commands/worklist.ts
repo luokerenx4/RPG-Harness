@@ -167,7 +167,14 @@ export async function collectDevelopmentWorklist(
     choices,
     reports: reports.filter((report) =>
       report.status === "open" &&
-      (evidenceSessions === null || evidenceSessions.has(report.session))
+      (
+        evidenceSessions === null ||
+        evidenceSessions.has(report.session) ||
+        // Acceptance-matrix findings describe the whole authored project,
+        // not one save lineage. They must remain visible while an agent is
+        // developing from any player/GUI branch.
+        report.evidence.auditMatrix !== undefined
+      )
     ),
     ...(session !== undefined ? { session } : {}),
   });

@@ -117,13 +117,15 @@ COMMANDS
   sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N]
         [--from-key WORK-KEY] [--snapshot-revision SHA256]
         [--persona NAME] [--max-steps N] [--max-nodes N]
-        [--max-total-nodes N] [--until-clean] [--max-generations N] [--pretty]
+        [--max-total-nodes N] [--until-clean] [--max-generations N]
+        [--audit-max-steps N] [--audit-max-segments N] [--audit-seed N] [--pretty]
       Execute a bounded frozen snapshot of the prioritized development queue.
       Preflights every isolated target before writing, stops on failures or
       authoring judgment, persists the immutable queue, and returns completed
       plus remaining work for resume even as new branch evidence shrinks the
       live queue. --until-clean also follows closest-state search continuations
-      and freezes later queue generations under shared item/node/generation caps.
+      and freezes later queue generations under shared item/node/generation caps,
+      then runs game.yaml ai_audit as the final project acceptance gate.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,
@@ -677,13 +679,16 @@ async function runSweep(args: string[]): Promise<void> {
       "max-total-nodes": { type: "string" },
       "until-clean": { type: "boolean", default: false },
       "max-generations": { type: "string", default: "5" },
+      "audit-max-steps": { type: "string", default: "1000" },
+      "audit-max-segments": { type: "string", default: "4" },
+      "audit-seed": { type: "string", default: "1592597881" },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N] [--from-key WORK-KEY] [--snapshot-revision SHA256] [--persona NAME] [--max-steps N] [--max-nodes N] [--max-total-nodes N] [--until-clean] [--max-generations N] [--pretty]",
+    "rpgh sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N] [--from-key WORK-KEY] [--snapshot-revision SHA256] [--persona NAME] [--max-steps N] [--max-nodes N] [--max-total-nodes N] [--until-clean] [--max-generations N] [--audit-max-steps N] [--audit-max-segments N] [--audit-seed N] [--pretty]",
   );
   if (!values.session) throw new Error("sweep requires --session SOURCE");
   if (!values["session-prefix"]) {
@@ -710,7 +715,12 @@ async function runSweep(args: string[]): Promise<void> {
       : {}),
     untilClean: Boolean(values["until-clean"]),
     ...(values["until-clean"]
-      ? { maxGenerations: Number(values["max-generations"] ?? "5") }
+      ? {
+          maxGenerations: Number(values["max-generations"] ?? "5"),
+          auditMaxSteps: Number(values["audit-max-steps"] ?? "1000"),
+          auditMaxSegments: Number(values["audit-max-segments"] ?? "4"),
+          auditSeed: Number(values["audit-seed"] ?? "1592597881"),
+        }
       : {}),
     pretty: Boolean(values.pretty),
   });

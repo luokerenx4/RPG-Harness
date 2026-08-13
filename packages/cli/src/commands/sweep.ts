@@ -4,6 +4,8 @@ import path from "node:path";
 import { assertSessionName } from "@rpg-harness/session-store";
 import { getPlaytestReport } from "../playtest-reports";
 import { sessionDir } from "../session";
+import { loadGame } from "../loader";
+import { runAudit, type AuditSummary } from "./audit";
 import { assertTargetEmpty } from "./fork";
 import {
   executeDevelopmentWorkItem,
@@ -27,6 +29,12 @@ export interface SweepArgs {
   maxSteps?: number;
   maxNodes?: number;
   maxTotalNodes?: number;
+  /** Per-slice decision budget for the final project acceptance matrix. */
+  auditMaxSteps?: number;
+  /** Maximum resumable slices for each final audit persona. */
+  auditMaxSegments?: number;
+  /** Stable root seed for the final project acceptance matrix. */
+  auditSeed?: number;
   /** Continue materialized closest-state searches and freeze later worklist generations. */
   untilClean?: boolean;
   /** Hard cap for immutable worklist generations in `untilClean` mode. */
@@ -98,6 +106,7 @@ export interface SweepConvergenceResult {
     | "search-budget-exhausted"
     | "work-failed"
     | "authoring-required"
+    | "quality-gate-failed"
     | "search-stalled"
     | "queue-stalled";
   sourceSession: string;
@@ -122,6 +131,11 @@ export interface SweepConvergenceResult {
     totalItems: number;
     nextKey: string | null;
   };
+  qualityGate?: {
+    status: "passed" | "failed" | "not-evaluated" | "not-configured";
+    sessionPrefix: string;
+    audit?: ProjectQualityAuditSummary;
+  };
   resume: SweepResult["resume"];
   generations: Array<{
     generation: number;
@@ -130,10 +144,29 @@ export interface SweepConvergenceResult {
   }>;
 }
 
+export interface ProjectQualityAuditSummary {
+  source: AuditSummary["source"];
+  seed: number;
+  maxSteps: number;
+  maxSegments: number;
+  totals: AuditSummary["totals"];
+  endings: Record<string, number>;
+  diversity: Pick<
+    AuditSummary["diversity"],
+    "classification" | "uniqueEndings" | "uniqueDecisionPaths"
+  >;
+  qualityGate: AuditSummary["qualityGate"];
+  lanes: Array<Pick<
+    AuditSummary["lanes"][number],
+    "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
+  > & { pathRevision: string }>;
+}
+
 interface PersistedSweepSnapshot {
   schemaVersion: 1;
   revision: string;
   sourceSession: string | null;
+  scope: "session" | "project";
   items: DevelopmentWorkItem[];
 }
 
@@ -185,6 +218,7 @@ export async function runDevelopmentConvergence(
   let finalStatus: SweepConvergenceResult["status"] = "paused";
   let finalReason: SweepConvergenceResult["reason"] = "generation-budget-exhausted";
   let resume: SweepResult["resume"] = null;
+  let qualityGate: SweepConvergenceResult["qualityGate"];
 
   for (let generation = 1; generation <= generationLimit; generation += 1) {
     const remainingItems = itemLimit - usedItems;
@@ -206,15 +240,17 @@ export async function runDevelopmentConvergence(
       limit: remainingItems,
       maxTotalNodes: remainingNodes,
       untilClean: false,
-    }, true);
+    }, true, true);
     generations.push({ generation, sessionPrefix: generationPrefix, result });
     usedItems += attemptedWorkItems(result);
     usedNodes += result.safety.nodeBudget.used;
     resume = result.resume;
 
     if (result.status === "clean") {
-      finalStatus = "clean";
-      finalReason = "clean";
+      ({ finalStatus, finalReason, qualityGate } = await evaluateProjectQualityGate(
+        args,
+        generation,
+      ));
       resume = null;
       break;
     }
@@ -244,10 +280,16 @@ export async function runDevelopmentConvergence(
     }
     revisions.add(result.snapshot.revision);
     resume = null;
-    const nextSnapshot = await createSweepSnapshot(args.gameDir, args.session);
+    const nextSnapshot = await createSweepSnapshot(
+      args.gameDir,
+      args.session,
+      null,
+    );
     if (nextSnapshot.items.length === 0) {
-      finalStatus = "clean";
-      finalReason = "clean";
+      ({ finalStatus, finalReason, qualityGate } = await evaluateProjectQualityGate(
+        args,
+        generation,
+      ));
       break;
     }
     if (revisions.has(nextSnapshot.revision)) {
@@ -257,11 +299,17 @@ export async function runDevelopmentConvergence(
     }
   }
 
-  const live = await collectDevelopmentWorklist(args.gameDir, args.session);
-  if (live.items.length === 0) {
-    finalStatus = "clean";
-    finalReason = "clean";
+  let live = await collectDevelopmentWorklist(args.gameDir);
+  if (live.items.length === 0 && qualityGate === undefined) {
+    ({ finalStatus, finalReason, qualityGate } = await evaluateProjectQualityGate(
+      args,
+      Math.max(1, generations.length),
+    ));
     resume = null;
+    // A failed project gate records a new global audit finding. Refresh the
+    // project queue so this same response hands the coding issue to the
+    // next autonomous development generation.
+    live = await collectDevelopmentWorklist(args.gameDir);
   } else if (
     generations.length >= generationLimit &&
     finalReason === "generation-budget-exhausted"
@@ -308,8 +356,85 @@ export async function runDevelopmentConvergence(
       totalItems: live.items.length,
       nextKey: live.items[0]?.key ?? null,
     },
+    ...(qualityGate ? { qualityGate } : {}),
     resume,
     generations,
+  };
+}
+
+async function evaluateProjectQualityGate(
+  args: SweepArgs,
+  generation: number,
+): Promise<{
+  finalStatus: SweepConvergenceResult["status"];
+  finalReason: SweepConvergenceResult["reason"];
+  qualityGate: NonNullable<SweepConvergenceResult["qualityGate"]>;
+}> {
+  const game = await loadGame(args.gameDir);
+  const policy = game.aiAudit;
+  const sessionPrefix = `${args.sessionPrefix}-quality-gate-g${String(generation).padStart(2, "0")}`;
+  if (!policy) {
+    return {
+      finalStatus: "clean",
+      finalReason: "clean",
+      qualityGate: { status: "not-configured", sessionPrefix },
+    };
+  }
+  const personas = policy.personas ?? [];
+  if (personas.length === 0) {
+    throw new Error(
+      "sweep --until-clean requires ai_audit.personas for its final project quality gate",
+    );
+  }
+  const audit = await runAudit({
+    gameDir: args.gameDir,
+    sessionPrefix,
+    personas,
+    maxSteps: args.auditMaxSteps ?? 1000,
+    maxSegments: args.auditMaxSegments ?? 4,
+    seed: args.auditSeed ?? 1_592_597_881,
+    reportOnStop: true,
+    pretty: false,
+  });
+  const status = audit.qualityGate?.status ?? "not-evaluated";
+  const compactAudit = compactProjectQualityAudit(audit);
+  return status === "passed"
+    ? {
+        finalStatus: "clean",
+        finalReason: "clean",
+        qualityGate: { status, sessionPrefix, audit: compactAudit },
+      }
+    : {
+        finalStatus: "stopped",
+        finalReason: "quality-gate-failed",
+        qualityGate: { status, sessionPrefix, audit: compactAudit },
+      };
+}
+
+function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSummary {
+  return {
+    source: audit.source,
+    seed: audit.seed,
+    maxSteps: audit.maxSteps,
+    maxSegments: audit.maxSegments,
+    totals: audit.totals,
+    endings: audit.endings,
+    diversity: {
+      classification: audit.diversity.classification,
+      uniqueEndings: audit.diversity.uniqueEndings,
+      uniqueDecisionPaths: audit.diversity.uniqueDecisionPaths,
+    },
+    qualityGate: audit.qualityGate,
+    lanes: audit.lanes.map((lane) => ({
+      persona: lane.persona,
+      session: lane.session,
+      webPath: lane.webPath,
+      segments: lane.segments,
+      reason: lane.reason,
+      ending: lane.ending,
+      decisions: lane.decisions,
+      pathRevision: lane.path.revision,
+    })),
   };
 }
 
@@ -325,10 +450,15 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
 async function runDevelopmentSweepInternal(
   args: SweepArgs,
   autoContinueSearches: boolean,
+  projectWide = false,
 ): Promise<SweepResult> {
   validateSweepArgs(args);
   const snapshot = args.snapshotRevision === undefined
-    ? await createSweepSnapshot(args.gameDir, args.session)
+    ? await createSweepSnapshot(
+        args.gameDir,
+        args.session,
+        projectWide ? null : args.session,
+      )
     : await readSweepSnapshot(
         args.gameDir,
         args.snapshotRevision,
@@ -345,7 +475,10 @@ async function runDevelopmentSweepInternal(
   const liveKeys = args.snapshotRevision === undefined
     ? null
     : new Set(
-        (await collectDevelopmentWorklist(args.gameDir, args.session)).items
+        (await collectDevelopmentWorklist(
+          args.gameDir,
+          snapshot.scope === "project" ? undefined : args.session,
+        )).items
           .map((item) => item.key),
       );
   const queuedItems = allItems
@@ -551,16 +684,22 @@ async function runDevelopmentSweepInternal(
 async function createSweepSnapshot(
   gameDir: string,
   sourceSession: string | undefined,
+  scopeSession: string | null | undefined = sourceSession,
 ): Promise<PersistedSweepSnapshot> {
-  const worklist = await collectDevelopmentWorklist(gameDir, sourceSession);
+  const worklist = await collectDevelopmentWorklist(
+    gameDir,
+    scopeSession === null ? undefined : scopeSession,
+  );
   const source = sourceSession ?? null;
+  const scope = scopeSession === null ? "project" as const : "session" as const;
   const revision = createHash("sha256")
-    .update(JSON.stringify({ sourceSession: source, items: worklist.items }))
+    .update(JSON.stringify({ sourceSession: source, scope, items: worklist.items }))
     .digest("hex");
   return {
     schemaVersion: 1,
     revision,
     sourceSession: source,
+    scope,
     items: worklist.items,
   };
 }
@@ -611,11 +750,13 @@ async function readSweepSnapshot(
   const computedRevision = createHash("sha256")
     .update(JSON.stringify({
       sourceSession: snapshot.sourceSession,
+      scope: snapshot.scope,
       items: snapshot.items,
     }))
     .digest("hex");
   if (
     snapshot.schemaVersion !== 1 ||
+    (snapshot.scope !== "session" && snapshot.scope !== "project") ||
     snapshot.revision !== revision ||
     computedRevision !== revision
   ) {
@@ -905,6 +1046,24 @@ function validateSweepArgs(args: SweepArgs): void {
     (!Number.isInteger(args.maxTotalNodes) || args.maxTotalNodes < 1)
   ) {
     throw new Error("--max-total-nodes must be a positive integer");
+  }
+  if (
+    args.auditMaxSteps !== undefined &&
+    (!Number.isInteger(args.auditMaxSteps) || args.auditMaxSteps < 1)
+  ) {
+    throw new Error("--audit-max-steps must be a positive integer");
+  }
+  if (
+    args.auditMaxSegments !== undefined &&
+    (!Number.isInteger(args.auditMaxSegments) || args.auditMaxSegments < 1)
+  ) {
+    throw new Error("--audit-max-segments must be a positive integer");
+  }
+  if (
+    args.auditSeed !== undefined &&
+    (!Number.isInteger(args.auditSeed) || args.auditSeed < 0 || args.auditSeed > 0xffff_ffff)
+  ) {
+    throw new Error("--audit-seed must be a uint32 integer");
   }
 }
 

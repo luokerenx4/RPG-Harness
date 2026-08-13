@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createInitialState, peek, step } from "@rpg-harness/engine";
+import { createInitialState, peek, scriptRevision, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { appendLog, saveSession, sessionDir } from "../session";
 import { runDevelopmentConvergence, runDevelopmentSweep } from "./sweep";
@@ -358,6 +358,162 @@ describe("bounded development sweep", () => {
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
   });
 
+  test("until-clean closes project work whose checkpoint belongs to another lineage", async () => {
+    const gameDir = await temporaryCrossLineageSweepGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "other-player", createInitialState(game));
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "other-player",
+      sessionPrefix: "cross-lineage",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      maxSteps: 20,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "clean",
+      liveWorklist: { totalItems: 0 },
+      generations: [{
+        result: {
+          snapshot: { sourceSession: "other-player", totalItems: 2 },
+          runs: expect.arrayContaining([
+            expect.objectContaining({
+              key: expect.stringMatching(/^choice-branch\//),
+              status: "executed",
+            }),
+          ]),
+        },
+      }],
+      qualityGate: { status: "not-configured" },
+    });
+  });
+
+  test("resuming a frozen project sweep keeps its cross-lineage scope", async () => {
+    const gameDir = await temporaryCrossLineageSweepGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "other-player", createInitialState(game));
+
+    const first = await runDevelopmentConvergence({
+      gameDir,
+      session: "other-player",
+      sessionPrefix: "cross-resume-first",
+      limit: 1,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      maxSteps: 20,
+      untilClean: true,
+      pretty: false,
+    });
+    const resume = first.resume;
+    if (!resume) throw new Error("project sweep did not return resume coordinates");
+    const resumeFromKey = resume.fromKey;
+    const resumeSnapshotRevision = resume.snapshotRevision;
+    expect(first).toMatchObject({
+      status: "paused",
+      reason: "item-budget-exhausted",
+      resume: {
+        fromKey: expect.stringMatching(/^choice-branch\//),
+        snapshotRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+    });
+
+    const resumed = await runDevelopmentSweep({
+      gameDir,
+      session: "other-player",
+      sessionPrefix: "cross-resume-second",
+      limit: 10,
+      fromKey: resumeFromKey,
+      snapshotRevision: resumeSnapshotRevision,
+      maxSteps: 20,
+      pretty: false,
+    });
+    expect(resumed).toMatchObject({
+      status: "completed",
+      reason: "snapshot-completed",
+      snapshot: { remainingItems: 0 },
+      runs: [{ status: "executed" }],
+    });
+  });
+
+  test("until-clean runs the authored AI acceptance matrix before declaring clean", async () => {
+    const gameDir = await temporaryQualitySweepGame(1);
+    const sourceBefore = await snapshotTree(sessionDir(gameDir, "player"));
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-pass",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 61,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "clean",
+      reason: "clean",
+      liveWorklist: { totalItems: 0, nextKey: null },
+      qualityGate: {
+        status: "passed",
+        sessionPrefix: "quality-pass-quality-gate-g01",
+        audit: {
+          seed: 61,
+          maxSteps: 2,
+          maxSegments: 4,
+          totals: { lanes: 1, completed: 1 },
+          qualityGate: { status: "passed" },
+        },
+      },
+    });
+    expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
+  });
+
+  test("until-clean converts a failed project matrix into the next coding issue", async () => {
+    const gameDir = await temporaryQualitySweepGame(2);
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-fail",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 67,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "stopped",
+      reason: "quality-gate-failed",
+      liveWorklist: {
+        totalItems: 1,
+        nextKey: expect.stringMatching(/^report\//),
+      },
+      qualityGate: {
+        status: "failed",
+        audit: {
+          qualityGate: {
+            status: "failed",
+            violations: ["unique endings 1 < required 2"],
+            report: { severity: "major" },
+          },
+        },
+      },
+    });
+  });
+
   test("until-clean stops when a diagnostic generation cannot change the queue", async () => {
     const gameDir = await temporaryDiagnosticSweepGame();
 
@@ -504,6 +660,50 @@ async function temporarySweepChoiceGame(): Promise<string> {
   return dir;
 }
 
+async function temporaryCrossLineageSweepGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-cross-lineage-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), "title: Cross-lineage sweep test\n", "utf-8");
+  await writeFile(path.join(dir, "scripts", "scene.md"), [
+    "---",
+    "id: scene",
+    "title: Scene",
+    "characters: []",
+    "---",
+    "",
+    "? Reply. {id: reply}",
+    "- Stay {id: stay, ai: social} -> goto stay_reply",
+    "- Leave {id: leave, ai: independent} -> goto leave_reply",
+    "",
+    "# stay_reply",
+    "",
+    "The player stays beside the fire.",
+    "",
+    "[end]",
+    "",
+    "# leave_reply",
+    "",
+    "The player leaves before dawn.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  const game = await loadGame(dir);
+  const ready = await peek(game, createInitialState(game));
+  const presented = await step(
+    game,
+    ready.state,
+    { type: "select", scriptId: "scene" },
+  );
+  await saveSession(dir, "player", presented.state);
+  await appendLog(dir, "player", {
+    input: { type: "select", scriptId: "scene" },
+    output: presented.output,
+  }, presented.state);
+  return dir;
+}
+
 async function temporaryCascadeSweepGame(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-cascade-"));
   temporaryDirectories.push(dir);
@@ -544,6 +744,41 @@ async function temporaryDiagnosticSweepGame(): Promise<string> {
   await mkdir(sessionDir(dir, "player"), { recursive: true });
   await writeFile(path.join(dir, "game.yaml"), "title: Diagnostic sweep test\n", "utf-8");
   await writeFile(path.join(sessionDir(dir, "player"), "state.json"), "{", "utf-8");
+  return dir;
+}
+
+async function temporaryQualitySweepGame(minEndings: number): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-quality-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Quality sweep test",
+    "ai_audit:",
+    `  personas: [${minEndings > 1 ? "objective, greedy" : "objective"}]`,
+    `  min_unique_endings: ${minEndings}`,
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "intro.md"), [
+    "---",
+    "id: intro",
+    "title: Intro",
+    "characters: []",
+    "---",
+    "",
+    "One beat.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  const game = await loadGame(dir);
+  const state = createInitialState(game);
+  state.baseline.completionOrder.push("intro");
+  state.baseline.scripts.intro = {
+    completed: true,
+    completedRevision: scriptRevision(game.scripts[0]!),
+    selfSwitches: { A: false, B: false, C: false, D: false },
+  };
+  await saveSession(dir, "player", state);
   return dir;
 }
 

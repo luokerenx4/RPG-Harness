@@ -359,6 +359,10 @@ export async function runAudit(
         qualityPolicy,
         acceptanceMatrixMatches,
         allTerminal,
+        args.maxSteps > 0,
+        lanes.filter((lane) =>
+          lane.reason !== "completed" || lane.ending === null
+        ).map((lane) => `${lane.persona}=${lane.reason}`),
         uniqueEndings,
         uniqueDecisionPaths,
         coveredActivityTags,
@@ -393,7 +397,7 @@ export async function runAudit(
       severity: "major",
       title: `AI audit quality gate failed (${uniqueEndings} endings, ${uniqueDecisionPaths} paths)`,
       details: [
-        `The deterministic persona matrix completed ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
+        `The deterministic persona matrix ran ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
         `Observed endings: ${formatEndingCounts(endings)}.`,
         `Covered activity tags: ${coveredActivityTags.join(", ") || "none"}.`,
         `Completed scripts: ${completedScripts.join(", ") || "none"}.`,
@@ -645,6 +649,8 @@ function evaluateQualityGate(
   policy: AiAuditConfig,
   acceptanceMatrixMatches: boolean,
   allTerminal: boolean,
+  executionBudgeted: boolean,
+  incompleteLanes: string[],
   uniqueEndings: number,
   uniqueDecisionPaths: number,
   coveredActivityTags: string[],
@@ -668,10 +674,11 @@ function evaluateQualityGate(
     };
   }
   if (!allTerminal) {
+    const violation = `audit lanes did not reach terminal endings: ${incompleteLanes.join(", ")}`;
     return {
-      status: "not-evaluated",
+      status: executionBudgeted ? "failed" : "not-evaluated",
       observed,
-      violations: ["not every audit lane reached a terminal ending"],
+      violations: [violation],
     };
   }
   const violations: string[] = [];
