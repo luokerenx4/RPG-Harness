@@ -52,6 +52,12 @@ later story edit makes the affected facts stale instead of silently preserving
 an obsolete green check.
 A report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
 the observed state after the live save and ordinary replay log are cleared.
+Structured autoplay findings additionally freeze the pre-run state and replay
+seed: their verifier reruns the whole causal path, not merely the already-stuck
+final save, and the ordinary `resolve` command cannot bypass that proof.
+Findings created before causal replay evidence existed remain reproducible from
+their incident checkpoint and may be explicitly reviewed or superseded with
+ordinary `resolve`; the worklist does not send them to an impossible verifier.
 The GUI watches content revisions and reloads when another surface advances the
 session. Compare-and-swap still rejects a stale write if both act inside the
 same polling window, so progress is never silently overwritten. Static Web
@@ -196,7 +202,7 @@ rpgh peek     <game-dir> [--session NAME]                      # inspect current
 rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays/forks/reports stops
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
-rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close a verified finding
+rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close an ordinary finding (structured findings require verification)
 rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
@@ -227,7 +233,9 @@ playing via the `rpg-harness-player` skill is just `step` with the LLM deciding 
 automatically pointing at the current script, save, log line, and latest input/output.
 `reproduce` turns that issue checkpoint into a named CLI/TUI/Web session (and
 prints its `/?session=...` path), making the coding issue directly executable.
-`resolve` closes that issue only after the resulting replay and surface behavior are verified.
+Structured autoplay and audit findings close only through their retained
+verifiers; manual `resolve` remains available for ordinary human-authored
+findings.
 `choices` reads stable `choice.id` / `option.id` values from the same recoverable
 session log and emits pending branches with an exact `fork --at` checkpoint plus
 the `choose` input. This catches route gaps hidden by 100% script coverage.
@@ -247,7 +255,7 @@ branches, and authored choice debt into one deterministic priority order. JSON
 items classify their actionability as `executable`, `diagnostic`, or `authoring`,
 retain the source coordinates, and expose a structured next operation such
 as `reproduce`, `transcript`, `cover`, `reach`, `reach-script`, `inspect-script`,
-`verify-audit`, or `edit`. Story gaps use the same bounded public-input search
+`verify-autoplay`, `verify-audit`, or `edit`. Story gaps use the same bounded public-input search
 and exact replay contract as choices instead of being mislabeled as generic
 autoplay.
 Placeholders such as
@@ -554,10 +562,13 @@ For an autonomous development lane, combine `--from-session`, `--session`, and
 `--report-on-stop`. The source GUI/player save is locked and checkpoint-forked
 before the first AI input; the target must not already exist. A normal game end
 returns the ending without filing noise. Any `quit`, detected `stalled` loop, `max-steps`, input
-exhaustion, or engine error freezes the AI branch's exact final state into the
-same structured playtest-report format used by `report`/`reproduce`, and the
+exhaustion, or engine error freezes both the pre-run replay state and the AI
+branch's exact final incident state into the same structured playtest-report
+format used by `report`/`reproduce`, and the
 JSON response includes the branch's `webPath` plus report evidence for the next
-coding agent. `max-steps` is an exact AI-decision budget: the summary reports
+coding agent. `verify-autoplay` reconstructs the pre-run checkpoint and repeats
+the original persona, seed, and decision budget; a patch that only makes the
+poisoned final save terminate cannot close the issue. `max-steps` is an exact AI-decision budget: the summary reports
 those decisions separately from visible `steps`, including the initial output.
 Autoplay also compares exact engine-state/public-output fingerprints and stops
 after three identical cycles (up to 20 visible outputs per cycle). Its summary

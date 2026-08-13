@@ -37,6 +37,11 @@ export interface ForkSource {
   mode: "checkpoint" | "initial-state" | "current-state";
 }
 
+export interface CreateForkFromSourceHooks {
+  /** Runs after state, provenance, and the fork log are written, while the target lock is held. */
+  onCreatedWhileLocked?: () => void | Promise<void>;
+}
+
 export async function forkCommand(args: ForkArgs): Promise<void> {
   const result = await forkSession(args);
   process.stdout.write(
@@ -125,43 +130,52 @@ export async function loadForkSource(
 export async function createForkFromSource(
   args: ForkArgs,
   source: ForkSource,
+  hooks: CreateForkFromSourceHooks = {},
 ) {
   assertSessionName(args.from);
   assertSessionName(args.to);
   if (args.from === args.to) throw new Error("Source and target sessions must differ");
-  return createFork({ ...args, ...source });
+  return withSessionLock(args.gameDir, args.to, () =>
+    createForkFromSourceWithLockHeld(args, source, hooks)
+  );
 }
 
-async function createFork(args: ForkArgs & {
-  state: ComposedState;
-  selectedEntry: number;
-  sourceEntries: number;
-  mode: "checkpoint" | "initial-state" | "current-state";
-}) {
-  return withSessionLock(args.gameDir, args.to, async () => {
-    await assertTargetEmpty(args.gameDir, args.to);
-    await saveSession(args.gameDir, args.to, args.state);
-    const provenance = {
-      schemaVersion: 1,
-      fromSession: args.from,
-      sourceLogEntry: args.selectedEntry,
-      sourceLogEntries: args.sourceEntries,
-      mode: args.mode,
-      createdAt: new Date().toISOString(),
-    };
-    await writeFile(
-      path.join(sessionDir(args.gameDir, args.to), "fork.json"),
-      JSON.stringify(provenance, null, 2) + "\n",
-      "utf-8",
-    );
-    await appendCheckpointedSessionEvent(
-      args.gameDir,
-      args.to,
-      { t: Date.now(), source: "fork", fork: provenance },
-      args.state,
-    );
-    return { session: args.to, ...provenance };
-  });
+/**
+ * Initialize a fork while the caller already owns the target session lock.
+ * This is the atomic seam used by autoplay: fork publication and the first
+ * engine transition must share one transaction so no GUI step can interleave.
+ */
+export async function createForkFromSourceWithLockHeld(
+  args: ForkArgs,
+  source: ForkSource,
+  hooks: CreateForkFromSourceHooks = {},
+) {
+  assertSessionName(args.from);
+  assertSessionName(args.to);
+  if (args.from === args.to) throw new Error("Source and target sessions must differ");
+  await assertTargetEmpty(args.gameDir, args.to);
+  await saveSession(args.gameDir, args.to, source.state);
+  const provenance = {
+    schemaVersion: 1,
+    fromSession: args.from,
+    sourceLogEntry: source.selectedEntry,
+    sourceLogEntries: source.sourceEntries,
+    mode: source.mode,
+    createdAt: new Date().toISOString(),
+  };
+  await writeFile(
+    path.join(sessionDir(args.gameDir, args.to), "fork.json"),
+    JSON.stringify(provenance, null, 2) + "\n",
+    "utf-8",
+  );
+  await appendCheckpointedSessionEvent(
+    args.gameDir,
+    args.to,
+    { t: Date.now(), source: "fork", fork: provenance },
+    source.state,
+  );
+  await hooks.onCreatedWhileLocked?.();
+  return { session: args.to, ...provenance };
 }
 
 export async function readSessionLog(

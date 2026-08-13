@@ -138,8 +138,9 @@ describe("sengoku-raid project personas", () => {
     });
   });
 
-  test("completionist defers an ending for the public three-flowers objective", async () => {
+  test("completionist follows invite objective instead of dismissing its current companion", async () => {
     const output = hub([
+      activity("dismiss:mio"),
       activity("script:ending_oni_self"),
       activity("invite:kagari"),
     ]);
@@ -163,8 +164,19 @@ describe("sengoku-raid project personas", () => {
     ];
     await expect(decide("completionist", output, {
       baseline: { scripts: {} },
-      "sengoku-raid": { achievementLog: [] },
+      "sengoku-raid": { companion: "mio", achievementLog: [] },
     })).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
+  test("extractor departs without choosing the new dismiss action", async () => {
+    const output = hub([
+      activity("dismiss:kagari"),
+      activity("depart:kuro_swamp"),
+    ]);
+    await expect(decide("extractor", output, {})).resolves.toEqual({
+      type: "doActivity",
+      id: "depart:kuro_swamp",
+    });
   });
 
   test("completionist also clears side objectives before a terminal main objective", async () => {

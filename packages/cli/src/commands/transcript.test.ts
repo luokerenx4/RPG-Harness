@@ -54,7 +54,7 @@ describe("session transcript", () => {
         output: { type: "narration", text: "friend branch", visualState: { cg: "large.png" } },
         checkpoint: checkpoint("b"),
       },
-      { input: { type: "next" }, output: { type: "gameEnd" } },
+      { input: { type: "next" }, output: { type: "gameEnd", endingId: "ending-alone" } },
     ]);
     await writeFile(path.join(sessionDir(gameDir, "branch"), "fork.json"), JSON.stringify({
       fromSession: "parent",
@@ -100,6 +100,10 @@ describe("session transcript", () => {
         message: "The requested option is locked: bond too low",
       },
       output: { type: "narration", text: "friend branch" },
+    });
+    expect(transcript.events[3]?.output).toEqual({
+      type: "gameEnd",
+      endingId: "ending-alone",
     });
     expect(JSON.stringify(transcript)).not.toContain("large.png");
     expect(JSON.stringify(transcript)).not.toContain("parent future");

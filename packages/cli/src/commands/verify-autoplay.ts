@@ -1,7 +1,9 @@
 import {
   getPlaytestReport,
+  hasCausallyVerifiableAutoplayReport,
+  loadPlaytestReportCheckpointSource,
   reproducePlaytestReport,
-  resolvePlaytestReport,
+  resolveVerifiedPlaytestReport,
   type PlaytestAutoplayVerification,
 } from "../playtest-reports";
 import { runAutoplay, type AutoplaySummary } from "./autoplay";
@@ -23,6 +25,7 @@ export interface VerifyAutoplaySummary {
     maxSteps: number;
     seed?: number;
     stopReason: AutoplaySummary["reason"];
+    decisionPathRevision: string;
   };
   result: {
     reason: AutoplaySummary["reason"];
@@ -44,9 +47,15 @@ export interface VerifyAutoplaySummary {
   };
 }
 
-/** Re-run an ordinary autoplay stop from its immutable checkpoint and close it only on completion. */
+interface VerifyAutoplayInternalHooks {
+  /** Deterministic seam after the inspection source exists but before proof runs. */
+  afterSourceMaterialized?: (sourceSession: string) => void | Promise<void>;
+}
+
+/** Re-run the full causal autoplay path from its immutable pre-run checkpoint. */
 export async function verifyAutoplayReport(
   args: VerifyAutoplayArgs,
+  hooks: VerifyAutoplayInternalHooks = {},
 ): Promise<VerifyAutoplaySummary> {
   const report = await getPlaytestReport(args.gameDir, args.reportId);
   if (report.status !== "open") {
@@ -56,18 +65,9 @@ export async function verifyAutoplayReport(
   if (!evidence) {
     throw new Error(`Playtest report is not a structured autoplay finding: ${report.id}`);
   }
-  if (!report.evidence.checkpoint) {
-    throw new Error(`Autoplay report has no recoverable checkpoint: ${report.id}`);
-  }
-  if (typeof evidence.persona !== "string" || !evidence.persona.trim()) {
-    throw new Error(`Autoplay report has invalid persona evidence: ${report.id}`);
-  }
-  if (!Number.isInteger(evidence.maxSteps) || evidence.maxSteps < 0) {
-    throw new Error(`Autoplay report has invalid maxSteps evidence: ${report.id}`);
-  }
-  if (!Number.isInteger(evidence.seed) || evidence.seed! < 0) {
+  if (!hasCausallyVerifiableAutoplayReport(report)) {
     throw new Error(
-      `Autoplay report lacks a deterministic seed; reproduce it manually or record a fresh run: ${report.id}`,
+      `Autoplay report has incomplete causal replay or incident evidence; record a fresh finding or resolve this legacy report manually: ${report.id}`,
     );
   }
 
@@ -75,20 +75,35 @@ export async function verifyAutoplayReport(
   const runSession = `${args.sessionPrefix}-run`;
   await assertTargetEmpty(args.gameDir, sourceSession);
   await assertTargetEmpty(args.gameDir, runSession);
+  const replaySource = await loadPlaytestReportCheckpointSource(
+    args.gameDir,
+    report,
+    "autoplay-replay",
+  );
   await reproducePlaytestReport({
     gameDir: args.gameDir,
     id: report.id,
     session: report.session,
     to: sourceSession,
+    checkpoint: "autoplay-replay",
   });
+  await hooks.afterSourceMaterialized?.(sourceSession);
   const autoplay = await runAutoplay({
     gameDir: args.gameDir,
     persona: evidence.persona,
     verbose: false,
     maxSteps: evidence.maxSteps,
     ...(evidence.seed !== undefined ? { seed: evidence.seed } : {}),
-    fromSession: sourceSession,
     session: runSession,
+    preparedForkSource: {
+      fromSession: sourceSession,
+      source: {
+        state: replaySource.state,
+        selectedEntry: replaySource.sourceLogEntry,
+        sourceEntries: replaySource.sourceLogEntry,
+        mode: "checkpoint",
+      },
+    },
     reportOnStop: false,
     pretty: false,
   });
@@ -97,6 +112,7 @@ export async function verifyAutoplayReport(
     maxSteps: evidence.maxSteps,
     ...(evidence.seed !== undefined ? { seed: evidence.seed } : {}),
     stopReason: evidence.stopReason,
+    decisionPathRevision: evidence.decisionPathRevision,
   };
   const result = {
     reason: autoplay.reason,
@@ -109,7 +125,11 @@ export async function verifyAutoplayReport(
     objectiveChanges: autoplay.progress.objectiveChanges.length,
     webPath: autoplay.webPath!,
   };
-  if (autoplay.reason !== "completed") {
+  // A generator can return without yielding gameEnd. runLoop classifies that
+  // exhaustion as completed, but it is not evidence that the authored route
+  // reached a public terminal output. `ending` is populated only from the
+  // final gameEnd's explicit identity (or the legacy generic fallback).
+  if (autoplay.reason !== "completed" || autoplay.ending === null) {
     return {
       status: "failed",
       reportId: report.id,
@@ -123,7 +143,8 @@ export async function verifyAutoplayReport(
   const verification: PlaytestAutoplayVerification = {
     kind: "autoplay",
     verifiedAt: new Date().toISOString(),
-    sourceCheckpointRevision: report.evidence.checkpoint.revision,
+    replayCheckpointRevision: evidence.replayCheckpoint.revision,
+    issueCheckpointRevision: report.evidence.checkpoint!.revision,
     originalStopReason: evidence.stopReason,
     persona: evidence.persona,
     maxSteps: evidence.maxSteps,
@@ -141,13 +162,16 @@ export async function verifyAutoplayReport(
       objectiveChanges: autoplay.progress.objectiveChanges.length,
     },
   };
-  const resolved = await resolvePlaytestReport({
+  const resolved = await resolveVerifiedPlaytestReport({
     gameDir: args.gameDir,
     id: report.id,
     session: report.session,
-    resolution: `Autoplay ${evidence.persona} completed from the immutable issue checkpoint after ${autoplay.decisions} decisions.`,
+    resolution: `Autoplay ${evidence.persona} reached terminal ending ${autoplay.ending} in a causal replay from the immutable pre-run checkpoint after ${autoplay.decisions} decisions.`,
     verification,
   });
+  if (resolved.verification?.kind !== "autoplay") {
+    throw new Error(`Resolved autoplay report lost its verification: ${report.id}`);
+  }
   return {
     status: "verified",
     reportId: report.id,
@@ -160,7 +184,7 @@ export async function verifyAutoplayReport(
       status: "resolved",
       resolvedAt: resolved.resolvedAt!,
       ...(resolved.resolution ? { resolution: resolved.resolution } : {}),
-      verification,
+      verification: resolved.verification,
     },
   };
 }

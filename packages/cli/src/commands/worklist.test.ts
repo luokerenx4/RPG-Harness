@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { PlaytestReport } from "../playtest-reports";
+import type {
+  PlaytestAutoplayEvidence,
+  PlaytestReport,
+} from "../playtest-reports";
 import type { ScriptCoverageReport } from "./coverage";
 import type { ChoiceCoverageReport } from "./choice-coverage";
 import {
@@ -161,6 +164,82 @@ describe("AI development worklist", () => {
         reportId: legacy.id,
         session: legacy.session,
         to: "<new-session>",
+      },
+    });
+  });
+
+  test("does not route legacy autoplay evidence into a verifier that cannot replay it", () => {
+    const story = storyReport();
+    story.summary.started = 0;
+    story.summary.uncovered = 0;
+    story.sessionErrors = [];
+    story.scripts = [];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.workItems = [];
+    choices.authoring.workItems = [];
+    const legacy = playtestReport("major", "pt-blocker");
+    legacy.evidence.autoplay = {
+      persona: "greedy",
+      maxSteps: 20,
+      seed: 17,
+      stopReason: "stalled",
+      decisions: 5,
+      rejectedInputs: 0,
+      steps: 6,
+    } as unknown as PlaytestAutoplayEvidence;
+
+    const result = analyzeDevelopmentWorklist({
+      story,
+      choices,
+      reports: [legacy],
+    });
+
+    expect(result.items[0]?.operation).toEqual({
+      command: "reproduce",
+      args: {
+        reportId: legacy.id,
+        session: legacy.session,
+        to: "<new-session>",
+      },
+    });
+  });
+
+  test("treats complete autoplay parameters without an issue checkpoint as diagnostic", () => {
+    const story = storyReport();
+    story.summary.started = 0;
+    story.summary.uncovered = 0;
+    story.sessionErrors = [];
+    story.scripts = [];
+    const choices = choiceReport();
+    choices.sessionErrors = [];
+    choices.workItems = [];
+    choices.authoring.workItems = [];
+    const report = playtestReport("major", "pt-no-incident");
+    report.evidence.autoplay = {
+      replayCheckpoint: {
+        schemaVersion: 1,
+        file: `issue-checkpoints/${"a".repeat(64)}.json`,
+        revision: "a".repeat(64),
+      },
+      replayLogEntry: 0,
+      persona: "greedy",
+      maxSteps: 20,
+      seed: 17,
+      stopReason: "stalled",
+      decisions: 5,
+      rejectedInputs: 0,
+      steps: 6,
+      decisionPathRevision: "c".repeat(64),
+    };
+
+    const result = analyzeDevelopmentWorklist({ story, choices, reports: [report] });
+
+    expect(result.items[0]).toMatchObject({
+      actionability: "diagnostic",
+      operation: {
+        command: "inspect-report",
+        args: { reportId: report.id, session: report.session },
       },
     });
   });

@@ -123,7 +123,10 @@ describe("AI audit issue verification", () => {
           resolution: expect.stringContaining("4 semantic decision paths"),
           verification: {
             kind: "ai-audit",
+            issueCheckpointRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
             sessionPrefix: "verify-fixed",
+            maxSteps: 10,
+            seed: expect.any(Number),
             policy: { minUniqueDecisionPaths: 4 },
             observed: { uniqueEndings: 1, uniqueDecisionPaths: 4 },
             lanes: expect.arrayContaining([

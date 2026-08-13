@@ -3,17 +3,19 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import {
   listPlaytestReports,
   reproducePlaytestReport,
 } from "../playtest-reports";
-import { saveSession, sessionDir } from "../session";
+import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import {
   detectTerminalScriptId,
   runAutoplay,
   summarizeDecisionPath,
 } from "./autoplay";
+import { loadForkSource } from "./fork";
 
 const temporaryDirectories: string[] = [];
 
@@ -26,19 +28,24 @@ afterEach(async () => {
 });
 
 describe("autoplay ending summary", () => {
-  test("uses the terminal state's last completed script without naming guesses", () => {
+  test("uses the terminal output's explicit stable identity", () => {
     expect(detectTerminalScriptId({
       done: true,
-      trace: [{ output: { type: "gameEnd" } }],
-      finalState: { baseline: { completionOrder: ["intro", "ending_oni_self"] } },
+      trace: [{ output: { type: "gameEnd", endingId: "ending_oni_self" } }],
     })).toBe("ending_oni_self");
+  });
+
+  test("accepts a legitimate generic gameEnd without borrowing a previous script id", () => {
+    expect(detectTerminalScriptId({
+      done: true,
+      trace: [{ output: { type: "gameEnd", reason: "calendar ended" } }],
+    })).toBe("game-end");
   });
 
   test("does not call an unfinished run an ending", () => {
     expect(detectTerminalScriptId({
       done: false,
       trace: [],
-      finalState: { baseline: { completionOrder: ["scene_005"] } },
     })).toBeNull();
   });
 });
@@ -138,6 +145,12 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.report?.evidence.stall).toEqual(summary.stall);
     expect(summary.seed).toBeInteger();
     expect(summary.report?.evidence.autoplay).toEqual({
+      replayCheckpoint: {
+        schemaVersion: 1,
+        file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+      replayLogEntry: 0,
       persona: "greedy",
       maxSteps: 100,
       seed: summary.seed,
@@ -145,6 +158,7 @@ describe("autoplay autonomous development lane", () => {
       decisions: summary.decisions,
       rejectedInputs: summary.rejectedInputs,
       steps: summary.steps,
+      decisionPathRevision: summary.decisionPath.revision,
     });
     expect(summary.report?.details).toContain("exact 2-output cycle");
   });
@@ -169,6 +183,74 @@ describe("autoplay autonomous development lane", () => {
     });
     expect(summary.report?.evidence.behaviorCycle).toEqual(summary.behaviorCycle);
     expect(summary.report?.details).toContain("while only these state paths kept changing");
+  });
+
+  test("freezes incident evidence before a later GUI transaction changes the live session", async () => {
+    const gameDir = await temporaryChangingCycleGame();
+    const game = await loadGame(gameDir);
+    const session = "ai-then-gui";
+    let guiState: Awaited<ReturnType<typeof loadSession>> | undefined;
+
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 6,
+      session,
+      reportOnStop: true,
+    }, {
+      afterSessionTransaction: async () => {
+        await withSessionLock(gameDir, session, async () => {
+          const state = await loadSession(gameDir, session, game);
+          state.baseline.currentScriptId = "gui-followup";
+          state.baseline.switches.guiTouched = true;
+          await saveSession(gameDir, session, state);
+          await appendLog(gameDir, session, {
+            t: Date.now(),
+            source: "web",
+            input: { type: "next" },
+            output: { type: "narration", text: "GUI moved after autoplay." },
+          }, state);
+          guiState = structuredClone(state);
+        });
+      },
+    });
+
+    expect(summary.reason).toBe("max-steps");
+    const report = summary.report!;
+    const issueCheckpoint = report.evidence.checkpoint!;
+    const issueState = JSON.parse(await readFile(
+      path.join(sessionDir(gameDir, session), ...issueCheckpoint.file.split("/")),
+      "utf-8",
+    ));
+    const liveState = JSON.parse(await readFile(
+      path.join(sessionDir(gameDir, session), "state.json"),
+      "utf-8",
+    ));
+    const liveLog = (await readFile(
+      path.join(sessionDir(gameDir, session), "log.jsonl"),
+      "utf-8",
+    )).trim().split("\n").map((line) => JSON.parse(line));
+
+    expect(issueState).toEqual(summary.finalState);
+    expect(issueState.baseline.switches.guiTouched).toBeUndefined();
+    expect(liveState).toEqual(guiState!);
+    expect(liveState.baseline).toMatchObject({
+      currentScriptId: "gui-followup",
+      switches: { guiTouched: true },
+    });
+    expect(liveLog.at(-1)).toMatchObject({
+      source: "web",
+      output: { type: "narration", text: "GUI moved after autoplay." },
+    });
+    expect(report.evidence.logEntry).toBe(liveLog.length - 1);
+    expect(report.evidence.lastEvent).not.toEqual({
+      input: { type: "next" },
+      output: { type: "narration", text: "GUI moved after autoplay." },
+    });
+    expect(report.evidence.currentScriptId).not.toBe("gui-followup");
+    expect(report.evidence.autoplay?.replayCheckpoint.revision)
+      .not.toBe(issueCheckpoint.revision);
   });
 
   test("forks a player save before moving and reports a checkpointed stop", async () => {
@@ -282,6 +364,89 @@ describe("autoplay autonomous development lane", () => {
     expect(await listPlaytestReports(gameDir, "ai-complete")).toEqual([]);
   });
 
+  test("files an incident when a generator returns without a public gameEnd", async () => {
+    const gameDir = await temporarySilentReturnGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 20,
+      session: "ai-silent-return",
+      reportOnStop: true,
+    });
+
+    expect(summary).toMatchObject({
+      reason: "completed",
+      ending: null,
+      report: {
+        status: "open",
+        title: "Autoplay greedy completed without a public gameEnd",
+        evidence: {
+          checkpoint: { schemaVersion: 1 },
+          autoplay: { stopReason: "completed" },
+        },
+      },
+    });
+    expect(summary.report?.details).toContain(
+      "returned without a public gameEnd output",
+    );
+  });
+
+  test("replays a fresh random session from the causal checkpoint without shifting its RNG", async () => {
+    const gameDir = await temporaryRandomChoiceGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: 1,
+      session: "fresh-random",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a causal autoplay report");
+
+    expect(original.decisionPath.decisions).toHaveLength(1);
+    expect(report.evidence.autoplay?.decisionPathRevision)
+      .toBe(original.decisionPath.revision);
+
+    await reproducePlaytestReport({
+      gameDir,
+      id: report.id,
+      session: "fresh-random",
+      to: "fresh-random-replay-source",
+      checkpoint: "autoplay-replay",
+    });
+    const replay = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: 1,
+      fromSession: "fresh-random-replay-source",
+      session: "fresh-random-replay-run",
+      reportOnStop: false,
+    });
+
+    expect(replay.decisionPath).toEqual(original.decisionPath);
+  });
+
+  test("keeps runner-owned persona randomness out of global Math.random", async () => {
+    const gameDir = await temporaryGlobalRandomGuardGame();
+    const originalRandom = Math.random;
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "global-guard",
+      verbose: false,
+      maxSteps: 1,
+      seed: 8,
+    });
+
+    expect(summary.reason).toBe("max-steps");
+    expect(summary.error).toBeUndefined();
+    expect(Math.random).toBe(originalRandom);
+  });
+
   test("validates the persona and source before leaving a target branch", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
@@ -306,6 +471,41 @@ describe("autoplay autonomous development lane", () => {
       session: "missing-source-branch",
     })).rejects.toThrow("Source session does not exist");
     await expect(pathExists(sessionDir(gameDir, "missing-source-branch"))).resolves.toBe(false);
+  });
+
+  test("keeps fork initialization and play in one target transaction", async () => {
+    const gameDir = await temporaryGame();
+    const game = await loadGame(gameDir);
+    const sourceSession = "atomic-player";
+    const targetSession = "atomic-ai";
+    await saveSession(gameDir, sourceSession, createInitialState(game));
+    const source = await loadForkSource(gameDir, sourceSession);
+    let guiWrite: Promise<void> | undefined;
+
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      session: targetSession,
+      preparedForkSource: { fromSession: sourceSession, source },
+    }, {
+      afterForkInitializedWhileLocked: () => {
+        guiWrite = withSessionLock(gameDir, targetSession, async () => {
+          const state = await loadSession(gameDir, targetSession, game);
+          state.baseline.switches.guiTouchedBetweenForkAndPlay = true;
+          await saveSession(gameDir, targetSession, state);
+        });
+      },
+    });
+
+    expect(summary.ending).toBe("intro");
+    expect(summary.finalState.baseline.switches.guiTouchedBetweenForkAndPlay)
+      .toBeUndefined();
+    if (!guiWrite) throw new Error("GUI contender was not started");
+    await guiWrite;
+    expect((await loadSession(gameDir, targetSession, game)).baseline.switches)
+      .toMatchObject({ guiTouchedBetweenForkAndPlay: true });
   });
 });
 
@@ -375,6 +575,96 @@ async function temporaryChangingCycleGame(): Promise<string> {
     "  }",
     "};",
     "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporarySilentReturnGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-silent-return-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay silent return test",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  yield { type: "narration", text: "The route simply disappears." };',
+    "  return;",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRandomChoiceGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-random-replay-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay random replay test",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    "  while (true) {",
+    '    const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "left", kind: "action", title: "Left", cost: 0, available: true }, { id: "right", kind: "action", title: "Right", cost: 0, available: true }] } };',
+    '    yield { type: "narration", text: input.type === "doActivity" ? input.id : "none" };',
+    "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryGlobalRandomGuardGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-global-rng-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay global RNG guard",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/guard.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    "  while (true) {",
+    '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "wait", kind: "action", title: "Wait", cost: 0, available: true }] } };',
+    '    yield { type: "narration", text: "waited" };',
+    "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "guard.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const importedMathRandom = Math.random;",
+    "const guard: Module = {",
+    '  id: "global-random-guard",',
+    "  aiPersonas: {",
+    '    "global-guard": {',
+    '      description: "Fails if the runner replaces process-global randomness",',
+    "      decide: async (output, _state, _step, context) => {",
+    '        if (Math.random !== importedMathRandom) throw new Error("global Math.random was replaced");',
+    "        context?.rng();",
+    '        if (output.type === "hubMenu") return { type: "doActivity", id: "wait" };',
+    '        if (output.type === "gameEnd") return null;',
+    '        return { type: "next" };',
+    "      },",
+    "    },",
+    "  },",
+    "};",
+    "export default guard;",
     "",
   ].join("\n"), "utf-8");
   return dir;

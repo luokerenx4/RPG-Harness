@@ -25,10 +25,13 @@ inputs:
   - { type: next }
 assertions:
   - kind: activity
-    id: invite:mio
+    id: dismiss:mio
     present: true
     available: true
     titleIncludes: 同行から外す
+  - kind: activity
+    id: invite:mio
+    present: false
   - kind: state
     path: baseline.switches.companion_mio
     eq: true

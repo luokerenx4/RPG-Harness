@@ -3,9 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { listPlaytestReports } from "../playtest-reports";
-import { loadSession, saveSession, sessionDir } from "../session";
+import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import { runAudit } from "./audit";
 import { readSessionLog } from "./fork";
 import { runDevelopmentWorkItem } from "./work";
@@ -186,6 +187,33 @@ describe("autoplay audit matrix", () => {
       reportOnStop: true,
       pretty: false,
     })).rejects.toThrow("random requires --seed");
+
+    await expect(runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "negative-seed-matrix",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: -1,
+      reportOnStop: true,
+      pretty: false,
+    })).rejects.toThrow("--seed must be a non-negative integer");
+  });
+
+  test("requires a seed for an author-owned stochastic persona", async () => {
+    const gameDir = await temporaryStochasticPersonaGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    await expect(runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "custom-random-matrix",
+      personas: ["coin-flip"],
+      maxSteps: 10,
+      reportOnStop: true,
+      pretty: false,
+    })).rejects.toThrow("[coin-flip] require --seed");
   });
 
   test("scopes seeded randomness to each audit lane and restores the host RNG", async () => {
@@ -369,7 +397,8 @@ describe("autoplay audit matrix", () => {
       "  min_unique_decision_paths: 3",
     ].join("\n") + "\n", "utf-8");
     const game = await loadGame(gameDir);
-    await saveSession(gameDir, "player", createInitialState(game));
+    const sourceState = createInitialState(game);
+    await saveSession(gameDir, "player", sourceState);
 
     const summary = await runAudit({
       gameDir,
@@ -379,6 +408,21 @@ describe("autoplay audit matrix", () => {
       maxSteps: 10,
       reportOnStop: true,
       pretty: false,
+    }, {
+      onQualityEvidenceForked: async (session) => {
+        await withSessionLock(gameDir, session, async () => {
+          const guiState = structuredClone(
+            await loadSession(gameDir, session, game),
+          );
+          guiState.baseline.currentScriptId = "gui-interleaved";
+          await saveSession(gameDir, session, guiState);
+          await appendLog(gameDir, session, {
+            t: Date.now(),
+            source: "gui",
+            output: { type: "text", text: "interleaved after audit fork" },
+          }, guiState);
+        });
+      },
     });
 
     expect(summary.qualityGate).toMatchObject({
@@ -401,6 +445,7 @@ describe("autoplay audit matrix", () => {
       evidence: {
         checkpoint: { schemaVersion: 1 },
         auditMatrix: {
+          seed: expect.any(Number),
           sessionPrefix: "failing-matrix",
           policy: { minUniqueEndings: 2, minUniqueDecisionPaths: 3 },
           observed: { uniqueEndings: 1, uniqueDecisionPaths: 3 },
@@ -421,6 +466,27 @@ describe("autoplay audit matrix", () => {
         },
       },
     });
+    const checkpoint = reports[0]?.evidence.checkpoint;
+    expect(checkpoint).toBeDefined();
+    if (!checkpoint) throw new Error("Expected frozen audit checkpoint");
+    const checkpointState = JSON.parse(await readFile(
+      path.join(
+        sessionDir(gameDir, "failing-matrix-quality-gate"),
+        checkpoint.file,
+      ),
+      "utf-8",
+    ));
+    expect(checkpointState).toEqual(sourceState);
+    expect(reports[0]?.evidence.logEntry).toBe(1);
+    expect((await readSessionLog(
+      gameDir,
+      "failing-matrix-quality-gate",
+    ))).toHaveLength(2);
+    expect((await loadSession(
+      gameDir,
+      "failing-matrix-quality-gate",
+      game,
+    )).baseline.currentScriptId).toBe("gui-interleaved");
     const worklist = await collectDevelopmentWorklist(gameDir);
     expect(worklist.items).toContainEqual(expect.objectContaining({
       key: `report/${reportId}`,
@@ -631,6 +697,41 @@ async function temporaryChoiceGame(): Promise<string> {
     "- Third {id: third}",
     "",
     "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryStochasticPersonaGame(): Promise<string> {
+  const dir = await temporaryGame();
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Audit stochastic persona test",
+    "modules:",
+    "  - ./modules/persona.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "persona.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "stochastic-persona",',
+    "  aiPersonas: {",
+    '    "coin-flip": {',
+    '      description: "Samples a runner-owned coin flip",',
+    "      deterministic: false,",
+    "      decide: async (output, _state, _step, context) => {",
+    '        if (output.type === "scriptComplete") {',
+    "          const available = output.nextAvailable;",
+    "          const script = available[Math.floor((context?.rng() ?? 0) * available.length)];",
+    '          return script ? { type: "select", scriptId: script.id } : null;',
+    "        }",
+    '        if (output.type === "gameEnd") return null;',
+    '        return { type: "next" };',
+    "      },",
+    "    },",
+    "  },",
+    "};",
+    "export default module;",
     "",
   ].join("\n"), "utf-8");
   return dir;

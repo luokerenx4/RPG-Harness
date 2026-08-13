@@ -3,11 +3,11 @@
 // like" after Phase 6.
 //
 // Owns:
-//   - mode flag (HUB / RAID), per-raid sub-state (current zone,
-//     encounter, pending loot), and the metCharacters tracker — all
+//   - per-raid sub-state (current zone, encounter, pending loot) and the
+//     metCharacters tracker — all
 //     in the module's own state slice at state["sengoku-raid"]
 //   - the hub menu (mode-dependent activities) via onHubBuild
-//   - 12 raid/hub action handlers declared via module.actionHandlers
+//   - raid/hub action handlers declared via module.actionHandlers
 //     + provides. Dispatched by the engine's standard
 //     actionHandlerRegistry; activities carry actionKind + payload
 //     so the engine routes Input.doActivity through one code path.
@@ -1066,12 +1066,15 @@ function buildHubMenu(ctx: Ctx): Output {
     const officialDuty =
       charId === "mio" &&
       ctx.state.baseline.switches.mio_inspection_duty === true;
-    if (affection < 4 && !officialDuty) continue;
     const alreadyInvited = m.companion === charId;
+    // Affection gates a new invitation, never the ability to remove an
+    // existing companion from a migrated/seeded save.
+    if (!alreadyInvited && affection < 4 && !officialDuty) continue;
+    const companionAction = alreadyInvited ? "dismiss" : "invite";
     activities.push({
-      id: `invite:${charId}`,
+      id: `${companionAction}:${charId}`,
       kind: "action",
-      actionKind: "invite",
+      actionKind: companionAction,
       payload: { characterId: charId },
       title: alreadyInvited
         ? `${char.name}を同行から外す`
@@ -2880,9 +2883,10 @@ const extractHandler: ActionHandler = (ctx) => {
   return {};
 };
 
-// 同行者 invite/uninvite handler. Toggles companion + the public
-// `companion_<id>` switch (hooks key off the switch since switches are
-// in the engine-modeled state, not module-private).
+// Invite one companion. The public action is intentionally not a toggle:
+// `invite:<id>` always means invite/replace, while `dismiss:<id>` always
+// means remove the selected companion. Stable semantic ids let AI traces,
+// objectives, and replay tools distinguish opposite player intents.
 const inviteHandler: ActionHandler = (ctx) => {
   const charId = ctx.action.payload?.characterId as string | undefined;
   if (!charId) return denial("誰を誘うか指定されていない。");
@@ -2903,15 +2907,8 @@ const inviteHandler: ActionHandler = (ctx) => {
   }
   const charName =
     ctx.game.characters.find((c) => c.id === charId)?.name ?? charId;
-
-  // Toggle off if already invited.
   if (m.companion === charId) {
-    m.companion = null;
-    m.companionHp = 0;
-    return {
-      deltas: { switches: { [`companion_${charId}`]: false } },
-      narrations: [`${charName}に同行を解いた旨を伝えた。`],
-    };
+    return denial(`${charName}はすでに同行している。`);
   }
 
   // Replace any prior companion, flip switches accordingly.
@@ -2928,6 +2925,26 @@ const inviteHandler: ActionHandler = (ctx) => {
     narrations: [
       `${charName}は頷いた。「次の出帰り、隣で歩く。」`,
     ],
+  };
+};
+
+const dismissHandler: ActionHandler = (ctx) => {
+  const charId = ctx.action.payload?.characterId as string | undefined;
+  if (!charId) return denial("誰の同行を解くか指定されていない。");
+  const m = moduleState(ctx);
+  if (m.raid !== null) {
+    return denial("出立後は同行を解けない。大名府に戻ってから。");
+  }
+  if (m.companion !== charId) {
+    return denial("その相手は現在同行していない。");
+  }
+  const charName =
+    ctx.game.characters.find((c) => c.id === charId)?.name ?? charId;
+  m.companion = null;
+  m.companionHp = 0;
+  return {
+    deltas: { switches: { [`companion_${charId}`]: false } },
+    narrations: [`${charName}に同行を解いた旨を伝えた。`],
   };
 };
 
@@ -3408,6 +3425,7 @@ const raidModule: Module = {
     "negotiate_release",
     "yaodao_voice",
     "invite",
+    "dismiss",
     "imbue_pure",
     "imbue_oni",
     "imbue_mundane",
@@ -3437,6 +3455,7 @@ const raidModule: Module = {
     negotiate_release: negotiateReleaseHandler,
     yaodao_voice: yaodaoVoiceHandler,
     invite: inviteHandler,
+    dismiss: dismissHandler,
     imbue_pure: imbuePureHandler,
     imbue_oni: imbueOniHandler,
     imbue_mundane: imbueMundaneHandler,

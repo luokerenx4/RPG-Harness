@@ -94,6 +94,8 @@ Web と Headless は同じ共有 view から main の候補を案内し、AI per
 
 邦絆ループ：邂逅 → 親密度 ≥2 で `bond_<id>_01` → ≥4 で `bond_<id>_02`（grant skill）→ raid に誘う（switch `companion_<id>`）→ 生還で `befriended_<id>` 立つ → ≥6 + befriended で `bond_<id>_03`（companion 同道）→ 三人とも befriended で `three_flowers_alliance` trigger。
 
+同行操作は AI / replay 向けに意味を固定し、`invite:<id>` は誘う・交代、`dismiss:<id>` は解除だけを行う。同じ action id が状態によって逆の意味へ反転することはない。
+
 **同行道中シーン**：同行者を連れて raid 中、初めて遭遇の無い静かな新 zone に着くと、その同行者の道中会話が一度だけ自動で流れる。二档ある——`road_<id>`（一幕目）と、befriended（生還を共にした）後に解錠される `road_<id>_2`（二幕目、より踏み込んだ告白）。`moveHandler` が character_spawns と同じ要領で `currentScriptId` をセットして launch、シーン自身の effects ブロックが `road_<id>(_2)_seen` を立てて再発火を止め、親密度を加える。各シーンには `:cg assets/cgs/road-<id>` が付く。同行を「数値バフ」から「道連れの関係」へ寄せるレイヤー。
 
 三人とも `bond_<id>_01 / 02 / 03` の三段が揃っている。澪の `bond_mio_02` が伝授する**水鏡（mizukagami）は hell_gate chain 解錠の四条件の一つ**——澪の邦絆を進めない限り、地獄門は開かない。三技（鎮魂法 / 早駆け / 水鏡）はそれぞれ別のヒロイン経由でしか手に入らない。
@@ -110,7 +112,7 @@ depart:<chain>           ───→            chain の entry map に enterMa
 │   infoshop_basic/loot/yaodao/hidden     │     │     ├── HP<30% → 聞く/逃がす/妖刀の声
 │   script:intel_briefing                 │     │     └── HP=0  → 脈絡選択（imbue）
 │   bond / script:bond_*                  │     ├── empty → search / move
-│   invite:<companion>                    │     └── is_extract → extract
+│   invite/dismiss:<companion>            │     └── is_extract → extract
 │   rest                                  │
 │   use_chinkonho                         │
 │   script:ending_*  (game over)          │

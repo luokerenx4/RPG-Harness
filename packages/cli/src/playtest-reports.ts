@@ -72,7 +72,23 @@ export interface PlaytestEvidence {
   captureErrors?: string[];
 }
 
+/**
+ * Base incident evidence frozen at one session transaction boundary.
+ *
+ * This is exported only from this implementation module so autonomous runners
+ * can carry the snapshot across a later report-append transaction. It is not a
+ * user-authored report payload.
+ */
+export type PlaytestEvidenceSnapshot = Omit<
+  PlaytestEvidence,
+  "stall" | "behaviorCycle" | "autoplay" | "auditMatrix"
+>;
+
 export interface PlaytestAutoplayEvidence {
+  /** Frozen state from immediately before the reported autoplay began. */
+  replayCheckpoint: PlaytestCheckpointRef;
+  /** Log boundary in the report session at that instant (0 before its first entry). */
+  replayLogEntry: number;
   persona: string;
   maxSteps: number;
   seed?: number;
@@ -80,8 +96,24 @@ export interface PlaytestAutoplayEvidence {
   decisions: number;
   rejectedInputs: number;
   steps: number;
+  /** Semantic decisions from the original failing run, for replay diagnostics. */
+  decisionPathRevision: string;
   sourceSession?: string;
   sourceLogEntry?: number;
+}
+
+/** True only when an autoplay finding carries every input needed for causal replay. */
+export function hasCausalAutoplayEvidence(
+  evidence: PlaytestAutoplayEvidence | undefined,
+): evidence is PlaytestAutoplayEvidence {
+  return evidence !== undefined &&
+    isPlaytestCheckpointRef(evidence.replayCheckpoint) &&
+    Number.isInteger(evidence.replayLogEntry) && evidence.replayLogEntry >= 0 &&
+    typeof evidence.persona === "string" && evidence.persona.trim().length > 0 &&
+    Number.isInteger(evidence.maxSteps) && evidence.maxSteps >= 0 &&
+    Number.isInteger(evidence.seed) && evidence.seed! >= 0 &&
+    typeof evidence.decisionPathRevision === "string" &&
+    /^[a-f0-9]{64}$/.test(evidence.decisionPathRevision);
 }
 
 export interface PlaytestAuditMatrixEvidence {
@@ -111,6 +143,8 @@ export interface PlaytestAuditMatrixEvidence {
   violations: string[];
   lanes: Array<{
     persona: string;
+    /** Whether this lane's persona is repeatable without a persona RNG seed. */
+    deterministic?: boolean;
     session: string;
     webPath: string;
     ending: string | null;
@@ -125,6 +159,24 @@ export interface PlaytestAuditMatrixEvidence {
     selections: Array<{ optionId: string; personas: string[] }>;
     notReachedBy: string[];
   }>;
+}
+
+/** True only when an audit finding retains a deterministic rerun matrix. */
+export function hasVerifiableAuditEvidence(
+  evidence: PlaytestAuditMatrixEvidence | undefined,
+): evidence is PlaytestAuditMatrixEvidence {
+  if (
+    evidence === undefined ||
+    !Number.isInteger(evidence.maxSteps) || evidence.maxSteps! < 0 ||
+    !Number.isInteger(evidence.seed) || evidence.seed! < 0 ||
+    !Array.isArray(evidence.lanes) || evidence.lanes.length === 0
+  ) return false;
+  const personas = evidence.lanes.map((lane) => lane.persona);
+  return personas.every((persona) =>
+    typeof persona === "string" && persona.trim().length > 0
+  ) &&
+    evidence.lanes.every((lane) => typeof lane.deterministic === "boolean") &&
+    new Set(personas).size === personas.length;
 }
 
 export interface PlaytestReport {
@@ -144,11 +196,30 @@ export interface PlaytestReport {
   evidence: PlaytestEvidence;
 }
 
+export function hasRecoverableIssueCheckpoint(report: PlaytestReport): boolean {
+  return isPlaytestCheckpointRef(report.evidence.checkpoint);
+}
+
+export function hasCausallyVerifiableAutoplayReport(
+  report: PlaytestReport,
+): boolean {
+  return hasRecoverableIssueCheckpoint(report) &&
+    hasCausalAutoplayEvidence(report.evidence.autoplay);
+}
+
+export function hasVerifiableAuditReport(report: PlaytestReport): boolean {
+  return hasRecoverableIssueCheckpoint(report) &&
+    hasVerifiableAuditEvidence(report.evidence.auditMatrix);
+}
+
 export interface PlaytestAuditVerification {
   kind: "ai-audit";
   verifiedAt: string;
+  issueCheckpointRevision: string;
   sessionPrefix: string;
   sourceRevision: string;
+  maxSteps: number;
+  seed: number;
   policy: {
     personas?: string[];
     minUniqueEndings?: number;
@@ -180,7 +251,10 @@ export interface PlaytestAuditVerification {
 export interface PlaytestAutoplayVerification {
   kind: "autoplay";
   verifiedAt: string;
-  sourceCheckpointRevision: string;
+  /** Causal replay start, before any input that contributed to the finding. */
+  replayCheckpointRevision: string;
+  /** Exact stopped state retained for GUI/headless incident inspection. */
+  issueCheckpointRevision: string;
   originalStopReason: LoopReason;
   persona: string;
   maxSteps: number;
@@ -189,7 +263,7 @@ export interface PlaytestAutoplayVerification {
   webPath: string;
   result: {
     reason: "completed";
-    ending: string | null;
+    ending: string;
     decisions: number;
     rejectedInputs: number;
     steps: number;
@@ -203,6 +277,14 @@ export type PlaytestVerification =
   | PlaytestAuditVerification
   | PlaytestAutoplayVerification;
 
+export type RecordPlaytestAutoplayEvidence = Omit<
+  PlaytestAutoplayEvidence,
+  "replayCheckpoint"
+> & {
+  /** Internal state payload; persisted content-addressably and never embedded in the report. */
+  replayState: ComposedState;
+};
+
 export interface RecordPlaytestReportArgs {
   gameDir: string;
   session: string;
@@ -213,8 +295,10 @@ export interface RecordPlaytestReportArgs {
   target?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
-  autoplay?: PlaytestAutoplayEvidence;
+  autoplay?: RecordPlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
+  /** @internal Evidence captured while the causal session transaction was held. */
+  evidenceSnapshot?: PlaytestEvidenceSnapshot;
 }
 
 export interface ResolvePlaytestReportArgs {
@@ -222,14 +306,23 @@ export interface ResolvePlaytestReportArgs {
   id: string;
   session?: string;
   resolution?: string;
-  verification?: PlaytestVerification;
 }
+
+/** @internal Only verification commands may persist structured proof. */
+export type ResolveVerifiedPlaytestReportArgs = ResolvePlaytestReportArgs & {
+  verification: PlaytestVerification;
+};
+
+type ResolvePlaytestReportInternalArgs =
+  | ({ mode: "manual" } & ResolvePlaytestReportArgs)
+  | ({ mode: "verified" } & ResolveVerifiedPlaytestReportArgs);
 
 export interface ReproducePlaytestReportArgs {
   gameDir: string;
   id: string;
   to: string;
   session?: string;
+  checkpoint?: "issue" | "autoplay-replay";
 }
 
 export async function recordPlaytestReport(
@@ -237,8 +330,23 @@ export async function recordPlaytestReport(
 ): Promise<PlaytestReport> {
   assertSessionName(args.session);
   if (!args.title.trim()) throw new Error("Playtest report title cannot be empty");
+  if (args.autoplay && args.auditMatrix) {
+    throw new Error(
+      "A playtest report cannot combine autoplay and AI audit evidence",
+    );
+  }
+  if ((args.autoplay || args.auditMatrix) && !args.evidenceSnapshot) {
+    throw new Error(
+      "Structured autoplay and audit reports require incident evidence frozen inside their causal session transaction",
+    );
+  }
   return withSessionLock(args.gameDir, args.session, async () => {
     const createdAt = new Date().toISOString();
+    const autoplay = args.autoplay
+      ? await persistAutoplayEvidence(args.gameDir, args.session, args.autoplay)
+      : undefined;
+    const incidentEvidence = args.evidenceSnapshot ??
+      await capturePlaytestEvidenceSnapshot(args.gameDir, args.session);
     const report: PlaytestReport = {
       schemaVersion: 1,
       id: `pt-${createdAt.replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`,
@@ -251,21 +359,36 @@ export async function recordPlaytestReport(
       ...(args.details?.trim() ? { details: args.details.trim() } : {}),
       ...(args.target?.trim() ? { target: args.target.trim() } : {}),
       evidence: {
-        ...await captureEvidence(args.gameDir, args.session),
+        ...incidentEvidence,
         ...(args.stall ? { stall: args.stall } : {}),
         ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
-        ...(args.autoplay ? { autoplay: args.autoplay } : {}),
+        ...(autoplay ? { autoplay } : {}),
         ...(args.auditMatrix ? { auditMatrix: args.auditMatrix } : {}),
       },
     };
 
     const dir = sessionDir(args.gameDir, args.session);
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, REPORTS_FILE), JSON.stringify(report) + "\n", {
-      flag: "a",
-    });
+    const file = path.join(dir, REPORTS_FILE);
+    const reports = await readReportFile(file);
+    reports.push(report);
+    await writeReportFileAtomically(file, reports);
     return report;
   });
+}
+
+async function persistAutoplayEvidence(
+  gameDir: string,
+  session: string,
+  input: RecordPlaytestAutoplayEvidence,
+): Promise<PlaytestAutoplayEvidence> {
+  const { replayState, ...evidence } = input;
+  const replayCheckpoint = await persistPlaytestCheckpoint(
+    gameDir,
+    session,
+    JSON.stringify(replayState, null, 2),
+  );
+  return { ...evidence, replayCheckpoint };
 }
 
 export async function listPlaytestReports(
@@ -302,18 +425,70 @@ export async function listPlaytestReports(
 export async function resolvePlaytestReport(
   args: ResolvePlaytestReportArgs,
 ): Promise<PlaytestReport> {
+  // Keep this runtime guard even though the public type omits `verification`:
+  // JavaScript callers and TypeScript casts must not mint their own proof.
+  if ("verification" in args) {
+    throw new Error(
+      "Manual report resolution does not accept verification evidence; run verify-autoplay or verify-audit instead",
+    );
+  }
+  const snapshot: ResolvePlaytestReportInternalArgs = {
+    mode: "manual",
+    gameDir: args.gameDir,
+    id: args.id,
+    ...(args.session !== undefined ? { session: args.session } : {}),
+    ...(args.resolution !== undefined ? { resolution: args.resolution } : {}),
+  };
+  return resolvePlaytestReportInternal(snapshot);
+}
+
+/** @internal Verification commands call this only after performing a replay. */
+export async function resolveVerifiedPlaytestReport(
+  args: ResolveVerifiedPlaytestReportArgs,
+): Promise<PlaytestReport> {
+  const snapshot: ResolvePlaytestReportInternalArgs = {
+    mode: "verified",
+    gameDir: args.gameDir,
+    id: args.id,
+    verification: structuredClone(args.verification),
+    ...(args.session !== undefined ? { session: args.session } : {}),
+    ...(args.resolution !== undefined ? { resolution: args.resolution } : {}),
+  };
+  return resolvePlaytestReportInternal(snapshot);
+}
+
+async function resolvePlaytestReportInternal(
+  args: ResolvePlaytestReportInternalArgs,
+): Promise<PlaytestReport> {
   if (!args.id.trim()) throw new Error("Playtest report id cannot be empty");
-  if (args.session !== undefined) assertSessionName(args.session);
-  const files = await reportFiles(args.gameDir, args.session);
-  const matches: Array<{
-    file: string;
-    index: number;
-    reports: PlaytestReport[];
-  }> = [];
-  for (const file of files) {
-    const reports = await readReportFile(file);
-    const index = reports.findIndex((report) => report.id === args.id);
-    if (index >= 0) matches.push({ file, index, reports });
+  if (args.session !== undefined) {
+    assertSessionName(args.session);
+    return withSessionLock(args.gameDir, args.session, () =>
+      resolvePlaytestReportInLockedSession(args, args.session!)
+    );
+  }
+
+  // A global lookup has no single lock to acquire. Read complete files
+  // optimistically so an unrelated long autoplay cannot block resolution. Only
+  // a session that contains the id, or whose trailing line is currently being
+  // appended, needs its transaction lock before a conclusive re-read.
+  const matches: string[] = [];
+  for (const session of await reportSessions(args.gameDir)) {
+    const file = path.join(sessionDir(args.gameDir, session), REPORTS_FILE);
+    const discovery = await readReportFileForDiscovery(file);
+    const optimisticCount = discovery.reports
+      .filter((report) => report.id === args.id).length;
+    if (optimisticCount > 1) {
+      throw new Error(`Duplicate playtest report id: ${args.id}`);
+    }
+    if (optimisticCount === 0 && !discovery.trailingPartial) continue;
+    const found = await withSessionLock(args.gameDir, session, async () => {
+      const reports = await readReportFile(file);
+      const count = reports.filter((report) => report.id === args.id).length;
+      if (count > 1) throw new Error(`Duplicate playtest report id: ${args.id}`);
+      return count === 1;
+    });
+    if (found) matches.push(session);
   }
   if (matches.length === 0) {
     throw new Error(`Playtest report not found: ${args.id}`);
@@ -321,26 +496,221 @@ export async function resolvePlaytestReport(
   if (matches.length > 1) {
     throw new Error(`Duplicate playtest report id: ${args.id}`);
   }
+  const session = matches[0]!;
+  return withSessionLock(args.gameDir, session, () =>
+    resolvePlaytestReportInLockedSession(args, session)
+  );
+}
 
-  const match = matches[0]!;
-  const current = match.reports[match.index]!;
-  if (current.status === "resolved") return current;
+/** Resolve from a fresh issues.jsonl read while the owning session lock is held. */
+async function resolvePlaytestReportInLockedSession(
+  args: ResolvePlaytestReportInternalArgs,
+  session: string,
+): Promise<PlaytestReport> {
+  const file = path.join(sessionDir(args.gameDir, session), REPORTS_FILE);
+  const reports = await readReportFile(file);
+  const indexes = reports.flatMap((report, index) =>
+    report.id === args.id ? [index] : []
+  );
+  if (indexes.length === 0) {
+    throw new Error(`Playtest report not found: ${args.id}`);
+  }
+  if (indexes.length > 1) {
+    throw new Error(`Duplicate playtest report id: ${args.id}`);
+  }
+  const index = indexes[0]!;
+  const current = reports[index]!;
+  if (current.session !== session) {
+    throw new Error(
+      `Playtest report session mismatch: ${current.id} names ${current.session}, stored under ${session}`,
+    );
+  }
+  if (current.status === "resolved") {
+    if (args.mode === "verified") {
+      throw new Error(
+        `Playtest report was resolved concurrently by another verification: ${current.id}`,
+      );
+    }
+    if (
+      args.resolution?.trim() &&
+      args.resolution.trim() !== current.resolution
+    ) {
+      throw new Error(
+        `Playtest report was resolved concurrently with a different resolution: ${current.id}`,
+      );
+    }
+    return current;
+  }
+  const verification = args.mode === "verified" ? args.verification : undefined;
+  assertVerificationMatchesReport(current, verification, args.resolution);
   const resolved: PlaytestReport = {
     ...current,
     status: "resolved",
     resolvedAt: new Date().toISOString(),
     ...(args.resolution?.trim() ? { resolution: args.resolution.trim() } : {}),
-    ...(args.verification ? { verification: args.verification } : {}),
+    ...(verification ? { verification } : {}),
   };
-  match.reports[match.index] = resolved;
-  const temporary = `${match.file}.${randomUUID()}.tmp`;
-  await writeFile(
-    temporary,
-    match.reports.map((report) => JSON.stringify(report)).join("\n") + "\n",
-    "utf-8",
-  );
-  await rename(temporary, match.file);
+  reports[index] = resolved;
+  await writeReportFileAtomically(file, reports);
   return resolved;
+}
+
+function assertVerificationMatchesReport(
+  report: PlaytestReport,
+  verification: PlaytestVerification | undefined,
+  resolution: string | undefined,
+): void {
+  const autoplay = report.evidence.autoplay;
+  const audit = report.evidence.auditMatrix;
+  if (autoplay && audit) {
+    throw new Error(
+      `Playtest report has conflicting structured evidence and cannot be resolved: ${report.id}`,
+    );
+  }
+  if (autoplay && hasCausallyVerifiableAutoplayReport(report)) {
+    if (verification?.kind !== "autoplay") {
+      throw new Error(
+        `Structured autoplay report ${report.id} requires causal autoplay verification; run verify-autoplay instead of resolving it manually`,
+      );
+    }
+    const issueCheckpoint = report.evidence.checkpoint;
+    if (!isPlaytestCheckpointRef(issueCheckpoint)) {
+      throw new Error(`Autoplay report has no recoverable issue checkpoint: ${report.id}`);
+    }
+    if (!isPlaytestCheckpointRef(autoplay.replayCheckpoint)) {
+      throw new Error(`Autoplay report has no recoverable replay checkpoint: ${report.id}`);
+    }
+    if (
+      verification.replayCheckpointRevision !== autoplay.replayCheckpoint.revision ||
+      verification.issueCheckpointRevision !== issueCheckpoint.revision
+    ) {
+      throw new Error(
+        `Autoplay verification checkpoint mismatch for report ${report.id}`,
+      );
+    }
+    if (
+      verification.originalStopReason !== autoplay.stopReason ||
+      verification.persona !== autoplay.persona ||
+      verification.maxSteps !== autoplay.maxSteps ||
+      verification.seed !== autoplay.seed
+    ) {
+      throw new Error(
+        `Autoplay verification replay parameters do not match report ${report.id}`,
+      );
+    }
+    if (
+      verification.result.reason !== "completed" ||
+      typeof verification.result.ending !== "string" ||
+      !verification.result.ending.trim()
+    ) {
+      throw new Error(
+        `Autoplay verification has no terminal gameEnd identity for report ${report.id}`,
+      );
+    }
+    return;
+  }
+  if (autoplay && !resolution?.trim()) {
+    throw new Error(
+      `Legacy autoplay report ${report.id} needs an explicit review or supersession reason before manual resolution`,
+    );
+  }
+  if (audit && hasVerifiableAuditReport(report)) {
+    if (verification?.kind !== "ai-audit") {
+      throw new Error(
+        `Structured AI audit report ${report.id} requires audit verification; run verify-audit instead of resolving it manually`,
+      );
+    }
+    assertAuditVerificationMatches(report, audit, verification);
+    return;
+  }
+  if (audit && !resolution?.trim()) {
+    throw new Error(
+      `Legacy AI audit report ${report.id} needs an explicit review or supersession reason before manual resolution`,
+    );
+  }
+}
+
+function assertAuditVerificationMatches(
+  report: PlaytestReport,
+  audit: PlaytestAuditMatrixEvidence,
+  verification: PlaytestAuditVerification,
+): void {
+  if (
+    verification.issueCheckpointRevision !== report.evidence.checkpoint!.revision ||
+    verification.sourceRevision !== audit.sourceRevision
+  ) {
+    throw new Error(`AI audit verification source mismatch for report ${report.id}`);
+  }
+  if (
+    verification.maxSteps !== audit.maxSteps ||
+    verification.seed !== audit.seed ||
+    JSON.stringify(sortJson(verification.policy)) !== JSON.stringify(sortJson(audit.policy))
+  ) {
+    throw new Error(`AI audit verification replay parameters do not match report ${report.id}`);
+  }
+  const originalPersonas = audit.lanes.map((lane) => lane.persona);
+  const verifiedPersonas = verification.lanes.map((lane) => lane.persona);
+  if (JSON.stringify(verifiedPersonas) !== JSON.stringify(originalPersonas)) {
+    throw new Error(`AI audit verification persona matrix does not match report ${report.id}`);
+  }
+  if (verification.lanes.some((lane) =>
+    typeof lane.ending !== "string" || !lane.ending.trim() ||
+    !/^[a-f0-9]{64}$/.test(lane.pathRevision)
+  )) {
+    throw new Error(`AI audit verification has an incomplete lane for report ${report.id}`);
+  }
+  const uniqueEndings = new Set(verification.lanes.map((lane) => lane.ending)).size;
+  const uniqueDecisionPaths = new Set(
+    verification.lanes.map((lane) => lane.pathRevision),
+  ).size;
+  const expectedClassification = uniqueEndings > 1
+    ? "divergent-endings"
+    : uniqueDecisionPaths > 1
+      ? "convergent-paths"
+      : "identical-path";
+  if (
+    verification.observed.uniqueEndings !== uniqueEndings ||
+    verification.observed.uniqueDecisionPaths !== uniqueDecisionPaths ||
+    verification.classification !== expectedClassification ||
+    (verification.policy.minUniqueEndings !== undefined &&
+      uniqueEndings < verification.policy.minUniqueEndings) ||
+    (verification.policy.minUniqueDecisionPaths !== undefined &&
+      uniqueDecisionPaths < verification.policy.minUniqueDecisionPaths)
+  ) {
+    throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
+  }
+  const coveredTags = new Set(
+    verification.lanes.flatMap((lane) => lane.activityTags ?? []),
+  );
+  const completedScripts = new Set(
+    verification.lanes.flatMap((lane) => lane.completedScripts ?? []),
+  );
+  const observedTags = verification.observed.coveredActivityTags;
+  const observedScripts = verification.observed.completedScripts;
+  if (
+    (observedTags !== undefined &&
+      JSON.stringify([...observedTags].sort()) !==
+        JSON.stringify([...coveredTags].sort())) ||
+    (observedScripts !== undefined &&
+      JSON.stringify([...observedScripts].sort()) !==
+        JSON.stringify([...completedScripts].sort())) ||
+    (verification.policy.requiredActivityTags ?? []).some((tag) => !coveredTags.has(tag)) ||
+    (verification.policy.requiredScripts ?? []).some((script) =>
+      !completedScripts.has(script)
+    )
+  ) {
+    throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
+  }
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, sortJson(nested)]),
+  );
 }
 
 export async function getPlaytestReport(
@@ -363,27 +733,24 @@ export async function reproducePlaytestReport(
 ) {
   assertSessionName(args.to);
   const report = await getPlaytestReport(args.gameDir, args.id, args.session);
-  const checkpoint = report.evidence.checkpoint;
-  if (!isPlaytestCheckpointRef(checkpoint)) {
-    throw new Error(
-      `Playtest report ${report.id} has no recoverable checkpoint; record a new report at the issue site`,
-    );
-  }
-  const state = await loadPlaytestCheckpoint(
+  const checkpointKind = args.checkpoint ?? "issue";
+  const prepared = await loadPlaytestReportCheckpointSource(
     args.gameDir,
-    report.session,
-    checkpoint,
-  ) as ComposedState;
+    report,
+    checkpointKind,
+  );
 
   return withSessionLock(args.gameDir, args.to, async () => {
     await assertReproductionTargetEmpty(args.gameDir, args.to);
-    await saveSession(args.gameDir, args.to, state);
+    await saveSession(args.gameDir, args.to, prepared.state);
     const provenance = {
       schemaVersion: 1,
       fromReport: report.id,
       fromSession: report.session,
-      sourceLogEntry: report.evidence.logEntry,
-      mode: "playtest-checkpoint" as const,
+      sourceLogEntry: prepared.sourceLogEntry,
+      mode: checkpointKind === "autoplay-replay"
+        ? "playtest-replay-checkpoint" as const
+        : "playtest-checkpoint" as const,
       createdAt: new Date().toISOString(),
     };
     await writeFile(
@@ -395,7 +762,7 @@ export async function reproducePlaytestReport(
       args.gameDir,
       args.to,
       { t: Date.now(), source: "playtest-report", report: provenance },
-      state,
+      prepared.state,
     );
     return {
       session: args.to,
@@ -403,6 +770,38 @@ export async function reproducePlaytestReport(
       webPath: `/?session=${encodeURIComponent(args.to)}`,
     };
   });
+}
+
+/** @internal Load immutable report state without routing through a live session. */
+export async function loadPlaytestReportCheckpointSource(
+  gameDir: string,
+  report: PlaytestReport,
+  checkpointKind: "issue" | "autoplay-replay" = "issue",
+): Promise<{ state: ComposedState; sourceLogEntry: number }> {
+  const checkpoint = checkpointKind === "autoplay-replay"
+    ? report.evidence.autoplay?.replayCheckpoint
+    : report.evidence.checkpoint;
+  if (!isPlaytestCheckpointRef(checkpoint)) {
+    throw new Error(
+      checkpointKind === "autoplay-replay"
+        ? `Playtest report ${report.id} has no causal autoplay replay checkpoint; record a fresh autoplay finding`
+        : `Playtest report ${report.id} has no recoverable checkpoint; record a new report at the issue site`,
+    );
+  }
+  const state = await loadPlaytestCheckpoint(
+    gameDir,
+    report.session,
+    checkpoint,
+  ) as ComposedState;
+  const sourceLogEntry = checkpointKind === "autoplay-replay"
+    ? report.evidence.autoplay?.replayLogEntry
+    : report.evidence.logEntry ?? 0;
+  if (!Number.isInteger(sourceLogEntry) || sourceLogEntry! < 0) {
+    throw new Error(
+      `Playtest report ${report.id} has no valid ${checkpointKind} source log coordinate`,
+    );
+  }
+  return { state, sourceLogEntry: sourceLogEntry! };
 }
 
 export function formatPlaytestReports(reports: PlaytestReport[]): string {
@@ -435,29 +834,40 @@ export function formatPlaytestReports(reports: PlaytestReport[]): string {
     .join("\n");
 }
 
-async function reportFiles(
-  gameDir: string,
-  session?: string,
-): Promise<string[]> {
-  if (session !== undefined) {
-    return [path.join(sessionDir(gameDir, session), REPORTS_FILE)];
-  }
+async function reportSessions(gameDir: string): Promise<string[]> {
   const root = path.join(gameDir, ".rpg-harness", "sessions");
   try {
-    return (await readdir(root, { withFileTypes: true }))
+    const names = (await readdir(root, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(root, entry.name, REPORTS_FILE))
+      .map((entry) => entry.name)
       .sort();
+    const candidates = await Promise.all(names.map(async (session) => {
+      try {
+        const info = await stat(path.join(root, session, REPORTS_FILE));
+        return info.isFile() ? session : null;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+    }));
+    return candidates.filter((session): session is string => session !== null);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
 }
 
-async function captureEvidence(
+/**
+ * Capture state and log evidence without acquiring a lock.
+ *
+ * Callers that need evidence causally tied to a preceding session mutation
+ * must invoke this while holding that session's transaction lock. Ordinary
+ * report recording invokes it from inside its own lock.
+ */
+export async function capturePlaytestEvidenceSnapshot(
   gameDir: string,
   session: string,
-): Promise<PlaytestEvidence> {
+): Promise<PlaytestEvidenceSnapshot> {
   const dir = sessionDir(gameDir, session);
   const stateFile = path.join(dir, "state.json");
   const logFile = path.join(dir, "log.jsonl");
@@ -786,4 +1196,55 @@ async function readReportFile(file: string): Promise<PlaytestReport[]> {
         throw new Error(`${file}:${index + 1}: invalid report JSON — ${(error as Error).message}`);
       }
     });
+}
+
+async function readReportFileForDiscovery(file: string): Promise<{
+  reports: PlaytestReport[];
+  trailingPartial: boolean;
+}> {
+  let content: string;
+  try {
+    content = await readFile(file, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { reports: [], trailingPartial: false };
+    }
+    throw error;
+  }
+  const lines = content.split(/\r?\n/);
+  let lastContentIndex = -1;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index]!.trim()) {
+      lastContentIndex = index;
+      break;
+    }
+  }
+  const reports: PlaytestReport[] = [];
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim()) continue;
+    try {
+      reports.push(JSON.parse(line) as PlaytestReport);
+    } catch (error) {
+      const mayBeActiveAppend = index === lastContentIndex && !/[\r\n]\s*$/.test(content);
+      if (mayBeActiveAppend) return { reports, trailingPartial: true };
+      throw new Error(
+        `${file}:${index + 1}: invalid report JSON — ${(error as Error).message}`,
+      );
+    }
+  }
+  return { reports, trailingPartial: false };
+}
+
+async function writeReportFileAtomically(
+  file: string,
+  reports: PlaytestReport[],
+): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await writeFile(
+    temporary,
+    reports.map((report) => JSON.stringify(report)).join("\n") + "\n",
+    "utf-8",
+  );
+  await rename(temporary, file);
 }

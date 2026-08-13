@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { listPlaytestReports } from "../playtest-reports";
 import { runAutoplay } from "./autoplay";
+import { verifyAutoplayReport } from "./verify-autoplay";
 import { runDevelopmentWorkItem } from "./work";
 import { collectDevelopmentWorklist } from "./worklist";
 
@@ -16,7 +17,7 @@ afterEach(async () => {
 });
 
 describe("autoplay issue verification", () => {
-  test("keeps a repeated stop open, then resolves it only after checkpoint completion", async () => {
+  test("rejects a final-state-only patch and resolves only after a full causal replay", async () => {
     const gameDir = await temporaryRepairableStallGame();
     const original = await runAutoplay({
       gameDir,
@@ -29,6 +30,16 @@ describe("autoplay issue verification", () => {
     });
     const reportId = original.report?.id;
     if (!reportId) throw new Error("fixture did not create an autoplay issue");
+    const replayCheckpoint = original.report?.evidence.autoplay?.replayCheckpoint;
+    const issueCheckpoint = original.report?.evidence.checkpoint;
+    if (!replayCheckpoint || !issueCheckpoint) {
+      throw new Error("fixture did not freeze both autoplay checkpoints");
+    }
+    expect(replayCheckpoint.revision).not.toBe(issueCheckpoint.revision);
+    expect((await readCheckpoint(gameDir, "original-stall", replayCheckpoint.file))
+      .baseline.switches.poisoned).toBe(false);
+    expect((await readCheckpoint(gameDir, "original-stall", issueCheckpoint.file))
+      .baseline.switches.poisoned).toBe(true);
 
     expect((await collectDevelopmentWorklist(gameDir)).items).toContainEqual(
       expect.objectContaining({
@@ -73,6 +84,7 @@ describe("autoplay issue verification", () => {
           maxSteps: 20,
           seed: 17,
           stopReason: "stalled",
+          decisionPathRevision: original.decisionPath.revision,
         },
         result: {
           reason: "stalled",
@@ -81,8 +93,77 @@ describe("autoplay issue verification", () => {
       },
     });
     expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+    expect(JSON.parse(await readFile(path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "verify-still-bad-source",
+      "fork.json",
+    ), "utf-8"))).toMatchObject({
+      fromReport: reportId,
+      fromSession: "original-stall",
+      sourceLogEntry: 0,
+      mode: "playtest-replay-checkpoint",
+    });
 
-    await writeFixedScript(gameDir);
+    // This patch would fool the old verifier: the stopped checkpoint is
+    // poisoned, so loading only that final state immediately reaches gameEnd.
+    // A causal replay starts healthy and proves the underlying route still stalls.
+    await writeMarkerScript(gameDir, "final_state_only");
+    const finalStateOnly = await verifyAutoplayReport({
+      gameDir,
+      reportId,
+      sessionPrefix: "verify-final-state-only",
+    }, {
+      afterSourceMaterialized: async (session) => {
+        const file = path.join(
+          gameDir,
+          ".rpg-harness",
+          "sessions",
+          session,
+          "state.json",
+        );
+        const state = JSON.parse(await readFile(file, "utf-8"));
+        state.baseline.switches.poisoned = true;
+        await writeFile(file, JSON.stringify(state, null, 2), "utf-8");
+      },
+    });
+    expect(finalStateOnly).toMatchObject({
+      status: "failed",
+      sourceSession: "verify-final-state-only-source",
+      runSession: "verify-final-state-only-run",
+      result: { reason: "stalled" },
+    });
+    expect(JSON.parse(await readFile(path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "verify-final-state-only-source",
+      "state.json",
+    ), "utf-8")).baseline.switches.poisoned).toBe(true);
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+
+    // A generator that silently returns is classified as completed by the
+    // engine, but no gameEnd or completed ending proves the route was repaired.
+    await writeMarkerScript(gameDir, "silent_return");
+    const silentReturn = await runDevelopmentWorkItem({
+      gameDir,
+      key: `report/${reportId}`,
+      newSession: "verify-silent-return",
+      pretty: false,
+    });
+    expect(silentReturn).toMatchObject({
+      status: "failed",
+      result: {
+        status: "failed",
+        sourceSession: "verify-silent-return-source",
+        runSession: "verify-silent-return-run",
+        result: { reason: "completed", ending: null },
+      },
+    });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+
+    await writeMarkerScript(gameDir, "fixed");
     const verified = await runDevelopmentWorkItem({
       gameDir,
       key: `report/${reportId}`,
@@ -97,13 +178,13 @@ describe("autoplay issue verification", () => {
         runSession: "verify-fixed-run",
         result: {
           reason: "completed",
-          ending: null,
+          ending: "fixed",
           webPath: "/?session=verify-fixed-run",
         },
         resolvedReport: {
           id: reportId,
           status: "resolved",
-          resolution: expect.stringContaining("completed from the immutable issue checkpoint"),
+          resolution: expect.stringContaining("reached terminal ending fixed"),
           verification: {
             kind: "autoplay",
             originalStopReason: "stalled",
@@ -112,8 +193,9 @@ describe("autoplay issue verification", () => {
             seed: 17,
             session: "verify-fixed-run",
             webPath: "/?session=verify-fixed-run",
-            sourceCheckpointRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
-            result: { reason: "completed" },
+            replayCheckpointRevision: replayCheckpoint.revision,
+            issueCheckpointRevision: issueCheckpoint.revision,
+            result: { reason: "completed", ending: "fixed" },
           },
         },
       },
@@ -133,17 +215,29 @@ async function temporaryRepairableStallGame(): Promise<string> {
   await writeFile(path.join(dir, "game.yaml"), [
     "title: Autoplay verification test",
     "preset: ./modules/run.ts",
+    "switches:",
+    "  poisoned: false",
     "",
   ].join("\n"), "utf-8");
   await writeFile(path.join(dir, "modules", "run.ts"), [
     'import type { RunFunction } from "@rpg-harness/engine";',
     "const run: RunFunction = async function* (ctx) {",
-    '  if (ctx.game.scripts.some((script) => script.id === "fixed")) {',
-    '    yield { type: "gameEnd", reason: "fixed" };',
+    "  const enteredPoisoned = ctx.state.baseline.switches.poisoned;",
+    '  if (enteredPoisoned && ctx.game.scripts.some((script) => script.id === "final_state_only")) {',
+    '    yield { type: "gameEnd", endingId: "final-state-only", reason: "only the stopped state was patched" };',
     "    return;",
     "  }",
     "  while (true) {",
     '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "wait", kind: "action", title: "Wait", cost: 0, available: true }] } };',
+    "    ctx.state.baseline.switches.poisoned = true;",
+    '    if (ctx.game.scripts.some((script) => script.id === "fixed")) {',
+    '      ctx.state.baseline.completionOrder.push("fixed");',
+    '      yield { type: "gameEnd", endingId: "fixed", reason: "fixed from a healthy replay" };',
+    "      return;",
+    "    }",
+    '    if (ctx.game.scripts.some((script) => script.id === "silent_return")) {',
+    "      return;",
+    "    }",
     '    yield { type: "narration", text: "Still blocked." };',
     "  }",
     "};",
@@ -153,16 +247,27 @@ async function temporaryRepairableStallGame(): Promise<string> {
   return dir;
 }
 
-async function writeFixedScript(gameDir: string): Promise<void> {
+async function writeMarkerScript(gameDir: string, id: string): Promise<void> {
   await mkdir(path.join(gameDir, "scripts"), { recursive: true });
-  await writeFile(path.join(gameDir, "scripts", "fixed.md"), [
+  await writeFile(path.join(gameDir, "scripts", `${id}.md`), [
     "---",
-    "id: fixed",
-    "title: Fixed",
+    `id: ${id}`,
+    `title: ${id}`,
     "characters: []",
     "---",
     "",
     "The route is repaired.",
     "",
   ].join("\n"), "utf-8");
+}
+
+async function readCheckpoint(
+  gameDir: string,
+  session: string,
+  file: string,
+): Promise<{ baseline: { switches: Record<string, boolean> } }> {
+  return JSON.parse(await readFile(
+    path.join(gameDir, ".rpg-harness", "sessions", session, ...file.split("/")),
+    "utf-8",
+  ));
 }

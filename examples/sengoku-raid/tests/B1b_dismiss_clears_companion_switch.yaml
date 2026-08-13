@@ -1,0 +1,41 @@
+name: dismiss_kagari は好感度に関係なく解除だけを行う
+description: |
+  同行中の篝に dismiss:kagari を実行すると、好感度が現在の招待条件を下回る
+  移行済み save でも、公開 switch と module state の同行状態だけが解除される。
+  同じ action id が相反する意味を持たない。
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    switches:
+      companion_kagari: true
+    characters:
+      kagari:
+        stats:
+          affection: 0
+  sengoku-raid:
+    metCharacters:
+      - kagari
+    raid: null
+    companion: kagari
+    companionHp: 10
+inputs:
+  - type: doActivity
+    id: dismiss:kagari
+  - type: next
+assertions:
+  - kind: state
+    path: baseline.switches.companion_kagari
+    eq: false
+  - kind: state
+    path: sengoku-raid.companion
+    eq: null
+  - kind: state
+    path: sengoku-raid.companionHp
+    eq: 0
+  - kind: activity
+    id: invite:kagari
+    present: false
+  - kind: activity
+    id: dismiss:kagari
+    present: false

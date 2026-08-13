@@ -1,13 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createInitialState, type Game } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import {
+  capturePlaytestEvidenceSnapshot,
   formatPlaytestReports,
   listPlaytestReports,
   recordPlaytestReport,
   reproducePlaytestReport,
   resolvePlaytestReport,
+  resolveVerifiedPlaytestReport,
+  type ResolvePlaytestReportArgs,
+  type PlaytestAutoplayVerification,
 } from "./playtest-reports";
 
 const temporaryDirectories: string[] = [];
@@ -286,6 +293,456 @@ describe("playtest reports", () => {
     );
     expect(resolved.evidence).toEqual(open.evidence);
     expect(await listPlaytestReports(gameDir, "web")).toEqual([resolved]);
+  });
+
+  for (const lookup of ["scoped", "global"] as const) {
+    test(`waits for a partial concurrent append before ${lookup} resolution lookup`, async () => {
+      const gameDir = await temporaryGame();
+      const session = "web";
+      const open = await recordPlaytestReport({
+        gameDir,
+        session,
+        area: "ui",
+        severity: "minor",
+        title: "First issue",
+      });
+      const reportFile = path.join(
+        gameDir,
+        ".rpg-harness",
+        "sessions",
+        session,
+        "issues.jsonl",
+      );
+      let writerStarted!: () => void;
+      const writerReady = new Promise<void>((resolve) => {
+        writerStarted = resolve;
+      });
+      let releaseWriter!: () => void;
+      const writerGate = new Promise<void>((resolve) => {
+        releaseWriter = resolve;
+      });
+      const concurrent = {
+        ...open,
+        id: `${open.id}-concurrent`,
+        createdAt: new Date(Date.now() + 1).toISOString(),
+        title: "Concurrent issue",
+      };
+      const encoded = JSON.stringify(concurrent);
+      const split = Math.floor(encoded.length / 2);
+      const writer = withSessionLock(gameDir, session, async () => {
+        const before = await readFile(reportFile, "utf-8");
+        // Deliberately expose invalid JSONL while retaining the owning lock.
+        // A resolver that performs its initial parse before locking fails here.
+        await writeFile(reportFile, before + encoded.slice(0, split), "utf-8");
+        writerStarted();
+        await writerGate;
+        await writeFile(reportFile, encoded.slice(split) + "\n", {
+          flag: "a",
+        });
+      });
+      await writerReady;
+
+      let resolutionSettled = false;
+      const resolving = resolvePlaytestReport({
+        gameDir,
+        id: open.id,
+        ...(lookup === "scoped" ? { session } : {}),
+        resolution: "Fixed without dropping concurrent work.",
+      }).finally(() => {
+        resolutionSettled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      expect(resolutionSettled).toBe(false);
+
+      releaseWriter();
+      await Promise.all([writer, resolving]);
+      expect(await listPlaytestReports(gameDir, session)).toEqual([
+        expect.objectContaining({ id: open.id, status: "resolved" }),
+        expect.objectContaining({ id: concurrent.id, status: "open" }),
+      ]);
+    });
+  }
+
+  test("global resolution does not wait for an unrelated locked report session", async () => {
+    const gameDir = await temporaryGame();
+    await recordPlaytestReport({
+      gameDir,
+      session: "aaa-unrelated",
+      area: "ui",
+      severity: "minor",
+      title: "Unrelated issue",
+    });
+    const target = await recordPlaytestReport({
+      gameDir,
+      session: "zzz-target",
+      area: "gameplay",
+      severity: "major",
+      title: "Target issue",
+    });
+    let heldStarted!: () => void;
+    const heldReady = new Promise<void>((resolve) => {
+      heldStarted = resolve;
+    });
+    let releaseHeld!: () => void;
+    const heldGate = new Promise<void>((resolve) => {
+      releaseHeld = resolve;
+    });
+    const held = withSessionLock(gameDir, "aaa-unrelated", async () => {
+      heldStarted();
+      await heldGate;
+    });
+    await heldReady;
+
+    const resolving = resolvePlaytestReport({
+      gameDir,
+      id: target.id,
+      resolution: "Found without waiting for unrelated work.",
+    });
+    const outcome = await Promise.race([
+      resolving.then(() => "resolved" as const),
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 100)
+      ),
+    ]);
+    releaseHeld();
+    await held;
+    await resolving;
+
+    expect(outcome).toBe("resolved");
+    expect((await listPlaytestReports(gameDir, "zzz-target"))[0]?.status)
+      .toBe("resolved");
+  });
+
+  test("does not let manual resolve bypass a structured autoplay verifier", async () => {
+    const gameDir = await temporaryGame();
+    const session = "structured-autoplay";
+    const state = createInitialState({
+      title: "Structured report guard",
+      characters: [],
+      scripts: [],
+    } as Game);
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state, null, 2));
+    const evidenceSnapshot = await capturePlaytestEvidenceSnapshot(gameDir, session);
+    const open = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "major",
+      title: "Autoplay stopped",
+      evidenceSnapshot,
+      autoplay: {
+        replayState: state,
+        replayLogEntry: 0,
+        persona: "greedy",
+        maxSteps: 20,
+        seed: 17,
+        stopReason: "stalled",
+        decisions: 5,
+        rejectedInputs: 0,
+        steps: 6,
+        decisionPathRevision: "a".repeat(64),
+      },
+    });
+
+    await expect(resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      resolution: "Trust me, it is fixed.",
+    })).rejects.toThrow("requires causal autoplay verification");
+    await expect(resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      session,
+      verification: {
+        kind: "autoplay",
+        verifiedAt: new Date().toISOString(),
+        replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+        issueCheckpointRevision: open.evidence.checkpoint!.revision,
+        originalStopReason: "stalled",
+        persona: "greedy",
+        maxSteps: 20,
+        seed: 17,
+        session: "forged-verification",
+        webPath: "/?session=forged-verification",
+        result: {
+          reason: "completed",
+          ending: null,
+          decisions: 0,
+          rejectedInputs: 0,
+          steps: 0,
+          decisionPathRevision: "0".repeat(64),
+          completedScripts: [],
+          objectiveChanges: 0,
+        },
+      } as unknown as PlaytestAutoplayVerification,
+    } as unknown as ResolvePlaytestReportArgs)).rejects.toThrow(
+      "does not accept verification evidence",
+    );
+    const validVerification: PlaytestAutoplayVerification = {
+      kind: "autoplay",
+      verifiedAt: new Date().toISOString(),
+      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+      issueCheckpointRevision: open.evidence.checkpoint!.revision,
+      originalStopReason: "stalled",
+      persona: "greedy",
+      maxSteps: 20,
+      seed: 17,
+      session: "verified-run",
+      webPath: "/?session=verified-run",
+      result: {
+        reason: "completed",
+        ending: "fixed-ending",
+        decisions: 2,
+        rejectedInputs: 0,
+        steps: 3,
+        decisionPathRevision: "b".repeat(64),
+        completedScripts: ["fixed-ending"],
+        objectiveChanges: 1,
+      },
+    };
+    await resolveVerifiedPlaytestReport({
+      gameDir,
+      id: open.id,
+      session,
+      verification: validVerification,
+    });
+    await expect(resolveVerifiedPlaytestReport({
+      gameDir,
+      id: open.id,
+      session,
+      verification: {
+        ...validVerification,
+        verifiedAt: new Date(Date.now() + 1).toISOString(),
+        session: "concurrent-run",
+      },
+    })).rejects.toThrow("resolved concurrently by another verification");
+    expect((await listPlaytestReports(gameDir, session))[0]).toMatchObject({
+      status: "resolved",
+      verification: validVerification,
+    });
+  });
+
+  test("snapshots manual resolution authority before waiting for the session lock", async () => {
+    const gameDir = await temporaryGame();
+    const session = "manual-authority-snapshot";
+    const state = createInitialState({
+      title: "Manual authority snapshot",
+      characters: [],
+      scripts: [],
+    } as Game);
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state, null, 2));
+    const evidenceSnapshot = await capturePlaytestEvidenceSnapshot(gameDir, session);
+    const open = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "major",
+      title: "Structured finding",
+      evidenceSnapshot,
+      autoplay: {
+        replayState: state,
+        replayLogEntry: 0,
+        persona: "greedy",
+        maxSteps: 20,
+        seed: 17,
+        stopReason: "stalled",
+        decisions: 5,
+        rejectedInputs: 0,
+        steps: 6,
+        decisionPathRevision: "a".repeat(64),
+      },
+    });
+    let release!: () => void;
+    let locked!: () => void;
+    const acquired = new Promise<void>((resolve) => { locked = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const holder = withSessionLock(gameDir, session, async () => {
+      locked();
+      await gate;
+    });
+    await acquired;
+    const mutableArgs: ResolvePlaytestReportArgs & {
+      verification?: PlaytestAutoplayVerification;
+    } = { gameDir, id: open.id, session };
+    const resolving = resolvePlaytestReport(mutableArgs);
+    mutableArgs.verification = {
+      kind: "autoplay",
+      verifiedAt: new Date().toISOString(),
+      replayCheckpointRevision: open.evidence.autoplay!.replayCheckpoint.revision,
+      issueCheckpointRevision: open.evidence.checkpoint!.revision,
+      originalStopReason: "stalled",
+      persona: "greedy",
+      maxSteps: 20,
+      seed: 17,
+      session: "forged-after-call",
+      webPath: "/?session=forged-after-call",
+      result: {
+        reason: "completed",
+        ending: "forged",
+        decisions: 0,
+        rejectedInputs: 0,
+        steps: 1,
+        decisionPathRevision: "b".repeat(64),
+        completedScripts: [],
+        objectiveChanges: 0,
+      },
+    };
+    release();
+    await holder;
+    await expect(resolving).rejects.toThrow("requires causal autoplay verification");
+    expect((await listPlaytestReports(gameDir, session))[0]?.status).toBe("open");
+  });
+
+  test("lets an explicitly reviewed legacy autoplay finding be resolved manually", async () => {
+    const gameDir = await temporaryGame();
+    const session = "legacy-autoplay";
+    const open = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "major",
+      title: "Legacy autoplay stop",
+    });
+    const file = path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      session,
+      "issues.jsonl",
+    );
+    const legacy = JSON.parse((await readFile(file, "utf-8")).trim());
+    legacy.evidence.autoplay = {
+      persona: "greedy",
+      maxSteps: 20,
+      seed: 17,
+      stopReason: "stalled",
+      decisions: 5,
+      rejectedInputs: 0,
+      steps: 6,
+    };
+    await writeFile(file, JSON.stringify(legacy) + "\n", "utf-8");
+
+    await expect(resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      session,
+    })).rejects.toThrow("needs an explicit review or supersession reason");
+
+    const resolved = await resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      session,
+      resolution: "Reviewed and superseded; this predates causal replay evidence.",
+    });
+
+    expect(resolved).toMatchObject({
+      status: "resolved",
+      resolution: "Reviewed and superseded; this predates causal replay evidence.",
+    });
+    expect(resolved.verification).toBeUndefined();
+  });
+
+  test("does not let manual resolve bypass a structured audit verifier", async () => {
+    const gameDir = await temporaryGame();
+    const session = "structured-audit";
+    const state = createInitialState({
+      title: "Structured audit guard",
+      characters: [],
+      scripts: [],
+    } as Game);
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state, null, 2));
+    const sourceRevision = createHash("sha256")
+      .update(JSON.stringify(state))
+      .digest("hex");
+    const evidenceSnapshot = await capturePlaytestEvidenceSnapshot(gameDir, session);
+    const open = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "gameplay",
+      severity: "major",
+      title: "Audit paths collapsed",
+      evidenceSnapshot,
+      auditMatrix: {
+        sourceRevision,
+        sessionPrefix: "collapsed",
+        maxSteps: 20,
+        seed: 17,
+        policy: { minUniqueDecisionPaths: 2 },
+        observed: { uniqueEndings: 1, uniqueDecisionPaths: 1 },
+        classification: "identical-path",
+        violations: ["unique decision paths 1 < required 2"],
+        lanes: [{
+          persona: "greedy",
+          deterministic: true,
+          session: "collapsed-greedy",
+          webPath: "/?session=collapsed-greedy",
+          ending: "ending",
+          reason: "completed",
+          pathRevision: "a".repeat(64),
+        }],
+        choiceDivergences: [],
+      },
+    });
+
+    await expect(resolvePlaytestReport({
+      gameDir,
+      id: open.id,
+      resolution: "The threshold no longer matters.",
+    })).rejects.toThrow("requires audit verification");
+    expect((await listPlaytestReports(gameDir, session))[0]?.status).toBe("open");
+  });
+
+  test("rejects reports that combine two incompatible structured causes", async () => {
+    const gameDir = await temporaryGame();
+    const session = "conflicting-structured-evidence";
+    const state = createInitialState({
+      title: "Conflicting evidence",
+      characters: [],
+      scripts: [],
+    } as Game);
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(state, null, 2));
+    const evidenceSnapshot = await capturePlaytestEvidenceSnapshot(gameDir, session);
+    await expect(recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "major",
+      title: "Two unrelated causes",
+      evidenceSnapshot,
+      autoplay: {
+        replayState: state,
+        replayLogEntry: 0,
+        persona: "greedy",
+        maxSteps: 10,
+        seed: 1,
+        stopReason: "stalled",
+        decisions: 1,
+        rejectedInputs: 0,
+        steps: 2,
+        decisionPathRevision: "a".repeat(64),
+      },
+      auditMatrix: {
+        sourceRevision: "b".repeat(64),
+        sessionPrefix: "conflict",
+        maxSteps: 10,
+        seed: 1,
+        policy: { minUniqueEndings: 2 },
+        observed: { uniqueEndings: 1, uniqueDecisionPaths: 1 },
+        classification: "identical-path",
+        violations: ["unique endings 1 < required 2"],
+        lanes: [],
+        choiceDivergences: [],
+      },
+    })).rejects.toThrow("cannot combine autoplay and AI audit evidence");
+    expect(await listPlaytestReports(gameDir, session)).toEqual([]);
   });
 
   test("fails loudly when resolving an unknown report id", async () => {

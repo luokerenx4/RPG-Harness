@@ -34,6 +34,16 @@ state:
 inputs: []
 assertions:
   - kind: activity
+    id: dismiss:kagari
+    available: true
+    aiTagsExcludes: progression
+  - kind: activity
+    id: dismiss:kagari
+    aiTagsExcludes: social
+  - kind: activity
+    id: invite:kagari
+    present: false
+  - kind: activity
     id: invite:kasumi
     available: true
     aiTagsExcludes: progression
@@ -44,3 +54,4 @@ assertions:
     id: three_flowers_alliance
     status: active
     relatedActivityIncludes: invite:kasumi
+    relatedActivityExcludes: dismiss:kagari

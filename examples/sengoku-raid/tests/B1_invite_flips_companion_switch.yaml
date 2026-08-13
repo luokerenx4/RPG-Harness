@@ -1,7 +1,8 @@
-name: 提案B：invite_kagari → companion_kagari スイッチが立つ、m.companion セット
+name: invite_kagari は同行だけを行い、次の公開操作を dismiss に替える
 description: |
-  Affection 5 で誘うと拒否（4 が要る）。Affection 4 にして再度 invite —
-  成功、companion_kagari true、m.companion = "kagari"、m.companionHp = 10。
+  Affection 4 で invite すると companion_kagari が立ち、m.companion と HP が
+  セットされる。同行後の逆操作は同じ ID の toggle ではなく、意図が安定した
+  dismiss:kagari として GUI / Headless の両方に公開される。
 state:
   baseline:
     completedScripts:
@@ -30,3 +31,11 @@ assertions:
   - kind: state
     path: sengoku-raid.companionHp
     eq: 10
+  - kind: activity
+    id: dismiss:kagari
+    present: true
+    available: true
+    titleIncludes: 同行から外す
+  - kind: activity
+    id: invite:kagari
+    present: false

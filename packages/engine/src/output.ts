@@ -13,6 +13,19 @@ export class OutputContractError extends Error {
  * this boundary also protects dynamically loaded JavaScript and generated code.
  */
 export function validateOutput(output: Output): void {
+  if (output.type === "gameEnd") {
+    if (
+      output.endingId !== undefined &&
+      (typeof output.endingId !== "string" ||
+        output.endingId.length === 0 ||
+        output.endingId !== output.endingId.trim())
+    ) {
+      throw new OutputContractError(
+        "gameEnd endingId must be a non-empty, trimmed string when present",
+      );
+    }
+    return;
+  }
   if (output.type !== "hubMenu" || output.snapshot.objectives === undefined) return;
   const activityIds = new Set(output.snapshot.activities.map((activity) => activity.id));
   const objectiveIds = new Set<string>();

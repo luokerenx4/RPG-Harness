@@ -26,8 +26,8 @@ switches:
   # 対になる三つ目の邦絆技能フラグ。hell_gate chain の解錠は
   # knownSkills を直接読むが、他二技と揃える形でスイッチも立てる。
   learnedMizukagami: false
-  # Companion currently in party (one of three exclusive). Flipped by
-  # the invite_<id> hub action; cleared on raid end. Read by raid menu
+  # Companion currently in party (one of three exclusive). invite:<id> sets
+  # it and dismiss:<id> clears it; raid end also clears it. Read by raid menu
   # passives + onActionDispatch veto guard.
   companion_kagari: false
   companion_kasumi: false

@@ -13,7 +13,8 @@ Day/slot/stats/hub game loop — the minimal reference is
   for each connection from the current map, and filters `game.actions[]`
   through their optional `whenIn:` map-id list.
 - **end conditions**: checked at the top of every loop iteration when
-  no script is in progress; first match triggers the ending script
+  no script is in progress; the first match runs its optional `goto` ending
+  script and then emits a stable terminal `gameEnd` identity
 
 ## Files
 

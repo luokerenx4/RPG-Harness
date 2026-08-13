@@ -1,12 +1,14 @@
 import { access } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import path from "node:path";
 import { assertSessionName } from "@rpg-harness/session-store";
 import type { AiAuditConfig } from "@rpg-harness/engine";
 import { sessionDir } from "../session";
 import { loadGame } from "../loader";
 import {
+  capturePlaytestEvidenceSnapshot,
   recordPlaytestReport,
+  type PlaytestEvidenceSnapshot,
   type PlaytestReport,
 } from "../playtest-reports";
 import { collectAiPersonas } from "../test/personas";
@@ -14,6 +16,7 @@ import {
   assertTargetEmpty,
   createForkFromSource,
   loadForkSource,
+  type ForkSource,
 } from "./fork";
 import {
   runAutoplay,
@@ -138,6 +141,8 @@ export interface AuditHooks {
   // A narrow lifecycle seam for concurrency regression tests and embedding.
   // Production CLI callers do not need it.
   onLaneComplete?: (lane: AuditLaneSummary, index: number) => void | Promise<void>;
+  /** Runs after the quality-evidence fork unlocks but before its report is recorded. */
+  onQualityEvidenceForked?: (session: string) => void | Promise<void>;
 }
 
 export async function auditCommand(args: AuditArgs): Promise<void> {
@@ -151,6 +156,7 @@ export async function auditCommand(args: AuditArgs): Promise<void> {
 export async function runAudit(
   args: AuditArgs,
   hooks: AuditHooks = {},
+  preparedSource?: ForkSource,
 ): Promise<AuditSummary> {
   validateAuditArgs(args);
   assertSessionName(args.fromSession);
@@ -164,6 +170,19 @@ export async function runAudit(
       );
     }
   }
+  const stochasticPersonas = args.personas.filter(
+    (persona) => personaRegistry[persona]?.deterministic === false,
+  );
+  if (stochasticPersonas.length > 0 && args.seed === undefined) {
+    throw new Error(
+      `Audit personas [${stochasticPersonas.join(", ")}] require --seed for reproducibility`,
+    );
+  }
+  // Every retained quality finding must be replayable even if a currently
+  // deterministic project persona later becomes stochastic. Preserve a
+  // caller seed or mint one before any lane starts, then freeze it in the
+  // audit evidence.
+  const effectiveSeed = args.seed ?? randomInt(0, 233_280);
   const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
   const acceptanceMatrixMatches = qualityPolicy?.personas === undefined ||
     samePersonaSet(args.personas, qualityPolicy.personas);
@@ -189,7 +208,7 @@ export async function runAudit(
   // GUI/TUI while this matrix runs; every AI lane must still start from this
   // same audit-time state rather than whatever state happens to be current
   // when its sequential turn begins.
-  const source = await loadForkSource(
+  const source = preparedSource ?? await loadForkSource(
     args.gameDir,
     args.fromSession,
     args.fromLogEntry,
@@ -205,21 +224,18 @@ export async function runAudit(
     optionId: string;
   }>>();
   for (const [index, target] of targets.entries()) {
-    const preparedFork = await createForkFromSource({
-      gameDir: args.gameDir,
-      from: args.fromSession,
-      to: target.session,
-      pretty: false,
-    }, source);
     const summary = await runAutoplay({
       gameDir: args.gameDir,
       persona: target.persona,
       verbose: false,
       maxSteps: args.maxSteps,
       session: target.session,
-      preparedFork,
+      preparedForkSource: {
+        fromSession: args.fromSession,
+        source,
+      },
       reportOnStop: args.reportOnStop,
-      ...(args.seed !== undefined ? { seed: args.seed + index } : {}),
+      seed: effectiveSeed + index,
     });
     const lane: AuditLaneSummary = {
       persona: target.persona,
@@ -308,12 +324,24 @@ export async function runAudit(
   let qualityReport: PlaytestReport | undefined;
   if (quality?.status === "failed" && qualityEvidenceSession &&
     args.reportOnQualityFailure !== false) {
+    let evidenceSnapshot: PlaytestEvidenceSnapshot | undefined;
     await createForkFromSource({
       gameDir: args.gameDir,
       from: args.fromSession,
       to: qualityEvidenceSession,
       pretty: false,
-    }, source);
+    }, source, {
+      onCreatedWhileLocked: async () => {
+        evidenceSnapshot = await capturePlaytestEvidenceSnapshot(
+          args.gameDir,
+          qualityEvidenceSession,
+        );
+      },
+    });
+    if (!evidenceSnapshot) {
+      throw new Error("AI audit failed to freeze its quality evidence snapshot");
+    }
+    await hooks.onQualityEvidenceForked?.(qualityEvidenceSession);
     qualityReport = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: qualityEvidenceSession,
@@ -331,11 +359,12 @@ export async function runAudit(
         "Reproduce the attached audit-source checkpoint, then decide whether to improve authored intent/route reachability or revise the explicit game-level threshold.",
       ].join(" "),
       target: "game.yaml",
+      evidenceSnapshot,
       auditMatrix: {
         sourceRevision: stateRevision,
         sessionPrefix: args.sessionPrefix,
         maxSteps: args.maxSteps,
-        ...(args.seed !== undefined ? { seed: args.seed } : {}),
+        seed: effectiveSeed,
         policy: qualityPolicy!,
         observed: {
           uniqueEndings,
@@ -351,6 +380,7 @@ export async function runAudit(
         violations: quality.violations,
         lanes: lanes.map((lane) => ({
           persona: lane.persona,
+          deterministic: personaRegistry[lane.persona]?.deterministic !== false,
           session: lane.session,
           webPath: lane.webPath,
           ending: lane.ending,
@@ -624,8 +654,8 @@ function validateAuditArgs(args: AuditArgs): void {
   if (args.personas.includes("random") && args.seed === undefined) {
     throw new Error("Audit persona random requires --seed for reproducibility");
   }
-  if (args.seed !== undefined && !Number.isInteger(args.seed)) {
-    throw new Error("--seed must be an integer");
+  if (args.seed !== undefined && (!Number.isInteger(args.seed) || args.seed < 0)) {
+    throw new Error("--seed must be a non-negative integer");
   }
 }
 

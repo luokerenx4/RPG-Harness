@@ -1,5 +1,10 @@
 import type { PlaytestReport } from "../playtest-reports";
-import { listPlaytestReports } from "../playtest-reports";
+import {
+  hasCausallyVerifiableAutoplayReport,
+  hasRecoverableIssueCheckpoint,
+  hasVerifiableAuditReport,
+  listPlaytestReports,
+} from "../playtest-reports";
 import {
   collectScriptCoverage,
   type ScriptCoverageReport,
@@ -200,35 +205,28 @@ export function analyzeDevelopmentWorklist(input: {
   }
 
   for (const report of input.reports) {
-    const auditMatrix = report.evidence.auditMatrix;
-    const auditVerifiable = auditMatrix !== undefined &&
-      Number.isInteger(auditMatrix.maxSteps) && auditMatrix.maxSteps! >= 0 &&
-      auditMatrix.lanes.length > 0;
-    const autoplay = report.evidence.autoplay;
-    const autoplayVerifiable = autoplay !== undefined &&
-      typeof autoplay.persona === "string" &&
-      autoplay.persona.trim().length > 0 &&
-      Number.isInteger(autoplay.maxSteps) && autoplay.maxSteps >= 0 &&
-      Number.isInteger(autoplay.seed) && autoplay.seed! >= 0;
+    const auditVerifiable = hasVerifiableAuditReport(report);
+    const autoplayVerifiable = hasCausallyVerifiableAutoplayReport(report);
+    const recoverable = hasRecoverableIssueCheckpoint(report);
     items.push({
       key: `report/${report.id}`,
       kind: "playtest-report",
       priority: reportPriority(report.severity),
-      actionability: report.evidence.checkpoint ? "executable" : "diagnostic",
+      actionability: recoverable ? "executable" : "diagnostic",
       title: report.title,
       ...(report.target ? { target: report.target } : {}),
       detail: `${report.severity} ${report.area} finding in ${report.session}`,
-      operation: auditVerifiable && report.evidence.checkpoint
+      operation: auditVerifiable
         ? {
             command: "verify-audit",
             args: { reportId: report.id, sessionPrefix: "<new-session>" },
           }
-        : autoplayVerifiable && report.evidence.checkpoint
+        : autoplayVerifiable
         ? {
             command: "verify-autoplay",
             args: { reportId: report.id, sessionPrefix: "<new-session>" },
           }
-        : report.evidence.checkpoint
+        : recoverable
         ? {
             command: "reproduce",
             args: { reportId: report.id, session: report.session, to: "<new-session>" },

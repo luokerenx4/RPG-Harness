@@ -426,26 +426,27 @@ export const personas: Record<string, Persona> = {
     return { type: "next" };
   },
 
-  random: async (output) => {
+  random: async (output, _state, _step, context) => {
+    const rng = context?.rng ?? Math.random;
     if (output.type === "choice") {
       const available = output.options
         .map((o, i) => ({ o, i }))
         .filter(({ o }) => o.available);
       if (available.length === 0) return { type: "quit" };
-      const pick = available[Math.floor(Math.random() * available.length)]!;
+      const pick = available[Math.floor(rng() * available.length)]!;
       return chooseOption(output, pick.i);
     }
     if (output.type === "scriptComplete") {
       if (output.nextAvailable.length === 0) return null;
       const pick =
         output.nextAvailable[
-          Math.floor(Math.random() * output.nextAvailable.length)
+          Math.floor(rng() * output.nextAvailable.length)
         ]!;
       return { type: "select", scriptId: pick.id };
     }
     if (output.type === "hubMenu") {
       return pickActivity(output, (acts) => {
-        return acts[Math.floor(Math.random() * acts.length)]!.idx;
+        return acts[Math.floor(rng() * acts.length)]!.idx;
       });
     }
     if (output.type === "gameEnd") return null;

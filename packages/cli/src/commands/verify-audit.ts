@@ -1,7 +1,9 @@
 import {
   getPlaytestReport,
+  hasVerifiableAuditReport,
+  loadPlaytestReportCheckpointSource,
   reproducePlaytestReport,
-  resolvePlaytestReport,
+  resolveVerifiedPlaytestReport,
   type PlaytestAuditVerification,
 } from "../playtest-reports";
 import { runAudit, type AuditSummary } from "./audit";
@@ -51,15 +53,12 @@ export async function verifyAuditReport(
   if (!evidence) {
     throw new Error(`Playtest report is not an AI audit finding: ${report.id}`);
   }
-  const personas = evidence.lanes.map((lane) => lane.persona);
-  if (new Set(personas).size !== personas.length || personas.length === 0) {
-    throw new Error(`AI audit report has invalid persona evidence: ${report.id}`);
-  }
-  if (!Number.isInteger(evidence.maxSteps) || evidence.maxSteps! < 0) {
+  if (!hasVerifiableAuditReport(report)) {
     throw new Error(
-      `AI audit report lacks a deterministic maxSteps budget; reproduce it manually or record a fresh audit: ${report.id}`,
+      `AI audit report has incomplete deterministic replay or incident evidence; record a fresh audit or resolve this legacy report manually: ${report.id}`,
     );
   }
+  const personas = evidence.lanes.map((lane) => lane.persona);
 
   const sourceSession = `${args.sessionPrefix}-source`;
   for (const session of [
@@ -68,6 +67,11 @@ export async function verifyAuditReport(
   ]) {
     await assertTargetEmpty(args.gameDir, session);
   }
+  const frozenSource = await loadPlaytestReportCheckpointSource(
+    args.gameDir,
+    report,
+    "issue",
+  );
   await reproducePlaytestReport({
     gameDir: args.gameDir,
     id: report.id,
@@ -80,7 +84,7 @@ export async function verifyAuditReport(
     sessionPrefix: args.sessionPrefix,
     personas,
     maxSteps: evidence.maxSteps!,
-    ...(evidence.seed !== undefined ? { seed: evidence.seed } : {}),
+    seed: evidence.seed!,
     reportOnStop: false,
     reportOnQualityFailure: false,
     qualityFloor: {
@@ -88,6 +92,11 @@ export async function verifyAuditReport(
       personas: evidence.policy.personas ?? personas,
     },
     pretty: false,
+  }, {}, {
+    state: frozenSource.state,
+    selectedEntry: frozenSource.sourceLogEntry,
+    sourceEntries: frozenSource.sourceLogEntry,
+    mode: "checkpoint",
   });
   const sourceRevisionMatches = audit.source.stateRevision === evidence.sourceRevision;
   const lanes = audit.lanes.map((lane) => ({
@@ -118,9 +127,16 @@ export async function verifyAuditReport(
   const verification: PlaytestAuditVerification = {
     kind: "ai-audit",
     verifiedAt: new Date().toISOString(),
+    issueCheckpointRevision: report.evidence.checkpoint!.revision,
     sessionPrefix: args.sessionPrefix,
     sourceRevision: audit.source.stateRevision,
-    policy: qualityGate.policy,
+    maxSteps: evidence.maxSteps!,
+    seed: evidence.seed!,
+    // Persist the exact frozen policy from the finding. The verification run
+    // may add the original persona set internally to make the quality gate
+    // evaluable, but that orchestration detail must not change the evidence
+    // contract being proven.
+    policy: evidence.policy,
     observed: qualityGate.observed,
     classification: audit.diversity.classification as Exclude<
       AuditSummary["diversity"]["classification"],
@@ -136,7 +152,7 @@ export async function verifyAuditReport(
       completedScripts: lane.completedScripts,
     })),
   };
-  const resolved = await resolvePlaytestReport({
+  const resolved = await resolveVerifiedPlaytestReport({
     gameDir: args.gameDir,
     id: report.id,
     session: report.session,
@@ -149,6 +165,9 @@ export async function verifyAuditReport(
     ].join(", ") + ".",
     verification,
   });
+  if (resolved.verification?.kind !== "ai-audit") {
+    throw new Error(`Resolved AI audit report lost its verification: ${report.id}`);
+  }
   return {
     status: "verified",
     reportId: report.id,
@@ -162,7 +181,7 @@ export async function verifyAuditReport(
       status: "resolved",
       resolvedAt: resolved.resolvedAt!,
       ...(resolved.resolution ? { resolution: resolved.resolution } : {}),
-      verification,
+      verification: resolved.verification,
     },
   };
 }

@@ -916,7 +916,14 @@ export type AiPersonaDecider = (
   output: Output,
   state: ComposedState,
   step: number,
+  context?: AiPersonaContext,
 ) => Promise<Input | null>;
+
+/** Runner-owned services kept separate from the game's persisted RNG. */
+export interface AiPersonaContext {
+  /** Stochastic personas must sample this stream instead of global Math.random. */
+  rng: () => number;
+}
 
 export interface AiPersonaDefinition {
   description: string;
@@ -1361,7 +1368,13 @@ export type Output =
       visualState?: VisualState;
     }
   | { type: "hubMenu"; snapshot: HubSnapshot; visualState?: VisualState }
-  | { type: "gameEnd"; reason?: string; visualState?: VisualState }
+  | {
+      type: "gameEnd";
+      /** Stable terminal identity supplied by the preset when one is authored. */
+      endingId?: string;
+      reason?: string;
+      visualState?: VisualState;
+    }
   | { type: "clear"; visualState?: VisualState };
 
 export type Input =

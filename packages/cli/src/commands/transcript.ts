@@ -225,6 +225,7 @@ function compactOutput(value: unknown): Record<string, unknown> | null {
     case "gameEnd":
       return {
         type: "gameEnd",
+        ...(typeof value.endingId === "string" ? { endingId: value.endingId } : {}),
         ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
       };
     case "clear":

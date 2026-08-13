@@ -80,7 +80,10 @@ export async function* raidRun(
     // Hub: ask the raid module for the menu (mode-dependent).
     const hubOutput = fireOnHubBuild(ctx);
     if (hubOutput === undefined) {
-      yield { type: "gameEnd" };
+      yield {
+        type: "gameEnd",
+        endingId: ctx.state.baseline.completionOrder.at(-1) ?? "game-end",
+      };
       return;
     }
     const input = yield hubOutput;

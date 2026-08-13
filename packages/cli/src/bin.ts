@@ -158,7 +158,8 @@ COMMANDS
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
       --from-session atomically forks a player/GUI save into --session before
       the AI moves, so autonomous play never mutates the player's branch.
-      --report-on-stop turns a non-terminal stop into a checkpointed coding issue.
+      --report-on-stop freezes pre-run and incident checkpoints as a causally
+      verifiable coding issue.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
 
@@ -214,7 +215,8 @@ COMMANDS
       Print one complete playtest finding with its captured evidence and checkpoint.
 
   resolve  <game-dir> <report-id> [--session NAME] [--resolution TEXT] [--pretty]
-      Mark a playtest issue resolved after its fix has been verified.
+      Mark an ordinary playtest issue resolved. Structured autoplay and audit
+      findings can close only through their causal verifier.
 
   reproduce <game-dir> <report-id> --to NAME [--session NAME] [--pretty]
       Fork the immutable save snapshot captured with a playtest issue. Prints

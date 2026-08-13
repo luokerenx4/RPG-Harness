@@ -21,9 +21,17 @@ import { diffVisualLines } from "../presenters/visualSummary";
 import { collectAiPersonas } from "../test/personas";
 import { appendLog, loadSession, saveSession, sessionDir } from "../session";
 import { withSessionLock } from "@rpg-harness/session-store";
-import { forkSession } from "./fork";
 import {
+  createForkFromSource,
+  createForkFromSourceWithLockHeld,
+  loadForkSource,
+  readSessionLog,
+  type ForkSource,
+} from "./fork";
+import {
+  capturePlaytestEvidenceSnapshot,
   recordPlaytestReport,
+  type PlaytestEvidenceSnapshot,
   type PlaytestReport,
 } from "../playtest-reports";
 import {
@@ -43,10 +51,12 @@ export interface AutoplayArgs {
   fromLogEntry?: number;
   reportOnStop?: boolean;
   pretty?: boolean;
-  // Internal orchestration hook for callers that already created an exact
-  // branch. Keeping the provenance here preserves ordinary reports/summaries
-  // without making the runner reread a live source session.
-  preparedFork?: Awaited<ReturnType<typeof forkSession>>;
+  // Internal orchestration input for callers that already froze an exact
+  // source. The target fork is created inside the same lock as the run.
+  preparedForkSource?: {
+    fromSession: string;
+    source: ForkSource;
+  };
   // Internal execution target used by `rpgh cover`. The first decision is
   // only submitted after the recoverable checkpoint still presents this
   // exact stable choice and option; option array indexes may safely change.
@@ -84,7 +94,7 @@ export interface AutoplaySummary {
   ending: string | null;
   session?: string;
   webPath?: string;
-  fork?: Awaited<ReturnType<typeof forkSession>>;
+  fork?: Awaited<ReturnType<typeof createForkFromSource>>;
   report?: PlaytestReport;
   choiceCoverage?: {
     summary: ChoiceCoverageReport["summary"];
@@ -128,7 +138,17 @@ export async function autoplayCommand(args: AutoplayArgs): Promise<void> {
   );
 }
 
-export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> {
+interface RunAutoplayInternalHooks {
+  /** Deterministic test seam at the otherwise-racy boundary between transactions. */
+  afterSessionTransaction?: () => Promise<void>;
+  /** Runs after fork initialization while the same target transaction remains held. */
+  afterForkInitializedWhileLocked?: () => void | Promise<void>;
+}
+
+export async function runAutoplay(
+  args: AutoplayArgs,
+  internalHooks: RunAutoplayInternalHooks = {},
+): Promise<AutoplaySummary> {
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
     throw new Error("--max-steps must be a non-negative integer");
   }
@@ -138,15 +158,23 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
   }
-  if (args.preparedFork && !args.session) {
-    throw new Error("A prepared fork requires a persisted --session");
+  if (args.preparedForkSource && !args.session) {
+    throw new Error("A prepared fork source requires a persisted --session");
   }
-  if (args.preparedFork && (args.fromSession || args.fromLogEntry !== undefined)) {
-    throw new Error("A prepared fork cannot be combined with --from-session or --from-at");
-  }
-  if (args.preparedFork && args.preparedFork.session !== args.session) {
+  if (
+    args.preparedForkSource &&
+    (args.fromSession || args.fromLogEntry !== undefined)
+  ) {
     throw new Error(
-      `Prepared fork session ${args.preparedFork.session} does not match autoplay session ${args.session}`,
+      "A prepared fork source cannot be combined with --from-session or --from-at",
+    );
+  }
+  if (
+    args.preparedForkSource &&
+    args.preparedForkSource.fromSession === args.session
+  ) {
+    throw new Error(
+      "Prepared fork source and autoplay target sessions must differ",
     );
   }
   if (args.fromLogEntry !== undefined && !args.fromSession) {
@@ -181,7 +209,8 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     );
   }
 
-  let fork: Awaited<ReturnType<typeof forkSession>> | undefined = args.preparedFork;
+  let fork: Awaited<ReturnType<typeof createForkFromSource>> | undefined;
+  let preparedForkSource = args.preparedForkSource;
   if (args.fromSession && args.session) {
     try {
       await access(path.join(sessionDir(args.gameDir, args.fromSession), "state.json"));
@@ -191,22 +220,21 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       }
       throw error;
     }
-    fork = await forkSession({
-      gameDir: args.gameDir,
-      from: args.fromSession,
-      to: args.session,
-      ...(args.fromLogEntry !== undefined ? { at: args.fromLogEntry } : {}),
-      pretty: false,
-    });
-  }
-  const originalRandom = Math.random;
-  if (effectiveSeed !== undefined) {
-    let s = effectiveSeed;
-    Math.random = () => {
-      s = (s * 9301 + 49297) % 233280;
-      return s / 233280;
+    preparedForkSource = {
+      fromSession: args.fromSession,
+      source: await loadForkSource(
+        args.gameDir,
+        args.fromSession,
+        args.fromLogEntry,
+      ),
     };
   }
+  // Persona sampling is deliberately separate from the engine's persisted
+  // RNG. A fresh state may consume randomness while it initializes, whereas a
+  // checkpoint replay does not; sharing global Math.random made the same seed
+  // choose a different first move on causal replay (and let concurrent lanes
+  // overwrite one another's stream).
+  const personaRng = createPersonaRng(effectiveSeed);
 
   process.stderr.write(
     `\n=== autoplay: ${game.title} (persona: ${args.persona}) ===\n\n`,
@@ -228,7 +256,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     state: Parameters<typeof persona>[1],
     step: number,
   ) => {
-    if (!awaitingTarget) return persona(output, state, step);
+    if (!awaitingTarget) return persona(output, state, step, { rng: personaRng });
     if (output.type !== "choice") {
       throw new Error(
         `Choice coverage checkpoint mismatch: expected ${args.targetChoice!.scriptId}/${args.targetChoice!.choiceId}, got ${output.type}`,
@@ -270,7 +298,23 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   };
 
   let autoplayInitialState: Awaited<ReturnType<typeof loadSession>> | undefined;
+  let autoplayReplayLogEntry: number | undefined;
+  let incidentEvidence: PlaytestEvidenceSnapshot | undefined;
   const play = async () => {
+    if (args.session && preparedForkSource) {
+      fork = await createForkFromSourceWithLockHeld({
+        gameDir: args.gameDir,
+        from: preparedForkSource.fromSession,
+        to: args.session,
+        at: preparedForkSource.source.selectedEntry,
+        pretty: false,
+      }, preparedForkSource.source, {
+        onCreatedWhileLocked: internalHooks.afterForkInitializedWhileLocked,
+      });
+    }
+    autoplayReplayLogEntry = args.session
+      ? (await readSessionLog(args.gameDir, args.session)).length
+      : 0;
     const initialState = args.session
       ? await loadSession(args.gameDir, args.session, game)
       : undefined;
@@ -327,16 +371,23 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
     // actual stop site rather than the previous log entry's state.
     if (args.session) {
       await saveSession(args.gameDir, args.session, result.finalState);
+      if (args.reportOnStop && detectTerminalScriptId(result) === null) {
+        // Freeze the incident before releasing the transaction. A GUI step can
+        // legitimately win the next lock before issues.jsonl is appended; the
+        // report must still describe this autoplay terminal state and log.
+        incidentEvidence = await capturePlaytestEvidenceSnapshot(
+          args.gameDir,
+          args.session,
+        );
+      }
     }
     return result;
   };
-  let result: Awaited<ReturnType<typeof runLoop>>;
-  try {
-    result = args.session
-      ? await withSessionLock(args.gameDir, args.session, play)
-      : await play();
-  } finally {
-    Math.random = originalRandom;
+  const result = args.session
+    ? await withSessionLock(args.gameDir, args.session, play)
+    : await play();
+  if (args.session && internalHooks.afterSessionTransaction) {
+    await internalHooks.afterSessionTransaction();
   }
 
   process.stderr.write(
@@ -354,7 +405,14 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
   const decisionPath = summarizeDecisionPath(result.trace);
 
   let report: PlaytestReport | undefined;
-  if (args.reportOnStop && args.session && !result.done) {
+  if (args.reportOnStop && args.session && ending === null) {
+    if (
+      !autoplayInitialState ||
+      autoplayReplayLogEntry === undefined ||
+      !incidentEvidence
+    ) {
+      throw new Error("Autoplay report is missing transaction-frozen evidence");
+    }
     report = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: args.session,
@@ -366,11 +424,16 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
           : "major",
       title: result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
         ? `Autoplay ${args.persona} reached a budget checkpoint with progress`
-        : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
+        : result.reason === "completed"
+          ? `Autoplay ${args.persona} completed without a public gameEnd`
+          : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
       details: [
         `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
         `Replay seed: \`${effectiveSeed}\`.`,
+        ...(result.reason === "completed"
+          ? ["The runner returned without a public gameEnd output."]
+          : []),
         ...(progress.madeProgress
           ? [`Progress made: ${formatAutoplayProgress(progress)}.`]
           : ["No authored script or public objective progress was observed during this run."]),
@@ -396,7 +459,10 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
+      evidenceSnapshot: incidentEvidence,
       autoplay: {
+        replayState: autoplayInitialState,
+        replayLogEntry: autoplayReplayLogEntry,
         persona: args.persona,
         maxSteps: args.maxSteps,
         seed: effectiveSeed!,
@@ -404,6 +470,7 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
         decisions: countDecisions(result.trace),
         rejectedInputs: countRejectedInputs(result.trace),
         steps: result.trace.length,
+        decisionPathRevision: decisionPath.revision,
         ...(fork
           ? {
               sourceSession: fork.fromSession,
@@ -578,11 +645,21 @@ function countRejectedInputs(
 export function detectTerminalScriptId(result: {
   done: boolean;
   trace: ReadonlyArray<{ output: Output }>;
-  finalState: { baseline: { completionOrder: string[] } };
 }): string | null {
-  return result.done && result.trace.at(-1)?.output.type === "gameEnd"
-    ? result.finalState.baseline.completionOrder.at(-1) ?? null
-    : null;
+  if (!result.done) return null;
+  const output = result.trace.at(-1)?.output;
+  if (output?.type !== "gameEnd") return null;
+  const ending = output.endingId;
+  return typeof ending === "string" && ending.trim() ? ending : "game-end";
+}
+
+function createPersonaRng(seed: number | undefined): () => number {
+  if (seed === undefined) return Math.random;
+  let state = seed;
+  return () => {
+    state = (state * 9301 + 49297) % 233280;
+    return state / 233280;
+  };
 }
 
 function formatOutput(o: Output): string | null {

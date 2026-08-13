@@ -73,7 +73,11 @@ export async function* trainingRun(
           ctx.state.baseline.beatIndex = 0;
           continue;
         }
-        yield { type: "gameEnd", reason: endCheck.reason };
+        yield {
+          type: "gameEnd",
+          endingId: endCheck.goto ?? "game-end",
+          reason: endCheck.reason,
+        };
         return;
       }
     }
@@ -117,7 +121,7 @@ export async function* trainingRun(
       // game.training is configured (the bundled training Module
       // always returns a hub). Fall through to gameEnd to avoid an
       // infinite loop.
-      yield { type: "gameEnd" };
+      yield { type: "gameEnd", endingId: "game-end" };
       return;
     }
     const input = yield hubOutput;

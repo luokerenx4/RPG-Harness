@@ -58,6 +58,16 @@ describe("AI-facing output contract", () => {
     const runner = new Engine(game).run();
     await expect(runner.next()).rejects.toThrow(/invalid scope wrong/);
   });
+
+  test("rejects an unstable explicit terminal identity but keeps legacy gameEnd valid", () => {
+    expect(() => validateOutput({ type: "gameEnd" })).not.toThrow();
+    expect(() => validateOutput({ type: "gameEnd", endingId: "ending-pure" }))
+      .not.toThrow();
+    expect(() => validateOutput({ type: "gameEnd", endingId: "  " }))
+      .toThrow(/endingId must be a non-empty, trimmed string/);
+    expect(() => validateOutput({ type: "gameEnd", endingId: " ending-pure " }))
+      .toThrow(/endingId must be a non-empty, trimmed string/);
+  });
 });
 
 function hub(objective: HubObjectiveSnapshot): Output {
