@@ -16,6 +16,7 @@ import {
   ModuleInitializationError,
 } from "./state";
 import { ModuleHookExecutionError } from "./primitives/hooks";
+import { TriggerExecutionError } from "./primitives/checkTriggers";
 import type {
   ComposedState,
   Game,
@@ -23,6 +24,7 @@ import type {
   ModuleHookName,
   ModuleHookContext,
   Output,
+  TriggerFailureStage,
 } from "./types";
 
 export interface TraceEntry {
@@ -88,6 +90,12 @@ export interface LoopFailure {
   moduleIds?: string[];
   /** Exact project module hook that threw inside the engine boundary. */
   hook?: { moduleId: string; name: ModuleHookName } & ModuleHookContext;
+  /** Exact module-owned reactive event that failed. */
+  trigger?: {
+    moduleId: string;
+    triggerId: string;
+    stage: TriggerFailureStage;
+  };
 }
 
 export type InputSource =
@@ -338,6 +346,7 @@ export async function runLoop(
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
     const hookError = error instanceof ModuleHookExecutionError ? error : null;
+    const triggerError = error instanceof TriggerExecutionError ? error : null;
     const attemptedInput = failurePhase === "input" && failureInput
       ? failureInput
       : null;
@@ -352,11 +361,11 @@ export async function runLoop(
       finalState: failedTransitionState,
       done: false,
       reason: "error",
-      error: hookError?.causeMessage ?? error.message,
+      error: hookError?.causeMessage ?? triggerError?.causeMessage ?? error.message,
       failure: {
         phase: failurePhase,
-        name: hookError?.causeName ?? error.name,
-        message: hookError?.causeMessage ?? error.message,
+        name: hookError?.causeName ?? triggerError?.causeName ?? error.name,
+        message: hookError?.causeMessage ?? triggerError?.causeMessage ?? error.message,
         input: attemptedInput,
         output: semanticOutput,
         ...failureDecisionContext(semanticOutput, attemptedInput),
@@ -369,6 +378,15 @@ export async function runLoop(
                 moduleId: hookError.moduleId,
                 name: hookError.hookName,
                 ...hookError.context,
+              },
+            }
+          : triggerError
+          ? {
+              moduleIds: [triggerError.moduleId],
+              trigger: {
+                moduleId: triggerError.moduleId,
+                triggerId: triggerError.triggerId,
+                stage: triggerError.stage,
               },
             }
           : {}),

@@ -727,6 +727,65 @@ describe("autoplay autonomous development lane", () => {
     });
   });
 
+  test("prefers a reactive trigger over the action that woke it", async () => {
+    const gameDir = await temporaryActionTriggeredEventErrorGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 47,
+      session: "ai-triggered-event-error",
+      reportOnStop: true,
+    });
+
+    expect(summary).toMatchObject({
+      reason: "error",
+      failure: {
+        phase: "input",
+        input: { type: "doActivity", id: "ring-bell" },
+        activityDecision: {
+          activityId: "ring-bell",
+          actionKind: "bell-actions:ring",
+        },
+        trigger: {
+          moduleId: "omen-events",
+          triggerId: "bad_omen",
+          stage: "handler",
+        },
+      },
+      report: {
+        target: "modules/events.ts",
+        title: "Autoplay greedy failed in omen-events.bad_omen.handler",
+        evidence: {
+          sourceTargets: [
+            {
+              kind: "preset",
+              file: "modules/run.ts",
+              runtimePhase: "input",
+            },
+            {
+              kind: "module-action",
+              file: "modules/actions.ts",
+              moduleId: "bell-actions",
+              actionKind: "bell-actions:ring",
+              activityId: "ring-bell",
+            },
+            {
+              kind: "module-trigger",
+              file: "modules/events.ts",
+              moduleId: "omen-events",
+              triggerId: "bad_omen",
+              triggerStage: "handler",
+            },
+          ],
+        },
+      },
+    });
+    expect(summary.finalState.baseline.switches.omen).toBe(false);
+    expect(summary.finalState.baseline.variables.partial).toBeUndefined();
+  });
+
   test("reports repeated behavior whose state counter masks an exact stall", async () => {
     const gameDir = await temporaryChangingCycleGame();
     const summary = await runAutoplay({
@@ -1306,6 +1365,58 @@ async function temporaryThrowingActionGame(): Promise<string> {
     "  ctx.state.runtime.lastHubActivities = [activity];",
     '  const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [activity] } };',
     '  if (input.type === "doActivity") yield* dispatchActivity(ctx, input.id);',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryActionTriggeredEventErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-triggered-event-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Triggered event error",
+    "preset: ./modules/run.ts",
+    "switches:",
+    "  omen: false",
+    "modules:",
+    "  - ./modules/actions.ts",
+    "  - ./modules/events.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "actions.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "bell-actions",',
+    '  actionHandlers: { ring: () => ({ deltas: { switches: { omen: true } } }) },',
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "events.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "omen-events",',
+    "  triggers: [{",
+    '    id: "bad_omen",',
+    '    when: { switch: { name: "omen", eq: true } },',
+    '    do: (ctx) => { ctx.state.baseline.variables.partial = 1; throw new Error("omen shattered"); },',
+    "  }],",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import { dispatchActivity } from "@rpg-harness/engine";',
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  const activity = { id: "ring-bell", kind: "action" as const, title: "Ring bell", cost: 0, available: true, actionKind: "bell-actions:ring" };',
+    "  ctx.state.runtime.lastHubActivities = [activity];",
+    '  const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [activity] } };',
+    '  if (input.type === "doActivity") yield* dispatchActivity(ctx, input.id);',
+    '  yield { type: "gameEnd", endingId: "bell-rung" };',
     "};",
     "export default run;",
     "",

@@ -3,8 +3,7 @@ import { createInitialState } from "./state";
 import { runLoop } from "./runLoop";
 import { makeGame } from "./test-utils";
 import type { Game } from "./types";
-import { dispatchActivity } from "./primitives";
-import { runScript } from "./primitives";
+import { checkTriggers, dispatchActivity, runScript } from "./primitives";
 
 const terminalGame: Game = {
   title: "terminal",
@@ -182,6 +181,49 @@ describe("runLoop terminal output", () => {
     expect(repaired.finalState.runtime.firedScriptStarts).toEqual(["opening"]);
     expect(repaired.finalState.baseline.variables.earlyHookRuns).toBe(1);
     expect(calls).toBe(2);
+  });
+
+  test("retains a trigger owner and rolls back its failed transition", async () => {
+    const game = makeGame({
+      switches: [{ id: "omen", initial: false }],
+      modules: [{
+        id: "broken-events",
+        source: "modules/events.ts",
+        triggers: [{
+          id: "bad_omen",
+          when: { switch: { name: "omen", eq: true } },
+          do: (ctx) => {
+            ctx.state.baseline.variables.partial = 1;
+            throw new RangeError("omen handler broke");
+          },
+          once: true,
+        }],
+      }],
+      runFn: async function* (ctx) {
+        ctx.state.baseline.switches.omen = true;
+        checkTriggers(ctx);
+        yield { type: "gameEnd" as const, endingId: "omen-fixed" };
+      },
+    });
+    const initialState = createInitialState(game);
+    const result = await runLoop(game, initialState, []);
+
+    expect(result).toMatchObject({
+      reason: "error",
+      error: "omen handler broke",
+      failure: {
+        phase: "prime",
+        name: "RangeError",
+        message: "omen handler broke",
+        moduleIds: ["broken-events"],
+        trigger: {
+          moduleId: "broken-events",
+          triggerId: "bad_omen",
+          stage: "handler",
+        },
+      },
+      finalState: initialState,
+    });
   });
 
   test("stops at a caller-owned observable condition without claiming game completion", async () => {

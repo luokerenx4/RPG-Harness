@@ -919,6 +919,14 @@ export interface Trigger {
   once?: boolean;
 }
 
+/** Engine-owned registry entry retaining the project module coordinate. */
+export interface OwnedTrigger {
+  moduleId: string;
+  trigger: Trigger;
+}
+
+export type TriggerFailureStage = "condition" | "handler" | "result";
+
 export type TriggerHandler = (ctx: PresetContext) => ActionResult;
 
 /**
@@ -1467,7 +1475,7 @@ export interface PresetContext {
   actionHandlerRegistry: Record<string, ActionHandler>;
   // Aggregated trigger list (all modules.triggers concatenated in
   // declaration order). Trigger ids must be unique across all modules.
-  triggerRegistry: Trigger[];
+  triggerRegistry: OwnedTrigger[];
   // Precomputed lookup maps; cheap convenience, not authoritative.
   scriptMap: Map<string, Script>;
   actionMap: Map<string, Action>;

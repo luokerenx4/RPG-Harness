@@ -375,6 +375,110 @@ describe("autoplay issue verification", () => {
     });
   });
 
+  test("resolves a reactive trigger crash from its module-owned event", async () => {
+    const gameDir = await temporaryRepairableTriggerErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 43,
+      session: "original-trigger-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a trigger issue");
+    expect(original).toMatchObject({
+      reason: "error",
+      error: "omen handler broke",
+      failure: {
+        phase: "prime",
+        name: "RangeError",
+        message: "omen handler broke",
+        moduleIds: ["broken-events"],
+        trigger: {
+          moduleId: "broken-events",
+          triggerId: "bad_omen",
+          stage: "handler",
+        },
+      },
+    });
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/events.ts",
+      title: "Autoplay greedy failed in broken-events.bad_omen.handler",
+      evidence: {
+        failure: {
+          trigger: {
+            moduleId: "broken-events",
+            triggerId: "bad_omen",
+            stage: "handler",
+          },
+        },
+        sourceTargets: [
+          {
+            kind: "preset",
+            file: "modules/run.ts",
+            runtimePhase: "prime",
+          },
+          {
+            kind: "module-trigger",
+            file: "modules/events.ts",
+            moduleId: "broken-events",
+            triggerId: "bad_omen",
+            triggerStage: "handler",
+          },
+        ],
+      },
+    });
+    expect(report.details).toContain(
+      "module trigger: `broken-events.bad_omen.handler`",
+    );
+    expect((await collectDevelopmentWorklist(gameDir)).items).toContainEqual(
+      expect.objectContaining({
+        key: `report/${report.id}`,
+        actionability: "executable",
+        target: "modules/events.ts",
+      }),
+    );
+
+    await writeFile(path.join(gameDir, "modules", "events.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const module: Module = {",
+      '  id: "broken-events",',
+      "  triggers: [{",
+      '    id: "bad_omen",',
+      '    when: { switch: { name: "omen", eq: true } },',
+      '    do: () => ({ narrations: ["The omen settles."] }),',
+      "    once: true,",
+      "  }],",
+      "};",
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "trigger-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      result: {
+        reason: "completed",
+        ending: "omen-fixed",
+        webPath: "/?session=trigger-fixed-run",
+      },
+      resolvedReport: {
+        status: "resolved",
+        verification: {
+          kind: "autoplay",
+          originalStopReason: "error",
+          result: { ending: "omen-fixed" },
+        },
+      },
+    });
+  });
+
   test("resolves a project persona crash only after its repaired policy reaches gameEnd", async () => {
     const gameDir = await temporaryRepairablePersonaErrorGame();
     const original = await runAutoplay({
@@ -860,6 +964,52 @@ async function temporaryRepairableHookErrorGame(): Promise<string> {
     "  if (!finished) return;",
     '  ctx.state.baseline.completionOrder.push("opening");',
     '  yield { type: "gameEnd", endingId: "opening", reason: "hook route completed" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairableTriggerErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-trigger-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable trigger error",
+    "preset: ./modules/run.ts",
+    "switches:",
+    "  omen: false",
+    "modules:",
+    "  - ./modules/events.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "events.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "broken-events",',
+    "  triggers: [{",
+    '    id: "bad_omen",',
+    '    when: { switch: { name: "omen", eq: true } },',
+    '    do: (ctx) => { ctx.state.baseline.variables.partial = 1; throw new RangeError("omen handler broke"); },',
+    "    once: true,",
+    "  }],",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import { checkTriggers } from "@rpg-harness/engine";',
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    "  ctx.state.baseline.switches.omen = true;",
+    "  checkTriggers(ctx);",
+    "  yield* (async function* () {",
+    "    while (ctx.state.runtime.pendingNarrations.length > 0) {",
+    '      yield { type: "narration" as const, text: ctx.state.runtime.pendingNarrations.shift()! };',
+    "    }",
+    "  })();",
+    '  yield { type: "gameEnd", endingId: "omen-fixed", reason: "trigger repaired" };',
     "};",
     "export default run;",
     "",

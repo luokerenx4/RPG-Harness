@@ -14,7 +14,12 @@ export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export type { ActivityDecisionContext, ChoiceDecisionContext } from "./decision";
-export type { ModuleHookContext, ModuleHookName } from "./types";
+export type {
+  ModuleHookContext,
+  ModuleHookName,
+  OwnedTrigger,
+  TriggerFailureStage,
+} from "./types";
 export {
   createInitialState,
   applyDelta,
@@ -81,6 +86,7 @@ export {
   drainNarrations,
   checkEndConditions,
   checkTriggers,
+  TriggerExecutionError,
   applyActionResult,
   runScript,
   dispatchActivity,

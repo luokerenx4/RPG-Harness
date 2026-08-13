@@ -298,6 +298,7 @@ export function compactAutoplaySummary(
               : {}),
             ...(failure.moduleIds ? { moduleIds: failure.moduleIds } : {}),
             ...(failure.hook ? { hook: failure.hook } : {}),
+            ...(failure.trigger ? { trigger: failure.trigger } : {}),
           },
         }
       : {}),
@@ -715,6 +716,8 @@ export async function runAutoplay(
       severity: result.reason === "error" ? "blocker" : "major",
       title: failureTarget?.kind === "module-hook"
           ? `Autoplay ${args.persona} failed in ${failureTarget.moduleId}.${failureTarget.hookName}`
+          : failureTarget?.kind === "module-trigger"
+          ? `Autoplay ${args.persona} failed in ${failureTarget.moduleId}.${failureTarget.triggerId}.${failureTarget.triggerStage}`
           : result.failure?.activityDecision?.actionKind
           ? `Autoplay ${args.persona} failed in ${result.failure.activityDecision.actionKind}`
           : result.failure?.phase === "decision" &&
@@ -752,7 +755,7 @@ export async function runAutoplay(
         ...(result.error ? [`Engine error: ${result.error}`] : []),
         ...(result.failure
           ? [
-              `Failure phase: \`${result.failure.phase}\`; attempted input: \`${JSON.stringify(result.failure.input)}\`${result.failure.activityDecision?.actionKind ? `; action contract: \`${result.failure.activityDecision.actionKind}\` / \`${result.failure.activityDecision.activityId}\`` : ""}${result.failure.hook ? `; module hook: \`${result.failure.hook.moduleId}.${result.failure.hook.name}\`` : ""}.`,
+              `Failure phase: \`${result.failure.phase}\`; attempted input: \`${JSON.stringify(result.failure.input)}\`${result.failure.activityDecision?.actionKind ? `; action contract: \`${result.failure.activityDecision.actionKind}\` / \`${result.failure.activityDecision.activityId}\`` : ""}${result.failure.hook ? `; module hook: \`${result.failure.hook.moduleId}.${result.failure.hook.name}\`` : ""}${result.failure.trigger ? `; module trigger: \`${result.failure.trigger.moduleId}.${result.failure.trigger.triggerId}.${result.failure.trigger.stage}\`` : ""}.`,
             ]
           : []),
         ...(fork
@@ -1057,6 +1060,20 @@ export function collectAutoplaySourceTargets(
       });
     }
   }
+  if (failure?.trigger) {
+    const owner = game.modules?.find(
+      ({ id }) => id === failure.trigger!.moduleId,
+    );
+    if (owner?.source) {
+      targets.push({
+        kind: "module-trigger",
+        file: normalizeAuthoringSource(gameDir, owner.source),
+        moduleId: owner.id,
+        triggerId: failure.trigger.triggerId,
+        triggerStage: failure.trigger.stage,
+      });
+    }
+  }
 
   const unique = new Map<string, PlaytestSourceTarget>();
   for (const target of targets) {
@@ -1105,6 +1122,11 @@ function sourceTargetMatchesFailure(
   if (target.kind === "module-hook") {
     return target.moduleId === failure.hook?.moduleId &&
       target.hookName === failure.hook?.name;
+  }
+  if (target.kind === "module-trigger") {
+    return target.moduleId === failure.trigger?.moduleId &&
+      target.triggerId === failure.trigger?.triggerId &&
+      target.triggerStage === failure.trigger?.stage;
   }
   if (target.kind === "preset") {
     return (failure.phase === "prime" || failure.phase === "input") &&

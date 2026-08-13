@@ -25,6 +25,7 @@ import type {
   RunFunction,
   ScriptInfo,
   Trigger,
+  OwnedTrigger,
 } from "./types";
 
 /** A module's static runtime contract prevents Engine construction. */
@@ -120,7 +121,7 @@ export function buildPresetContext(
     }
   }
 
-  const triggerRegistry: Trigger[] = [];
+  const triggerRegistry: OwnedTrigger[] = [];
   const triggerOwnerById = new Map<string, string>();
   for (const mod of modules) {
     for (const trig of mod.triggers ?? []) {
@@ -132,7 +133,7 @@ export function buildPresetContext(
         );
       }
       triggerOwnerById.set(trig.id, mod.id);
-      triggerRegistry.push(trig);
+      triggerRegistry.push({ moduleId: mod.id, trigger: trig });
     }
   }
 

@@ -7,7 +7,7 @@ import {
   twoCharGame,
 } from "../test-utils";
 import type { Module, Trigger } from "../types";
-import { checkTriggers } from "./checkTriggers";
+import { checkTriggers, TriggerExecutionError } from "./checkTriggers";
 import { mutateState } from "./mutateState";
 
 // Helper: build a game with a tracker module exposing one or more
@@ -245,6 +245,151 @@ describe("checkTriggers — trigger result application", () => {
     mutateState(ctx, { characterStats: { alice: { affection: 3 } } }, "action");
     const log = (ctx.state.milestones as { log: unknown[] }).log;
     expect(log).toEqual([{ name: "first" }]);
+  });
+});
+
+describe("checkTriggers — author-owned failures", () => {
+  test("distinguishes malformed condition evaluation", () => {
+    const game = makeGame({
+      modules: [{
+        id: "broken-events",
+        triggers: [{
+          id: "bad_condition",
+          when: null as never,
+          do: () => ({}),
+        }],
+      }],
+    });
+    const ctx = makeCtx(game);
+
+    try {
+      checkTriggers(ctx);
+      throw new Error("expected trigger condition failure");
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "broken-events",
+        triggerId: "bad_condition",
+        stage: "condition",
+        causeName: "TypeError",
+      });
+    }
+  });
+
+  test("retains the owner and handler stage", () => {
+    const game = makeGame({
+      modules: [{
+        id: "broken-events",
+        triggers: [{
+          id: "bad_omen",
+          when: { switch: { name: "omen", eq: true } },
+          do: () => {
+            throw new RangeError("omen handler broke");
+          },
+          once: true,
+        }],
+      }],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.switches.omen = true;
+
+    expect(() => checkTriggers(ctx)).toThrow(TriggerExecutionError);
+    try {
+      checkTriggers(ctx);
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "broken-events",
+        triggerId: "bad_omen",
+        stage: "handler",
+        causeName: "RangeError",
+        causeMessage: "omen handler broke",
+      });
+    }
+  });
+
+  test("rejects async handlers instead of silently treating them as empty", () => {
+    const game = makeGame({
+      modules: [{
+        id: "async-events",
+        triggers: [{
+          id: "late_omen",
+          when: { switch: { name: "omen", eq: true } },
+          do: (() => Promise.resolve({})) as never,
+        }],
+      }],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.switches.omen = true;
+
+    expect(() => checkTriggers(ctx)).toThrow(TriggerExecutionError);
+    try {
+      checkTriggers(ctx);
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "async-events",
+        triggerId: "late_omen",
+        stage: "handler",
+        causeName: "TypeError",
+      });
+    }
+  });
+
+  test("attributes a broken thenable contract to the owning handler", () => {
+    const game = makeGame({
+      modules: [{
+        id: "thenable-events",
+        triggers: [{
+          id: "hostile_omen",
+          when: { switch: { name: "omen", eq: true } },
+          do: (() => Object.defineProperty({}, "then", {
+            get() {
+              throw new SyntaxError("then getter broke");
+            },
+          })) as never,
+        }],
+      }],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.switches.omen = true;
+
+    try {
+      checkTriggers(ctx);
+      throw new Error("expected trigger handler failure");
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "thenable-events",
+        triggerId: "hostile_omen",
+        stage: "handler",
+        causeName: "SyntaxError",
+        causeMessage: "then getter broke",
+      });
+    }
+  });
+
+  test("distinguishes an invalid handler result", () => {
+    const game = makeGame({
+      modules: [{
+        id: "broken-events",
+        triggers: [{
+          id: "bad_result",
+          when: { switch: { name: "omen", eq: true } },
+          do: (() => null) as never,
+        }],
+      }],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.switches.omen = true;
+
+    try {
+      checkTriggers(ctx);
+      throw new Error("expected trigger result failure");
+    } catch (error) {
+      expect(error).toMatchObject({
+        moduleId: "broken-events",
+        triggerId: "bad_result",
+        stage: "result",
+        causeName: "TypeError",
+      });
+    }
   });
 });
 

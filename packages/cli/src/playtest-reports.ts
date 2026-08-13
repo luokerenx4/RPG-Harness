@@ -87,6 +87,7 @@ export interface PlaytestSourceTarget {
     | "module-action"
     | "module-persona"
     | "module-hook"
+    | "module-trigger"
     | "module-setup"
     | "preset"
     | "script";
@@ -97,6 +98,8 @@ export interface PlaytestSourceTarget {
   activityId?: string;
   persona?: string;
   hookName?: ModuleHookName;
+  triggerId?: string;
+  triggerStage?: NonNullable<LoopFailure["trigger"]>["stage"];
   beatIndex?: number;
   labelName?: string;
   setupPhase?: "initialize" | "engine";
@@ -116,6 +119,7 @@ export interface PlaytestFailureEvidence {
   activityDecision?: LoopFailure["activityDecision"];
   stack?: string;
   hook?: LoopFailure["hook"];
+  trigger?: LoopFailure["trigger"];
   moduleIds?: string[];
 }
 
@@ -556,6 +560,9 @@ function compactLoopFailure(failure: LoopFailure): PlaytestFailureEvidence {
     ...(failure.stack ? { stack: failure.stack } : {}),
     ...(failure.moduleIds?.length ? { moduleIds: [...failure.moduleIds] } : {}),
     ...(failure.hook ? { hook: structuredClone(failure.hook) } : {}),
+    ...(failure.trigger
+      ? { trigger: structuredClone(failure.trigger) }
+      : {}),
   };
 }
 

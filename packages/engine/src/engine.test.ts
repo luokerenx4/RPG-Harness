@@ -115,7 +115,13 @@ describe("buildPresetContext", () => {
         modules: [modA, modB],
       }),
     );
-    expect(ctx.triggerRegistry.map((t) => t.id)).toEqual(["t1", "t2"]);
+    expect(ctx.triggerRegistry.map(({ moduleId, trigger }) => ({
+      moduleId,
+      triggerId: trigger.id,
+    }))).toEqual([
+      { moduleId: "modA", triggerId: "t1" },
+      { moduleId: "modB", triggerId: "t2" },
+    ]);
   });
 
   test("throws on duplicate trigger id across modules", () => {

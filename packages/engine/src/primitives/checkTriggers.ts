@@ -1,7 +1,53 @@
 import { evaluateCondition } from "../condition";
 import { applyDelta } from "../state";
-import type { PresetContext, Trigger } from "../types";
+import type {
+  ActionResult,
+  PresetContext,
+  Trigger,
+  TriggerFailureStage,
+} from "../types";
+import { ModuleHookExecutionError } from "./hooks";
 import { fireOnStateMutated } from "./hooks";
+
+/** Exact project-owned parallel event that failed during evaluation. */
+export class TriggerExecutionError extends Error {
+  readonly causeName: string;
+  readonly causeMessage: string;
+
+  constructor(
+    readonly moduleId: string,
+    readonly triggerId: string,
+    readonly stage: TriggerFailureStage,
+    cause: unknown,
+  ) {
+    const original = cause instanceof Error ? cause : new Error(String(cause));
+    super(
+      `Module ${moduleId} trigger ${triggerId} ${stage} failed: ${original.message}`,
+      { cause: original },
+    );
+    this.name = "TriggerExecutionError";
+    this.causeName = original.name;
+    this.causeMessage = original.message;
+    if (original.stack) this.stack = original.stack;
+  }
+}
+
+function triggerFailure<T>(
+  moduleId: string,
+  triggerId: string,
+  stage: TriggerFailureStage,
+  run: () => T,
+): T {
+  try {
+    return run();
+  } catch (error) {
+    if (
+      error instanceof TriggerExecutionError ||
+      error instanceof ModuleHookExecutionError
+    ) throw error;
+    throw new TriggerExecutionError(moduleId, triggerId, stage, error);
+  }
+}
 
 // Edge-detecting trigger dispatcher. Called by mutateState after every
 // state mutation. Compares each trigger's current `when` evaluation
@@ -22,15 +68,21 @@ export function checkTriggers(ctx: PresetContext): void {
   // compares against this. Updates land at the end of the pass.
   const wasActive = new Set(runtime.activeTriggers);
   const newActive: string[] = [];
-  const toFire: Trigger[] = [];
+  const toFire: Array<{ moduleId: string; trigger: Trigger }> = [];
 
-  for (const trig of ctx.triggerRegistry) {
-    const isActive = evaluateCondition(trig.when, ctx.state).ok;
+  for (const owned of ctx.triggerRegistry) {
+    const { moduleId, trigger: trig } = owned;
+    const isActive = triggerFailure(
+      moduleId,
+      trig.id,
+      "condition",
+      () => evaluateCondition(trig.when, ctx.state).ok,
+    );
     if (isActive) {
       newActive.push(trig.id);
       if (wasActive.has(trig.id)) continue; // not a rising edge
       if (trig.once && runtime.firedTriggers.includes(trig.id)) continue;
-      toFire.push(trig);
+      toFire.push(owned);
     }
     // Falling edges (was active, no longer) drop out of newActive
     // naturally — the trigger re-arms.
@@ -40,11 +92,29 @@ export function checkTriggers(ctx: PresetContext): void {
 
   // Fire in declaration order. Each trigger's result applies via
   // applyTriggerResult (sibling helper, NO re-check) to bound cascade.
-  for (const trig of toFire) {
+  for (const { moduleId, trigger: trig } of toFire) {
     if (trig.once) runtime.firedTriggers.push(trig.id);
-    const result = trig.do(ctx);
-    applyTriggerResult(ctx, result);
+    const result = triggerFailure(moduleId, trig.id, "handler", () => {
+      const value = trig.do(ctx);
+      if (isPromiseLike(value)) {
+        void Promise.resolve(value).catch(() => undefined);
+        throw new TypeError("Trigger handlers must be synchronous");
+      }
+      return value;
+    });
+    triggerFailure(
+      moduleId,
+      trig.id,
+      "result",
+      () => applyTriggerResult(ctx, result),
+    );
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function";
 }
 
 // Apply a trigger's ActionResult without invoking checkTriggers again.
@@ -53,7 +123,7 @@ export function checkTriggers(ctx: PresetContext): void {
 // recursively fire more triggers in the same wave.
 function applyTriggerResult(
   ctx: PresetContext,
-  result: ReturnType<Trigger["do"]>,
+  result: ActionResult,
 ): void {
   if (result.deltas) {
     applyDelta(ctx.state, result.deltas);
