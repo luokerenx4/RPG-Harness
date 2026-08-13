@@ -132,7 +132,9 @@ COMMANDS
       live queue. --until-clean also follows closest-state search continuations
       and freezes later queue generations under shared item/node/generation caps,
       then runs game.yaml ai_audit as the final project acceptance gate.
-      Passed gates are content-addressed and reused until game/runtime inputs
+      Every author-declared ai_audit seed must pass. --audit-seed supplies the
+      fallback only when game.yaml does not declare seeds. Passed gates are
+      content-addressed and reused until game/runtime inputs
       change; --force-audit reruns every lane.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]

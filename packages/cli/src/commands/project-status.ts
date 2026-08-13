@@ -19,8 +19,10 @@ export interface ProjectDevelopmentStatus {
     createdAt: string | null;
     endings: number;
     paths: number;
+    seeds: number[];
     maxActivityRepetitions: number | null;
     maxActivityRepetition: {
+      seed: number;
       persona: string;
       activityKind: string;
       count: number;
@@ -52,12 +54,20 @@ export async function collectProjectDevelopmentStatus(
           inputRevision: currentCertificate.certificate.inputRevision,
           certificateRevision: currentCertificate.certificate.revision,
           createdAt: currentCertificate.certificate.createdAt,
-          endings: currentCertificate.certificate.audit.diversity.uniqueEndings,
-          paths: currentCertificate.certificate.audit.diversity.uniqueDecisionPaths,
+          endings: Math.min(...currentCertificate.certificate.audits.map(
+            (audit) => audit.diversity.uniqueEndings,
+          )),
+          paths: Math.min(...currentCertificate.certificate.audits.map(
+            (audit) => audit.diversity.uniqueDecisionPaths,
+          )),
+          seeds: currentCertificate.certificate.audits.map((audit) => audit.seed),
           maxActivityRepetitions:
-            currentCertificate.certificate.audit.qualityGate?.policy.maxActivityRepetitions ?? null,
-          maxActivityRepetition:
-            currentCertificate.certificate.audit.qualityGate?.observed.maxActivityRepetition ?? null,
+            currentCertificate.certificate.audits[0]?.qualityGate?.policy.maxActivityRepetitions ?? null,
+          maxActivityRepetition: currentCertificate.certificate.audits
+            .flatMap((audit) => audit.qualityGate?.observed.maxActivityRepetition
+              ? [{ seed: audit.seed, ...audit.qualityGate.observed.maxActivityRepetition }]
+              : [])
+            .sort((left, right) => right.count - left.count)[0] ?? null,
         }
       : {
           status: "uncertified" as const,
@@ -66,6 +76,7 @@ export async function collectProjectDevelopmentStatus(
           createdAt: null,
           endings: 0,
           paths: 0,
+          seeds: [],
           maxActivityRepetitions: null,
           maxActivityRepetition: null,
         },

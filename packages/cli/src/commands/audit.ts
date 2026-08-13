@@ -661,6 +661,11 @@ function mergeQualityPolicies(
       : current?.personas !== undefined
         ? { personas: [...current.personas] }
         : {}),
+    ...(floor?.seeds !== undefined
+      ? { seeds: [...floor.seeds] }
+      : current?.seeds !== undefined
+        ? { seeds: [...current.seeds] }
+        : {}),
     ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
     ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
     ...(maxActivityRepetitions !== undefined ? { maxActivityRepetitions } : {}),

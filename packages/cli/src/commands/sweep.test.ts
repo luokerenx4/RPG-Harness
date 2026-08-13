@@ -440,8 +440,8 @@ describe("bounded development sweep", () => {
     });
   });
 
-  test("until-clean runs the authored AI acceptance matrix before declaring clean", async () => {
-    const gameDir = await temporaryQualitySweepGame(1);
+  test("until-clean runs every authored fresh-world seed before declaring clean", async () => {
+    const gameDir = await temporaryQualitySweepGame(1, [11, 13]);
     const sourceBefore = await snapshotTree(sessionDir(gameDir, "player"));
 
     const result = await runDevelopmentConvergence({
@@ -473,17 +473,23 @@ describe("bounded development sweep", () => {
           revision: expect.stringMatching(/^[a-f0-9]{64}$/),
           file: expect.stringContaining("/.rpg-harness/evidence/quality/objects/"),
         },
-        audit: {
-          seed: 61,
+        audits: [{
+          seed: 11,
           maxSteps: 2,
           maxSegments: 4,
           totals: { lanes: 1, completed: 1 },
           qualityGate: { status: "passed" },
-        },
+        }, {
+          seed: 13,
+          maxSteps: 2,
+          maxSegments: 4,
+          totals: { lanes: 1, completed: 1 },
+          qualityGate: { status: "passed" },
+        }],
       },
     });
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       surfaces: [{
         schemaVersion: 1,
         id: "web-input-contract",
@@ -498,6 +504,71 @@ describe("bounded development sweep", () => {
       }],
     });
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
+  });
+
+  test("one failing authored seed blocks certification and becomes coding work", async () => {
+    const gameDir = await temporarySeedSensitiveQualityGame();
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-seed-failure",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 10,
+      auditMaxSegments: 2,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "stopped",
+      reason: "quality-gate-failed",
+      liveWorklist: { totalItems: 1, nextKey: expect.stringMatching(/^report\//) },
+      qualityGate: {
+        status: "failed",
+        audits: [{
+          seed: 11,
+          qualityGate: { status: "passed" },
+        }, {
+          seed: 13,
+          qualityGate: {
+            status: "failed",
+            violations: ["activity repetition objective/search = 2 > allowed 1"],
+            report: { severity: "major" },
+          },
+        }],
+      },
+    });
+    expect(result.qualityGate?.certificate).toBeUndefined();
+  });
+
+  test("preflights every authored seed before writing the first quality lane", async () => {
+    const gameDir = await temporaryQualitySweepGame(1, [11, 13]);
+    const game = await loadGame(gameDir);
+    await saveSession(
+      gameDir,
+      "quality-seed-preflight-quality-gate-g01-seed-13-objective",
+      createInitialState(game),
+    );
+
+    await expect(runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-seed-preflight",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 2,
+      untilClean: true,
+      pretty: false,
+    })).rejects.toThrow(
+      "Target session already exists: quality-seed-preflight-quality-gate-g01-seed-13-objective",
+    );
+    expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
+      .not.toContain("quality-seed-preflight-quality-gate-g01-seed-11-source");
   });
 
   test("until-clean reuses a valid project-quality certificate without creating audit lanes", async () => {
@@ -583,7 +654,7 @@ describe("bounded development sweep", () => {
     expect(second.qualityGate).toMatchObject({ status: "passed", mode: "executed" });
     expect(second.qualityGate?.inputRevision).not.toBe(first.qualityGate?.inputRevision);
     expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
-      .toContain("quality-edit-second-quality-gate-g01-objective");
+      .toContain("quality-edit-second-quality-gate-g01-seed-73-objective");
   });
 
   test("force-audit bypasses a matching project-quality certificate", async () => {
@@ -620,7 +691,7 @@ describe("bounded development sweep", () => {
       sessionPrefix: "quality-force-second-quality-gate-g01",
     });
     expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
-      .toContain("quality-force-second-quality-gate-g01-objective");
+      .toContain("quality-force-second-quality-gate-g01-seed-79-objective");
     expect(await readFile(firstCertificateFile, "utf-8")).toBe(firstCertificateBody);
     expect(forced.qualityGate?.certificate?.file).not.toBe(firstCertificateFile);
   });
@@ -646,7 +717,7 @@ describe("bounded development sweep", () => {
     const certificateFile = first.qualityGate?.certificate?.file;
     if (!certificateFile) throw new Error("quality gate did not emit a certificate");
     const certificate = JSON.parse(await readFile(certificateFile, "utf-8"));
-    certificate.audit.endings = { forged: 99 };
+    certificate.audits[0].endings = { forged: 99 };
     await writeFile(certificateFile, JSON.stringify(certificate), "utf-8");
 
     const second = await runDevelopmentConvergence({
@@ -658,7 +729,7 @@ describe("bounded development sweep", () => {
       mode: "executed",
       sessionPrefix: "quality-tamper-second-quality-gate-g01",
     });
-    expect(second.qualityGate?.audit?.endings).toEqual({ intro: 1 });
+    expect(second.qualityGate?.audits?.[0]?.endings).toEqual({ intro: 1 });
   });
 
   test("until-clean converts a failed project matrix into the next coding issue", async () => {
@@ -687,13 +758,13 @@ describe("bounded development sweep", () => {
       },
       qualityGate: {
         status: "failed",
-        audit: {
+        audits: [{
           qualityGate: {
             status: "failed",
             violations: ["unique endings 1 < required 2"],
             report: { severity: "major" },
           },
-        },
+        }],
       },
     });
   });
@@ -931,7 +1002,10 @@ async function temporaryDiagnosticSweepGame(): Promise<string> {
   return dir;
 }
 
-async function temporaryQualitySweepGame(minEndings: number): Promise<string> {
+async function temporaryQualitySweepGame(
+  minEndings: number,
+  seeds?: number[],
+): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-quality-"));
   temporaryDirectories.push(dir);
   await mkdir(path.join(dir, "scripts"), { recursive: true });
@@ -939,6 +1013,7 @@ async function temporaryQualitySweepGame(minEndings: number): Promise<string> {
     "title: Quality sweep test",
     "ai_audit:",
     `  personas: [${minEndings > 1 ? "objective, greedy" : "objective"}]`,
+    ...(seeds ? [`  seeds: [${seeds.join(", ")}]`] : []),
     `  min_unique_endings: ${minEndings}`,
     "",
   ].join("\n"), "utf-8");
@@ -963,6 +1038,48 @@ async function temporaryQualitySweepGame(minEndings: number): Promise<string> {
     selfSwitches: { A: false, B: false, C: false, D: false },
   };
   await saveSession(dir, "player", state);
+  return dir;
+}
+
+async function temporarySeedSensitiveQualityGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-seed-quality-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Seed-sensitive quality sweep test",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/world-seed.ts",
+    "ai_audit:",
+    "  personas: [objective]",
+    "  seeds: [11, 13]",
+    "  max_activity_repetitions: 1",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "world-seed.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "world-seed",',
+    '  version: "1",',
+    "  initialize(_game, context) { return { seed: context.seed }; },",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  const seed = (ctx.state["world-seed"] as { seed: number }).seed;',
+    "  const rounds = seed === 13 ? 2 : 1;",
+    "  for (let index = 0; index < rounds; index += 1) {",
+    '    const id = `search:zone-${index}`;',
+    '    yield { type: "hubMenu", snapshot: { day: index, maxDay: rounds, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "finish", title: "Finish", scope: "main", terminal: false, status: "active", relatedActivityIds: [id] }], activities: [{ id, kind: "action", actionKind: "search", title: "Search", cost: 0, available: true }] } };',
+    "  }",
+    '  yield { type: "gameEnd", reason: "done", endingId: "ending" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
   return dir;
 }
 

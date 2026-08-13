@@ -8,9 +8,9 @@ connections:
   - { dir: 川沿い, target: sumida_river_drift_pier }
   - { dir: 戻る, target: sumida_river_reed_marsh }
 encounter_table:
-  - { enemy: oni_warrior, weight: 50 }
+  - { enemy: oni_warrior, weight: 40 }
   - { enemy: oni_lesser, weight: 30 }
-  - { enemy: null, weight: 20 }
+  - { enemy: null, weight: 30 }
 loot_table:
   - { item: oni_horn, min: 1, max: 1, weight: 40 }
   - { item: soul_shard, min: 2, max: 3, weight: 40 }

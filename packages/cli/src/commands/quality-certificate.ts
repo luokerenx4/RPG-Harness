@@ -12,16 +12,16 @@ export interface QualityAuditInputs {
   policy: AiAuditConfig;
   maxSteps: number;
   maxSegments: number;
-  seed: number;
+  seeds: number[];
 }
 
 export interface QualityAuditCertificate {
-  schemaVersion: 2;
+  schemaVersion: 3;
   revision: string;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
-  audit: ProjectQualityAuditSummary;
+  audits: ProjectQualityAuditSummary[];
   surfaces: QualitySurfaceEvidence[];
 }
 
@@ -31,11 +31,11 @@ export interface CurrentQualityAuditCertificate {
 }
 
 interface QualityAuditCertificatePayload {
-  schemaVersion: 2;
+  schemaVersion: 3;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
-  audit: ProjectQualityAuditSummary;
+  audits: ProjectQualityAuditSummary[];
   surfaces: QualitySurfaceEvidence[];
 }
 
@@ -196,7 +196,7 @@ export async function readQualityAuditCertificate(
   }
   if (
     !isRecord(reference) ||
-    reference.schemaVersion !== 2 ||
+    reference.schemaVersion !== 3 ||
     reference.inputRevision !== inputRevision ||
     !isSha256(reference.certificateRevision)
   ) return null;
@@ -213,13 +213,13 @@ export async function readQualityAuditCertificate(
     }
     throw error;
   }
-  if (!isRecord(value) || value.schemaVersion !== 2) return null;
+  if (!isRecord(value) || value.schemaVersion !== 3) return null;
   const certificate = value as unknown as QualityAuditCertificate;
   if (
     certificate.inputRevision !== inputRevision ||
     !isSha256(certificate.revision) ||
     certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
-    certificate.audit?.qualityGate?.status !== "passed" ||
+    !hasPassingAudits(certificate.audits) ||
     !hasRequiredQualitySurfaces(certificate.surfaces)
   ) return null;
   return { certificate, file };
@@ -256,17 +256,18 @@ export async function findCurrentQualityAuditCertificate(
     } catch {
       continue;
     }
-    if (!isRecord(value) || value.schemaVersion !== 2) continue;
+    if (!isRecord(value) || value.schemaVersion !== 3) continue;
     const certificate = value as unknown as QualityAuditCertificate;
     const filenameRevision = entry.slice(0, -".json".length);
     if (
       certificate.revision !== filenameRevision ||
       certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
-      certificate.audit?.qualityGate?.status !== "passed" ||
+      !hasPassingAudits(certificate.audits) ||
       !hasRequiredQualitySurfaces(certificate.surfaces)
     ) continue;
-    const policy = certificate.audit.qualityGate.policy;
-    const personas = certificate.audit.lanes.map((lane) => lane.persona);
+    const firstAudit = certificate.audits[0]!;
+    const policy = firstAudit.qualityGate!.policy;
+    const personas = firstAudit.lanes.map((lane) => lane.persona);
     if (
       !game.aiAudit ||
       canonicalJson(game.aiAudit) !== canonicalJson(policy) ||
@@ -275,9 +276,9 @@ export async function findCurrentQualityAuditCertificate(
     const inputs: QualityAuditInputs = {
       personas,
       policy,
-      maxSteps: certificate.audit.maxSteps,
-      maxSegments: certificate.audit.maxSegments,
-      seed: certificate.audit.seed,
+      maxSteps: firstAudit.maxSteps,
+      maxSegments: firstAudit.maxSegments,
+      seeds: certificate.audits.map((audit) => audit.seed),
     };
     const inputsKey = canonicalJson(inputs);
     let currentRevision = currentByInputs.get(inputsKey);
@@ -300,19 +301,19 @@ export async function writeQualityAuditCertificate(
   args: {
     inputRevision: string;
     sessionPrefix: string;
-    audit: ProjectQualityAuditSummary;
+    audits: ProjectQualityAuditSummary[];
   },
 ): Promise<{ certificate: QualityAuditCertificate; file: string }> {
-  if (args.audit.qualityGate?.status !== "passed") {
-    throw new Error("Only a passed project audit can be certified");
+  if (!hasPassingAudits(args.audits)) {
+    throw new Error("Only a non-empty matrix of passed project audits can be certified");
   }
   const surfaces = await runQualitySurfaceChecks();
   const payload: QualityAuditCertificatePayload = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     inputRevision: args.inputRevision,
     createdAt: new Date().toISOString(),
     sessionPrefix: args.sessionPrefix,
-    audit: args.audit,
+    audits: args.audits,
     surfaces,
   };
   const certificate: QualityAuditCertificate = {
@@ -328,7 +329,7 @@ export async function writeQualityAuditCertificate(
   );
   await mkdir(path.dirname(referenceFile), { recursive: true });
   await writeJsonAtomically(referenceFile, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     inputRevision: args.inputRevision,
     certificateRevision: certificate.revision,
   });
@@ -486,6 +487,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSha256(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function hasPassingAudits(
+  value: unknown,
+): value is ProjectQualityAuditSummary[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const seeds = value.flatMap((audit) =>
+    isRecord(audit) && Number.isInteger(audit.seed) ? [audit.seed as number] : []
+  );
+  if (seeds.length !== value.length || new Set(seeds).size !== seeds.length) return false;
+  const first = value[0];
+  if (!isRecord(first) || !isRecord(first.qualityGate)) return false;
+  const firstPolicy = first.qualityGate.policy;
+  const firstPersonas = Array.isArray(first.lanes)
+    ? first.lanes.flatMap((lane) =>
+      isRecord(lane) && typeof lane.persona === "string" ? [lane.persona] : []
+    )
+    : [];
+  if (
+    !isRecord(firstPolicy) ||
+    firstPersonas.length === 0 ||
+    (Array.isArray(firstPolicy.seeds) && canonicalJson(firstPolicy.seeds) !== canonicalJson(seeds))
+  ) return false;
+  return value.every((audit) =>
+    isRecord(audit) &&
+    Number.isInteger(audit.seed) &&
+    isRecord(audit.qualityGate) &&
+    audit.qualityGate.status === "passed" &&
+    canonicalJson(audit.qualityGate.policy) === canonicalJson(firstPolicy) &&
+    Array.isArray(audit.lanes) &&
+    canonicalJson(audit.lanes.map((lane) => isRecord(lane) ? lane.persona : null)) ===
+      canonicalJson(firstPersonas) &&
+    audit.maxSteps === first.maxSteps &&
+    audit.maxSegments === first.maxSegments
+  );
 }
 
 function toPosix(value: string): string {

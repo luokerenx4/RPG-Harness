@@ -263,7 +263,7 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
   const label = !clean
     ? `AI Dev · ${status.worklist.total} pending${status.worklist.highestPriority ? ` · ${status.worklist.highestPriority}` : ""}`
     : certified
-      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths${pacing && pacingLimit ? ` · loop ${pacing.count}/${pacingLimit}` : ""}`
+      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths · ${status.quality.seeds.length} seeds${pacing && pacingLimit ? ` · loop ${pacing.count}/${pacingLimit}` : ""}`
       : "AI Dev · clean · audit pending";
   const detail = !clean
     ? [
@@ -275,8 +275,9 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
     : certified
       ? [
           "Current game/runtime inputs passed AI audit.",
+          `Fresh-world seeds: ${status.quality.seeds.join(", ")}.`,
           pacing && pacingLimit
-            ? `Heaviest semantic loop: ${pacing.persona}/${pacing.activityKind} ×${pacing.count} (limit ${pacingLimit}).`
+            ? `Heaviest semantic loop: seed ${pacing.seed}, ${pacing.persona}/${pacing.activityKind} ×${pacing.count} (limit ${pacingLimit}).`
             : undefined,
           `Certificate: ${status.quality.certificateRevision}`,
         ].filter(Boolean).join("\n")

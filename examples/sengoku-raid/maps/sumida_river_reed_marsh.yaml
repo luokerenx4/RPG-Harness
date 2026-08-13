@@ -7,8 +7,8 @@ connections:
   - { dir: 沼奥, target: sumida_river_drowned_shrine }
   - { dir: 戻る, target: sumida_river_bridge_foot }
 encounter_table:
-  - { enemy: oni_lesser, weight: 60 }
-  - { enemy: null, weight: 40 }
+  - { enemy: oni_lesser, weight: 50 }
+  - { enemy: null, weight: 50 }
 loot_table:
   - { item: soul_shard, min: 1, max: 2, weight: 50 }
   - { item: ryo, min: 10, max: 20, weight: 30 }

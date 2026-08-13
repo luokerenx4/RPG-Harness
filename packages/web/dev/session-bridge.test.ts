@@ -164,6 +164,7 @@ describe("Web development session bridge", () => {
         createdAt: null,
         endings: 0,
         paths: 0,
+        seeds: [],
         maxActivityRepetitions: null,
         maxActivityRepetition: null,
       },

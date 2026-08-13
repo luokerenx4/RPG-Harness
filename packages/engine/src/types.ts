@@ -25,6 +25,8 @@ export interface VariableDef {
 export interface AiAuditConfig {
   /** Project-owned acceptance matrix. CLI defaults are only a fallback. */
   personas?: string[];
+  /** Independent fresh-world seeds that must all satisfy the acceptance matrix. */
+  seeds?: number[];
   minUniqueEndings?: number;
   minUniqueDecisionPaths?: number;
   /** Maximum times one semantic activity kind may repeat in any acceptance lane. */

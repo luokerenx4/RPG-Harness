@@ -93,6 +93,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   const obj = raw as Record<string, unknown>;
   const known = new Set([
     "personas",
+    "seeds",
     "min_unique_endings",
     "min_unique_decision_paths",
     "max_activity_repetitions",
@@ -119,6 +120,24 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
       throw new ManifestParseError("ai_audit.personas must not contain duplicates");
     }
     config.personas = personas;
+  }
+  if (obj.seeds !== undefined) {
+    if (
+      !Array.isArray(obj.seeds) ||
+      obj.seeds.length === 0 ||
+      obj.seeds.some((seed) =>
+        !Number.isInteger(seed) || (seed as number) < 0 || (seed as number) > 0xffff_ffff
+      )
+    ) {
+      throw new ManifestParseError(
+        "ai_audit.seeds must be a non-empty array of uint32 integers",
+      );
+    }
+    const seeds = obj.seeds as number[];
+    if (new Set(seeds).size !== seeds.length) {
+      throw new ManifestParseError("ai_audit.seeds must not contain duplicates");
+    }
+    config.seeds = [...seeds];
   }
   if (obj.required_activity_tags !== undefined) {
     if (

@@ -318,7 +318,8 @@ deterministic search whose closest branch applied zero inputs is reported in
 `safety.searchStalls` as `no-state-progress` instead of rerunning the identical
 slice. The source player save is never written.
 Before `--until-clean` returns clean, it runs the exact `game.yaml ai_audit`
-acceptance matrix from a seeded fresh game. A passing verdict becomes a
+acceptance matrix from every author-declared fresh-game seed. `--audit-seed`
+is only the fallback for projects without `ai_audit.seeds`. A passing verdict becomes a
 immutable content-addressed certificate under `.rpg-harness/evidence/quality/`, binding
 the game behavior files, local Headless engine/parser/CLI implementation, Web
 GUI/input bridge, audit policy, personas, budgets, and seed. Repeating the same clean convergence
@@ -693,13 +694,17 @@ Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
 ```yaml
 ai_audit:
   personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
+  seeds: [1, 17, 2718, 65535]
   min_unique_endings: 2
   min_unique_decision_paths: 3
   required_activity_tags: [cautious, economic, aggressive]
   required_scripts: [deep_route_coda]
 ```
 
-Projects may declare the acceptance `personas` beside their thresholds. With no
+Projects may declare the acceptance `personas` and independent fresh-world
+`seeds` beside their thresholds. `sweep --until-clean` runs the full persona
+matrix once per declared seed; one failed seed blocks the v3 project certificate
+and creates its own replayable audit issue. With no
 `--personas` override, `audit` runs that project-owned matrix; an explicit
 diagnostic subset remains runnable but is `not-evaluated` against the project
 gate, so an impossible subset cannot create false quality debt. Thresholds may

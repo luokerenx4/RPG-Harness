@@ -144,7 +144,7 @@ export interface SweepConvergenceResult {
     sessionPrefix: string;
     inputRevision?: string;
     certificate?: { revision: string; file: string };
-    audit?: ProjectQualityAuditSummary;
+    audits?: ProjectQualityAuditSummary[];
   };
   resume: SweepResult["resume"];
   generations: Array<{
@@ -398,13 +398,13 @@ async function evaluateProjectQualityGate(
   }
   const maxSteps = args.auditMaxSteps ?? 1000;
   const maxSegments = args.auditMaxSegments ?? 4;
-  const seed = args.auditSeed ?? 1_592_597_881;
+  const seeds = policy.seeds ?? [args.auditSeed ?? 1_592_597_881];
   const inputRevision = await qualityAuditInputRevision(args.gameDir, {
     personas,
     policy,
     maxSteps,
     maxSegments,
-    seed,
+    seeds,
   });
   if (!args.forceAudit) {
     const cached = await readQualityAuditCertificate(args.gameDir, inputRevision);
@@ -421,28 +421,47 @@ async function evaluateProjectQualityGate(
             revision: cached.certificate.revision,
             file: cached.file,
           },
-          audit: cached.certificate.audit,
+          audits: cached.certificate.audits,
         },
       };
     }
   }
-  const audit = await runAudit({
-    gameDir: args.gameDir,
-    sessionPrefix,
-    personas,
-    maxSteps,
-    maxSegments,
-    seed,
-    reportOnStop: true,
-    pretty: false,
-  });
-  const status = audit.qualityGate?.status ?? "not-evaluated";
-  const compactAudit = compactProjectQualityAudit(audit);
+  // Treat the author-declared seed matrix as one batch. A collision in a later
+  // seed must fail before the first source/lane/report session is materialized,
+  // otherwise a retry sees a misleading half-written quality run.
+  for (const seed of seeds) {
+    const seedPrefix = `${sessionPrefix}-seed-${seed}`;
+    for (const target of [
+      `${seedPrefix}-source`,
+      ...personas.map((persona) => `${seedPrefix}-${persona}`),
+      `${seedPrefix}-quality-gate`,
+    ]) {
+      assertSessionName(target);
+      await assertTargetEmpty(args.gameDir, target);
+    }
+  }
+  const audits: ProjectQualityAuditSummary[] = [];
+  for (const seed of seeds) {
+    const audit = await runAudit({
+      gameDir: args.gameDir,
+      sessionPrefix: `${sessionPrefix}-seed-${seed}`,
+      personas,
+      maxSteps,
+      maxSegments,
+      seed,
+      reportOnStop: true,
+      pretty: false,
+    });
+    audits.push(compactProjectQualityAudit(audit));
+  }
+  const status = audits.every((audit) => audit.qualityGate?.status === "passed")
+    ? "passed" as const
+    : "failed" as const;
   if (status === "passed") {
     const certified = await writeQualityAuditCertificate(args.gameDir, {
       inputRevision,
       sessionPrefix,
-      audit: compactAudit,
+      audits,
     });
     return {
       finalStatus: "clean",
@@ -456,7 +475,7 @@ async function evaluateProjectQualityGate(
           revision: certified.certificate.revision,
           file: certified.file,
         },
-        audit: compactAudit,
+        audits,
       },
     };
   }
@@ -468,7 +487,7 @@ async function evaluateProjectQualityGate(
       mode: "executed",
       sessionPrefix,
       inputRevision,
-      audit: compactAudit,
+      audits,
     },
   };
 }

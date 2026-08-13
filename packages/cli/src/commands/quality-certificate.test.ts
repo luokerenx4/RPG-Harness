@@ -40,7 +40,7 @@ describe("project quality certificate input", () => {
       policy: { personas: ["objective"], minUniqueEndings: 1 },
       maxSteps: 10,
       maxSegments: 2,
-      seed: 7,
+      seeds: [7],
     };
     const before = await qualityAuditInputRevision(
       gameDir,

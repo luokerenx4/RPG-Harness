@@ -8,6 +8,10 @@ modules:
 # reproducible coding issue at the frozen audit source checkpoint.
 ai_audit:
   personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
+  # Every seed is a separate fresh world. All must pass before sweep may issue
+  # a project certificate; this keeps one lucky encounter sequence from hiding
+  # a stochastic grind or soft lock.
+  seeds: [1, 17, 2718, 65535, 38173]
   min_unique_endings: 2
   min_unique_decision_paths: 3
   # A route may revisit a semantic action, but no acceptance persona should
