@@ -4,9 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
 import { sessionStateRevision } from "@rpg-harness/session-store";
 import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 13;
+  schemaVersion: 14;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -27,6 +28,7 @@ export interface WebQualitySurfaceEvidence {
       | "branch-control-handoff"
       | "bounded-ai-coplay"
       | "persistent-ai-coplay"
+      | "shareable-game-route"
       | "feedback-live-routing";
     text: string;
   }>;
@@ -162,19 +164,34 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(branchControlHandoffProjection());
   projections.push(boundedAiCoplayProjection());
   projections.push(persistentAiCoplayProjection());
+  projections.push(shareableGameRouteProjection());
   projections.push(feedbackLiveRoutingProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 13,
+    schemaVersion: 14,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function shareableGameRouteProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const route = webGameRoute(
+    "http://127.0.0.1:5188/?session=ai-branch",
+    "sengoku-raid",
+  );
+  if (
+    route !== "/?session=ai-branch&game=sengoku-raid" ||
+    requestedWebGame(route) !== "sengoku-raid" ||
+    webGameRoute(`http://127.0.0.1:5188${route}`, null) !==
+      "/?session=ai-branch"
+  ) throw new Error("Web game route cannot survive refresh and return to picker");
+  return { surface: "shareable-game-route", text: route };
 }
 
 function persistentAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][number] {

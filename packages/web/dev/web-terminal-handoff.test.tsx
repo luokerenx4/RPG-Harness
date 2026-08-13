@@ -58,7 +58,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 13,
+      schemaVersion: 14,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -101,6 +101,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "persistent-ai-coplay",
         text: "random@2718 · web · state 56e32233d741",
+      }, {
+        surface: "shareable-game-route",
+        text: "/?session=ai-branch&game=sengoku-raid",
       }, {
         surface: "feedback-live-routing",
         text: "scripts/current.mdRouting: live checkpoint / current runtime",

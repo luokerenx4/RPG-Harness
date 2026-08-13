@@ -593,6 +593,28 @@ export function requestedSharedSession(search: string): string | null {
   return requested;
 }
 
+/** Stable game selection carried by shareable local co-play URLs. */
+export function requestedWebGame(search: string): string | null {
+  const requested = new URLSearchParams(search).get("game");
+  if (requested === null || requested === "") return null;
+  if (
+    requested === "." ||
+    requested === ".." ||
+    requested.includes("/") ||
+    requested.includes("\\") ||
+    requested.includes("\0")
+  ) return null;
+  return requested;
+}
+
+/** Preserve the session and any future route fields while entering/leaving a game. */
+export function webGameRoute(href: string, gameId: string | null): string {
+  const url = new URL(href, "http://localhost");
+  if (gameId === null) url.searchParams.delete("game");
+  else url.searchParams.set("game", gameId);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 async function detectSessionInfo(): Promise<WebSessionInfo> {
   try {
     const response = await fetch(BRIDGE_ROOT, {

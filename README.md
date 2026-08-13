@@ -24,7 +24,9 @@ TUI, or `rpgh step` move atomically rebinds it to the resulting save, while a
 stale or manually replaced save drops the cursor instead of guessing. The
 player's next click takes the next turn without a stop-task race. `rpgh
 personas <game-dir>` exposes the same project-extensible registry to other
-tools.
+tools. Entering a Web game also retains both `session` and `game` in the URL,
+so refreshing or sharing that address resumes the same playable branch instead
+of dropping back to the project picker.
 
 ## Make your own
 

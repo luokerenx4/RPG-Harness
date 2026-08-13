@@ -13,10 +13,12 @@ import {
   loadExplorationStatus,
   loadFeedbackFeed,
   pollExternalState,
+  requestedWebGame,
   advanceAiTurn,
   saveState,
   startNextExploration,
   submitFeedback,
+  webGameRoute,
   type WebSessionInfo,
   type WebAiTurnReceipt,
   type WebBranchContext,
@@ -52,7 +54,7 @@ export function App() {
   const [autoStartConsumed, setAutoStartConsumed] = useState(false);
   const [aiTurnPending, setAiTurnPending] = useState(false);
   const requestedGame = useMemo(
-    () => new URLSearchParams(window.location.search).get("game"),
+    () => requestedWebGame(window.location.search),
     [],
   );
 
@@ -95,6 +97,11 @@ export function App() {
         ...(branchContext ? { branchContext } : {}),
         ...(feedbackFeed ? { feedbackFeed } : {}),
       });
+      window.history.replaceState(
+        window.history.state,
+        "",
+        webGameRoute(window.location.href, id),
+      );
     } catch (err) {
       setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
     }
@@ -267,6 +274,11 @@ export function App() {
 
   const exit = useCallback(() => {
     setLoaded(null);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      webGameRoute(window.location.href, null),
+    );
     void refreshSessions();
   }, [refreshSessions]);
 
