@@ -28,6 +28,23 @@ export interface WebSessionInfo {
   label: string;
 }
 
+export interface WebBranchContext {
+  fromSession: string;
+  sourceLogEntry: number;
+  mode: string;
+  handoff: {
+    schemaVersion: 1;
+    workKey: string;
+    priority: "P0" | "P1" | "P2" | "P3";
+    kind: string;
+    title: string;
+    operation: string;
+    state: "target-reached" | "closest" | "reproduced" | "covered";
+    preparedAt: string;
+    target?: string;
+  } | null;
+}
+
 export interface WebDevelopmentStatus {
   revision: string;
   worklist: {
@@ -114,6 +131,19 @@ export async function loadDevelopmentStatus(
   );
   if (!response.ok) throw await bridgeError(response);
   return await response.json() as WebDevelopmentStatus;
+}
+
+export async function loadBranchContext(
+  gameId: string,
+): Promise<WebBranchContext | null> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return null;
+  const response = await fetch(
+    `${BRIDGE_ROOT}/branch/${encodeURIComponent(gameId)}/${encodeURIComponent(info.session)}`,
+  );
+  if (!response.ok) throw await bridgeError(response);
+  const payload = (await response.json()) as { branch?: unknown };
+  return (payload.branch ?? null) as WebBranchContext | null;
 }
 
 export async function saveState(

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { DevelopmentBadge, StageView } from "../src/WebPlayScreen";
+import { BranchHandoffBadge, DevelopmentBadge, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
@@ -49,6 +49,30 @@ describe("Web terminal handoff", () => {
 
     expect(html).toContain("― 終 ―");
     expect(html).not.toContain("ended-ending-id");
+  });
+
+  test("explains why an AI-prepared branch was handed to the player", () => {
+    const html = renderToStaticMarkup(<BranchHandoffBadge branch={{
+      fromSession: "player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply?",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        target: "scripts/scene.md",
+      },
+    }} />);
+
+    expect(html).toContain("AI 分支 · P2 · Reach authored choice: Reply?");
+    expect(html).toContain("Work: choice-authoring/scene/reply");
+    expect(html).toContain("Source: player @ log 7 (checkpoint)");
+    expect(html).toContain("Target: scripts/scene.md");
   });
 
   test("shows a certified project verdict next to the shared GUI session", () => {

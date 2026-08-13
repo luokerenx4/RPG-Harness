@@ -1,4 +1,5 @@
-import { access, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { access, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInitialState, type ComposedState } from "@rpg-harness/engine";
 import {
@@ -40,6 +41,18 @@ export interface ForkSource {
 export interface CreateForkFromSourceHooks {
   /** Runs after state, provenance, and the fork log are written, while the target lock is held. */
   onCreatedWhileLocked?: () => void | Promise<void>;
+}
+
+export interface DevelopmentBranchHandoff {
+  schemaVersion: 1;
+  workKey: string;
+  priority: "P0" | "P1" | "P2" | "P3";
+  kind: string;
+  title: string;
+  operation: string;
+  state: "target-reached" | "closest" | "reproduced" | "covered";
+  preparedAt: string;
+  target?: string;
 }
 
 export async function forkCommand(args: ForkArgs): Promise<void> {
@@ -176,6 +189,37 @@ export async function createForkFromSourceWithLockHeld(
   );
   await hooks.onCreatedWhileLocked?.();
   return { session: args.to, ...provenance };
+}
+
+/**
+ * Attach the coding-work intent to an already materialized branch. The save
+ * state remains untouched; Web can project this advisory metadata alongside
+ * the exact fork provenance when handing the branch to a player.
+ */
+export async function attachDevelopmentBranchHandoff(
+  gameDir: string,
+  session: string,
+  handoff: DevelopmentBranchHandoff,
+): Promise<DevelopmentBranchHandoff> {
+  assertSessionName(session);
+  return withSessionLock(gameDir, session, async () => {
+    const file = path.join(sessionDir(gameDir, session), "fork.json");
+    const value = JSON.parse(await readFile(file, "utf-8")) as Record<string, unknown>;
+    if (value.schemaVersion !== 1 || typeof value.fromSession !== "string") {
+      throw new Error(`Cannot attach development handoff to invalid fork: ${session}`);
+    }
+    const temporary = path.join(
+      sessionDir(gameDir, session),
+      `.fork-${randomUUID()}.tmp`,
+    );
+    await writeFile(
+      temporary,
+      JSON.stringify({ ...value, handoff }, null, 2) + "\n",
+      "utf-8",
+    );
+    await rename(temporary, file);
+    return handoff;
+  });
 }
 
 export async function readSessionLog(

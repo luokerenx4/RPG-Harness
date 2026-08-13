@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState, peek, step } from "@rpg-harness/engine";
@@ -321,6 +321,22 @@ describe("structured development work execution", () => {
     });
     expect(result.result).not.toHaveProperty("inputs");
     expect(result.result).not.toHaveProperty("closest");
+    expect(JSON.parse(await readFile(
+      path.join(sessionDir(gameDir, "ai-reach-reply"), "fork.json"),
+      "utf-8",
+    ))).toMatchObject({
+      fromSession: "fresh-player",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply.",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: expect.any(String),
+      },
+    });
     expect(await snapshotTree(sessionDir(gameDir, "fresh-player"))).toEqual(sourceBefore);
   });
 

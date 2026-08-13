@@ -146,6 +146,13 @@ the shared segmented budget without errors or rejected inputs, but do not
 participate in strategy diversity or repetition scoring. Their exact seed,
 decision count, path revision, GUI session, and ending remain certificate
 evidence, so stochastic exploration is reproducible rather than anecdotal.
+Playable branches created by the structured `work` executor also persist a small
+development handoff next to their fork provenance. It names the stable work
+item, priority, intent, source coordinate, operation, and readiness state; the
+Web bridge exposes it read-only and the GUI renders it in the HUD. This closes
+the human/agent handoff: Headless can prepare an exact coding-issue scene while
+the player understands why that isolated save exists before making the next
+choice.
 The final `sweep --until-clean` acceptance is also persisted as a project
 quality certificate. Its input revision covers authored behavior plus the
 Headless engine, parser, session-store, CLI evaluator, Web GUI/input bridge,

@@ -13,6 +13,10 @@ import { verifyAuditReport } from "./verify-audit";
 import { verifyAutoplayReport } from "./verify-autoplay";
 import { collectSessionTranscript } from "./transcript";
 import {
+  attachDevelopmentBranchHandoff,
+  type DevelopmentBranchHandoff,
+} from "./fork";
+import {
   collectDevelopmentWorklist,
   type DevelopmentOperation,
   type DevelopmentWorkItem,
@@ -126,7 +130,11 @@ export async function executeDevelopmentWorkItem(
         session: operation.args.session,
         to: target,
       });
-      return executed(selection, operation, "isolated-session", true, target, result);
+      const handoff = await attachWorkHandoff(args, item, target, "reproduced");
+      return executed(selection, operation, "isolated-session", true, target, {
+        ...result,
+        handoff,
+      });
     }
     case "verify-audit": {
       const target = requireNewSession(args, item);
@@ -164,13 +172,14 @@ export async function executeDevelopmentWorkItem(
         verbose: false,
         pretty: false,
       });
+      const handoff = await attachWorkHandoff(args, item, target, "covered");
       return executed(
         selection,
         operation,
         "isolated-session",
         true,
         target,
-        compactCoverResult(result),
+        { ...compactCoverResult(result), handoff },
       );
     }
     case "reach": {
@@ -195,6 +204,18 @@ export async function executeDevelopmentWorkItem(
         pretty: false,
       });
       const wroteSession = result.session !== undefined;
+      const handoff = wroteSession
+        ? await attachWorkHandoff(
+            args,
+            item,
+            result.session!,
+            result.found ? "target-reached" : "closest",
+          )
+        : undefined;
+      const compact = {
+        ...compactReachResult(result),
+        ...(handoff ? { handoff } : {}),
+      };
       return result.found
         ? executed(
             selection,
@@ -202,20 +223,20 @@ export async function executeDevelopmentWorkItem(
             wroteSession ? "isolated-session" : "read-only",
             wroteSession,
             result.session ?? null,
-            compactReachResult(result),
+            compact,
           )
         : result.status === "paused"
           ? pausedAfterWrite(
               selection,
               operation,
               result.session ?? target,
-              compactReachResult(result),
+              compact,
             )
           : failedAfterWrite(
               selection,
               operation,
               result.session ?? target,
-              compactReachResult(result),
+              compact,
             );
     }
     case "reach-script": {
@@ -237,6 +258,13 @@ export async function executeDevelopmentWorkItem(
         maxSteps: args.maxSteps ?? 250,
         pretty: false,
       });
+      const handoff = await attachWorkHandoff(
+        args,
+        item,
+        result.session ?? target,
+        result.found ? "covered" : "closest",
+      );
+      const compact = { ...compactReachScriptResult(result), handoff };
       return result.found
         ? executed(
             selection,
@@ -244,20 +272,20 @@ export async function executeDevelopmentWorkItem(
             "isolated-session",
             true,
             result.session ?? null,
-            compactReachScriptResult(result),
+            compact,
           )
         : result.status === "paused"
           ? pausedAfterWrite(
               selection,
               operation,
               result.session ?? target,
-              compactReachScriptResult(result),
+              compact,
             )
           : failedAfterWrite(
               selection,
               operation,
               result.session ?? target,
-              compactReachScriptResult(result),
+              compact,
             );
     }
     case "edit": {
@@ -291,6 +319,25 @@ export async function executeDevelopmentWorkItem(
       };
     }
   }
+}
+
+async function attachWorkHandoff(
+  args: WorkArgs,
+  item: DevelopmentWorkItem,
+  session: string,
+  state: DevelopmentBranchHandoff["state"],
+): Promise<DevelopmentBranchHandoff> {
+  return attachDevelopmentBranchHandoff(args.gameDir, session, {
+    schemaVersion: 1,
+    workKey: item.key,
+    priority: item.priority,
+    kind: item.kind,
+    title: item.title,
+    operation: item.operation.command,
+    state,
+    preparedAt: new Date().toISOString(),
+    ...(item.target ? { target: item.target } : {}),
+  });
 }
 
 function compactCoverResult(result: CoverChoiceSummary) {

@@ -786,6 +786,14 @@ because a sample is not evidence of authored intent.
 without requiring an agent to manually translate evidence into `fork` and
 `step` commands, and fails closed if live authoring removed, locked, or replaced
 the targeted stable option.
+`work` adds a development handoff to every playable isolated branch it materializes:
+the stable work key, priority, intent, operation, source fork, and whether the
+target was reached, only a closest state was found, the issue was reproduced,
+or the work was already covered are persisted beside
+`fork.json`. The readiness value records the materialization result rather than
+pretending to track later player inputs. The local Web GUI projects that metadata into its HUD, so a player
+opening the returned `webPath` can see why the AI prepared this exact scene
+without reading terminal output or letting the agent advance the player save.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

@@ -524,6 +524,24 @@ body {
   border: 1px solid #31533e;
   border-radius: 8px;
 }
+.hud-handoff {
+  align-self: center;
+  max-width: min(520px, 100%);
+  overflow: hidden;
+  padding: 6px 10px;
+  color: #d9c6f2;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(35, 24, 49, 0.92);
+  border: 1px solid #72558d;
+  border-radius: 8px;
+}
+.hud-handoff.closest {
+  color: #efd5a2;
+  background: rgba(48, 34, 18, 0.92);
+  border-color: #806235;
+}
 .hud-development {
   align-self: center;
   padding: 6px 10px;

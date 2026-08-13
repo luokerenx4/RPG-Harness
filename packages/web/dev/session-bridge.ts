@@ -47,6 +47,23 @@ export interface BridgeSessionSnapshot {
   revision: string | null;
 }
 
+export interface BridgeBranchContext {
+  fromSession: string;
+  sourceLogEntry: number;
+  mode: string;
+  handoff: {
+    schemaVersion: 1;
+    workKey: string;
+    priority: "P0" | "P1" | "P2" | "P3";
+    kind: string;
+    title: string;
+    operation: string;
+    state: "target-reached" | "closest" | "reproduced" | "covered";
+    preparedAt: string;
+    target?: string;
+  } | null;
+}
+
 export interface BridgeDevelopmentStatus {
   revision: string;
   worklist: {
@@ -209,6 +226,46 @@ export async function loadBridgeSnapshot(
   };
 }
 
+export async function loadBridgeBranchContext(
+  gameDir: string,
+  session: string,
+): Promise<BridgeBranchContext | null> {
+  assertSegment(session, "session");
+  let raw: string;
+  try {
+    raw = await readFile(
+      path.join(sessionDirectory(gameDir, session), "fork.json"),
+      "utf-8",
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const value = JSON.parse(raw) as Record<string, unknown>;
+  const modes = new Set([
+    "checkpoint",
+    "initial-state",
+    "current-state",
+    "playtest-checkpoint",
+    "playtest-replay-checkpoint",
+  ]);
+  if (
+    typeof value.fromSession !== "string" ||
+    !Number.isInteger(value.sourceLogEntry) || (value.sourceLogEntry as number) < 0 ||
+    typeof value.mode !== "string" || !modes.has(value.mode)
+  ) {
+    throw new Error(`Invalid fork provenance for session: ${session}`);
+  }
+  assertSegment(value.fromSession, "source session");
+  const handoff = parseBridgeHandoff(value.handoff);
+  return {
+    fromSession: value.fromSession,
+    sourceLogEntry: value.sourceLogEntry as number,
+    mode: value.mode,
+    handoff,
+  };
+}
+
 export async function saveBridgeSession(
   args: SaveBridgeSessionArgs,
 ): Promise<string> {
@@ -359,6 +416,21 @@ async function handleBridgeRequest(
       return true;
     }
 
+    const branchMatch = url.pathname.match(
+      /^\/__rpgh\/session-bridge\/branch\/([^/]+)\/([^/]+)$/,
+    );
+    if (branchMatch) {
+      if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
+      const gameId = decodeURIComponent(branchMatch[1] ?? "");
+      const session = decodeURIComponent(branchMatch[2] ?? "");
+      assertSegment(gameId, "game id");
+      assertSegment(session, "session");
+      const gameDir = path.join(examplesRoot, gameId);
+      await access(path.join(gameDir, "game.yaml"));
+      sendJson(res, 200, { branch: await loadBridgeBranchContext(gameDir, session) });
+      return true;
+    }
+
     const match = url.pathname.match(
       /^\/__rpgh\/session-bridge\/session\/([^/]+)\/([^/]+)$/,
     );
@@ -417,6 +489,30 @@ async function handleBridgeRequest(
     });
     return true;
   }
+}
+
+function parseBridgeHandoff(value: unknown): BridgeBranchContext["handoff"] {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid development branch handoff");
+  }
+  const handoff = value as Record<string, unknown>;
+  const priorities = new Set(["P0", "P1", "P2", "P3"]);
+  const states = new Set(["target-reached", "closest", "reproduced", "covered"]);
+  if (
+    handoff.schemaVersion !== 1 ||
+    typeof handoff.workKey !== "string" || !handoff.workKey.trim() ||
+    typeof handoff.priority !== "string" || !priorities.has(handoff.priority) ||
+    typeof handoff.kind !== "string" || !handoff.kind.trim() ||
+    typeof handoff.title !== "string" || !handoff.title.trim() ||
+    typeof handoff.operation !== "string" || !handoff.operation.trim() ||
+    typeof handoff.state !== "string" || !states.has(handoff.state) ||
+    typeof handoff.preparedAt !== "string" || !handoff.preparedAt.trim() ||
+    (handoff.target !== undefined && typeof handoff.target !== "string")
+  ) {
+    throw new Error("Invalid development branch handoff");
+  }
+  return handoff as unknown as NonNullable<BridgeBranchContext["handoff"]>;
 }
 
 function revisionOf(state: unknown): string {

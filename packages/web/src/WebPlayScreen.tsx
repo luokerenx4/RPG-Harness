@@ -34,7 +34,11 @@ import {
 } from "@rpg-harness/frontend-core";
 import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
-import type { WebDevelopmentStatus, WebStepEvent } from "./session";
+import type {
+  WebBranchContext,
+  WebDevelopmentStatus,
+  WebStepEvent,
+} from "./session";
 
 // The browser twin of packages/cli/src/components/PlayScreen.tsx. Same
 // engine pump (new Engine → run() → next(input)), same screen-model
@@ -61,6 +65,7 @@ interface Props {
     event?: WebStepEvent,
   ) => void | Promise<void>;
   sessionLabel?: string;
+  branchContext?: WebBranchContext;
   developmentStatus?: WebDevelopmentStatus;
   onExit?: () => void;
 }
@@ -85,6 +90,7 @@ export function WebPlayScreen({
   initialState,
   onCommit,
   sessionLabel,
+  branchContext,
   developmentStatus,
   onExit,
 }: Props) {
@@ -230,6 +236,7 @@ export function WebPlayScreen({
             ⛓ {sessionLabel}
           </span>
         )}
+        {branchContext?.handoff && <BranchHandoffBadge branch={branchContext} />}
         {developmentStatus && <DevelopmentBadge status={developmentStatus} />}
         {onExit && (
           <button className="hud-btn" onClick={onExit}>
@@ -252,6 +259,29 @@ export function WebPlayScreen({
         <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
       )}
     </div>
+  );
+}
+
+export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {
+  const handoff = branch.handoff;
+  if (!handoff) return null;
+  const state = handoff.state === "target-reached"
+    ? "exact target reached"
+    : handoff.state === "closest"
+      ? "closest state"
+      : handoff.state;
+  const detail = [
+    "AI prepared this isolated branch from structured coding work.",
+    `Work: ${handoff.workKey}`,
+    `Intent: ${handoff.title}`,
+    `Source: ${branch.fromSession} @ log ${branch.sourceLogEntry} (${branch.mode})`,
+    `Operation: ${handoff.operation}; state: ${state}.`,
+    ...(handoff.target ? [`Target: ${handoff.target}`] : []),
+  ].join("\n");
+  return (
+    <span className={`hud-handoff ${handoff.state}`} role="status" title={detail}>
+      AI 分支 · {handoff.priority} · {handoff.title}
+    </span>
   );
 }
 

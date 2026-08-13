@@ -6,6 +6,7 @@ import {
   clearBridgeSession,
   developmentStatusInvalidation,
   installDevelopmentStatusInvalidation,
+  loadBridgeBranchContext,
   loadBridgeDevelopmentStatus,
   loadBridgeSession,
   loadBridgeSnapshot,
@@ -126,6 +127,68 @@ describe("Web development session bridge", () => {
       state: { value: 2 },
       revision: nextRevision,
     });
+  });
+
+  test("projects AI work intent from fork metadata without reading save internals", async () => {
+    const gameDir = await temporaryGame();
+    const branchDir = path.join(gameDir, ".rpg-harness", "sessions", "ai-branch");
+    await mkdir(branchDir, { recursive: true });
+    await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
+      schemaVersion: 1,
+      fromSession: "player",
+      sourceLogEntry: 7,
+      sourceLogEntries: 10,
+      mode: "checkpoint",
+      createdAt: "2026-08-13T00:00:00.000Z",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply?",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        target: "scripts/scene.md",
+      },
+    }), "utf-8");
+
+    expect(await loadBridgeBranchContext(gameDir, "ai-branch")).toEqual({
+      fromSession: "player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply?",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        target: "scripts/scene.md",
+      },
+    });
+    await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
+      schemaVersion: 1,
+      fromSession: "player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+    }), "utf-8");
+    expect(await loadBridgeBranchContext(gameDir, "ai-branch")).toEqual({
+      fromSession: "player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+      handoff: null,
+    });
+    await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
+      schemaVersion: 1,
+      fromSession: "../player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+    }), "utf-8");
+    await expect(loadBridgeBranchContext(gameDir, "ai-branch"))
+      .rejects.toThrow("Invalid source session");
   });
 
   test("projects the global AI development state without writing the player session", async () => {

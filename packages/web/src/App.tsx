@@ -5,11 +5,13 @@ import {
   clearState,
   getSessionInfo,
   hasSave,
+  loadBranchContext,
   loadState,
   loadDevelopmentStatus,
   pollExternalState,
   saveState,
   type WebSessionInfo,
+  type WebBranchContext,
   type WebDevelopmentStatus,
 } from "./session";
 import { WebPlayScreen } from "./WebPlayScreen";
@@ -22,6 +24,7 @@ interface Loaded {
   revision: number;
   initialState?: ComposedState;
   developmentStatus?: WebDevelopmentStatus;
+  branchContext?: WebBranchContext;
 }
 
 export function App() {
@@ -53,7 +56,10 @@ export function App() {
   const start = useCallback(async (id: string, fresh: boolean) => {
     try {
       if (fresh) await clearState(id);
-      const saved = fresh ? null : await loadState(id);
+      const [saved, branchContext] = await Promise.all([
+        fresh ? Promise.resolve(null) : loadState(id),
+        loadBranchContext(id),
+      ]);
       const { game, assetUrls } = loadWebGame(id);
       const info = await getSessionInfo();
       setLoaded({
@@ -63,6 +69,7 @@ export function App() {
         sessionInfo: info,
         revision: 0,
         ...(saved ? { initialState: saved } : {}),
+        ...(branchContext ? { branchContext } : {}),
       });
     } catch (err) {
       setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
@@ -109,6 +116,40 @@ export function App() {
       window.clearInterval(timer);
     };
   }, [loaded?.id, loaded?.sessionInfo.mode, refreshSessions]);
+
+  useEffect(() => {
+    if (
+      !loaded ||
+      loaded.sessionInfo.mode !== "shared" ||
+      loaded.branchContext?.handoff
+    ) return;
+    let cancelled = false;
+    let checking = false;
+    const poll = async () => {
+      if (checking || cancelled) return;
+      checking = true;
+      try {
+        const branchContext = await loadBranchContext(loaded.id);
+        if (cancelled || !branchContext?.handoff) return;
+        setLoaded((current) =>
+          current && current.id === loaded.id
+            ? { ...current, branchContext }
+            : current
+        );
+      } catch {
+        // A named branch may be opened before Headless finishes materializing
+        // fork metadata. Gameplay state polling remains authoritative; retry.
+      } finally {
+        checking = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 750);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loaded?.id, loaded?.sessionInfo.mode, loaded?.branchContext?.handoff]);
 
   useEffect(() => {
     if (!loaded || loaded.sessionInfo.mode !== "shared") return;
@@ -159,6 +200,7 @@ export function App() {
         {...(loaded.initialState ? { initialState: loaded.initialState } : {})}
         onCommit={(state, event) => saveState(loaded.id, state, event)}
         sessionLabel={loaded.sessionInfo.label}
+        branchContext={loaded.branchContext}
         developmentStatus={loaded.developmentStatus}
         onExit={exit}
       />
