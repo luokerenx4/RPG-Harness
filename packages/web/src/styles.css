@@ -583,6 +583,11 @@ body {
   background: rgba(48, 34, 18, 0.92);
   border-color: #806235;
 }
+.hud-handoff.player-owned {
+  color: #b9d8d2;
+  background: rgba(19, 39, 39, 0.9);
+  border-color: #456d68;
+}
 .hud-development {
   align-self: center;
   padding: 6px 10px;

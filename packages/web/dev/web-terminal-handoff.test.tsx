@@ -25,7 +25,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 9,
+      schemaVersion: 10,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -59,6 +59,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "ai-choice-backlog",
         text: "What do you promise?AI 選択Stay until dawn",
+      }, {
+        surface: "branch-control-handoff",
+        text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
       }],
     });
   });
@@ -137,10 +140,12 @@ describe("Web terminal handoff", () => {
         preparedAt: "2026-08-13T00:00:01.000Z",
         target: "scripts/scene.md",
       },
+      playerControl: null,
       outcome: null,
     }} />);
 
-    expect(html).toContain("AI 分支 · P2 · Reach authored choice: Reply?");
+    expect(html).toContain("AI 首映 · Reach authored choice: Reply? · P2");
+    expect(html).toContain("Control: awaiting the player");
     expect(html).toContain("Work: choice-authoring/scene/reply");
     expect(html).toContain("Source: player @ log 7 (checkpoint)");
     expect(html).toContain("Target: scripts/scene.md");
@@ -171,10 +176,12 @@ describe("Web terminal handoff", () => {
         source: "web",
         logEntry: 2,
       },
+      playerControl: { source: "web", logEntry: 2 },
     }} />);
 
-    expect(html).toContain("AI 分支 · P2 · 已选择: Stay together");
+    expect(html).toContain("玩家游玩 · AI 来源: 已选择: Stay together · P2");
     expect(html).toContain("Outcome: selected stay via web at log 2.");
+    expect(html).toContain("Control: handed to the player via web at log 2.");
   });
 
   test("shows a certified project verdict next to the shared GUI session", () => {

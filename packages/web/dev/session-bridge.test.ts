@@ -411,6 +411,7 @@ describe("Web development session bridge", () => {
         preparedAt: "2026-08-13T00:00:01.000Z",
         target: "scripts/scene.md",
       },
+      playerControl: null,
       outcome: null,
     });
     await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
@@ -424,6 +425,7 @@ describe("Web development session bridge", () => {
       sourceLogEntry: 7,
       mode: "checkpoint",
       handoff: null,
+      playerControl: null,
       outcome: null,
     });
     await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
@@ -485,6 +487,7 @@ describe("Web development session bridge", () => {
       }),
       JSON.stringify({
         source: "web",
+        input: { type: "choose", choiceId: "reply", optionId: "stay" },
         decision: { scriptId: "scene", choiceId: "reply", optionId: "stay" },
         output: { type: "dialogue", text: "Then stay." },
       }),
@@ -493,6 +496,7 @@ describe("Web development session bridge", () => {
 
     expect(await loadBridgeBranchContext(gameDir, "ai-choice")).toMatchObject({
       handoff: { coordinates: { scriptId: "scene", choiceId: "reply" } },
+      playerControl: { source: "web", logEntry: 4 },
       outcome: {
         kind: "choice-selected",
         scriptId: "scene",
@@ -502,6 +506,45 @@ describe("Web development session bridge", () => {
         source: "web",
         logEntry: 4,
       },
+    });
+  });
+
+  test("hands an AI premiere to the first accepted GUI or TUI input", async () => {
+    const gameDir = await temporaryGame();
+    const branchDir = path.join(gameDir, ".rpg-harness", "sessions", "premiere");
+    await mkdir(branchDir, { recursive: true });
+    await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
+      schemaVersion: 1,
+      fromSession: "proof",
+      sourceLogEntry: 2,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-branch/scene/reply/stay",
+        priority: "P3",
+        kind: "choice-branch",
+        title: "Explore Stay",
+        operation: "cover",
+        state: "covered",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        premiere: { optionText: "Stay" },
+      },
+    }), "utf-8");
+    await writeFile(path.join(branchDir, "log.jsonl"), [
+      JSON.stringify({ source: "fork", output: { type: "dialogue", text: "First." } }),
+      JSON.stringify({
+        source: "web",
+        input: { type: "doActivity", id: "stale" },
+        inputResult: { accepted: false },
+        output: { type: "dialogue", text: "First." },
+      }),
+      JSON.stringify({ source: "autoplay:objective", input: { type: "next" } }),
+      JSON.stringify({ source: "tui", input: { type: "next" } }),
+      "",
+    ].join("\n"), "utf-8");
+
+    expect(await loadBridgeBranchContext(gameDir, "premiere")).toMatchObject({
+      playerControl: { source: "tui", logEntry: 4 },
     });
   });
 

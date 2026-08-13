@@ -53,6 +53,10 @@ export interface WebBranchContext {
       optionText: string;
     };
   } | null;
+  playerControl: {
+    source: "web" | "tui";
+    logEntry: number;
+  } | null;
   outcome: {
     kind: "choice-selected";
     scriptId?: string;

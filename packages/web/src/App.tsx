@@ -155,7 +155,11 @@ export function App() {
         if (cancelled || !branchContext?.handoff) return;
         const currentHasHandoff = loaded.branchContext?.handoff !== null &&
           loaded.branchContext?.handoff !== undefined;
-        if (currentHasHandoff && !branchContext.outcome) return;
+        if (
+          currentHasHandoff &&
+          !branchContext.outcome &&
+          !branchContext.playerControl
+        ) return;
         setLoaded((current) =>
           current && current.id === loaded.id
             ? { ...current, branchContext }
@@ -179,6 +183,7 @@ export function App() {
     loaded?.sessionInfo.mode,
     loaded?.branchContext?.handoff,
     loaded?.branchContext?.outcome,
+    loaded?.branchContext?.playerControl,
   ]);
 
   useEffect(() => {
@@ -315,5 +320,5 @@ export function App() {
 
 function needsBranchContextPolling(branch: WebBranchContext | undefined): boolean {
   if (!branch?.handoff) return true;
-  return typeof branch.handoff.coordinates?.choiceId === "string" && !branch.outcome;
+  return !branch.playerControl;
 }

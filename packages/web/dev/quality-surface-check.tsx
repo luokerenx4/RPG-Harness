@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
-import { BacklogOverlay, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 9;
+  schemaVersion: 10;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -22,7 +22,8 @@ export interface WebQualitySurfaceEvidence {
       | "forecast-unit-hidden"
       | "forecast-detail-hidden"
       | "terminal-ai-branch"
-      | "ai-choice-backlog";
+      | "ai-choice-backlog"
+      | "branch-control-handoff";
     text: string;
   }>;
 }
@@ -154,17 +155,53 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   forecastUnitProjection(), forecastDetailProjection()];
   projections.push(terminalExplorationProjection());
   projections.push(aiChoiceBacklogProjection());
+  projections.push(branchControlHandoffProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function branchControlHandoffProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const handoff = {
+    fromSession: "proof",
+    sourceLogEntry: 2,
+    mode: "checkpoint",
+    handoff: {
+      schemaVersion: 1 as const,
+      workKey: "choice-branch/scene/reply/stay",
+      priority: "P3" as const,
+      kind: "choice-branch",
+      title: "Explore Stay",
+      operation: "cover",
+      state: "covered" as const,
+      preparedAt: "2026-08-13T00:00:00.000Z",
+    },
+    outcome: null,
+  };
+  const awaiting = renderToStaticMarkup(React.createElement(BranchHandoffBadge, {
+    branch: { ...handoff, playerControl: null },
+  }));
+  const handed = renderToStaticMarkup(React.createElement(BranchHandoffBadge, {
+    branch: { ...handoff, playerControl: { source: "web", logEntry: 2 } },
+  }));
+  if (
+    !awaiting.includes("AI 首映 · Explore Stay") ||
+    !awaiting.includes("awaiting the player") ||
+    !handed.includes("玩家游玩 · AI 来源: Explore Stay") ||
+    !handed.includes("handed to the player via web at log 2")
+  ) throw new Error("Web branch badge does not distinguish AI provenance from player control");
+  return {
+    surface: "branch-control-handoff",
+    text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
   };
 }
 

@@ -484,6 +484,7 @@ export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {
   const handoff = branch.handoff;
   if (!handoff) return null;
   const outcome = branch.outcome;
+  const playerControl = branch.playerControl;
   const state = handoff.state === "target-reached"
     ? "exact target reached"
     : handoff.state === "closest"
@@ -499,13 +500,23 @@ export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {
     ...(outcome
       ? [`Outcome: selected ${outcome.optionId} via ${outcome.source ?? "unknown"} at log ${outcome.logEntry}.`]
       : []),
+    ...(playerControl
+      ? [`Control: handed to the player via ${playerControl.source} at log ${playerControl.logEntry}.`]
+      : ["Control: awaiting the player's first accepted input."]),
   ].join("\n");
-  const label = outcome
+  const subject = outcome
     ? `已选择: ${outcome.optionText ?? outcome.optionId}`
     : handoff.title;
+  const label = playerControl
+    ? `玩家游玩 · AI 来源: ${subject}`
+    : `AI 首映 · ${subject}`;
   return (
-    <span className={`hud-handoff ${handoff.state}`} role="status" title={detail}>
-      AI 分支 · {handoff.priority} · {label}
+    <span
+      className={`hud-handoff ${handoff.state}${playerControl ? " player-owned" : ""}`}
+      role="status"
+      title={detail}
+    >
+      {label} · {handoff.priority}
     </span>
   );
 }

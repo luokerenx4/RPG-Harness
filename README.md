@@ -802,6 +802,12 @@ or the work was already covered are persisted beside
 pretending to track later player inputs. The local Web GUI projects that metadata into its HUD, so a player
 opening the returned `webPath` can see why the AI prepared this exact scene
 without reading terminal output or letting the agent advance the player save.
+AI provenance and live control are separate projections: the HUD begins as
+**AI premiere**, then the first accepted Web/TUI input changes it to **player
+play · AI source**. The immutable fork intent remains available for diagnosis,
+but no longer implies that later raids or scenes are still being driven by AI.
+This lifecycle is derived from the transaction-locked shared log, so reloads
+and both frontends agree without mutating `fork.json`.
 When the handoff names a stable choice, the bridge derives the player's selected
 option and display text from the locked session log. The HUD updates in place,
 while `log.jsonl` remains the single evidence source that also removes that

@@ -30,7 +30,9 @@ rpgh test .                                  # fixture 回帰
 Web は選んだ直後の最初の台詞で止めた premiere branch を渡すため、プレイヤーは
 新しい場面を見逃さず自分で続きを送れる。回看には元の問いと **AI 選択** も残り、
 返答の文脈を HUD の開発情報から推測する必要はない。一周目は上書きされず、AI の分岐結果は
-次回の family coverage にそのまま戻る。
+次回の family coverage にそのまま戻る。最初の有効な Web/TUI 入力を送ると HUD は
+**AI 首映** から **玩家游玩 · AI 来源** へ切り替わる。fork の出所は診断用に残るが、
+その後の raid まで AI が操作中だとは表示しない。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
 密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。

@@ -335,6 +335,10 @@ export interface BridgeBranchContext {
       optionText: string;
     };
   } | null;
+  playerControl: {
+    source: "web" | "tui";
+    logEntry: number;
+  } | null;
   outcome: {
     kind: "choice-selected";
     scriptId?: string;
@@ -542,13 +546,19 @@ export async function loadBridgeBranchContext(
     }
     assertSegment(value.fromSession, "source session");
     const handoff = parseBridgeHandoff(value.handoff);
+    const entries = handoff
+      ? await readBridgeSessionEntries(gameDir, session)
+      : [];
     return {
       fromSession: value.fromSession,
       sourceLogEntry: value.sourceLogEntry as number,
       mode: value.mode,
       handoff,
       outcome: handoff
-        ? await readBridgeBranchOutcome(gameDir, session, handoff)
+        ? readBridgeBranchOutcome(entries, handoff)
+        : null,
+      playerControl: handoff
+        ? readBridgePlayerControl(entries)
         : null,
     };
   });
@@ -1002,13 +1012,10 @@ function isBridgeHandoffCoordinates(value: unknown): boolean {
     );
 }
 
-async function readBridgeBranchOutcome(
+async function readBridgeSessionEntries(
   gameDir: string,
   session: string,
-  handoff: NonNullable<BridgeBranchContext["handoff"]>,
-): Promise<BridgeBranchContext["outcome"]> {
-  const choiceId = handoff.coordinates?.choiceId;
-  if (!choiceId) return null;
+): Promise<Record<string, unknown>[]> {
   let raw: string;
   try {
     raw = await readFile(
@@ -1016,12 +1023,40 @@ async function readBridgeBranchOutcome(
       "utf-8",
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  const entries = raw.split(/\r?\n/).filter((line) => line.trim()).map((line) =>
+  return raw.split(/\r?\n/).filter((line) => line.trim()).map((line) =>
     JSON.parse(line) as Record<string, unknown>
   );
+}
+
+function readBridgePlayerControl(
+  entries: Record<string, unknown>[],
+): BridgeBranchContext["playerControl"] {
+  const index = entries.findIndex((entry) => {
+    if (entry.source !== "web" && entry.source !== "tui") return false;
+    if (!entry.input || typeof entry.input !== "object" || Array.isArray(entry.input)) {
+      return false;
+    }
+    const inputResult = entry.inputResult;
+    if (inputResult === undefined) return true;
+    return typeof inputResult === "object" && !Array.isArray(inputResult) &&
+      (inputResult as Record<string, unknown>).accepted === true;
+  });
+  if (index < 0) return null;
+  return {
+    source: entries[index]!.source as "web" | "tui",
+    logEntry: index + 1,
+  };
+}
+
+function readBridgeBranchOutcome(
+  entries: Record<string, unknown>[],
+  handoff: NonNullable<BridgeBranchContext["handoff"]>,
+): BridgeBranchContext["outcome"] {
+  const choiceId = handoff.coordinates?.choiceId;
+  if (!choiceId) return null;
   const presentedAt = entries.findLastIndex((entry) => {
     const output = entry.output;
     if (!output || typeof output !== "object" || Array.isArray(output)) return false;
