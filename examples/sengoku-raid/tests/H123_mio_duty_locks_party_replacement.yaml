@@ -1,0 +1,38 @@
+name: 澪の公儀査問中は同行解除も他者への交代もできない
+description: |
+  Official inspection is a story contract, not a reversible party toggle.
+  While 澪 is assigned by the court, GUI and Headless surfaces keep both the
+  dismiss action and an otherwise eligible replacement visible but locked with
+  the same authored reason. This prevents a persona or player from contradicting
+  the active main objective by removing the inspector.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_02_rival
+    characters:
+      kagari:
+        stats: { affection: 4 }
+      mio:
+        stats: { affection: 1 }
+    switches:
+      mio_met: true
+      mio_inspection_duty: true
+      companion_mio: true
+  sengoku-raid:
+    metCharacters: [kagari, mio]
+    raid: null
+    companion: mio
+    companionHp: 10
+inputs: []
+assertions:
+  - kind: activity
+    id: dismiss:mio
+    present: true
+    available: false
+    lockedReasonIncludes: 公儀
+  - kind: activity
+    id: invite:kagari
+    present: true
+    available: false
+    lockedReasonIncludes: 公儀

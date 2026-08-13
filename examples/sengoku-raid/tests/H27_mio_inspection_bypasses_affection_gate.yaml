@@ -3,7 +3,8 @@ description: |
   After letter 02, 澪 is an official inspector who promised to accompany the
   player until her judgment. Even at affection 0, the hub must expose her
   invite action with the authored duty explanation, and dispatch must accept
-  it rather than applying the ordinary affection-4 social gate.
+  it rather than applying the ordinary affection-4 social gate. Once joined,
+  the official inspection cannot be cancelled like an ordinary party toggle.
 state:
   baseline:
     completedScripts:
@@ -27,8 +28,9 @@ assertions:
   - kind: activity
     id: dismiss:mio
     present: true
-    available: true
+    available: false
     titleIncludes: 同行から外す
+    lockedReasonIncludes: 公儀
   - kind: activity
     id: invite:mio
     present: false

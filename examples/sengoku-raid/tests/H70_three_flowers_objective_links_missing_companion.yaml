@@ -1,7 +1,7 @@
 name: the shared hub objective names and links the companion still missing from the alliance
 state:
   baseline:
-    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, letter_03_choice]
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, bond_mio_04, letter_03_choice]
     switches:
       chose_court_defy: true
       befriended_kagari: true

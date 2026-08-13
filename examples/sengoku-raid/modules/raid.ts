@@ -1058,6 +1058,8 @@ function buildHubMenu(ctx: Ctx): Output {
   // Only one companion at a time. Flipping a companion_<id> switch
   // is what onChoicePresented / onBeatBefore key on; m.companion is
   // the runtime mirror.
+  const mioInspectionDuty =
+    ctx.state.baseline.switches.mio_inspection_duty === true;
   for (const charId of m.metCharacters) {
     const char = ctx.game.characters.find((c) => c.id === charId);
     if (!char) continue;
@@ -1065,12 +1067,19 @@ function buildHubMenu(ctx: Ctx): Output {
       ctx.state.baseline.characters[charId]?.stats.affection ?? 0;
     const officialDuty =
       charId === "mio" &&
-      ctx.state.baseline.switches.mio_inspection_duty === true;
+      mioInspectionDuty;
     const alreadyInvited = m.companion === charId;
     // Affection gates a new invitation, never the ability to remove an
     // existing companion from a migrated/seeded save.
     if (!alreadyInvited && affection < 4 && !officialDuty) continue;
     const companionAction = alreadyInvited ? "dismiss" : "invite";
+    const inspectionLock = mioInspectionDuty &&
+        ((alreadyInvited && charId === "mio") ||
+          (!alreadyInvited && charId !== "mio"))
+      ? charId === "mio"
+        ? "公儀の見立てが済むまでは澪の同行を解けない。"
+        : "澪が公儀の査問役に就いている。見立てが済むまでは他の同行者を選べない。"
+      : null;
     activities.push({
       id: `${companionAction}:${charId}`,
       kind: "action",
@@ -1080,10 +1089,10 @@ function buildHubMenu(ctx: Ctx): Output {
         ? `${char.name}を同行から外す`
         : `${char.name}を次の出帰りに誘う`,
       description: alreadyInvited
-        ? "同行を解く（次の出立では一人）"
+        ? inspectionLock ?? "同行を解く（次の出立では一人）"
         : officialDuty
           ? "公儀の見立てが済むまで同行可。他者を誘うと自動的に交代"
-          : "親密度 4 以上で同行可。他者を誘うと自動的に交代",
+          : inspectionLock ?? "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
       // A fresh invitation can advance a relationship objective. Replacing
       // an already selected companion is merely a reversible party-loadout
@@ -1094,7 +1103,8 @@ function buildHubMenu(ctx: Ctx): Output {
         ? { aiTags: ["social", "progression"] }
         : {}),
       cost: 0,
-      available: true,
+      available: inspectionLock === null,
+      ...(inspectionLock ? { lockedReason: inspectionLock } : {}),
     });
   }
 
@@ -2897,6 +2907,12 @@ const inviteHandler: ActionHandler = (ctx) => {
   if (m.raid !== null) {
     return denial("出立後は誘えない。大名府に戻ってから。");
   }
+  if (
+    charId !== "mio" &&
+    ctx.state.baseline.switches.mio_inspection_duty === true
+  ) {
+    return denial("澪の公儀査問が済むまでは、同行者を交代できない。");
+  }
   const affection =
     ctx.state.baseline.characters[charId]?.stats.affection ?? 0;
   const officialDuty =
@@ -2937,6 +2953,12 @@ const dismissHandler: ActionHandler = (ctx) => {
   }
   if (m.companion !== charId) {
     return denial("その相手は現在同行していない。");
+  }
+  if (
+    charId === "mio" &&
+    ctx.state.baseline.switches.mio_inspection_duty === true
+  ) {
+    return denial("公儀の見立てが済むまでは、澪の同行を解けない。");
   }
   const charName =
     ctx.game.characters.find((c) => c.id === charId)?.name ?? charId;
