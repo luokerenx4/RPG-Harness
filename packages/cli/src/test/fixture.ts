@@ -59,7 +59,12 @@ export interface ActivityAssertion {
   aiTagsExcludes?: string;
   requires?: unknown;
   forecastMetric?: string;
-  metricValue?: number;
+  forecastMetricPresent?: boolean;
+  // ActivityForecastMetric.value is intentionally generic: modules may expose
+  // exact numeric deltas, boolean facts, or stable authored outcome labels.
+  // Fixtures must be able to assert the same public contract that GUI and
+  // Headless clients consume.
+  metricValue?: number | string | boolean;
   metricMin?: number;
   metricMax?: number;
 }

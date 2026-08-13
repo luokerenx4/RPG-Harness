@@ -201,8 +201,14 @@ function checkActivity(
     const metric = act.forecast?.metrics.find(
       (item) => item.id === a.forecastMetric,
     );
+    const metricPresent = a.forecastMetricPresent ?? true;
     if (!metric) {
-      return `activity ${a.id}: forecast metric ${a.forecastMetric} not found`;
+      return metricPresent
+        ? `activity ${a.id}: forecast metric ${a.forecastMetric} not found`
+        : null;
+    }
+    if (!metricPresent) {
+      return `activity ${a.id}: forecast metric ${a.forecastMetric} expected absent but present`;
     }
     if (a.metricValue !== undefined && metric.value !== a.metricValue) {
       return `activity ${a.id}: metric ${a.forecastMetric} expected value=${a.metricValue}, got ${String(metric.value)}`;

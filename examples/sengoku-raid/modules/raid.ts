@@ -1289,6 +1289,19 @@ function buildRaidMenu(ctx: Ctx): Output {
     const criticalChance = roundForecastPercent(playerStat(ctx, "spectral") * 0.7);
     const fumbleChance = fumbleChancePercent(ctx);
     const sneakChance = sneakStrikeChancePercent(ctx, inst.encounter.enemyId);
+    const normalKillForecast = killForecast(
+      normalDamage,
+      inst.encounter.enemyHp,
+      criticalChance > 0 ? criticalDamage : undefined,
+    );
+    const sneakKillForecast = killForecast(
+      sneakDamage,
+      inst.encounter.enemyHp,
+    );
+    const victoryMetrics = victoryForecastMetrics(
+      ctx,
+      inst.encounter.enemyHpMax,
+    );
     const fleeChance = fleeSuccessChancePercent(ctx);
     const fleeFailureDamage = Math.max(
       2,
@@ -1305,9 +1318,12 @@ function buildRaidMenu(ctx: Ctx): Output {
       available: !companionRefusesAttack,
       ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
       forecast: {
-        summary: counterDamage.companion
-          ? "敵が生き残れば反撃。同行者が一部を引き受ける"
-          : "敵が生き残れば反撃を受ける",
+        summary:
+          normalKillForecast === "確定"
+            ? "確定撃破。反撃を受けず、霊体化吸収後に三脈を選ぶ"
+            : counterDamage.companion
+              ? "敵が生き残れば反撃。同行者が一部を引き受ける"
+              : "敵が生き残れば反撃を受ける",
         metrics: [
           {
             id: "damage",
@@ -1331,37 +1347,48 @@ function buildRaidMenu(ctx: Ctx): Output {
             polarity: "benefit",
           },
           {
-            id: "counter_damage",
-            label: "生存時反撃（合計）",
-            ...counterDamage.total,
-            unit: "HP",
-            polarity: "risk",
+            id: "kill_outcome",
+            label: "撃破見込み",
+            value: normalKillForecast,
+            polarity: "benefit",
           },
-          {
-            id: "fumble_chance",
-            label: "妖刀暴発率（反撃 1.6 倍）",
-            value: fumbleChance,
-            unit: "percent",
-            polarity: "risk",
-          },
-          ...(counterDamage.companion
-            ? [
+          ...(normalKillForecast === "不可" ? [] : victoryMetrics),
+          ...(normalKillForecast === "確定"
+            ? []
+            : [
                 {
-                  id: "player_counter_damage",
-                  label: "プレイヤー承傷",
-                  ...counterDamage.player,
+                  id: "counter_damage",
+                  label: "生存時反撃（合計）",
+                  ...counterDamage.total,
                   unit: "HP",
                   polarity: "risk" as const,
                 },
                 {
-                  id: "companion_counter_damage",
-                  label: `${counterDamage.companionName}承傷`,
-                  ...counterDamage.companion,
-                  unit: "HP",
+                  id: "fumble_chance",
+                  label: "妖刀暴発率（反撃 1.6 倍）",
+                  value: fumbleChance,
+                  unit: "percent",
                   polarity: "risk" as const,
                 },
-              ]
-            : []),
+                ...(counterDamage.companion
+                  ? [
+                      {
+                        id: "player_counter_damage",
+                        label: "プレイヤー承傷",
+                        ...counterDamage.player,
+                        unit: "HP",
+                        polarity: "risk" as const,
+                      },
+                      {
+                        id: "companion_counter_damage",
+                        label: `${counterDamage.companionName}承傷`,
+                        ...counterDamage.companion,
+                        unit: "HP",
+                        polarity: "risk" as const,
+                      },
+                    ]
+                  : []),
+              ]),
         ],
       },
     });
@@ -1376,9 +1403,14 @@ function buildRaidMenu(ctx: Ctx): Output {
       available: !companionRefusesAttack,
       ...(attackLockedReason ? { lockedReason: attackLockedReason } : {}),
       forecast: {
-        summary: counterDamage.companion
-          ? "失敗時は反撃。同行者が一部を引き受ける"
-          : "失敗時はダメージを与えず反撃を受ける",
+        summary:
+          sneakKillForecast === "確定"
+            ? counterDamage.companion
+              ? "成功時は確定撃破。失敗時のみ同行者と反撃を受ける"
+              : "成功時は確定撃破。失敗時のみ反撃を受ける"
+            : counterDamage.companion
+              ? "失敗時は反撃。同行者が一部を引き受ける"
+              : "失敗時はダメージを与えず反撃を受ける",
         metrics: [
           {
             id: "success_chance",
@@ -1394,6 +1426,13 @@ function buildRaidMenu(ctx: Ctx): Output {
             unit: "HP",
             polarity: "benefit",
           },
+          {
+            id: "success_kill_outcome",
+            label: "成功時撃破",
+            value: sneakKillForecast,
+            polarity: "benefit",
+          },
+          ...(sneakKillForecast === "不可" ? [] : victoryMetrics),
           {
             id: "failure_counter_damage",
             label: "失敗時反撃（合計）",
@@ -1709,6 +1748,8 @@ interface NumericRange {
   max: number;
 }
 
+type KillForecast = "確定" | "可能" | "不可";
+
 function combatDamageBase(ctx: Ctx): number {
   return getSwordPower(ctx) * (1 + playerStat(ctx, "spectral") * 0.04);
 }
@@ -1737,6 +1778,40 @@ function criticalAttackDamageRange(ctx: Ctx): NumericRange {
 
 function sneakAttackDamageRange(ctx: Ctx): NumericRange {
   return boundedFloorRange(combatDamageBase(ctx) * 2.2, 0.9, 1.1);
+}
+
+function killForecast(
+  damage: NumericRange,
+  enemyHp: number,
+  alternateDamage?: NumericRange,
+): KillForecast {
+  if (damage.min >= enemyHp) return "確定";
+  if (damage.max >= enemyHp || (alternateDamage?.max ?? 0) >= enemyHp) {
+    return "可能";
+  }
+  return "不可";
+}
+
+function victoryForecastMetrics(ctx: Ctx, enemyHpMax: number) {
+  const spectralAfterStrike = Math.min(100, playerStat(ctx, "spectral") + 1);
+  const spectralAfterAbsorb = Math.max(
+    0,
+    spectralAfterStrike - Math.floor(enemyHpMax / 2),
+  );
+  return [
+    {
+      id: "victory_spectral_after",
+      label: "撃破時霊体化",
+      value: spectralAfterAbsorb,
+      polarity: "neutral" as const,
+    },
+    {
+      id: "victory_followup",
+      label: "撃破後",
+      value: "三脈選択",
+      polarity: "neutral" as const,
+    },
+  ];
 }
 
 function sneakStrikeChancePercent(ctx: Ctx, enemyId: string): number {

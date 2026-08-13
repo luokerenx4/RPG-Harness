@@ -1,0 +1,80 @@
+name: lethal combat forecasts expose the complete victory transition
+description: |
+  A guaranteed kill is not merely a damage number. Human and AI clients must
+  know before dispatch that no counterattack will occur, exactly where the
+  victory absorption leaves spectral, and that the next required decision is
+  the three-pulse imbue menu.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_lava_vent
+    weapons:
+      ancestor_yaodao: { power: 41 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 8, intellect: 99 }
+        custom: {}
+  sengoku-raid:
+    metCharacters: []
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foot
+      turnsTaken: 3
+      pendingLoot: {}
+      visited:
+        mt_houkyou_lava_vent:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 18
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: attack
+    forecastMetric: damage
+    metricMin: 43
+    metricMax: 64
+  - kind: activity
+    id: attack
+    forecastMetric: kill_outcome
+    metricValue: 確定
+  - kind: activity
+    id: attack
+    forecastMetric: victory_spectral_after
+    metricValue: 0
+  - kind: activity
+    id: attack
+    forecastMetric: victory_followup
+    metricValue: 三脈選択
+  - kind: activity
+    id: attack
+    forecastMetric: counter_damage
+    forecastMetricPresent: false
+  - kind: activity
+    id: attack
+    forecastMetric: fumble_chance
+    forecastMetricPresent: false
+  - kind: activity
+    id: attack
+    forecastMetric: companion_counter_damage
+    forecastMetricPresent: false
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: success_kill_outcome
+    metricValue: 確定
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: victory_spectral_after
+    metricValue: 0
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: victory_followup
+    metricValue: 三脈選択
+  - kind: activity
+    id: sneak_strike
+    forecastMetric: failure_counter_damage
+    forecastMetricPresent: true
