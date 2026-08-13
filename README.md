@@ -218,7 +218,7 @@ rpgh choices  <game-dir> [--status pending|all]                # executable choi
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
 rpgh work     <game-dir> [--key KEY] [--new-session NAME]     # safely execute one structured work item
 rpgh sweep    <game-dir> --session NAME --session-prefix RUN  # bounded resumable lineage exploration batch
-rpgh sweep    <game-dir> --session NAME --session-prefix RUN --until-clean --limit 100 --max-generations 5
+rpgh sweep    <game-dir> --session NAME --session-prefix RUN --until-clean --limit 100 --max-generations 5 [--force-audit]
 rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
 rpgh inspect-session <game-dir> --session NAME               # read-only state/log/checkpoint diagnosis
 rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
@@ -316,6 +316,14 @@ judgment is required, or when any declared budget is exhausted. A paused
 deterministic search whose closest branch applied zero inputs is reported in
 `safety.searchStalls` as `no-state-progress` instead of rerunning the identical
 slice. The source player save is never written.
+Before `--until-clean` returns clean, it runs the exact `game.yaml ai_audit`
+acceptance matrix from a seeded fresh game. A passing verdict becomes a
+immutable content-addressed certificate under `.rpg-harness/evidence/quality/`, binding
+the game behavior files, local Headless engine/parser/CLI implementation, audit
+policy, personas, budgets, and seed. Repeating the same clean convergence
+reuses that certificate without creating another set of audit sessions; any
+bound source edit changes the input revision and reruns the matrix.
+`--force-audit` deliberately bypasses a matching certificate.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports

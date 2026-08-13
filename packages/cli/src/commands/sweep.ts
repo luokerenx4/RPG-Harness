@@ -6,6 +6,11 @@ import { getPlaytestReport } from "../playtest-reports";
 import { sessionDir } from "../session";
 import { loadGame } from "../loader";
 import { runAudit, type AuditSummary } from "./audit";
+import {
+  qualityAuditInputRevision,
+  readQualityAuditCertificate,
+  writeQualityAuditCertificate,
+} from "./quality-certificate";
 import { assertTargetEmpty } from "./fork";
 import {
   executeDevelopmentWorkItem,
@@ -35,6 +40,8 @@ export interface SweepArgs {
   auditMaxSegments?: number;
   /** Stable root seed for the final project acceptance matrix. */
   auditSeed?: number;
+  /** Ignore a matching project-quality certificate and rerun every audit lane. */
+  forceAudit?: boolean;
   /** Continue materialized closest-state searches and freeze later worklist generations. */
   untilClean?: boolean;
   /** Hard cap for immutable worklist generations in `untilClean` mode. */
@@ -133,7 +140,10 @@ export interface SweepConvergenceResult {
   };
   qualityGate?: {
     status: "passed" | "failed" | "not-evaluated" | "not-configured";
+    mode: "executed" | "certificate" | "not-configured";
     sessionPrefix: string;
+    inputRevision?: string;
+    certificate?: { revision: string; file: string };
     audit?: ProjectQualityAuditSummary;
   };
   resume: SweepResult["resume"];
@@ -377,7 +387,7 @@ async function evaluateProjectQualityGate(
     return {
       finalStatus: "clean",
       finalReason: "clean",
-      qualityGate: { status: "not-configured", sessionPrefix },
+      qualityGate: { status: "not-configured", mode: "not-configured", sessionPrefix },
     };
   }
   const personas = policy.personas ?? [];
@@ -386,29 +396,81 @@ async function evaluateProjectQualityGate(
       "sweep --until-clean requires ai_audit.personas for its final project quality gate",
     );
   }
+  const maxSteps = args.auditMaxSteps ?? 1000;
+  const maxSegments = args.auditMaxSegments ?? 4;
+  const seed = args.auditSeed ?? 1_592_597_881;
+  const inputRevision = await qualityAuditInputRevision(args.gameDir, {
+    personas,
+    policy,
+    maxSteps,
+    maxSegments,
+    seed,
+  });
+  if (!args.forceAudit) {
+    const cached = await readQualityAuditCertificate(args.gameDir, inputRevision);
+    if (cached) {
+      return {
+        finalStatus: "clean",
+        finalReason: "clean",
+        qualityGate: {
+          status: "passed",
+          mode: "certificate",
+          sessionPrefix: cached.certificate.sessionPrefix,
+          inputRevision,
+          certificate: {
+            revision: cached.certificate.revision,
+            file: cached.file,
+          },
+          audit: cached.certificate.audit,
+        },
+      };
+    }
+  }
   const audit = await runAudit({
     gameDir: args.gameDir,
     sessionPrefix,
     personas,
-    maxSteps: args.auditMaxSteps ?? 1000,
-    maxSegments: args.auditMaxSegments ?? 4,
-    seed: args.auditSeed ?? 1_592_597_881,
+    maxSteps,
+    maxSegments,
+    seed,
     reportOnStop: true,
     pretty: false,
   });
   const status = audit.qualityGate?.status ?? "not-evaluated";
   const compactAudit = compactProjectQualityAudit(audit);
-  return status === "passed"
-    ? {
-        finalStatus: "clean",
-        finalReason: "clean",
-        qualityGate: { status, sessionPrefix, audit: compactAudit },
-      }
-    : {
-        finalStatus: "stopped",
-        finalReason: "quality-gate-failed",
-        qualityGate: { status, sessionPrefix, audit: compactAudit },
-      };
+  if (status === "passed") {
+    const certified = await writeQualityAuditCertificate(args.gameDir, {
+      inputRevision,
+      sessionPrefix,
+      audit: compactAudit,
+    });
+    return {
+      finalStatus: "clean",
+      finalReason: "clean",
+      qualityGate: {
+        status,
+        mode: "executed",
+        sessionPrefix,
+        inputRevision,
+        certificate: {
+          revision: certified.certificate.revision,
+          file: certified.file,
+        },
+        audit: compactAudit,
+      },
+    };
+  }
+  return {
+    finalStatus: "stopped",
+    finalReason: "quality-gate-failed",
+    qualityGate: {
+      status,
+      mode: "executed",
+      sessionPrefix,
+      inputRevision,
+      audit: compactAudit,
+    },
+  };
 }
 
 function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSummary {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState, peek, scriptRevision, step } from "@rpg-harness/engine";
@@ -464,7 +464,13 @@ describe("bounded development sweep", () => {
       liveWorklist: { totalItems: 0, nextKey: null },
       qualityGate: {
         status: "passed",
+        mode: "executed",
         sessionPrefix: "quality-pass-quality-gate-g01",
+        inputRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        certificate: {
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+          file: expect.stringContaining("/.rpg-harness/evidence/quality/objects/"),
+        },
         audit: {
           seed: 61,
           maxSteps: 2,
@@ -475,6 +481,167 @@ describe("bounded development sweep", () => {
       },
     });
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
+  });
+
+  test("until-clean reuses a valid project-quality certificate without creating audit lanes", async () => {
+    const gameDir = await temporaryQualitySweepGame(1);
+    const first = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-cached-first",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 71,
+      untilClean: true,
+      pretty: false,
+    });
+    expect(first.qualityGate).toMatchObject({
+      status: "passed",
+      mode: "executed",
+    });
+    const firstSessions = await readdir(path.join(gameDir, ".rpg-harness", "sessions"));
+
+    const second = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "quality-cached-second",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 71,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(second).toMatchObject({
+      status: "clean",
+      qualityGate: {
+        status: "passed",
+        mode: "certificate",
+        inputRevision: first.qualityGate?.inputRevision,
+        certificate: {
+          revision: first.qualityGate?.certificate?.revision,
+          file: first.qualityGate?.certificate?.file,
+        },
+      },
+    });
+    expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
+      .toEqual(firstSessions);
+  });
+
+  test("an authored behavior edit invalidates the project-quality certificate", async () => {
+    const gameDir = await temporaryQualitySweepGame(1);
+    const args = {
+      gameDir,
+      session: "player",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 73,
+      untilClean: true,
+      pretty: false,
+    } as const;
+    const first = await runDevelopmentConvergence({
+      ...args,
+      sessionPrefix: "quality-edit-first",
+    });
+    const scriptFile = path.join(gameDir, "scripts", "intro.md");
+    await writeFile(
+      scriptFile,
+      (await readFile(scriptFile, "utf-8")).replace("One beat.", "One changed beat."),
+      "utf-8",
+    );
+
+    const second = await runDevelopmentConvergence({
+      ...args,
+      sessionPrefix: "quality-edit-second",
+    });
+    expect(second.qualityGate).toMatchObject({ status: "passed", mode: "executed" });
+    expect(second.qualityGate?.inputRevision).not.toBe(first.qualityGate?.inputRevision);
+    expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
+      .toContain("quality-edit-second-quality-gate-g01-objective");
+  });
+
+  test("force-audit bypasses a matching project-quality certificate", async () => {
+    const gameDir = await temporaryQualitySweepGame(1);
+    const shared = {
+      gameDir,
+      session: "player",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 79,
+      untilClean: true,
+      pretty: false,
+    } as const;
+    const first = await runDevelopmentConvergence({
+      ...shared,
+      sessionPrefix: "quality-force-first",
+    });
+    const firstCertificateFile = first.qualityGate?.certificate?.file;
+    if (!firstCertificateFile) throw new Error("quality gate did not emit a certificate");
+    const firstCertificateBody = await readFile(firstCertificateFile, "utf-8");
+    const forced = await runDevelopmentConvergence({
+      ...shared,
+      sessionPrefix: "quality-force-second",
+      forceAudit: true,
+    });
+
+    expect(forced.qualityGate).toMatchObject({
+      status: "passed",
+      mode: "executed",
+      inputRevision: first.qualityGate?.inputRevision,
+      sessionPrefix: "quality-force-second-quality-gate-g01",
+    });
+    expect(await readdir(path.join(gameDir, ".rpg-harness", "sessions")))
+      .toContain("quality-force-second-quality-gate-g01-objective");
+    expect(await readFile(firstCertificateFile, "utf-8")).toBe(firstCertificateBody);
+    expect(forced.qualityGate?.certificate?.file).not.toBe(firstCertificateFile);
+  });
+
+  test("a tampered project-quality certificate is ignored instead of trusted", async () => {
+    const gameDir = await temporaryQualitySweepGame(1);
+    const shared = {
+      gameDir,
+      session: "player",
+      limit: 10,
+      maxGenerations: 2,
+      maxTotalNodes: 100,
+      auditMaxSteps: 2,
+      auditMaxSegments: 4,
+      auditSeed: 83,
+      untilClean: true,
+      pretty: false,
+    } as const;
+    const first = await runDevelopmentConvergence({
+      ...shared,
+      sessionPrefix: "quality-tamper-first",
+    });
+    const certificateFile = first.qualityGate?.certificate?.file;
+    if (!certificateFile) throw new Error("quality gate did not emit a certificate");
+    const certificate = JSON.parse(await readFile(certificateFile, "utf-8"));
+    certificate.audit.endings = { forged: 99 };
+    await writeFile(certificateFile, JSON.stringify(certificate), "utf-8");
+
+    const second = await runDevelopmentConvergence({
+      ...shared,
+      sessionPrefix: "quality-tamper-second",
+    });
+    expect(second.qualityGate).toMatchObject({
+      status: "passed",
+      mode: "executed",
+      sessionPrefix: "quality-tamper-second-quality-gate-g01",
+    });
+    expect(second.qualityGate?.audit?.endings).toEqual({ intro: 1 });
   });
 
   test("until-clean converts a failed project matrix into the next coding issue", async () => {

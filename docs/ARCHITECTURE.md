@@ -136,6 +136,17 @@ gameplay surfaces or unreachable deep authored events into replayable
 quality-gate work instead of trusting path hashes as an indirect proxy.
 This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.
+The final `sweep --until-clean` acceptance is also persisted as a project
+quality certificate. Its input revision covers authored behavior plus the
+Headless engine, parser, session-store, CLI evaluator, and exact matrix inputs.
+It also records the Bun/Node/platform/architecture execution identity in the
+input digest, so a local certificate is never silently promoted across unlike
+runtimes.
+Consequently an unchanged clean loop is cheap and creates no new lane sessions,
+while either a game edit or evaluator edit invalidates the verdict instead of
+silently inheriting green status. The certificate is a local derived artifact;
+`--force-audit` provides an explicit full rerun when environmental validation is
+more important than reuse.
 Hub objectives carry explicit author intent rather than naming conventions:
 `scope` is `main`, `side`, or `mastery`, and `terminal` says whether taking the
 linked activity may conclude the run. `Engine.run()` validates objective ids,
