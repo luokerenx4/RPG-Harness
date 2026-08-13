@@ -23,6 +23,15 @@ export {
 } from "./commands/worklist";
 export { runDevelopmentWorkItem } from "./commands/work";
 export {
+  runDevelopmentConvergence,
+  runDevelopmentSweep,
+} from "./commands/sweep";
+export type {
+  SweepArgs,
+  SweepConvergenceResult,
+  SweepResult,
+} from "./commands/sweep";
+export {
   compactCheckpointsCommand,
   formatCheckpointCompaction,
 } from "./commands/compact-checkpoints";

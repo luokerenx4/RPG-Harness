@@ -218,6 +218,7 @@ rpgh choices  <game-dir> [--status pending|all]                # executable choi
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
 rpgh work     <game-dir> [--key KEY] [--new-session NAME]     # safely execute one structured work item
 rpgh sweep    <game-dir> --session NAME --session-prefix RUN  # bounded resumable lineage exploration batch
+rpgh sweep    <game-dir> --session NAME --session-prefix RUN --until-clean --limit 100 --max-generations 5
 rpgh inspect-script <game-dir> <script-id> [--session NAME]   # authored structure + live hook transforms
 rpgh inspect-session <game-dir> --session NAME               # read-only state/log/checkpoint diagnosis
 rpgh inspect-report <game-dir> <report-id>                    # one finding with complete evidence
@@ -300,6 +301,21 @@ retaining the exact next key, revision, write boundary, causal result identity,
 and GUI-compatible branch session where complete evidence remains available.
 Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
 detailed artifacts are actually needed.
+With `--until-clean`, the item limit and total search-node limit become shared
+budgets across several immutable generations. A search that reaches its own
+node slice automatically resumes from the replay-verified closest branch, and
+a completed generation freezes the newly exposed queue before continuing.
+Paused searches rotate behind the other frozen items before receiving another
+slice, so one difficult route cannot monopolize the lineage budget.
+`--max-generations` (default 5) is a third hard bound. The convergence envelope
+reports every generation revision, continuation attempt, isolated target,
+aggregate budget, live remaining item, and (when paused inside a generation)
+the exact frozen resume coordinate.
+It stops rather than spinning when a queue revision repeats, when authoring
+judgment is required, or when any declared budget is exhausted. A paused
+deterministic search whose closest branch applied zero inputs is reported in
+`safety.searchStalls` as `no-state-progress` instead of rerunning the identical
+slice. The source player save is never written.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports

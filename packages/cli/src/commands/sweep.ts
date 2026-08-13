@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertSessionName } from "@rpg-harness/session-store";
 import { getPlaytestReport } from "../playtest-reports";
+import { sessionDir } from "../session";
 import { assertTargetEmpty } from "./fork";
 import {
   executeDevelopmentWorkItem,
@@ -26,6 +27,10 @@ export interface SweepArgs {
   maxSteps?: number;
   maxNodes?: number;
   maxTotalNodes?: number;
+  /** Continue materialized closest-state searches and freeze later worklist generations. */
+  untilClean?: boolean;
+  /** Hard cap for immutable worklist generations in `untilClean` mode. */
+  maxGenerations?: number;
   pretty: boolean;
 }
 
@@ -38,7 +43,8 @@ export interface SweepResult {
     | "budget-exhausted"
     | "work-failed"
     | "authoring-required"
-    | "search-budget-exhausted";
+    | "search-budget-exhausted"
+    | "search-stalled";
   snapshot: {
     revision: string;
     file: string;
@@ -55,6 +61,12 @@ export interface SweepResult {
     preflightedTargets: string[];
     sourceWrites: false;
     nodeBudget: { limit: number; used: number; remaining: number };
+    searchStalls: Array<{
+      key: string;
+      targetSession: string | null;
+      attempt: number;
+      reason: "no-state-progress";
+    }>;
   };
   resume: {
     fromKey: string;
@@ -64,6 +76,7 @@ export interface SweepResult {
   } | null;
   runs: Array<{
     index: number;
+    attempt?: number;
     key: string;
     targetSession: string | null;
     status: WorkResult["status"];
@@ -74,6 +87,49 @@ export interface SweepResult {
   }>;
 }
 
+export interface SweepConvergenceResult {
+  schemaVersion: 1;
+  mode: "until-clean";
+  status: "clean" | "paused" | "stopped";
+  reason:
+    | "clean"
+    | "item-budget-exhausted"
+    | "generation-budget-exhausted"
+    | "search-budget-exhausted"
+    | "work-failed"
+    | "authoring-required"
+    | "search-stalled"
+    | "queue-stalled";
+  sourceSession: string;
+  budgets: {
+    items: { limit: number; used: number; remaining: number };
+    generations: { limit: number; used: number; remaining: number };
+    nodes: { limit: number; used: number; remaining: number };
+  };
+  safety: {
+    immutableGenerations: true;
+    sourceWrites: false;
+    preflightedTargets: string[];
+    searchStalls: Array<{
+      generation: number;
+      key: string;
+      targetSession: string | null;
+      attempt: number;
+      reason: "no-state-progress";
+    }>;
+  };
+  liveWorklist: {
+    totalItems: number;
+    nextKey: string | null;
+  };
+  resume: SweepResult["resume"];
+  generations: Array<{
+    generation: number;
+    sessionPrefix: string;
+    result: SweepResult;
+  }>;
+}
+
 interface PersistedSweepSnapshot {
   schemaVersion: 1;
   revision: string;
@@ -81,12 +137,180 @@ interface PersistedSweepSnapshot {
   items: DevelopmentWorkItem[];
 }
 
+interface SweepAttempt {
+  index: number;
+  item: DevelopmentWorkItem;
+  attemptItem: DevelopmentWorkItem;
+  firstTarget: string | null;
+  targetSession: string | null;
+  attempt: number;
+}
+
 export async function sweepCommand(args: SweepArgs): Promise<void> {
-  const result = await runDevelopmentSweep(args);
+  const result = args.untilClean
+    ? await runDevelopmentConvergence(args)
+    : await runDevelopmentSweep(args);
   process.stdout.write(
     (args.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n",
   );
   if (result.status === "stopped") process.exitCode = 1;
+}
+
+/**
+ * Consume multiple immutable queue generations without turning the scheduler
+ * into an unbounded daemon. `limit`, `maxGenerations`, and `maxTotalNodes` are
+ * shared hard budgets across the whole convergence run.
+ */
+export async function runDevelopmentConvergence(
+  args: SweepArgs,
+): Promise<SweepConvergenceResult> {
+  validateSweepArgs(args);
+  if (!args.session) throw new Error("--until-clean requires --session SOURCE");
+  const generationLimit = args.maxGenerations ?? 5;
+  if (!Number.isInteger(generationLimit) || generationLimit < 1) {
+    throw new Error("--max-generations must be a positive integer");
+  }
+  if (args.fromKey !== undefined || args.snapshotRevision !== undefined) {
+    throw new Error(
+      "--until-clean starts from the live queue; use a regular sweep to resume a frozen snapshot",
+    );
+  }
+
+  const itemLimit = args.limit;
+  const nodeLimit = args.maxTotalNodes ?? 5_000;
+  let usedItems = 0;
+  let usedNodes = 0;
+  const generations: SweepConvergenceResult["generations"] = [];
+  const revisions = new Set<string>();
+  let finalStatus: SweepConvergenceResult["status"] = "paused";
+  let finalReason: SweepConvergenceResult["reason"] = "generation-budget-exhausted";
+  let resume: SweepResult["resume"] = null;
+
+  for (let generation = 1; generation <= generationLimit; generation += 1) {
+    const remainingItems = itemLimit - usedItems;
+    const remainingNodes = nodeLimit - usedNodes;
+    if (remainingItems <= 0) {
+      finalReason = "item-budget-exhausted";
+      break;
+    }
+    if (remainingNodes <= 0) {
+      finalReason = "search-budget-exhausted";
+      break;
+    }
+
+    const generationPrefix = `${args.sessionPrefix}-g${String(generation).padStart(2, "0")}`;
+    assertSessionName(generationPrefix);
+    const result = await runDevelopmentSweepInternal({
+      ...args,
+      sessionPrefix: generationPrefix,
+      limit: remainingItems,
+      maxTotalNodes: remainingNodes,
+      untilClean: false,
+    }, true);
+    generations.push({ generation, sessionPrefix: generationPrefix, result });
+    usedItems += attemptedWorkItems(result);
+    usedNodes += result.safety.nodeBudget.used;
+    resume = result.resume;
+
+    if (result.status === "clean") {
+      finalStatus = "clean";
+      finalReason = "clean";
+      resume = null;
+      break;
+    }
+    if (result.status === "paused") {
+      finalStatus = "paused";
+      finalReason = "search-budget-exhausted";
+      break;
+    }
+    if (result.status === "stopped") {
+      finalStatus = "stopped";
+      finalReason = result.reason === "authoring-required"
+        ? "authoring-required"
+        : result.reason === "search-stalled"
+          ? "search-stalled"
+          : "work-failed";
+      break;
+    }
+    if (result.reason === "budget-exhausted") {
+      finalStatus = "paused";
+      finalReason = "item-budget-exhausted";
+      break;
+    }
+    if (revisions.has(result.snapshot.revision)) {
+      finalStatus = "stopped";
+      finalReason = "queue-stalled";
+      break;
+    }
+    revisions.add(result.snapshot.revision);
+    resume = null;
+    const nextSnapshot = await createSweepSnapshot(args.gameDir, args.session);
+    if (nextSnapshot.items.length === 0) {
+      finalStatus = "clean";
+      finalReason = "clean";
+      break;
+    }
+    if (revisions.has(nextSnapshot.revision)) {
+      finalStatus = "stopped";
+      finalReason = "queue-stalled";
+      break;
+    }
+  }
+
+  const live = await collectDevelopmentWorklist(args.gameDir, args.session);
+  if (live.items.length === 0) {
+    finalStatus = "clean";
+    finalReason = "clean";
+    resume = null;
+  } else if (
+    generations.length >= generationLimit &&
+    finalReason === "generation-budget-exhausted"
+  ) {
+    finalStatus = "paused";
+  }
+
+  const preflightedTargets = generations.flatMap(({ result }) =>
+    result.safety.preflightedTargets
+  );
+  const searchStalls = generations.flatMap(({ generation, result }) =>
+    result.safety.searchStalls.map((stall) => ({ generation, ...stall }))
+  );
+  return {
+    schemaVersion: 1,
+    mode: "until-clean",
+    status: finalStatus,
+    reason: finalReason,
+    sourceSession: args.session,
+    budgets: {
+      items: {
+        limit: itemLimit,
+        used: usedItems,
+        remaining: Math.max(0, itemLimit - usedItems),
+      },
+      generations: {
+        limit: generationLimit,
+        used: generations.length,
+        remaining: Math.max(0, generationLimit - generations.length),
+      },
+      nodes: {
+        limit: nodeLimit,
+        used: usedNodes,
+        remaining: Math.max(0, nodeLimit - usedNodes),
+      },
+    },
+    safety: {
+      immutableGenerations: true,
+      sourceWrites: false,
+      preflightedTargets,
+      searchStalls,
+    },
+    liveWorklist: {
+      totalItems: live.items.length,
+      nextKey: live.items[0]?.key ?? null,
+    },
+    resume,
+    generations,
+  };
 }
 
 /**
@@ -95,6 +319,13 @@ export async function sweepCommand(args: SweepArgs): Promise<void> {
  * is checked before the first write.
  */
 export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult> {
+  return runDevelopmentSweepInternal(args, false);
+}
+
+async function runDevelopmentSweepInternal(
+  args: SweepArgs,
+  autoContinueSearches: boolean,
+): Promise<SweepResult> {
   validateSweepArgs(args);
   const snapshot = args.snapshotRevision === undefined
     ? await createSweepSnapshot(args.gameDir, args.session)
@@ -143,16 +374,29 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
     | "work-failed"
     | "authoring-required"
     | "search-budget-exhausted"
+    | "search-stalled"
     | null = null;
 
-  for (const [index, item] of selected.entries()) {
-    const targetSession = targets[index] ?? null;
-    const searches = item.operation.command === "reach" ||
-      item.operation.command === "reach-script";
+  const queue: SweepAttempt[] = selected.map((item, index) => ({
+    index,
+    item,
+    attemptItem: item,
+    firstTarget: targets[index] ?? null,
+    targetSession: targets[index] ?? null,
+    attempt: 1,
+  }));
+  let searchBudgetBlocked = false;
+  const searchStalls: SweepResult["safety"]["searchStalls"] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const { index, item, attemptItem, firstTarget, targetSession, attempt } = current;
+    const searches = attemptItem.operation.command === "reach" ||
+      attemptItem.operation.command === "reach-script";
     const remainingNodes = Math.max(0, totalNodeLimit - usedNodes);
     if (searches && remainingNodes === 0) {
-      stoppedReason = "search-budget-exhausted";
-      break;
+      searchBudgetBlocked = true;
+      continue;
     }
     let result: WorkResult;
     try {
@@ -169,13 +413,9 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
             ? { maxNodes: args.maxNodes }
             : {}),
         pretty: false,
-      }, item);
+      }, attemptItem);
     } catch (error) {
-      const possibleTargets = targetSession === null
-        ? []
-        : preflightedTargets.filter((session) =>
-            session === targetSession || session.startsWith(`${targetSession}-`)
-          );
+      const possibleTargets = targetSession === null ? [] : [targetSession];
       const wrote = await anyTargetWritten(args.gameDir, possibleTargets);
       result = {
         schemaVersion: 1,
@@ -187,7 +427,7 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
           actionability: item.actionability,
           title: item.title,
         },
-        operation: item.operation,
+        operation: attemptItem.operation,
         safety: {
           mode: wrote ? "isolated-session" : "read-only",
           writes: wrote,
@@ -198,6 +438,7 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
     }
     runs.push({
       index: index + 1,
+      ...(attempt > 1 ? { attempt } : {}),
       key: item.key,
       targetSession,
       status: result.status,
@@ -217,13 +458,57 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
       break;
     }
     if (result.status === "paused") {
-      stoppedReason = "search-budget-exhausted";
-      break;
+      const next = workSearchContinuation(result);
+      const canContinue = autoContinueSearches &&
+        next !== null &&
+        consumedNodes > 0 &&
+        firstTarget !== null;
+      if (!canContinue) {
+        stoppedReason = "search-budget-exhausted";
+        break;
+      }
+      if (!await searchContinuationChangedState(
+        args.gameDir,
+        attemptItem,
+        args.session,
+        targetSession,
+      )) {
+        searchStalls.push({
+          key: item.key,
+          targetSession,
+          attempt,
+          reason: "no-state-progress",
+        });
+        continue;
+      }
+      if (usedNodes >= totalNodeLimit) {
+        searchBudgetBlocked = true;
+        continue;
+      }
+      const nextAttempt = attempt + 1;
+      const nextTarget = `${firstTarget}-c${String(nextAttempt - 1).padStart(2, "0")}`;
+      assertSessionName(nextTarget);
+      await assertTargetEmpty(args.gameDir, nextTarget);
+      preflightedTargets.push(nextTarget);
+      queue.push({
+        index,
+        item,
+        attemptItem: continueSearchItem(item, next),
+        firstTarget,
+        targetSession: nextTarget,
+        attempt: nextAttempt,
+      });
+      continue;
     }
     if (result.status === "prepared") {
       stoppedReason = "authoring-required";
       break;
     }
+  }
+  if (!stoppedReason && searchBudgetBlocked) {
+    stoppedReason = "search-budget-exhausted";
+  } else if (!stoppedReason && searchStalls.length > 0) {
+    stoppedReason = "search-stalled";
   }
 
   if (stoppedReason) {
@@ -241,6 +526,7 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
       },
       usedNodes,
       queuedItems,
+      searchStalls,
     );
   }
   const exhausted = selected.length < queuedItems.length;
@@ -258,6 +544,7 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
     },
     usedNodes,
     queuedItems,
+    searchStalls,
   );
 }
 
@@ -354,12 +641,16 @@ function resultEnvelope(
   outcome: Pick<SweepResult, "status" | "reason">,
   usedNodes = 0,
   pendingItems = allItems.slice(startIndex),
+  searchStalls: SweepResult["safety"]["searchStalls"] = [],
 ): SweepResult {
-  const completedItems = runs.filter((run) => run.status === "executed").length;
+  const completedKeys = new Set(
+    runs.filter((run) => run.status === "executed").map((run) => run.key),
+  );
+  const completedItems = completedKeys.size;
   const remainingKeys = pendingItems
-    .slice(completedItems)
+    .filter((item) => !completedKeys.has(item.key))
     .map((item) => item.key);
-  const next = pausedSearchContinuation(runs);
+  const next = pausedSearchContinuation(runs, remainingKeys[0]);
   return {
     schemaVersion: 1,
     ...outcome,
@@ -383,6 +674,7 @@ function resultEnvelope(
         used: usedNodes,
         remaining: Math.max(0, (args.maxTotalNodes ?? 5_000) - usedNodes),
       },
+      searchStalls,
     },
     resume: remainingKeys[0]
       ? {
@@ -397,8 +689,11 @@ function resultEnvelope(
 
 function pausedSearchContinuation(
   runs: SweepResult["runs"],
+  key?: string,
 ): ReachChoiceContinuation["next"] | ReachScriptContinuation["next"] | null {
-  const last = runs.at(-1);
+  const last = [...runs].reverse().find((run) =>
+    run.status === "paused" && (key === undefined || run.key === key)
+  );
   if (last?.status !== "paused" || !isRecord(last.evidence.output)) return null;
   const continuation = last.evidence.output.continuation;
   if (!isRecord(continuation) || !isRecord(continuation.next)) return null;
@@ -408,6 +703,89 @@ function pausedSearchContinuation(
   return next as unknown as
     | ReachChoiceContinuation["next"]
     | ReachScriptContinuation["next"];
+}
+
+function workSearchContinuation(
+  result: WorkResult,
+): ReachChoiceContinuation["next"] | ReachScriptContinuation["next"] | null {
+  if (result.status !== "paused" || !isRecord(result.result)) return null;
+  const continuation = result.result.continuation;
+  if (!isRecord(continuation) || !isRecord(continuation.next)) return null;
+  const next = continuation.next;
+  if (next.command !== "reach" && next.command !== "reach-script") return null;
+  if (!isRecord(next.args)) return null;
+  return next as unknown as
+    | ReachChoiceContinuation["next"]
+    | ReachScriptContinuation["next"];
+}
+
+async function searchContinuationChangedState(
+  gameDir: string,
+  item: DevelopmentWorkItem,
+  rootSession: string | undefined,
+  targetSession: string | null,
+): Promise<boolean> {
+  if (targetSession === null) return true;
+  if (item.operation.command !== "reach" && item.operation.command !== "reach-script") {
+    return true;
+  }
+  const declaredSource = item.operation.args.fromSession;
+  const sourceSession = declaredSource === "<source-session>"
+    ? rootSession
+    : declaredSource;
+  if (!sourceSession) return true;
+  try {
+    const [sourceState, targetState] = await Promise.all([
+      readFile(path.join(sessionDir(gameDir, sourceSession), "state.json"), "utf-8"),
+      readFile(path.join(sessionDir(gameDir, targetSession), "state.json"), "utf-8"),
+    ]);
+    return sourceState !== targetState;
+  } catch {
+    // The reach result already replay-verified its materialized target. If a
+    // concurrent diagnostic removes one of the comparison files, fail open to
+    // the global node bound instead of falsely declaring causal stagnation.
+    return true;
+  }
+}
+
+function continueSearchItem(
+  item: DevelopmentWorkItem,
+  next: ReachChoiceContinuation["next"] | ReachScriptContinuation["next"],
+): DevelopmentWorkItem {
+  if (next.command === "reach") {
+    if (item.operation.command !== "reach") {
+      throw new Error(`Search continuation changed command for ${item.key}`);
+    }
+    return {
+      ...item,
+      operation: {
+        command: "reach",
+        args: {
+          key: next.args.key,
+          fromSession: next.args.fromSession,
+          session: "<new-session>",
+        },
+      },
+    };
+  }
+  if (item.operation.command !== "reach-script") {
+    throw new Error(`Search continuation changed command for ${item.key}`);
+  }
+  return {
+    ...item,
+    operation: {
+      command: "reach-script",
+      args: {
+        scriptId: next.args.scriptId,
+        fromSession: next.args.fromSession,
+        session: "<new-session>",
+      },
+    },
+  };
+}
+
+function attemptedWorkItems(result: SweepResult): number {
+  return new Set(result.runs.map((run) => run.key)).size;
 }
 
 function compactSweepOutput(result: WorkResult): unknown {

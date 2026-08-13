@@ -5,7 +5,7 @@ import path from "node:path";
 import { createInitialState, peek, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import { appendLog, saveSession, sessionDir } from "../session";
-import { runDevelopmentSweep } from "./sweep";
+import { runDevelopmentConvergence, runDevelopmentSweep } from "./sweep";
 
 const temporaryDirectories: string[] = [];
 
@@ -263,6 +263,141 @@ describe("bounded development sweep", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  test("until-clean rotates searches and refuses deterministic zero-progress retries", async () => {
+    const gameDir = await temporarySweepGame();
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "continued",
+      limit: 2,
+      maxGenerations: 2,
+      maxNodes: 1,
+      maxTotalNodes: 5,
+      maxSteps: 20,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result.status).toBe("stopped");
+    expect(result.reason).toBe("search-stalled");
+    expect(result.generations).toHaveLength(1);
+    expect(result.generations[0]?.result.runs).toHaveLength(2);
+    expect(result.generations[0]?.result.runs.map((run) => run.key)).toEqual([
+      "story/scene-a",
+      "story/scene-b",
+    ]);
+    expect(result.budgets.nodes).toEqual({ limit: 5, used: 2, remaining: 3 });
+    expect(result.safety.searchStalls).toEqual([{
+      generation: 1,
+      key: "story/scene-a",
+      targetSession: "continued-g01-001",
+      attempt: 1,
+      reason: "no-state-progress",
+    }, {
+      generation: 1,
+      key: "story/scene-b",
+      targetSession: "continued-g01-002",
+      attempt: 1,
+      reason: "no-state-progress",
+    }]);
+    expect(result.liveWorklist.totalItems).toBeGreaterThan(0);
+    expect(result.resume?.next?.args.fromSession).toBe("continued-g01-001");
+  });
+
+  test("until-clean freezes newly exposed choice work as a later generation", async () => {
+    const gameDir = await temporaryCascadeSweepGame();
+    const sourceBefore = await snapshotTree(sessionDir(gameDir, "player"));
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "cascade",
+      limit: 10,
+      maxGenerations: 3,
+      maxNodes: 20,
+      maxTotalNodes: 100,
+      maxSteps: 20,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      mode: "until-clean",
+      status: "clean",
+      reason: "clean",
+      sourceSession: "player",
+      budgets: {
+        generations: { used: 2 },
+        items: { used: 3 },
+      },
+      safety: {
+        immutableGenerations: true,
+        sourceWrites: false,
+      },
+      liveWorklist: { totalItems: 0, nextKey: null },
+      resume: null,
+      generations: [{
+        generation: 1,
+        sessionPrefix: "cascade-g01",
+        result: {
+          reason: "snapshot-completed",
+          snapshot: { totalItems: 1, completedItems: 1 },
+          runs: [{ status: "executed" }],
+        },
+      }, {
+        generation: 2,
+        sessionPrefix: "cascade-g02",
+        result: {
+          reason: "snapshot-completed",
+          snapshot: { totalItems: 2, completedItems: 2 },
+          runs: [{ status: "executed" }, { status: "executed" }],
+        },
+      }],
+    });
+    expect(result.generations[0]?.result.snapshot.revision)
+      .not.toBe(result.generations[1]?.result.snapshot.revision);
+    expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
+  });
+
+  test("until-clean stops when a diagnostic generation cannot change the queue", async () => {
+    const gameDir = await temporaryDiagnosticSweepGame();
+
+    const result = await runDevelopmentConvergence({
+      gameDir,
+      session: "player",
+      sessionPrefix: "stalled",
+      limit: 10,
+      maxGenerations: 5,
+      maxTotalNodes: 100,
+      untilClean: true,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "stopped",
+      reason: "queue-stalled",
+      budgets: {
+        items: { used: 1 },
+        generations: { used: 1 },
+        nodes: { used: 0 },
+      },
+      liveWorklist: {
+        totalItems: 1,
+        nextKey: "session-error/player",
+      },
+      generations: [{
+        result: {
+          status: "completed",
+          reason: "snapshot-completed",
+          runs: [{
+            key: "session-error/player",
+            status: "executed",
+            evidence: { safety: { mode: "read-only", writes: false } },
+          }],
+        },
+      }],
+    });
+  });
+
   test("keeps checkpoint coverage batches bounded and points details at the branch", async () => {
     const gameDir = await temporarySweepChoiceGame();
     const child = Bun.spawn([
@@ -368,6 +503,50 @@ async function temporarySweepChoiceGame(): Promise<string> {
   }, presented.state);
   return dir;
 }
+
+async function temporaryCascadeSweepGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-cascade-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), "title: Cascade sweep test\n", "utf-8");
+  await writeFile(path.join(dir, "scripts", "scene.md"), [
+    "---",
+    "id: scene",
+    "title: Scene",
+    "characters: []",
+    "---",
+    "",
+    "? Choose a route. {id: route}",
+    "- Take the left trail {id: left, ai: curious} -> goto left_path",
+    "- Take the right trail {id: right, ai: cautious} -> goto right_path",
+    "",
+    "# left_path",
+    "",
+    "The left trail opens beneath the moon.",
+    "",
+    "[end]",
+    "",
+    "# right_path",
+    "",
+    "The right trail reaches a quiet shrine.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  const game = await loadGame(dir);
+  await saveSession(dir, "player", createInitialState(game));
+  return dir;
+}
+
+async function temporaryDiagnosticSweepGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-sweep-diagnostic-"));
+  temporaryDirectories.push(dir);
+  await mkdir(sessionDir(dir, "player"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), "title: Diagnostic sweep test\n", "utf-8");
+  await writeFile(path.join(sessionDir(dir, "player"), "state.json"), "{", "utf-8");
+  return dir;
+}
+
 
 async function snapshotTree(root: string): Promise<Record<string, string>> {
   const snapshot: Record<string, string> = {};

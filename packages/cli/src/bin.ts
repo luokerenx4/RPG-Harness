@@ -117,12 +117,13 @@ COMMANDS
   sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N]
         [--from-key WORK-KEY] [--snapshot-revision SHA256]
         [--persona NAME] [--max-steps N] [--max-nodes N]
-        [--max-total-nodes N] [--pretty]
+        [--max-total-nodes N] [--until-clean] [--max-generations N] [--pretty]
       Execute a bounded frozen snapshot of the prioritized development queue.
       Preflights every isolated target before writing, stops on failures or
       authoring judgment, persists the immutable queue, and returns completed
       plus remaining work for resume even as new branch evidence shrinks the
-      live queue.
+      live queue. --until-clean also follows closest-state search continuations
+      and freezes later queue generations under shared item/node/generation caps.
 
   inspect-script <game-dir> <script-id> [--session NAME] [--pretty]
       Inspect one authored script, including requirements, source coordinates,
@@ -670,13 +671,15 @@ async function runSweep(args: string[]): Promise<void> {
       "max-steps": { type: "string" },
       "max-nodes": { type: "string" },
       "max-total-nodes": { type: "string" },
+      "until-clean": { type: "boolean", default: false },
+      "max-generations": { type: "string", default: "5" },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N] [--from-key WORK-KEY] [--snapshot-revision SHA256] [--persona NAME] [--max-steps N] [--max-nodes N] [--max-total-nodes N] [--pretty]",
+    "rpgh sweep <game-dir> --session SOURCE --session-prefix PREFIX [--limit N] [--from-key WORK-KEY] [--snapshot-revision SHA256] [--persona NAME] [--max-steps N] [--max-nodes N] [--max-total-nodes N] [--until-clean] [--max-generations N] [--pretty]",
   );
   if (!values.session) throw new Error("sweep requires --session SOURCE");
   if (!values["session-prefix"]) {
@@ -700,6 +703,10 @@ async function runSweep(args: string[]): Promise<void> {
       : {}),
     ...(values["max-total-nodes"] !== undefined
       ? { maxTotalNodes: Number(values["max-total-nodes"]) }
+      : {}),
+    untilClean: Boolean(values["until-clean"]),
+    ...(values["until-clean"]
+      ? { maxGenerations: Number(values["max-generations"] ?? "5") }
       : {}),
     pretty: Boolean(values.pretty),
   });
