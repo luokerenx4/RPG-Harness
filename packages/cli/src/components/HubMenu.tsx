@@ -10,6 +10,7 @@ import {
   buildHubView,
   formatActivityForecast,
   formatHubCalendar,
+  formatObjectiveRequirement,
 } from "@rpg-harness/frontend-core";
 
 interface HubMenuProps {
@@ -71,7 +72,7 @@ export function HubMenu({ snapshot, cursor }: HubMenuProps) {
           {objective.description ? <Text dimColor>{objective.description}</Text> : null}
           {(objective.requirements ?? []).map((req) => (
             <Text key={req.id} color={req.satisfied ? "green" : "yellow"}>
-              {req.satisfied ? "✓" : "○"} {req.label}: {String(req.current)} / {String(req.target)}
+              {formatObjectiveRequirement(req)}
             </Text>
           ))}
         </Box>

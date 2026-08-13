@@ -302,12 +302,15 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: "web-input-contract";
   status: "passed";
   revision: string;
   interactions: Array<{ surface: string; input: unknown }>;
-  projections: Array<{ surface: "player-feedback-proof"; text: string }>;
+  projections: Array<{
+    surface: "player-feedback-proof" | "objective-requirement";
+    text: string;
+  }>;
 }
 
 const execFileAsync = promisify(execFile);
@@ -329,6 +332,9 @@ const REQUIRED_WEB_INTERACTIONS = [
 const REQUIRED_WEB_PROJECTIONS = [{
   surface: "player-feedback-proof",
   text: "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc",
+}, {
+  surface: "objective-requirement",
+  text: "○ Vow kept○ Pulse: Oni 0 / 6",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -647,7 +653,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 2 &&
+    value.schemaVersion === 3 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

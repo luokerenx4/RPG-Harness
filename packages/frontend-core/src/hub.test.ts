@@ -4,6 +4,8 @@ import {
   buildHubView,
   formatActivityForecast,
   formatHubCalendar,
+  formatObjectiveRequirement,
+  objectiveRequirementProgress,
 } from "./hub";
 
 function snapshot(overrides: Partial<HubSnapshot> = {}): HubSnapshot {
@@ -37,6 +39,36 @@ describe("formatHubCalendar", () => {
     expect(
       formatHubCalendar(snapshot({ day: 1, maxDay: 5, slotsPerDay: 1 })),
     ).toBe("Day 1/5");
+  });
+});
+
+describe("formatObjectiveRequirement", () => {
+  test("uses the status marker instead of leaking boolean diagnostics", () => {
+    const pending = {
+      id: "survived",
+      label: "篝と生還",
+      current: false,
+      target: true,
+      satisfied: false,
+    };
+    const completed = { ...pending, current: true, satisfied: true };
+
+    expect(formatObjectiveRequirement(pending)).toBe("○ 篝と生還");
+    expect(formatObjectiveRequirement(completed)).toBe("✓ 篝と生還");
+    expect(objectiveRequirementProgress(pending)).toBeNull();
+  });
+
+  test("keeps exact numeric progress without adding a second colon", () => {
+    const requirement = {
+      id: "pulse",
+      label: "脈絡: 鬼",
+      current: 0,
+      target: 6,
+      satisfied: false,
+    };
+
+    expect(formatObjectiveRequirement(requirement)).toBe("○ 脈絡: 鬼 0 / 6");
+    expect(objectiveRequirementProgress(requirement)).toBe("0 / 6");
   });
 });
 

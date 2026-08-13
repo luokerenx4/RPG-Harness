@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project quality certificate input", () => {
   test("executes the current Web GUI contract before certification", async () => {
     expect(await runQualitySurfaceChecks()).toMatchObject([{
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -32,6 +32,9 @@ describe("project quality certificate input", () => {
       projections: [{
         surface: "player-feedback-proof",
         text: "検証済みproject aaaaaaaaaa → bbbbbbbbbbcertificate cccccccccc",
+      }, {
+        surface: "objective-requirement",
+        text: "○ Vow kept○ Pulse: Oni 0 / 6",
       }],
     }]);
   });

@@ -25,6 +25,7 @@ import {
   applyUiAction,
   buildHubView,
   formatHubCalendar,
+  formatObjectiveRequirement,
   initialModel,
   makeErrorModel,
   type BacklogEntry,
@@ -596,7 +597,7 @@ export function StageView({
                   className={`objective-requirement${req.satisfied ? " satisfied" : ""}`}
                   key={req.id}
                 >
-                  {req.satisfied ? "✓" : "○"} {req.label}: {String(req.current)} / {String(req.target)}
+                  {formatObjectiveRequirement(req)}
                 </div>
               ))}
             </section>

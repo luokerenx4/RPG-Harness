@@ -1,4 +1,8 @@
-import type { HubActivity, HubSnapshot } from "@rpg-harness/engine";
+import type {
+  HubActivity,
+  HubObjectiveRequirement,
+  HubSnapshot,
+} from "@rpg-harness/engine";
 
 // Shared presentation semantics for hub-like menus. Engine modules are free to
 // introduce their own categories; these well-known categories merely provide a
@@ -113,6 +117,31 @@ export function formatActivityForecast(activity: HubActivity): string | null {
       return metric.label;
     })
     .join(" · ");
+}
+
+/**
+ * Keep objective data lossless for AI/Headless consumers while projecting it
+ * into player language for GUI shells. The leading ✓/○ already communicates a
+ * boolean gate, so repeating `false / true` is diagnostic noise. Numeric and
+ * string requirements retain their exact progress.
+ */
+export function formatObjectiveRequirement(
+  requirement: HubObjectiveRequirement,
+): string {
+  const progress = objectiveRequirementProgress(requirement);
+  return `${requirement.satisfied ? "✓" : "○"} ${requirement.label}${
+    progress === null ? "" : ` ${progress}`
+  }`;
+}
+
+export function objectiveRequirementProgress(
+  requirement: HubObjectiveRequirement,
+): string | null {
+  if (
+    typeof requirement.current === "boolean" &&
+    typeof requirement.target === "boolean"
+  ) return null;
+  return `${String(requirement.current)} / ${String(requirement.target)}`;
 }
 
 export function buildHubView(snapshot: HubSnapshot): HubView {

@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -14,7 +14,7 @@ export interface WebQualitySurfaceEvidence {
     input: Input;
   }>;
   projections: Array<{
-    surface: "player-feedback-proof";
+    surface: "player-feedback-proof" | "objective-requirement";
     text: string;
   }>;
 }
@@ -142,18 +142,63 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   const projections = [{
     surface: "player-feedback-proof" as const,
     text: expectedProof,
-  }];
+  }, objectiveRequirementProjection()];
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function objectiveRequirementProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const tree = StageView({
+    stage: {
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        objectives: [{
+          id: "gate",
+          title: "Open the gate",
+          scope: "main",
+          terminal: true,
+          status: "active",
+          requirements: [
+            { id: "vow", label: "Vow kept", current: false, target: true, satisfied: false },
+            { id: "pulse", label: "Pulse: Oni", current: 0, target: 6, satisfied: false },
+          ],
+        }],
+        activities: [],
+      },
+    },
+    game: { scripts: [] } as unknown as Game,
+    onInput: () => {},
+  });
+  const text = nodeText(tree);
+  if (
+    !text.includes("○ Vow kept") ||
+    !text.includes("○ Pulse: Oni 0 / 6") ||
+    text.includes("false / true") ||
+    text.includes("Pulse: Oni: 0 / 6")
+  ) {
+    throw new Error("Web quality surface leaks raw objective requirement diagnostics");
+  }
+  return {
+    surface: "objective-requirement",
+    text: "○ Vow kept○ Pulse: Oni 0 / 6",
   };
 }
 
