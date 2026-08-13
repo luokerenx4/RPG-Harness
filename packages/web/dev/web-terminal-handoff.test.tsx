@@ -217,6 +217,26 @@ describe("Web terminal handoff", () => {
           title: "Line is too explicit",
           evidence: { logEntry: 7, currentScriptId: "scene" },
         })}
+        feedbackFeed={{
+          revision: "feedback-revision",
+          open: 0,
+          resolved: 1,
+          items: [{
+            id: "pt-resolved",
+            createdAt: "2026-08-13T00:00:00.000Z",
+            status: "resolved",
+            session: "player",
+            area: "narrative",
+            severity: "minor",
+            title: "Line is too explicit",
+            resolution: "Replaced exposition with a pause and replayed the scene.",
+            evidence: {
+              logEntry: 7,
+              currentScriptId: "scene",
+              checkpoint: { revision: "a".repeat(64) },
+            },
+          }],
+        }}
         onClose={() => {}}
       />,
     );
@@ -224,5 +244,8 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("今の画面・ログ・セーブを再現可能な coding issue にします。");
     expect(html).toContain("この瞬間を issue にする");
     expect(html).toContain("Target: scripts/scene.md");
+    expect(html).toContain("このセッションのフィードバック");
+    expect(html).toContain("対応済み");
+    expect(html).toContain("Replaced exposition with a pause and replayed the scene.");
   });
 });

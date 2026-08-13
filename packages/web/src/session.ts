@@ -118,6 +118,22 @@ export interface WebFeedbackReceipt {
   };
 }
 
+export interface WebFeedbackFeed {
+  revision: string;
+  open: number;
+  resolved: number;
+  items: Array<WebFeedbackReceipt & {
+    createdAt: string;
+    status: "open" | "resolved" | "superseded";
+    details?: string;
+    target?: string;
+    resolvedAt?: string;
+    resolution?: string;
+    supersededAt?: string;
+    supersededReason?: string;
+  }>;
+}
+
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
 
@@ -207,6 +223,16 @@ export async function submitFeedback(
     throw new Error("session bridge did not return a feedback report");
   }
   return payload.report;
+}
+
+export async function loadFeedbackFeed(gameId: string): Promise<WebFeedbackFeed | null> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return null;
+  const response = await fetch(
+    `${BRIDGE_ROOT}/feedback/${encodeURIComponent(gameId)}/${encodeURIComponent(info.session)}`,
+  );
+  if (!response.ok) throw await bridgeError(response);
+  return await response.json() as WebFeedbackFeed;
 }
 
 export async function saveState(

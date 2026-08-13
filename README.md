@@ -805,6 +805,10 @@ contract used by Headless: the coding issue freezes the live save, log
 coordinate, last input/output, visuals, current script, and a content-addressed
 reproduction checkpoint, then appears immediately in `rpgh worklist`. Static
 browser builds omit the control because they have no local development bridge.
+Web submissions carry a structured player-feedback origin, so the same HUD can
+poll the session's issue history without mixing in autonomous audit findings.
+Players see whether AI is still working, resolved the concern, or explicitly
+superseded it, together with the AI's recorded resolution.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

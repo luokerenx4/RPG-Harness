@@ -9,6 +9,7 @@ import {
   installDevelopmentStatusInvalidation,
   loadBridgeBranchContext,
   loadBridgeDevelopmentStatus,
+  loadBridgeFeedbackFeed,
   loadBridgeSession,
   loadBridgeSnapshot,
   saveBridgeSession,
@@ -173,6 +174,7 @@ describe("Web development session bridge", () => {
 
     expect(report).toMatchObject({
       status: "open",
+      origin: { kind: "player-feedback", surface: "web" },
       session: "player-branch",
       area: "narrative",
       severity: "minor",
@@ -204,6 +206,52 @@ describe("Web development session bridge", () => {
     expect(await loadBridgeSession(gameDir, "player-branch")).toMatchObject({
       baseline: { currentScriptId: "bond_mio_03", beatIndex: 8 },
     });
+
+    const openFeed = await loadBridgeFeedbackFeed(gameDir, "player-branch");
+    expect(openFeed).toMatchObject({
+      revision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      open: 1,
+      resolved: 0,
+      items: [{
+        id: report.id,
+        status: "open",
+        title: "This answer sounds too explanatory",
+        evidence: {
+          logEntry: 1,
+          currentScriptId: "bond_mio_03",
+          checkpoint: { revision: report.evidence.checkpoint?.revision },
+        },
+      }],
+    });
+
+    const automaticReport = {
+      ...report,
+      id: "pt-automatic",
+      title: "Automated audit finding",
+      origin: undefined,
+    };
+    const resolvedReport = {
+      ...report,
+      status: "resolved",
+      resolvedAt: "2026-08-13T01:00:00.000Z",
+      resolution: "Made Mio pause before answering and replayed the choice.",
+    };
+    await writeFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "player-branch", "issues.jsonl"),
+      [resolvedReport, automaticReport].map((value) => JSON.stringify(value)).join("\n") + "\n",
+      "utf-8",
+    );
+    const resolvedFeed = await loadBridgeFeedbackFeed(gameDir, "player-branch");
+    expect(resolvedFeed).toMatchObject({
+      open: 0,
+      resolved: 1,
+      items: [{
+        id: report.id,
+        status: "resolved",
+        resolution: "Made Mio pause before answering and replayed the choice.",
+      }],
+    });
+    expect(resolvedFeed.revision).not.toBe(openFeed.revision);
   });
 
   test("rejects malformed player feedback before writing an issue", async () => {

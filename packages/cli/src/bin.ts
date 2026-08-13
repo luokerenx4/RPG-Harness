@@ -1155,16 +1155,21 @@ async function runReport(args: string[]): Promise<void> {
       title: { type: "string" },
       details: { type: "string" },
       target: { type: "string" },
+      origin: { type: "string" },
       pretty: { type: "boolean", default: false },
     },
     allowPositionals: true,
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh report <game-dir> --title TEXT [--session NAME] [--area AREA] [--severity LEVEL] [--details TEXT] [--target FILE] [--pretty]",
+    "rpgh report <game-dir> --title TEXT [--session NAME] [--area AREA] [--severity LEVEL] [--details TEXT] [--target FILE] [--origin player-feedback/web] [--pretty]",
   );
   if (!values.title) {
     process.stderr.write("Missing required flag: --title\n");
+    process.exit(2);
+  }
+  if (values.origin !== undefined && values.origin !== "player-feedback/web") {
+    process.stderr.write("--origin must be player-feedback/web when provided\n");
     process.exit(2);
   }
   const area = values.area ?? "narrative";
@@ -1187,6 +1192,9 @@ async function runReport(args: string[]): Promise<void> {
     area: area as PlaytestArea,
     severity: severity as PlaytestSeverity,
     title: values.title,
+    ...(values.origin !== undefined
+      ? { origin: values.origin as "player-feedback/web" }
+      : {}),
     ...(values.details !== undefined ? { details: values.details } : {}),
     ...(values.target !== undefined ? { target: values.target } : {}),
     pretty: Boolean(values.pretty),

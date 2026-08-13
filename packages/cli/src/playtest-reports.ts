@@ -234,6 +234,10 @@ export interface PlaytestReport {
   area: PlaytestArea;
   severity: PlaytestSeverity;
   title: string;
+  origin?: {
+    kind: "player-feedback";
+    surface: "web";
+  };
   details?: string;
   target?: string;
   resolvedAt?: string;
@@ -353,6 +357,7 @@ export interface RecordPlaytestReportArgs {
   area: PlaytestArea;
   severity: PlaytestSeverity;
   title: string;
+  origin?: PlaytestReport["origin"];
   details?: string;
   target?: string;
   sourceTargets?: PlaytestSourceTarget[];
@@ -401,6 +406,12 @@ export async function recordPlaytestReport(
 ): Promise<PlaytestReport> {
   assertSessionName(args.session);
   if (!args.title.trim()) throw new Error("Playtest report title cannot be empty");
+  if (
+    args.origin &&
+    (args.origin.kind !== "player-feedback" || args.origin.surface !== "web")
+  ) {
+    throw new Error("Invalid playtest report origin");
+  }
   if (args.autoplay && args.auditMatrix) {
     throw new Error(
       "A playtest report cannot combine autoplay and AI audit evidence",
@@ -427,6 +438,7 @@ export async function recordPlaytestReport(
       area: args.area,
       severity: args.severity,
       title: args.title.trim(),
+      ...(args.origin ? { origin: structuredClone(args.origin) } : {}),
       ...(args.details?.trim() ? { details: args.details.trim() } : {}),
       ...(args.target?.trim() ? { target: args.target.trim() } : {}),
       evidence: {

@@ -16,6 +16,7 @@ interface ReportArgs {
   area: PlaytestArea;
   severity: PlaytestSeverity;
   title: string;
+  origin?: "player-feedback/web";
   details?: string;
   target?: string;
   pretty: boolean;
@@ -60,7 +61,13 @@ interface InspectReportArgs {
 }
 
 export async function reportCommand(args: ReportArgs): Promise<void> {
-  const report = await recordPlaytestReport(args);
+  const { origin, pretty: _pretty, ...reportArgs } = args;
+  const report = await recordPlaytestReport({
+    ...reportArgs,
+    ...(origin === "player-feedback/web"
+      ? { origin: { kind: "player-feedback" as const, surface: "web" as const } }
+      : {}),
+  });
   process.stdout.write(
     (args.pretty ? JSON.stringify(report, null, 2) : JSON.stringify(report)) +
       "\n",

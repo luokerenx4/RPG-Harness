@@ -8,12 +8,14 @@ import {
   loadBranchContext,
   loadState,
   loadDevelopmentStatus,
+  loadFeedbackFeed,
   pollExternalState,
   saveState,
   submitFeedback,
   type WebSessionInfo,
   type WebBranchContext,
   type WebDevelopmentStatus,
+  type WebFeedbackFeed,
 } from "./session";
 import { WebPlayScreen } from "./WebPlayScreen";
 
@@ -26,6 +28,7 @@ interface Loaded {
   initialState?: ComposedState;
   developmentStatus?: WebDevelopmentStatus;
   branchContext?: WebBranchContext;
+  feedbackFeed?: WebFeedbackFeed;
 }
 
 export function App() {
@@ -57,9 +60,10 @@ export function App() {
   const start = useCallback(async (id: string, fresh: boolean) => {
     try {
       if (fresh) await clearState(id);
-      const [saved, branchContext] = await Promise.all([
+      const [saved, branchContext, feedbackFeed] = await Promise.all([
         fresh ? Promise.resolve(null) : loadState(id),
         loadBranchContext(id),
+        loadFeedbackFeed(id).catch(() => null),
       ]);
       const { game, assetUrls } = loadWebGame(id);
       const info = await getSessionInfo();
@@ -71,6 +75,7 @@ export function App() {
         revision: 0,
         ...(saved ? { initialState: saved } : {}),
         ...(branchContext ? { branchContext } : {}),
+        ...(feedbackFeed ? { feedbackFeed } : {}),
       });
     } catch (err) {
       setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
@@ -191,6 +196,36 @@ export function App() {
     };
   }, [loaded?.id, loaded?.sessionInfo.mode]);
 
+  useEffect(() => {
+    if (!loaded || loaded.sessionInfo.mode !== "shared") return;
+    let cancelled = false;
+    let checking = false;
+    const poll = async () => {
+      if (checking || cancelled) return;
+      checking = true;
+      try {
+        const feed = await loadFeedbackFeed(loaded.id);
+        if (cancelled || !feed) return;
+        setLoaded((current) =>
+          current && current.id === loaded.id &&
+              current.feedbackFeed?.revision !== feed.revision
+            ? { ...current, feedbackFeed: feed }
+            : current
+        );
+      } catch {
+        // Feedback history is advisory; gameplay persistence remains live.
+      } finally {
+        checking = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loaded?.id, loaded?.sessionInfo.mode]);
+
   const exit = useCallback(() => {
     setLoaded(null);
     void refreshSessions();
@@ -213,6 +248,7 @@ export function App() {
         developmentStatus={loaded.developmentStatus}
         feedbackEnabled={loaded.sessionInfo.mode === "shared"}
         onFeedback={(input) => submitFeedback(loaded.id, input)}
+        feedbackFeed={loaded.feedbackFeed}
         onExit={exit}
       />
     );

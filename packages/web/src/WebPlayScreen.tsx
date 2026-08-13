@@ -38,6 +38,7 @@ import type {
   WebBranchContext,
   WebDevelopmentStatus,
   WebFeedbackArea,
+  WebFeedbackFeed,
   WebFeedbackInput,
   WebFeedbackReceipt,
   WebStepEvent,
@@ -72,6 +73,7 @@ interface Props {
   developmentStatus?: WebDevelopmentStatus;
   feedbackEnabled?: boolean;
   onFeedback?: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
+  feedbackFeed?: WebFeedbackFeed;
   onExit?: () => void;
 }
 
@@ -99,6 +101,7 @@ export function WebPlayScreen({
   developmentStatus,
   feedbackEnabled = false,
   onFeedback,
+  feedbackFeed,
   onExit,
 }: Props) {
   const [model, dispatch] = useReducer(modelReducer, initialModel);
@@ -261,7 +264,11 @@ export function WebPlayScreen({
         </button>
         {feedbackEnabled && onFeedback && (
           <button className="hud-btn hud-feedback-btn" onClick={() => setShowFeedback(true)}>
-            AIへフィードバック
+            AIへフィードバック{feedbackFeed?.open
+              ? ` · ${feedbackFeed.open}件対応中`
+              : feedbackFeed?.resolved
+                ? ` · ${feedbackFeed.resolved}件対応済み`
+                : ""}
           </button>
         )}
       </div>
@@ -274,6 +281,7 @@ export function WebPlayScreen({
       {showFeedback && onFeedback && (
         <FeedbackOverlay
           branchContext={branchContext}
+          feedbackFeed={feedbackFeed}
           onSubmit={onFeedback}
           onClose={() => setShowFeedback(false)}
         />
@@ -284,10 +292,12 @@ export function WebPlayScreen({
 
 export function FeedbackOverlay({
   branchContext,
+  feedbackFeed,
   onSubmit,
   onClose,
 }: {
   branchContext?: WebBranchContext;
+  feedbackFeed?: WebFeedbackFeed;
   onSubmit: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
   onClose: () => void;
 }) {
@@ -299,6 +309,7 @@ export function FeedbackOverlay({
   const [receipt, setReceipt] = useState<WebFeedbackReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
   const target = branchContext?.handoff?.target;
+  const targetApplies = area === "narrative" || area === "gameplay";
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!title.trim() || submitting) return;
@@ -310,7 +321,7 @@ export function FeedbackOverlay({
         severity,
         title,
         ...(details.trim() ? { details } : {}),
-        ...(target ? { target } : {}),
+        ...(target && targetApplies ? { target } : {}),
       }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -362,12 +373,30 @@ export function FeedbackOverlay({
             <label>補足（任意）
               <textarea rows={5} maxLength={2000} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="期待した感触や、直してほしい方向を書けます。" />
             </label>
-            {target && <div className="feedback-target">Target: {target}</div>}
+            {target && targetApplies && <div className="feedback-target">Target: {target}</div>}
             {error && <div className="feedback-error" role="alert">{error}</div>}
             <button className="feedback-submit" disabled={!title.trim() || submitting} type="submit">
               {submitting ? "記録中…" : "この瞬間を issue にする"}
             </button>
           </form>
+        )}
+        {feedbackFeed && feedbackFeed.items.length > 0 && (
+          <div className="feedback-history">
+            <strong>このセッションのフィードバック</strong>
+            {feedbackFeed.items.map((item) => (
+              <article className={`feedback-history-item ${item.status}`} key={item.id}>
+                <div className="feedback-history-title">
+                  <span>{item.title}</span>
+                  <span>{item.status === "open" ? "AI対応中" : item.status === "resolved" ? "対応済み" : "見送り"}</span>
+                </div>
+                <div className="feedback-history-meta">
+                  {item.area} · {item.severity} · log {item.evidence.logEntry ?? "—"} · {item.evidence.currentScriptId ?? "—"}
+                </div>
+                {item.resolution && <p><strong>AI:</strong> {item.resolution}</p>}
+                {item.supersededReason && <p><strong>AI:</strong> {item.supersededReason}</p>}
+              </article>
+            ))}
+          </div>
         )}
       </div>
     </div>

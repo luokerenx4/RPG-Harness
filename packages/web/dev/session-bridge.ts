@@ -75,6 +75,32 @@ export interface BridgeFeedbackReport {
   [key: string]: unknown;
 }
 
+export interface BridgeFeedbackFeed {
+  revision: string;
+  open: number;
+  resolved: number;
+  items: Array<{
+    id: string;
+    session: string;
+    createdAt: string;
+    status: "open" | "resolved" | "superseded";
+    area: PlaytestArea;
+    severity: PlaytestSeverity;
+    title: string;
+    details?: string;
+    target?: string;
+    resolvedAt?: string;
+    resolution?: string;
+    supersededAt?: string;
+    supersededReason?: string;
+    evidence: {
+      logEntry: number | null;
+      currentScriptId: string | null;
+      checkpoint?: { revision: string };
+    };
+  }>;
+}
+
 export async function createBridgeFeedback(
   args: CreateBridgeFeedbackArgs,
 ): Promise<BridgeFeedbackReport> {
@@ -99,11 +125,75 @@ export async function createBridgeFeedback(
     args.severity,
     "--title",
     args.title.trim(),
+    "--origin",
+    "player-feedback/web",
     ...(args.details?.trim() ? ["--details", args.details.trim()] : []),
     ...(args.target?.trim() ? ["--target", args.target.trim()] : []),
   ];
   const { stdout } = await execFileAsync("bun", command, { maxBuffer: 1024 * 1024 });
   return JSON.parse(stdout) as BridgeFeedbackReport;
+}
+
+export async function loadBridgeFeedbackFeed(
+  gameDir: string,
+  session: string,
+): Promise<BridgeFeedbackFeed> {
+  assertSegment(session, "session");
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const { stdout } = await execFileAsync("bun", [
+    cli,
+    "reports",
+    gameDir,
+    "--session",
+    session,
+    "--status",
+    "all",
+    "--format",
+    "json",
+  ], { maxBuffer: 4 * 1024 * 1024 });
+  const reports = JSON.parse(stdout) as unknown;
+  if (!Array.isArray(reports)) throw new Error("Invalid feedback report list");
+  const items = reports
+    .filter(isPlayerFeedbackReport)
+    .map((report) => ({
+      id: report.id,
+      session,
+      createdAt: report.createdAt,
+      status: report.status,
+      area: report.area,
+      severity: report.severity,
+      title: report.title,
+      ...(typeof report.details === "string" ? { details: report.details } : {}),
+      ...(typeof report.target === "string" ? { target: report.target } : {}),
+      ...(typeof report.resolvedAt === "string" ? { resolvedAt: report.resolvedAt } : {}),
+      ...(typeof report.resolution === "string" ? { resolution: report.resolution } : {}),
+      ...(typeof report.supersededAt === "string" ? { supersededAt: report.supersededAt } : {}),
+      ...(typeof report.supersededReason === "string"
+        ? { supersededReason: report.supersededReason }
+        : {}),
+      evidence: {
+        logEntry: Number.isInteger(report.evidence.logEntry)
+          ? report.evidence.logEntry as number
+          : null,
+        currentScriptId: typeof report.evidence.currentScriptId === "string"
+          ? report.evidence.currentScriptId
+          : null,
+        ...(isFeedbackCheckpoint(report.evidence.checkpoint)
+          ? { checkpoint: { revision: report.evidence.checkpoint.revision } }
+          : {}),
+      },
+    }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const revision = createHash("sha256")
+    .update(JSON.stringify(items))
+    .digest("hex")
+    .slice(0, 16);
+  return {
+    revision,
+    open: items.filter((item) => item.status === "open").length,
+    resolved: items.filter((item) => item.status === "resolved").length,
+    items,
+  };
 }
 
 export interface BridgeBranchContext {
@@ -515,13 +605,19 @@ async function handleBridgeRequest(
       /^\/__rpgh\/session-bridge\/feedback\/([^/]+)\/([^/]+)$/,
     );
     if (feedbackMatch) {
-      if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
+      if (req.method !== "GET" && req.method !== "POST") {
+        return methodNotAllowed(res, ["GET", "POST"]);
+      }
       const gameId = decodeURIComponent(feedbackMatch[1] ?? "");
       const session = decodeURIComponent(feedbackMatch[2] ?? "");
       assertSegment(gameId, "game id");
       assertSegment(session, "session");
       const gameDir = path.join(examplesRoot, gameId);
       await access(path.join(gameDir, "game.yaml"));
+      if (req.method === "GET") {
+        sendJson(res, 200, await loadBridgeFeedbackFeed(gameDir, session));
+        return true;
+      }
       const body = await readJsonBody(req);
       const report = await createBridgeFeedback({
         gameDir,
@@ -597,6 +693,44 @@ async function handleBridgeRequest(
     });
     return true;
   }
+}
+
+function isPlayerFeedbackReport(value: unknown): value is {
+  id: string;
+  createdAt: string;
+  status: "open" | "resolved" | "superseded";
+  area: PlaytestArea;
+  severity: PlaytestSeverity;
+  title: string;
+  details?: unknown;
+  target?: unknown;
+  resolvedAt?: unknown;
+  resolution?: unknown;
+  supersededAt?: unknown;
+  supersededReason?: unknown;
+  evidence: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const report = value as Record<string, unknown>;
+  const origin = report.origin;
+  return report.schemaVersion === 1 &&
+    typeof report.id === "string" &&
+    typeof report.createdAt === "string" &&
+    (report.status === "open" || report.status === "resolved" || report.status === "superseded") &&
+    typeof report.area === "string" && PLAYTEST_AREAS.includes(report.area as PlaytestArea) &&
+    typeof report.severity === "string" && PLAYTEST_SEVERITIES.includes(report.severity as PlaytestSeverity) &&
+    typeof report.title === "string" &&
+    origin !== null && typeof origin === "object" && !Array.isArray(origin) &&
+    (origin as Record<string, unknown>).kind === "player-feedback" &&
+    (origin as Record<string, unknown>).surface === "web" &&
+    report.evidence !== null && typeof report.evidence === "object" &&
+    !Array.isArray(report.evidence);
+}
+
+function isFeedbackCheckpoint(value: unknown): value is { revision: string } {
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).revision === "string" &&
+    /^[a-f0-9]{64}$/.test((value as Record<string, unknown>).revision as string);
 }
 
 function parseBridgeHandoff(value: unknown): BridgeBranchContext["handoff"] {
