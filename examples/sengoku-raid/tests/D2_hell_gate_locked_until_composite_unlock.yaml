@@ -1,4 +1,4 @@
-name: 提案D：hell_gate は composite gate（pulse_oni>=8 AND power>=12 AND 2 skills）でのみ
+name: 提案D：hell_gate は composite gate（pulse_oni>=6 AND power>=12 AND 2 skills）でのみ
   depart 可
 description: |
   Two-step verification. First: seed almost meeting requirements but
@@ -25,7 +25,7 @@ state:
           spectral: 25
           intellect: 5
     variables:
-      pulse_oni: 8
+      pulse_oni: 6
   runtime:
     firedTriggers: []
   sengoku-raid:

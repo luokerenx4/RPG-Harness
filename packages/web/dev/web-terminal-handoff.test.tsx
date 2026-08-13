@@ -70,10 +70,13 @@ describe("Web terminal handoff", () => {
           createdAt: "2026-08-13T00:00:00.000Z",
           endings: 3,
           paths: 7,
+          maxActivityRepetitions: 30,
+          maxActivityRepetition: { persona: "greedy", activityKind: "attack", count: 27 },
         },
       }} />,
     );
-    expect(html).toContain("AI Dev · certified · 3 endings / 7 paths");
+    expect(html).toContain("AI Dev · certified · 3 endings / 7 paths · loop 27/30");
+    expect(html).toContain("greedy/attack ×27 (limit 30)");
     expect(html).toContain("certificate-revision");
   });
 
@@ -96,6 +99,8 @@ describe("Web terminal handoff", () => {
           createdAt: "2026-08-13T00:00:00.000Z",
           endings: 3,
           paths: 7,
+          maxActivityRepetitions: 30,
+          maxActivityRepetition: { persona: "greedy", activityKind: "attack", count: 27 },
         },
       }} />,
     );

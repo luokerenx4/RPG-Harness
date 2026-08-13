@@ -1,7 +1,7 @@
-name: 提案B：同行者 alive で extract → befriended_<id> flip + 親密度+1
+name: 提案B：同行者 alive で extract → befriended_<id> flip + 親密度+2
 description: |
   Seed an in-raid state with kasumi as companion (HP 8) at the extract
-  zone. Extract — befriended_kasumi flips true, kasumi affection +1,
+  zone. Extract — befriended_kasumi flips true, kasumi affection +2,
   companion clears, raid counters tick.
 state:
   baseline:
@@ -55,7 +55,7 @@ assertions:
     eq: true
   - kind: state
     path: baseline.characters.kasumi.affection
-    eq: 6
+    eq: 7
   - kind: state
     path: baseline.switches.companion_kasumi
     eq: false

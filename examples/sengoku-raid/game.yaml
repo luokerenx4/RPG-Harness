@@ -11,7 +11,7 @@ ai_audit:
   min_unique_endings: 2
   min_unique_decision_paths: 3
   # A route may revisit a semantic action, but no acceptance persona should
-  # need to grind the same stable activity more than this many times.
+  # need to grind the same semantic activity kind more than this many times.
   max_activity_repetitions: 30
   # These tags are observed on activities the lanes actually execute, not
   # inferred from persona names or merely available buttons. Together they

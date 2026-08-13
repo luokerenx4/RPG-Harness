@@ -45,6 +45,12 @@ export interface WebDevelopmentStatus {
     createdAt: string | null;
     endings: number;
     paths: number;
+    maxActivityRepetitions: number | null;
+    maxActivityRepetition: {
+      persona: string;
+      activityKind: string;
+      count: number;
+    } | null;
   };
 }
 

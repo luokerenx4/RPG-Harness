@@ -39,4 +39,4 @@ assertions:
     relatedActivityExcludes: imbue:pure
     requirementId: pulse_oni
     current: 3
-    target: 8
+    target: 6

@@ -31,7 +31,7 @@ export interface VerifyAuditSummary {
     pathRevision: string;
     activityTags: string[];
     completedScripts: string[];
-    activityCounts: Record<string, number>;
+    semanticActivityCounts: Record<string, number>;
   }>;
   resolvedReport?: {
     id: string;
@@ -110,7 +110,7 @@ export async function verifyAuditReport(
     pathRevision: lane.path.revision,
     activityTags: lane.path.activityTags,
     completedScripts: lane.progress.completedScripts,
-    activityCounts: lane.path.activityCounts,
+    semanticActivityCounts: lane.path.semanticActivityCounts,
   }));
   const passed = sourceRevisionMatches && audit.qualityGate?.status === "passed";
   if (!passed) {
@@ -154,7 +154,7 @@ export async function verifyAuditReport(
       pathRevision: lane.pathRevision,
       activityTags: lane.activityTags,
       completedScripts: lane.completedScripts,
-      activityCounts: lane.activityCounts,
+      semanticActivityCounts: lane.semanticActivityCounts,
     })),
   };
   const resolved = await resolveVerifiedPlaytestReport({

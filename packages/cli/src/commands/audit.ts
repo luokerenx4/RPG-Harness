@@ -69,7 +69,7 @@ export interface AuditLaneSummary {
     semanticDecisions: number;
     choices: number;
     activityTags: string[];
-    activityCounts: Record<string, number>;
+    semanticActivityCounts: Record<string, number>;
   };
   stall?: AutoplaySummary["stall"];
   behaviorCycle?: AutoplaySummary["behaviorCycle"];
@@ -139,7 +139,7 @@ export interface AuditSummary {
       completedScripts?: string[];
       maxActivityRepetition?: {
         persona: string;
-        activityId: string;
+        activityKind: string;
         count: number;
       };
     };
@@ -341,13 +341,13 @@ export async function runAudit(
     lanes.flatMap((lane) => lane.path.activityTags),
   )].sort();
   const maxActivityRepetition = lanes
-    .flatMap((lane) => Object.entries(lane.path.activityCounts).map(
-      ([activityId, count]) => ({ persona: lane.persona, activityId, count }),
+    .flatMap((lane) => Object.entries(lane.path.semanticActivityCounts).map(
+      ([activityKind, count]) => ({ persona: lane.persona, activityKind, count }),
     ))
     .sort((left, right) =>
       right.count - left.count ||
       left.persona.localeCompare(right.persona) ||
-      left.activityId.localeCompare(right.activityId)
+      left.activityKind.localeCompare(right.activityKind)
     )[0];
   const completedScriptsByPersona = Object.fromEntries(
     lanes.map((lane) => [lane.persona, [...lane.progress.completedScripts].sort()]),
@@ -456,7 +456,7 @@ export async function runAudit(
           pathRevision: lane.path.revision,
           activityTags: lane.path.activityTags,
           completedScripts: lane.progress.completedScripts,
-          activityCounts: lane.path.activityCounts,
+          semanticActivityCounts: lane.path.semanticActivityCounts,
         })),
         choiceDivergences,
       },
@@ -593,10 +593,14 @@ function summarizeAuditLane(
         activityTags: [...new Set(decisions.flatMap((decision) =>
           decision.type === "doActivity" ? decision.aiTags ?? [] : []
         ))].sort(),
-        activityCounts: Object.fromEntries(
+        semanticActivityCounts: Object.fromEntries(
           [...decisions.reduce((counts, decision) => {
             if (decision.type === "doActivity") {
-              counts.set(decision.id, (counts.get(decision.id) ?? 0) + 1);
+              const semanticActivity = decision.actionKind ?? decision.id;
+              counts.set(
+                semanticActivity,
+                (counts.get(semanticActivity) ?? 0) + 1,
+              );
             }
             return counts;
           }, new Map<string, number>())]
@@ -695,7 +699,7 @@ function evaluateQualityGate(
   uniqueDecisionPaths: number,
   coveredActivityTags: string[],
   completedScripts: string[],
-  maxActivityRepetition: { persona: string; activityId: string; count: number } | undefined,
+  maxActivityRepetition: { persona: string; activityKind: string; count: number } | undefined,
 ): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
   const observed = {
     uniqueEndings,
@@ -758,7 +762,7 @@ function evaluateQualityGate(
     maxActivityRepetition.count > policy.maxActivityRepetitions
   ) {
     violations.push(
-      `activity repetition ${maxActivityRepetition.persona}/${maxActivityRepetition.activityId} = ${maxActivityRepetition.count} > allowed ${policy.maxActivityRepetitions}`,
+      `activity repetition ${maxActivityRepetition.persona}/${maxActivityRepetition.activityKind} = ${maxActivityRepetition.count} > allowed ${policy.maxActivityRepetitions}`,
     );
   }
   return {

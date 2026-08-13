@@ -511,14 +511,14 @@ describe("autoplay audit matrix", () => {
     });
 
     expect(summary.totals.completed).toBe(1);
-    expect(summary.lanes[0]?.path.activityCounts).toEqual({ search: 3 });
+    expect(summary.lanes[0]?.path.semanticActivityCounts).toEqual({ search: 3 });
     expect(summary.qualityGate).toMatchObject({
       policy: { maxActivityRepetitions: 2 },
       status: "failed",
       observed: {
         maxActivityRepetition: {
           persona: "objective",
-          activityId: "search",
+          activityKind: "search",
           count: 3,
         },
       },
@@ -531,11 +531,11 @@ describe("autoplay audit matrix", () => {
       observed: {
         maxActivityRepetition: {
           persona: "objective",
-          activityId: "search",
+          activityKind: "search",
           count: 3,
         },
       },
-      lanes: [{ persona: "objective", activityCounts: { search: 3 } }],
+      lanes: [{ persona: "objective", semanticActivityCounts: { search: 3 } }],
     });
   });
 
@@ -1133,8 +1133,9 @@ async function temporaryRepetitionGame(): Promise<string> {
     'import type { RunFunction } from "@rpg-harness/engine";',
     "const run: RunFunction = async function* (ctx) {",
     "  for (let index = 0; index < 3; index += 1) {",
-    '    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "search-loop", title: "Search again", scope: "main", terminal: false, status: "active", relatedActivityIds: ["search"] }], activities: [',
-    '      { id: "search", kind: "action", title: "Search", cost: 0, available: true },',
+    '    const id = `search:zone-${index}`;',
+    '    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "search-loop", title: "Search again", scope: "main", terminal: false, status: "active", relatedActivityIds: [id] }], activities: [',
+    '      { id, kind: "action", actionKind: "search", title: "Search", cost: 0, available: true },',
     "    ] } };",
     "  }",
     '  ctx.state.baseline.completionOrder.push("ending");',

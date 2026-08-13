@@ -19,6 +19,12 @@ export interface ProjectDevelopmentStatus {
     createdAt: string | null;
     endings: number;
     paths: number;
+    maxActivityRepetitions: number | null;
+    maxActivityRepetition: {
+      persona: string;
+      activityKind: string;
+      count: number;
+    } | null;
   };
 }
 
@@ -48,6 +54,10 @@ export async function collectProjectDevelopmentStatus(
           createdAt: currentCertificate.certificate.createdAt,
           endings: currentCertificate.certificate.audit.diversity.uniqueEndings,
           paths: currentCertificate.certificate.audit.diversity.uniqueDecisionPaths,
+          maxActivityRepetitions:
+            currentCertificate.certificate.audit.qualityGate?.policy.maxActivityRepetitions ?? null,
+          maxActivityRepetition:
+            currentCertificate.certificate.audit.qualityGate?.observed.maxActivityRepetition ?? null,
         }
       : {
           status: "uncertified" as const,
@@ -56,6 +66,8 @@ export async function collectProjectDevelopmentStatus(
           createdAt: null,
           endings: 0,
           paths: 0,
+          maxActivityRepetitions: null,
+          maxActivityRepetition: null,
         },
   };
   return {

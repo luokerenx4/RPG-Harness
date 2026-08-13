@@ -5,7 +5,7 @@ characters: []
 requires:
   all:
     - { switch: { name: chose_court_defy } }
-    - { variable: { name: pulse_oni, min: 8 } }
+    - { variable: { name: pulse_oni, min: 6 } }
 ---
 
 :cg assets/cgs/ending-oni-self

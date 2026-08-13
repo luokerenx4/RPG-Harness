@@ -279,6 +279,7 @@ describe("autoplay semantic decision paths", () => {
             activities: [{
               id: "search",
               kind: "action",
+              actionKind: "search",
               title: "Search",
               cost: 0,
               available: true,
@@ -310,6 +311,7 @@ describe("autoplay semantic decision paths", () => {
             activities: [{
               id: "search",
               kind: "action",
+              actionKind: "search",
               title: "Search",
               cost: 0,
               available: true,
@@ -326,7 +328,12 @@ describe("autoplay semantic decision paths", () => {
 
     expect(first).toEqual(second);
     expect(first.decisions).toEqual([
-      { type: "doActivity", id: "search", aiTags: ["exploration", "reward"] },
+      {
+        type: "doActivity",
+        id: "search",
+        actionKind: "search",
+        aiTags: ["exploration", "reward"],
+      },
       { type: "choose", scriptId: "intro", choiceId: "route", optionId: "third" },
     ]);
     expect(first.revision).toMatch(/^[a-f0-9]{64}$/);

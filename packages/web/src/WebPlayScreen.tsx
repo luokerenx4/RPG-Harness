@@ -258,10 +258,12 @@ export function WebPlayScreen({
 export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
   const clean = status.worklist.total === 0;
   const certified = status.quality.status === "certified";
+  const pacing = status.quality.maxActivityRepetition;
+  const pacingLimit = status.quality.maxActivityRepetitions;
   const label = !clean
     ? `AI Dev · ${status.worklist.total} pending${status.worklist.highestPriority ? ` · ${status.worklist.highestPriority}` : ""}`
     : certified
-      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths`
+      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths${pacing && pacingLimit ? ` · loop ${pacing.count}/${pacingLimit}` : ""}`
       : "AI Dev · clean · audit pending";
   const detail = !clean
     ? [
@@ -271,7 +273,13 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
           : undefined,
       ].filter(Boolean).join("\n")
     : certified
-      ? `Current game/runtime inputs passed AI audit.\nCertificate: ${status.quality.certificateRevision}`
+      ? [
+          "Current game/runtime inputs passed AI audit.",
+          pacing && pacingLimit
+            ? `Heaviest semantic loop: ${pacing.persona}/${pacing.activityKind} ×${pacing.count} (limit ${pacingLimit}).`
+            : undefined,
+          `Certificate: ${status.quality.certificateRevision}`,
+        ].filter(Boolean).join("\n")
       : "No worklist items remain, but current game/runtime inputs have no matching AI audit certificate.";
   return (
     <span

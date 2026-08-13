@@ -173,7 +173,7 @@ export interface AutoplayContinuation {
 export type AutoplaySemanticDecision =
   | { type: "choose"; scriptId: string; choiceId: string; optionId: string }
   | { type: "select"; scriptId: string }
-  | { type: "doActivity"; id: string; aiTags?: string[] };
+  | { type: "doActivity"; id: string; actionKind?: string; aiTags?: string[] };
 
 export interface AutoplayDecisionPath {
   revision: string;
@@ -851,6 +851,7 @@ export function summarizeDecisionPath(
         decisions.push({
           type: "doActivity",
           id: activityId,
+          ...(activity?.actionKind ? { actionKind: activity.actionKind } : {}),
           ...(activity?.aiTags?.length ? { aiTags: [...activity.aiTags] } : {}),
         });
       }

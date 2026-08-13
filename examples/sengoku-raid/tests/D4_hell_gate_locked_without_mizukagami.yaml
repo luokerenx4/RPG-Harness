@@ -3,7 +3,7 @@ description: |
   Complement to D2. D2 seeds mizukagami directly and proves the gate
   OPENS when all four conditions hold. But D2 never proves mizukagami
   is the binding constraint. Here we seed everything D2 does EXCEPT
-  mizukagami (pulse_oni>=8, power>=12, chinkonho known) and confirm
+  mizukagami (pulse_oni>=6, power>=12, chinkonho known) and confirm
   depart:hell_gate is NOT surfaced — dispatching it is a no-op and the
   raid stays null. Together with fixture 09 (which proves mizukagami is
   now obtainable via bond_mio_02), this closes the loop: the endgame
@@ -25,7 +25,7 @@ state:
           spectral: 25
           intellect: 5
     variables:
-      pulse_oni: 8
+      pulse_oni: 6
   runtime:
     firedTriggers: []
   sengoku-raid:

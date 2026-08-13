@@ -76,7 +76,7 @@ Web と Headless は同じ共有 view から main の候補を案内し、AI per
 | `kuro_swamp`   | 黒沼地 | 1 | `kuro_swamp_edge` | `kuro_swamp_shrine` / `kuro_swamp_deep_grove` | 下級の鬼 | 開幕から |
 | `sumida_river` | 隅田河 | 2 | `sumida_river_bridge_foot` | `sumida_river_ferry_landing` / `sumida_river_under_eaves` | 下級の鬼 + 戦鬼 | 開幕から |
 | `mt_houkyou`   | 砲響山 | 3 | `mt_houkyou_foothills` | `mt_houkyou_burnt_temple` / `mt_houkyou_caldera` | 戦鬼 + 鬼神 (boss) | 開幕から |
-| `hell_gate`    | 地獄門 | 5 | `hell_gate_mouth` | `hell_gate_mirror_pool` | 鬼神 + 鏡鬼（映し井戸） | pulse_oni≥8 AND power≥12 AND chinkonho AND mizukagami |
+| `hell_gate`    | 地獄門 | 5 | `hell_gate_mouth` | `hell_gate_mirror_pool` | 鬼神 + 鏡鬼（映し井戸） | pulse_oni≥6 AND power≥12 AND chinkonho AND mizukagami |
 
 各 map は `maps/<chain>_<zone>.yaml`：自分の `bg` / `connections` / `encounter_table` / `loot_table` / `is_extract` / 場合により `character_spawns` を持つ。引擎の `enterMap` primitive がトランジションを駆動（`currentMapId` + `visuals.bg` 同期）。
 

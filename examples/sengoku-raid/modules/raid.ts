@@ -282,7 +282,7 @@ function chainUnlocked(ctx: Ctx, chain: string): boolean {
     const power = ctx.state.baseline.weapons.ancestor_yaodao?.power ?? 0;
     const knows = ctx.state.baseline.knownSkills;
     return (
-      pulseOni >= 8 &&
+      pulseOni >= 6 &&
       power >= 12 &&
       knows.includes("chinkonho") &&
       knows.includes("mizukagami")
@@ -473,7 +473,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         "bond:mio",
       ]);
       relatedActivityIds = next ? [next] : executableProgressActivityIds;
-    } else if (!completed && (pulseOni < 8 || power < 12)) {
+    } else if (!completed && (pulseOni < 6 || power < 12)) {
       const next = firstAvailable(["imbue:oni", "upgrade_oni"]);
       relatedActivityIds = next ? [next] : executableProgressActivityIds;
     }
@@ -485,7 +485,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       terminal: false,
       status: completed ? "completed" as const : "active" as const,
       requirements: [
-        requirement("pulse_oni", "脈絡: 鬼", pulseOni, 8, pulseOni >= 8),
+        requirement("pulse_oni", "脈絡: 鬼", pulseOni, 6, pulseOni >= 6),
         requirement("weapon_power", "妖刀威力", power, 12, power >= 12),
         requirement("chinkonho", "鎮魂法", knowsChinkonho, true, knowsChinkonho),
         requirement("mizukagami", "水鏡", knowsMizukagami, true, knowsMizukagami),
@@ -541,7 +541,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const route = switches.chose_court_loyal
     ? { id: "ending_pure_rite", title: "鎮魂結界の儀へ", variable: "pulse_pure", label: "脈絡: 浄", target: 5 }
     : switches.chose_court_defy
-      ? { id: "ending_oni_self", title: "地獄門の底へ", variable: "pulse_oni", label: "脈絡: 鬼", target: 8 }
+      ? { id: "ending_oni_self", title: "地獄門の底へ", variable: "pulse_oni", label: "脈絡: 鬼", target: 6 }
       : switches.chose_court_silent
         ? { id: "ending_mundane_seal", title: "妖刀を祠へ納める", variable: "pulse_mundane", label: "脈絡: 凡", target: 5 }
         : null;
@@ -2072,17 +2072,19 @@ function endRaidExtract(ctx: Ctx): void {
   }
 
   // If companion survived the raid (HP > 0), mark the persistent
-  // "befriended" switch and grant +1 affection. This is the loop:
+  // "befriended" switch and grant +2 affection. Shared danger should move a
+  // relationship faster than buying one gift, so bond progression does not
+  // require a long sequence of otherwise identical expeditions.
   // invite → survive together → unlock deeper bond scenes.
   if (m.companion && m.companionHp > 0) {
     const companionId = m.companion;
     ctx.state.baseline.switches[`befriended_${companionId}`] = true;
     const c = ctx.state.baseline.characters[companionId];
-    if (c) c.stats.affection = (c.stats.affection ?? 0) + 1;
+    if (c) c.stats.affection = (c.stats.affection ?? 0) + 2;
     const charName =
       ctx.game.characters.find((x) => x.id === companionId)?.name ?? companionId;
     ctx.state.runtime.pendingNarrations.push(
-      `${charName}は無事に大名府まで歩いた。一度共に出帰った仲——刀を握る手の重さが、少し変わる。親密度 +1。`,
+      `${charName}は無事に大名府まで歩いた。一度共に出帰った仲——刀を握る手の重さが、確かに変わる。親密度 +2。`,
     );
     if (
       companionId === "mio" &&
@@ -3342,6 +3344,11 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           if (m?.companion) {
             const flee = find(({ id }) => id === "flee");
             if (flee) return { type: "doActivity", id: flee.id };
+            // The current mastery step is to bring this companion home. Once
+            // the fight is clear, leave by the shortest available path rather
+            // than fully looting every zone before every relationship raid.
+            const extract = find(({ id }) => id === "extract");
+            if (extract) return { type: "doActivity", id: extract.id };
           }
           const attack = find(({ id }) => id === "attack");
           if (attack) return { type: "doActivity", id: attack.id };

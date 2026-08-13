@@ -260,6 +260,22 @@ describe("sengoku-raid project personas", () => {
       },
     })).resolves.toEqual({ type: "doActivity", id: "flee" });
   });
+
+  test("completionist extracts a surviving companion before optional looting", async () => {
+    const output = hub([
+      activity("search:kuro_swamp_shrine"),
+      activity("extract"),
+      activity("move:kuro_swamp_crossroads"),
+    ]);
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": {
+        achievementLog: [],
+        companion: "kagari",
+        raid: { visited: { kuro_swamp_shrine: { visited: true } } },
+      },
+    })).resolves.toEqual({ type: "doActivity", id: "extract" });
+  });
 });
 
 function decide(

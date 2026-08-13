@@ -169,7 +169,7 @@ export interface ProjectQualityAuditSummary {
   lanes: Array<Pick<
     AuditSummary["lanes"][number],
     "persona" | "session" | "webPath" | "segments" | "reason" | "ending" | "decisions"
-  > & { pathRevision: string; activityCounts: Record<string, number> }>;
+  > & { pathRevision: string; semanticActivityCounts: Record<string, number> }>;
 }
 
 interface PersistedSweepSnapshot {
@@ -496,7 +496,7 @@ function compactProjectQualityAudit(audit: AuditSummary): ProjectQualityAuditSum
       ending: lane.ending,
       decisions: lane.decisions,
       pathRevision: lane.path.revision,
-      activityCounts: lane.path.activityCounts,
+      semanticActivityCounts: lane.path.semanticActivityCounts,
     })),
   };
 }
