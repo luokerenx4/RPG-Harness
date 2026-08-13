@@ -44,6 +44,7 @@ import { VisualLayer } from "./VisualLayer";
 import type {
   WebBranchContext,
   WebAiPersona,
+  WebAiStatus,
   WebAiTurnReceipt,
   WebDevelopmentStatus,
   WebExplorationStatus,
@@ -96,11 +97,9 @@ interface Props {
   aiTurnReceipt?: WebAiTurnReceipt;
   aiTurnPending?: boolean;
   initialAiPersona?: string;
-  initialAiSeeds?: Record<string, number>;
-  onLoadAiPersonas?: () => Promise<WebAiPersona[]>;
+  onLoadAiStatus?: () => Promise<WebAiStatus>;
   onAdvanceAiTurn?: (
     persona: string,
-    seed?: number,
   ) => Promise<WebAiTurnReceipt>;
   explorationEnabled?: boolean;
   onLoadExploration?: () => Promise<WebExplorationStatus | null>;
@@ -162,7 +161,7 @@ function formatAiPublicAction(
     case "next":
       return "推进文本";
     case "choose":
-      return `选择「${action.text}」`;
+      return `选择「${action.text ?? action.optionId ?? "选项"}」`;
     case "select":
       return `进入「${action.title ?? action.scriptId}」`;
     case "doActivity":
@@ -188,8 +187,7 @@ export function WebPlayScreen({
   aiTurnReceipt,
   aiTurnPending = false,
   initialAiPersona,
-  initialAiSeeds,
-  onLoadAiPersonas,
+  onLoadAiStatus,
   onAdvanceAiTurn,
   explorationEnabled = false,
   onLoadExploration,
@@ -219,10 +217,10 @@ export function WebPlayScreen({
   const [exploring, setExploring] = useState(false);
   const [explorationError, setExplorationError] = useState<string | null>(null);
   const [aiPersonas, setAiPersonas] = useState<WebAiPersona[]>([]);
-  const [aiPersona, setAiPersona] = useState(initialAiPersona ?? "objective");
-  const [aiSeeds, setAiSeeds] = useState<Record<string, number>>(
-    initialAiSeeds ?? {},
-  );
+  // Empty on a fresh mount so the shared control ticket can choose the first
+  // value. Once the player selects a valid persona, background status reloads
+  // must not snap the pending choice back before they click hand-off.
+  const [aiPersona, setAiPersona] = useState(initialAiPersona ?? "");
   const [aiThinking, setAiThinking] = useState(false);
   const [aiReceipt, setAiReceipt] = useState<WebAiTurnReceipt | null>(
     aiTurnReceipt ?? null,
@@ -248,21 +246,24 @@ export function WebPlayScreen({
   }, [aiTurnReceipt]);
 
   useEffect(() => {
-    if (!aiControlEnabled || !onLoadAiPersonas) return;
+    if (!aiControlEnabled || !onLoadAiStatus) return;
     let cancelled = false;
-    void onLoadAiPersonas().then((personas) => {
+    void onLoadAiStatus().then(({ personas, control }) => {
       if (cancelled) return;
       setAiPersonas(personas);
-      setAiPersona((current) =>
-        personas.some((persona) => persona.name === current)
-          ? current
-          : personas[0]?.name ?? ""
-      );
+      setAiPersona((current) => {
+        if (personas.some((persona) => persona.name === current)) return current;
+        const persisted = control?.persona;
+        if (persisted && personas.some((persona) => persona.name === persisted)) {
+          return persisted;
+        }
+        return personas[0]?.name ?? "";
+      });
     }).catch((cause) => {
       if (!cancelled) setAiError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => { cancelled = true; };
-  }, [aiControlEnabled, onLoadAiPersonas]);
+  }, [aiControlEnabled, onLoadAiStatus]);
 
   const advanceAi = useCallback(async () => {
     if (!onAdvanceAiTurn || !aiPersona || aiThinking || processingRef.current) return;
@@ -270,10 +271,7 @@ export function WebPlayScreen({
     setAiThinking(true);
     setAiError(null);
     try {
-      const receipt = await onAdvanceAiTurn(aiPersona, aiSeeds[aiPersona]);
-      if (receipt.nextSeed !== null) {
-        setAiSeeds((current) => ({ ...current, [aiPersona]: receipt.nextSeed! }));
-      }
+      const receipt = await onAdvanceAiTurn(aiPersona);
       setAiReceipt(receipt);
     } catch (cause) {
       setAiError(cause instanceof Error ? cause.message : String(cause));
@@ -281,7 +279,7 @@ export function WebPlayScreen({
       processingRef.current = false;
       setAiThinking(false);
     }
-  }, [aiPersona, aiSeeds, aiThinking, onAdvanceAiTurn]);
+  }, [aiPersona, aiThinking, onAdvanceAiTurn]);
 
   useEffect(() => {
     if (model.stage.kind !== "ended" || !explorationEnabled || !onLoadExploration) {

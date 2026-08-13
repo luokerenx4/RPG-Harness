@@ -12,7 +12,14 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { withSessionLock } from "./index";
+import {
+  loadBoundSessionCoPlayControl,
+  loadSessionCoPlayControl,
+  rebindSessionCoPlayControl,
+  sessionStateRevision,
+  withSessionLock,
+  writeSessionCoPlayControl,
+} from "./index";
 
 const temporaryDirectories: string[] = [];
 
@@ -22,6 +29,141 @@ afterEach(async () => {
       rm(dir, { recursive: true, force: true }),
     ),
   );
+});
+
+describe("session co-play lineage", () => {
+  test("persists one shared persona cursor bound to the exact save", async () => {
+    const gameDir = await temporaryGame();
+    const state = { turn: 1 };
+    const written = await withSessionLock(gameDir, "web", () =>
+      writeSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        persona: "random",
+        nextSeed: 2718,
+        state,
+        controller: "autoplay:random",
+        lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "Moon" },
+        now: () => new Date("2026-08-14T00:00:00.000Z"),
+      })
+    );
+
+    expect(written).toEqual({
+      schemaVersion: 1,
+      persona: "random",
+      nextSeed: 2718,
+      stateRevision: sessionStateRevision(state),
+      controller: "autoplay:random",
+      lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "Moon" },
+      updatedAt: "2026-08-14T00:00:00.000Z",
+    });
+    expect(await loadBoundSessionCoPlayControl(gameDir, "web", state)).toEqual(written);
+    expect(await loadBoundSessionCoPlayControl(gameDir, "web", { turn: 2 })).toBeNull();
+  });
+
+  test("a player surface rebinds the AI cursor to its new save", async () => {
+    const gameDir = await temporaryGame();
+    await withSessionLock(gameDir, "web", async () => {
+      await writeSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        persona: "completionist",
+        nextSeed: 17,
+        state: { turn: 1 },
+        controller: "autoplay:completionist",
+      });
+      await rebindSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        previousState: { turn: 1 },
+        state: { turn: 2 },
+        controller: "web",
+        lastAction: { type: "next" },
+      });
+    });
+
+    expect(await loadSessionCoPlayControl(gameDir, "web")).toMatchObject({
+      persona: "completionist",
+      nextSeed: 17,
+      stateRevision: sessionStateRevision({ turn: 2 }),
+      controller: "web",
+      lastAction: { type: "next" },
+    });
+  });
+
+  test("state normalization preserves the current controller and action", async () => {
+    const gameDir = await temporaryGame();
+    await withSessionLock(gameDir, "web", async () => {
+      await writeSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        persona: "random",
+        nextSeed: 61,
+        state: { turn: 1 },
+        controller: "web",
+        lastAction: { type: "next" },
+      });
+      await rebindSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        previousState: { turn: 1 },
+        state: { turn: 1, normalized: true },
+      });
+    });
+
+    expect(await loadSessionCoPlayControl(gameDir, "web")).toMatchObject({
+      persona: "random",
+      nextSeed: 61,
+      controller: "web",
+      lastAction: { type: "next" },
+      stateRevision: sessionStateRevision({ turn: 1, normalized: true }),
+    });
+  });
+
+  test("a new controller without an action does not inherit the previous action", async () => {
+    const gameDir = await temporaryGame();
+    await withSessionLock(gameDir, "web", async () => {
+      await writeSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        persona: "random",
+        nextSeed: 61,
+        state: { turn: 1 },
+        controller: "autoplay:random",
+        lastAction: { type: "next" },
+      });
+      await rebindSessionCoPlayControl({
+        gameDir,
+        session: "web",
+        previousState: { turn: 1 },
+        state: { turn: 2 },
+        controller: "web",
+      });
+    });
+
+    expect(await loadSessionCoPlayControl(gameDir, "web")).toMatchObject({
+      controller: "web",
+      stateRevision: sessionStateRevision({ turn: 2 }),
+    });
+    expect((await loadSessionCoPlayControl(gameDir, "web"))?.lastAction).toBeUndefined();
+  });
+
+  test("corrupt advisory control cannot block gameplay", async () => {
+    const gameDir = await temporaryGame();
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "co-play.json"), "{broken", "utf-8");
+
+    await expect(loadBoundSessionCoPlayControl(gameDir, "web", { turn: 1 }))
+      .resolves.toBeNull();
+    await expect(rebindSessionCoPlayControl({
+      gameDir,
+      session: "web",
+      previousState: { turn: 1 },
+      state: { turn: 2 },
+      controller: "web",
+    })).resolves.toBeNull();
+  });
 });
 
 describe("withSessionLock", () => {

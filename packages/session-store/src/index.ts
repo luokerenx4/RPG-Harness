@@ -29,6 +29,180 @@ export interface CheckpointedSessionEvent {
   [key: string]: unknown;
 }
 
+export type SessionPublicAction =
+  | { type: "next" }
+  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
+  | { type: "select"; scriptId: string; title?: string }
+  | { type: "doActivity"; id: string; title?: string }
+  | { type: "quit" };
+
+/**
+ * Shared co-play lineage. This is session data, not GUI preference: every
+ * surface reads the same persona cursor and rebinds it to the state it wrote.
+ */
+export interface SessionCoPlayControl {
+  schemaVersion: 1;
+  persona: string;
+  nextSeed: number;
+  stateRevision: string;
+  controller: string;
+  lastAction?: SessionPublicAction;
+  updatedAt: string;
+}
+
+const CO_PLAY_CONTROL_FILE = "co-play.json";
+
+export function sessionStateRevision(state: unknown): string {
+  return createHash("sha256").update(JSON.stringify(state)).digest("hex");
+}
+
+export async function loadSessionCoPlayControl(
+  gameDir: string,
+  session: string,
+): Promise<SessionCoPlayControl | null> {
+  assertSessionName(session);
+  try {
+    const value = JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", session, CO_PLAY_CONTROL_FILE),
+      "utf-8",
+    )) as unknown;
+    if (!isSessionCoPlayControl(value)) {
+      throw new Error(`Invalid ${CO_PLAY_CONTROL_FILE} for session ${session}`);
+    }
+    return value;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export async function loadBoundSessionCoPlayControl(
+  gameDir: string,
+  session: string,
+  state: unknown,
+): Promise<SessionCoPlayControl | null> {
+  try {
+    const control = await loadSessionCoPlayControl(gameDir, session);
+    return control?.stateRevision === sessionStateRevision(state) ? control : null;
+  } catch {
+    // Control is advisory lineage, never gameplay authority. A torn/manual
+    // edit drops continuation instead of blocking the save or AI recovery.
+    return null;
+  }
+}
+
+/** Caller must hold the session transaction lock while publishing gameplay. */
+export async function writeSessionCoPlayControl(args: {
+  gameDir: string;
+  session: string;
+  persona: string;
+  nextSeed: number;
+  state: unknown;
+  controller: string;
+  lastAction?: SessionPublicAction;
+  now?: () => Date;
+}): Promise<SessionCoPlayControl> {
+  assertSessionName(args.session);
+  if (!args.persona.trim()) throw new Error("Co-play persona cannot be empty");
+  if (!args.controller.trim()) throw new Error("Co-play controller cannot be empty");
+  if (
+    !Number.isInteger(args.nextSeed) || args.nextSeed < 0 ||
+    args.nextSeed > 0xffff_ffff
+  ) throw new Error("Co-play nextSeed must be a uint32 integer");
+  const value: SessionCoPlayControl = {
+    schemaVersion: 1,
+    persona: args.persona,
+    nextSeed: args.nextSeed,
+    stateRevision: sessionStateRevision(args.state),
+    controller: args.controller,
+    ...(args.lastAction ? { lastAction: args.lastAction } : {}),
+    updatedAt: (args.now ?? (() => new Date()))().toISOString(),
+  };
+  const dir = path.join(args.gameDir, ".rpg-harness", "sessions", args.session);
+  await mkdir(dir, { recursive: true });
+  const target = path.join(dir, CO_PLAY_CONTROL_FILE);
+  const temporary = path.join(dir, `.co-play-${randomUUID()}.tmp`);
+  await writeFile(temporary, JSON.stringify(value, null, 2), "utf-8");
+  await rename(temporary, target);
+  return value;
+}
+
+/** Preserve the persona RNG stream while another surface advances the world. */
+export async function rebindSessionCoPlayControl(args: {
+  gameDir: string;
+  session: string;
+  previousState: unknown;
+  state: unknown;
+  /** Omit for state normalization that must preserve the current owner label. */
+  controller?: string;
+  lastAction?: SessionPublicAction;
+  now?: () => Date;
+}): Promise<SessionCoPlayControl | null> {
+  const current = await loadBoundSessionCoPlayControl(
+    args.gameDir,
+    args.session,
+    args.previousState,
+  );
+  if (
+    !current
+  ) return null;
+  try {
+    return await writeSessionCoPlayControl({
+      gameDir: args.gameDir,
+      session: args.session,
+      state: args.state,
+      controller: args.controller ?? current.controller,
+      ...(args.lastAction
+        ? { lastAction: args.lastAction }
+        : args.controller === undefined && current.lastAction
+          ? { lastAction: current.lastAction }
+          : {}),
+      ...(args.now ? { now: args.now } : {}),
+      persona: current.persona,
+      nextSeed: current.nextSeed,
+    });
+  } catch {
+    // Gameplay has already been committed by callers. Losing advisory
+    // continuation is safer than reporting that an accepted turn failed.
+    return null;
+  }
+}
+
+function isSessionCoPlayControl(value: unknown): value is SessionCoPlayControl {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const control = value as Record<string, unknown>;
+  return control.schemaVersion === 1 &&
+    typeof control.persona === "string" && control.persona.trim().length > 0 &&
+    Number.isInteger(control.nextSeed) && (control.nextSeed as number) >= 0 &&
+    (control.nextSeed as number) <= 0xffff_ffff &&
+    typeof control.stateRevision === "string" && /^[a-f0-9]{64}$/.test(control.stateRevision) &&
+    typeof control.controller === "string" && control.controller.trim().length > 0 &&
+    typeof control.updatedAt === "string" &&
+    (control.lastAction === undefined || isSessionPublicAction(control.lastAction));
+}
+
+function isSessionPublicAction(value: unknown): value is SessionPublicAction {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const action = value as Record<string, unknown>;
+  switch (action.type) {
+    case "next":
+    case "quit":
+      return true;
+    case "choose":
+      return (action.choiceId === undefined || typeof action.choiceId === "string") &&
+        (action.optionId === undefined || typeof action.optionId === "string") &&
+        (action.text === undefined || typeof action.text === "string");
+    case "select":
+      return typeof action.scriptId === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    case "doActivity":
+      return typeof action.id === "string" &&
+        (action.title === undefined || typeof action.title === "string");
+    default:
+      return false;
+  }
+}
+
 export interface SessionLockOptions {
   timeoutMs?: number;
   staleAfterMs?: number;

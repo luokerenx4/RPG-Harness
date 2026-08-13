@@ -26,7 +26,11 @@ import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { collectAiPersonas } from "../test/personas";
 import { appendLog, loadSession, saveSession, sessionDir } from "../session";
-import { withSessionLock } from "@rpg-harness/session-store";
+import {
+  loadBoundSessionCoPlayControl,
+  withSessionLock,
+  writeSessionCoPlayControl,
+} from "@rpg-harness/session-store";
 import {
   createForkFromSource,
   createForkFromSourceWithLockHeld,
@@ -378,7 +382,7 @@ export async function runAutoplay(
   // resumed save the persisted world cursor wins and it seeds the persona.
   // This makes ordinary successful exploration reproducible too, rather than
   // preserving determinism only after a run has already become an incident.
-  const effectiveSeed = args.seed ?? randomInt(0, 0x1_0000_0000);
+  let effectiveSeed = args.seed ?? randomInt(0, 0x1_0000_0000);
 
   let fork: Awaited<ReturnType<typeof createForkFromSource>> | undefined;
   let preparedForkSource = args.preparedForkSource;
@@ -405,7 +409,7 @@ export async function runAutoplay(
   // checkpoint replay does not; sharing global Math.random made the same seed
   // choose a different first move on causal replay (and let concurrent lanes
   // overwrite one another's stream).
-  const personaRng = createPersonaRng(effectiveSeed);
+  let personaRng: ReturnType<typeof createPersonaRng> | undefined;
 
   writeTelemetry(
     `\n=== autoplay: ${game.title} (persona: ${args.persona}) ===\n\n`,
@@ -428,7 +432,7 @@ export async function runAutoplay(
     step: number,
   ) => {
     if (!awaitingTarget) {
-      return persona(output, state, step, { rng: personaRng.next });
+      return persona(output, state, step, { rng: personaRng!.next });
     }
     if (output.type !== "choice") {
       throw new Error(
@@ -496,6 +500,15 @@ export async function runAutoplay(
           { seed: effectiveSeed },
         )
       : createInitialState(game, { seed: effectiveSeed });
+    if (args.session && args.seed === undefined) {
+      const control = await loadBoundSessionCoPlayControl(
+        args.gameDir,
+        args.session,
+        initialState,
+      );
+      if (control?.persona === args.persona) effectiveSeed = control.nextSeed;
+    }
+    personaRng = createPersonaRng(effectiveSeed);
     if (args.expectedInitialStateRevision !== undefined) {
       const actualRevision = createHash("sha256")
         .update(JSON.stringify(initialState))
@@ -562,6 +575,18 @@ export async function runAutoplay(
     // actual stop site rather than the previous log entry's state.
     if (args.session) {
       await saveSession(args.gameDir, args.session, result.finalState);
+      if (countDecisions(result.trace) > 0) {
+        const lastAction = summarizeLastPublicAction(result.trace);
+        await writeSessionCoPlayControl({
+          gameDir: args.gameDir,
+          session: args.session,
+          persona: args.persona,
+          nextSeed: personaRng!.state(),
+          state: result.finalState,
+          controller: `autoplay:${args.persona}`,
+          ...(lastAction ? { lastAction } : {}),
+        }).catch(() => undefined);
+      }
       if (args.reportOnStop && isReportableAutoplayStop(result)) {
         // Freeze the incident before releasing the transaction. A GUI step can
         // legitimately win the next lock before issues.jsonl is appended; the
@@ -608,7 +633,7 @@ export async function runAutoplay(
               // A zero-budget inspection still returns a continuation that can
               // actually advance when an orchestrator executes it verbatim.
               maxSteps: Math.max(1, args.maxSteps),
-              seed: personaRng.state(),
+              seed: personaRng!.state(),
               session: args.session,
               reportOnStop: args.reportOnStop ?? false,
             },

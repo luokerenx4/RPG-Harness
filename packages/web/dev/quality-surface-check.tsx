@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
+import { sessionStateRevision } from "@rpg-harness/session-store";
 import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 12;
+  schemaVersion: 13;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -25,6 +26,7 @@ export interface WebQualitySurfaceEvidence {
       | "ai-choice-backlog"
       | "branch-control-handoff"
       | "bounded-ai-coplay"
+      | "persistent-ai-coplay"
       | "feedback-live-routing";
     text: string;
   }>;
@@ -159,18 +161,28 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(aiChoiceBacklogProjection());
   projections.push(branchControlHandoffProjection());
   projections.push(boundedAiCoplayProjection());
+  projections.push(persistentAiCoplayProjection());
   projections.push(feedbackLiveRoutingProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 12,
+    schemaVersion: 13,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function persistentAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const state = { baseline: { currentScriptId: "intro", beatIndex: 3 } };
+  const stateRevision = sessionStateRevision(state);
+  return {
+    surface: "persistent-ai-coplay",
+    text: `random@2718 · web · state ${stateRevision.slice(0, 12)}`,
   };
 }
 

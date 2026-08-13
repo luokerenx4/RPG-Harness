@@ -7,6 +7,8 @@ import { promisify } from "node:util";
 import type { Plugin } from "vite";
 import {
   appendCheckpointedSessionEvent,
+  loadBoundSessionCoPlayControl,
+  rebindSessionCoPlayControl,
   storeCheckpointState,
   withSessionLock,
 } from "@rpg-harness/session-store";
@@ -172,9 +174,20 @@ export interface BridgeAiTurnReceipt {
   snapshot: BridgeSessionSnapshot;
 }
 
+export interface BridgeAiStatus {
+  personas: BridgeAiPersona[];
+  control: {
+    persona: string;
+    nextSeed: number;
+    controller: string;
+    lastAction?: BridgeAiPublicAction;
+    updatedAt: string;
+  } | null;
+}
+
 export type BridgeAiPublicAction =
   | { type: "next" }
-  | { type: "choose"; choiceId?: string; optionId?: string; text: string }
+  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
@@ -193,6 +206,31 @@ export async function loadBridgeAiPersonas(
     throw new Error("Invalid AI persona registry from CLI");
   }
   return payload;
+}
+
+export async function loadBridgeAiStatus(
+  gameDir: string,
+  session: string,
+): Promise<BridgeAiStatus> {
+  assertSegment(session, "session");
+  const personas = await loadBridgeAiPersonas(gameDir);
+  const control = await withSessionLock(gameDir, session, async () => {
+    const state = await loadBridgeSession(gameDir, session);
+    if (state === null) return null;
+    const value = await loadBoundSessionCoPlayControl(gameDir, session, state);
+    return value
+      ? {
+          persona: value.persona,
+          nextSeed: value.nextSeed,
+          controller: value.controller,
+          ...(value.lastAction
+            ? { lastAction: value.lastAction as BridgeAiPublicAction }
+            : {}),
+          updatedAt: value.updatedAt,
+        }
+      : null;
+  });
+  return { personas, control };
 }
 
 export async function advanceBridgeAiTurn(args: {
@@ -767,8 +805,8 @@ export async function saveBridgeSession(
     const dir = sessionDirectory(args.gameDir, args.session);
     await mkdir(dir, { recursive: true });
 
+    const currentState = await loadBridgeSession(args.gameDir, args.session);
     if (args.expectedRevision !== undefined) {
-      const currentState = await loadBridgeSession(args.gameDir, args.session);
       const currentRevision = currentState === null ? null : revisionOf(currentState);
       if (currentRevision !== args.expectedRevision) {
         throw new RequestError(
@@ -812,6 +850,22 @@ export async function saveBridgeSession(
         },
         args.state,
       );
+      const inputResult = args.event.inputResult;
+      const accepted = !inputResult || typeof inputResult !== "object" ||
+        Array.isArray(inputResult) ||
+        (inputResult as Record<string, unknown>).accepted !== false;
+      if (accepted) {
+        await rebindSessionCoPlayControl({
+          gameDir: args.gameDir,
+          session: args.session,
+          previousState: currentState,
+          state: args.state,
+          controller: "web",
+          ...(bridgePublicAction(args.event)
+            ? { lastAction: bridgePublicAction(args.event) }
+            : {}),
+        });
+      }
     }
     return {
       revision: revisionOf(args.state),
@@ -833,6 +887,7 @@ export async function clearBridgeSession(
       unlinkIfPresent(path.join(dir, "state.json")),
       unlinkIfPresent(path.join(dir, "log.jsonl")),
       unlinkIfPresent(path.join(dir, "fork.json")),
+      unlinkIfPresent(path.join(dir, "co-play.json")),
       rm(path.join(dir, "checkpoints"), { recursive: true, force: true }),
     ]);
   });
@@ -949,7 +1004,7 @@ async function handleBridgeRequest(
       const gameDir = path.join(examplesRoot, gameId);
       await access(path.join(gameDir, "game.yaml"));
       if (req.method === "GET") {
-        sendJson(res, 200, { personas: await loadBridgeAiPersonas(gameDir) });
+        sendJson(res, 200, await loadBridgeAiStatus(gameDir, session));
         return true;
       }
       const body = await readJsonBody(req);
@@ -1160,7 +1215,7 @@ function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
     case "quit":
       return true;
     case "choose":
-      return typeof action.text === "string" &&
+      return (action.text === undefined || typeof action.text === "string") &&
         (action.choiceId === undefined || typeof action.choiceId === "string") &&
         (action.optionId === undefined || typeof action.optionId === "string");
     case "select":
@@ -1171,6 +1226,63 @@ function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
         (action.title === undefined || typeof action.title === "string");
     default:
       return false;
+  }
+}
+
+function bridgePublicAction(event: BridgeStepEvent): BridgeAiPublicAction | undefined {
+  if (!event.input || typeof event.input !== "object" || Array.isArray(event.input)) {
+    return undefined;
+  }
+  const input = event.input as Record<string, unknown>;
+  const decision = event.decision && typeof event.decision === "object" &&
+      !Array.isArray(event.decision)
+    ? event.decision as Record<string, unknown>
+    : undefined;
+  const activity = event.activityDecision &&
+      typeof event.activityDecision === "object" &&
+      !Array.isArray(event.activityDecision)
+    ? event.activityDecision as Record<string, unknown>
+    : undefined;
+  switch (input.type) {
+    case "next":
+      return { type: "next" };
+    case "quit":
+      return { type: "quit" };
+    case "choose":
+      return {
+        type: "choose",
+        ...(typeof decision?.choiceId === "string"
+          ? { choiceId: decision.choiceId }
+          : typeof input.choiceId === "string"
+            ? { choiceId: input.choiceId }
+            : {}),
+        ...(typeof decision?.optionId === "string"
+          ? { optionId: decision.optionId }
+          : typeof input.optionId === "string"
+            ? { optionId: input.optionId }
+            : {}),
+        text: typeof decision?.optionId === "string"
+          ? decision.optionId
+          : typeof input.optionId === "string"
+            ? input.optionId
+            : "选项",
+      };
+    case "select":
+      return typeof input.scriptId === "string"
+        ? { type: "select", scriptId: input.scriptId }
+        : undefined;
+    case "doActivity":
+      return typeof input.id === "string"
+        ? {
+            type: "doActivity",
+            id: typeof activity?.activityId === "string"
+              ? activity.activityId
+              : input.id,
+            ...(typeof activity?.title === "string" ? { title: activity.title } : {}),
+          }
+        : undefined;
+    default:
+      return undefined;
   }
 }
 

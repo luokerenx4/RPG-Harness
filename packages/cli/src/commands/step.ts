@@ -5,7 +5,10 @@ import {
   step,
 } from "@rpg-harness/engine";
 import type { Input } from "@rpg-harness/engine";
-import { withSessionLock } from "@rpg-harness/session-store";
+import {
+  rebindSessionCoPlayControl,
+  withSessionLock,
+} from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { presentHeadlessCommandResult } from "../presenters/headlessCommand";
 import { presentHeadlessOutput } from "../presenters/headlessOutput";
@@ -29,6 +32,7 @@ export async function stepCommand(args: Args): Promise<void> {
   }
   const result = await withSessionLock(args.gameDir, args.session, async () => {
     const state = await loadSession(args.gameDir, args.session, game);
+    const lineageState = structuredClone(state);
     const before = await peek(game, state);
     const next = await step(game, state, input);
     await saveSession(args.gameDir, args.session, next.state);
@@ -47,6 +51,16 @@ export async function stepCommand(args: Args): Promise<void> {
       ...(decision ? { decision } : {}),
       ...(activityDecision ? { activityDecision } : {}),
     }, next.state);
+    if (next.inputResult?.accepted) {
+      await rebindSessionCoPlayControl({
+        gameDir: args.gameDir,
+        session: args.session,
+        previousState: lineageState,
+        state: next.state,
+        controller: "cli",
+        lastAction: publicAction(input, decision, activityDecision),
+      });
+    }
     return next;
   });
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
@@ -62,4 +76,26 @@ export async function stepCommand(args: Args): Promise<void> {
   process.stdout.write(
     args.pretty ? JSON.stringify(payload, null, 2) + "\n" : JSON.stringify(payload) + "\n",
   );
+}
+
+function publicAction(
+  input: Input,
+  decision?: ReturnType<typeof choiceDecisionContext>,
+  activity?: ReturnType<typeof activityDecisionContext>,
+) {
+  switch (input.type) {
+    case "next": return { type: "next" as const };
+    case "quit": return { type: "quit" as const };
+    case "choose": return {
+      type: "choose" as const,
+      ...(decision?.choiceId ? { choiceId: decision.choiceId } : {}),
+      ...(decision?.optionId ? { optionId: decision.optionId } : {}),
+    };
+    case "select": return { type: "select" as const, scriptId: input.scriptId };
+    case "doActivity": return {
+      type: "doActivity" as const,
+      id: activity?.activityId ?? input.id,
+      ...(activity?.title ? { title: activity.title } : {}),
+    };
+  }
 }

@@ -181,6 +181,19 @@ export interface WebAiPersona {
   source: "builtin" | `module:${string}`;
 }
 
+export interface WebAiControl {
+  persona: string;
+  nextSeed: number;
+  controller: string;
+  lastAction?: WebAiPublicAction;
+  updatedAt: string;
+}
+
+export interface WebAiStatus {
+  personas: WebAiPersona[];
+  control: WebAiControl | null;
+}
+
 export interface WebAiTurnReceipt {
   persona: string;
   seed: number;
@@ -208,7 +221,7 @@ export interface WebAiTurnReceipt {
 
 export type WebAiPublicAction =
   | { type: "next" }
-  | { type: "choose"; choiceId?: string; optionId?: string; text: string }
+  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
@@ -387,22 +400,27 @@ export async function startNextExploration(
   return await response.json() as WebExplorationReceipt;
 }
 
-export async function loadAiPersonas(gameId: string): Promise<WebAiPersona[]> {
+export async function loadAiStatus(gameId: string): Promise<WebAiStatus> {
   const info = await getSessionInfo();
-  if (info.mode !== "shared") return [];
+  if (info.mode !== "shared") return { personas: [], control: null };
   const response = await fetch(aiEndpoint(gameId, info.session));
   if (!response.ok) throw await bridgeError(response);
-  const payload = await response.json() as { personas?: unknown };
-  if (!Array.isArray(payload.personas)) {
-    throw new Error("session bridge did not return AI personas");
+  const payload = await response.json() as Record<string, unknown>;
+  if (
+    !Array.isArray(payload.personas) ||
+    (payload.control !== null && !isWebAiControl(payload.control))
+  ) {
+    throw new Error("session bridge did not return AI co-play status");
   }
-  return payload.personas as WebAiPersona[];
+  return {
+    personas: payload.personas as WebAiPersona[],
+    control: payload.control as WebAiControl | null,
+  };
 }
 
 export async function advanceAiTurn(
   gameId: string,
   persona: string,
-  seed?: number,
 ): Promise<WebAiTurnReceipt> {
   const info = await getSessionInfo();
   if (info.mode !== "shared") {
@@ -418,7 +436,6 @@ export async function advanceAiTurn(
     body: JSON.stringify({
       persona,
       expectedRevision,
-      ...(seed !== undefined ? { seed } : {}),
     }),
   });
   if (!response.ok) throw await bridgeError(response);
@@ -469,7 +486,7 @@ function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
     case "quit":
       return true;
     case "choose":
-      return typeof action.text === "string" &&
+      return (action.text === undefined || typeof action.text === "string") &&
         (action.choiceId === undefined || typeof action.choiceId === "string") &&
         (action.optionId === undefined || typeof action.optionId === "string");
     case "select":
@@ -481,6 +498,16 @@ function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
     default:
       return false;
   }
+}
+
+function isWebAiControl(value: unknown): value is WebAiControl {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const control = value as Record<string, unknown>;
+  return typeof control.persona === "string" &&
+    Number.isInteger(control.nextSeed) &&
+    typeof control.controller === "string" &&
+    typeof control.updatedAt === "string" &&
+    (control.lastAction === undefined || isWebAiPublicAction(control.lastAction));
 }
 
 export async function saveState(

@@ -7,7 +7,7 @@ import {
   getSessionInfo,
   hasSave,
   loadBranchContext,
-  loadAiPersonas,
+  loadAiStatus,
   loadState,
   loadDevelopmentStatus,
   loadExplorationStatus,
@@ -41,7 +41,6 @@ interface Loaded {
   };
   aiTurnReceipt?: WebAiTurnReceipt;
   aiPersona?: string;
-  aiSeeds?: Record<string, number>;
 }
 
 export function App() {
@@ -271,6 +270,13 @@ export function App() {
     void refreshSessions();
   }, [refreshSessions]);
 
+  const loadCurrentAiStatus = useCallback(
+    () => loaded
+      ? loadAiStatus(loaded.id)
+      : Promise.resolve({ personas: [], control: null }),
+    [loaded?.id],
+  );
+
   if (error) {
     return <pre className="boot-error">{error}</pre>;
   }
@@ -302,13 +308,12 @@ export function App() {
         aiTurnReceipt={loaded.aiTurnReceipt}
         aiTurnPending={aiTurnPending}
         initialAiPersona={loaded.aiPersona}
-        initialAiSeeds={loaded.aiSeeds}
         aiControlEnabled={loaded.sessionInfo.mode === "shared"}
-        onLoadAiPersonas={() => loadAiPersonas(loaded.id)}
-        onAdvanceAiTurn={async (persona, seed) => {
+        onLoadAiStatus={loadCurrentAiStatus}
+        onAdvanceAiTurn={async (persona) => {
           setAiTurnPending(true);
           try {
-            const receipt = await advanceAiTurn(loaded.id, persona, seed);
+            const receipt = await advanceAiTurn(loaded.id, persona);
             setLoaded((current) =>
               current && current.id === loaded.id
                 ? {
@@ -317,14 +322,6 @@ export function App() {
                     revision: current.revision + 1,
                     aiTurnReceipt: receipt,
                     aiPersona: persona,
-                    ...(receipt.nextSeed !== null
-                      ? {
-                          aiSeeds: {
-                            ...(current.aiSeeds ?? {}),
-                            [persona]: receipt.nextSeed,
-                          },
-                        }
-                      : {}),
                   }
                 : current
             );

@@ -17,6 +17,7 @@ import {
   loadBridgeSession,
   loadBridgeSnapshot,
   loadBridgeAiPersonas,
+  loadBridgeAiStatus,
   saveBridgeSession,
 } from "./session-bridge";
 
@@ -374,6 +375,97 @@ describe("Web development session bridge", () => {
     ), "utf-8");
     expect(log.trim().split("\n")).toHaveLength(1);
     expect(JSON.parse(log).source).toBe("autoplay:objective");
+    expect(await loadBridgeAiStatus(gameDir, "shared")).toMatchObject({
+      control: {
+        persona: "objective",
+        nextSeed: turn.nextSeed,
+        controller: "autoplay:objective",
+        lastAction: { type: "select", scriptId: "intro", title: "Intro" },
+      },
+    });
+  });
+
+  test("restores one random persona cursor after a player turn and GUI refresh", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, ["peek", gameDir, "--session", "shared"]);
+    const before = await loadBridgeSnapshot(gameDir, "shared");
+    const ai = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "random",
+      expectedRevision: before.revision!,
+      seed: 23,
+    });
+    const cursor = ai.nextSeed;
+    if (cursor === null) throw new Error("random turn did not publish a continuation");
+
+    const playerState = ai.snapshot.state as Record<string, unknown>;
+    await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { ...playerState, playerTurn: 1 },
+      expectedRevision: ai.snapshot.revision,
+      event: {
+        input: { type: "next" },
+        output: { type: "narration", text: "Player continued." },
+        inputResult: { accepted: true },
+      },
+    });
+
+    const refreshed = await loadBridgeAiStatus(gameDir, "shared");
+    expect(refreshed).toMatchObject({
+      control: {
+        persona: "random",
+        nextSeed: cursor,
+        controller: "web",
+        lastAction: { type: "next" },
+      },
+    });
+    const live = await loadBridgeSnapshot(gameDir, "shared");
+    const resumed = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "random",
+      expectedRevision: live.revision!,
+    });
+    expect(resumed.seed).toBe(cursor);
+  });
+
+  test("shares the same random cursor through a Headless player step", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await runCli(gameDir, ["peek", gameDir, "--session", "shared"]);
+    const before = await loadBridgeSnapshot(gameDir, "shared");
+    const ai = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "random",
+      expectedRevision: before.revision!,
+      seed: 61,
+    });
+    const cursor = ai.nextSeed;
+    if (cursor === null) throw new Error("random turn did not publish a continuation");
+
+    await runCli(gameDir, [
+      "step", gameDir,
+      "--session", "shared",
+      "--input", JSON.stringify({ type: "next" }),
+    ]);
+    expect(await loadBridgeAiStatus(gameDir, "shared")).toMatchObject({
+      control: {
+        persona: "random",
+        nextSeed: cursor,
+        controller: "cli",
+        lastAction: { type: "next" },
+      },
+    });
+    const live = await loadBridgeSnapshot(gameDir, "shared");
+    const resumed = await advanceBridgeAiTurn({
+      gameDir,
+      session: "shared",
+      persona: "random",
+      expectedRevision: live.revision!,
+    });
+    expect(resumed.seed).toBe(cursor);
   });
 
   test("refuses an AI turn after player ownership moved", async () => {

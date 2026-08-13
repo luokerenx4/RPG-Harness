@@ -923,6 +923,30 @@ describe("autoplay autonomous development lane", () => {
     expect(second.report).toBeUndefined();
   });
 
+  test("resumes the session-owned random cursor without a client seed", async () => {
+    const gameDir = await temporaryRandomChoiceGame();
+    const first = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: 23,
+      session: "random-shared-cursor",
+    });
+    const cursor = first.continuation?.next.args.seed;
+    if (cursor === undefined) throw new Error("first turn did not publish a cursor");
+
+    const second = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      session: "random-shared-cursor",
+    });
+
+    expect(second.seed).toBe(cursor);
+  });
+
   test("validates the persona and source before leaving a target branch", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);

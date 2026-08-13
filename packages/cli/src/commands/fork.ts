@@ -285,7 +285,7 @@ export async function readSessionLog(
 }
 
 export async function assertTargetEmpty(gameDir: string, session: string): Promise<void> {
-  for (const file of ["state.json", "log.jsonl", "fork.json", "checkpoints"]) {
+  for (const file of ["state.json", "log.jsonl", "fork.json", "co-play.json", "checkpoints"]) {
     try {
       await access(path.join(sessionDir(gameDir, session), file));
       throw new Error(`Target session already exists: ${session}`);

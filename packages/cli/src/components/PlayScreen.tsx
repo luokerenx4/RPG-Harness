@@ -8,6 +8,12 @@ import {
   choiceDecisionContext,
   Engine,
 } from "@rpg-harness/engine";
+import {
+  rebindSessionCoPlayControl,
+  sessionStateRevision,
+  withSessionLock,
+  type SessionPublicAction,
+} from "@rpg-harness/session-store";
 import type {
   AssetSpec,
   ComposedState,
@@ -107,7 +113,24 @@ export function PlayScreen({
     let cancelled = false;
     (async () => {
       try {
-        const initialState = await loadSession(gameDir, sessionName, initialGame);
+        const boot = await withSessionLock(gameDir, sessionName, async () => {
+          const initialState = await loadSession(gameDir, sessionName, initialGame);
+          const lineageState = structuredClone(initialState);
+          const engine = new Engine(initialGame, initialState);
+          const runner = engine.run();
+          const result = await runner.next();
+          if (!result.done) {
+            const state = engine.getState();
+            await saveSession(gameDir, sessionName, state);
+            await rebindSessionCoPlayControl({
+              gameDir,
+              session: sessionName,
+              previousState: lineageState,
+              state,
+            });
+          }
+          return { engine, runner, result };
+        });
         const handoff = await loadDevelopmentBranchHandoff(gameDir, sessionName);
         if (handoff?.premiere) {
           dispatch({
@@ -118,21 +141,19 @@ export function PlayScreen({
             }),
           });
         }
-        const engine = new Engine(initialGame, initialState);
-        const runner = engine.run();
+        const { engine, runner, result } = boot;
         gameRef.current = initialGame;
         engineRef.current = engine;
         runnerRef.current = runner;
-        const { value, done: isDone } = await runner.next();
+        const { value, done: isDone } = result;
         if (cancelled) return;
-        if (isDone) {
+        if (isDone || value === undefined) {
           outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
           outputRef.current = value;
           dispatch({ kind: "apply", output: value });
           stateRef.current = engine.getState();
-          await saveSession(gameDir, sessionName, engine.getState());
         }
       } catch (err) {
         if (cancelled) return;
@@ -171,7 +192,7 @@ export function PlayScreen({
       runnerRef.current = newRunner;
       try {
         const { value, done: isDone } = await newRunner.next();
-        if (isDone) {
+        if (isDone || value === undefined) {
           outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
@@ -252,22 +273,40 @@ export function PlayScreen({
       if (!runner || !engine) return;
       processingRef.current = true;
       try {
-        const decision = choiceDecisionContext(outputRef.current, input);
-        const activityDecision = activityDecisionContext(outputRef.current, input);
-        const { value, done: isDone } = await runner.next(input);
-        dispatch({ kind: "choose", input, selectedBy: "player" });
-        const finalState = engine.getState();
+        const committed = await withSessionLock(gameDir, sessionName, async () => {
+          const localState = engine.getState();
+          const lineageState = structuredClone(localState);
+          const liveState = await loadSession(gameDir, sessionName, gameRef.current);
+          if (sessionStateRevision(liveState) !== sessionStateRevision(localState)) {
+            throw new SessionOwnershipLost();
+          }
+          const decision = choiceDecisionContext(outputRef.current, input);
+          const activityDecision = activityDecisionContext(outputRef.current, input);
+          const { value, done: isDone } = await runner.next(input);
+          const finalState = engine.getState();
+          await saveSession(gameDir, sessionName, finalState);
+          await appendLog(gameDir, sessionName, {
+            t: Date.now(),
+            source: "tui",
+            input,
+            output: isDone ? null : value,
+            ...(decision ? { decision } : {}),
+            ...(activityDecision ? { activityDecision } : {}),
+          }, finalState);
+          await rebindSessionCoPlayControl({
+            gameDir,
+            session: sessionName,
+            previousState: lineageState,
+            state: finalState,
+            controller: "tui",
+            lastAction: tuiPublicAction(input, decision, activityDecision),
+          });
+          return { value, isDone, finalState };
+        });
+        const { value, isDone, finalState } = committed;
         stateRef.current = finalState;
-        await saveSession(gameDir, sessionName, finalState);
-        await appendLog(gameDir, sessionName, {
-          t: Date.now(),
-          source: "tui",
-          input,
-          output: isDone ? null : value,
-          ...(decision ? { decision } : {}),
-          ...(activityDecision ? { activityDecision } : {}),
-        }, finalState);
-        if (isDone) {
+        dispatch({ kind: "choose", input, selectedBy: "player" });
+        if (isDone || value === undefined) {
           outputRef.current = { type: "gameEnd" };
           dispatch({ kind: "apply", output: { type: "gameEnd" } });
         } else {
@@ -275,7 +314,31 @@ export function PlayScreen({
           dispatch({ kind: "apply", output: value });
         }
       } catch (err) {
-        dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
+        if (err instanceof SessionOwnershipLost) {
+          try {
+            const latest = await withSessionLock(gameDir, sessionName, async () => {
+              const state = await loadSession(gameDir, sessionName, gameRef.current);
+              const nextEngine = new Engine(gameRef.current, state);
+              const nextRunner = nextEngine.run();
+              const result = await nextRunner.next();
+              return { nextEngine, nextRunner, result };
+            });
+            engineRef.current = latest.nextEngine;
+            runnerRef.current = latest.nextRunner;
+            stateRef.current = latest.nextEngine.getState();
+            const output = latest.result.done
+              ? { type: "gameEnd" as const }
+              : latest.result.value;
+            outputRef.current = output;
+            dispatch({ kind: "reset", model: applyOutput(initialModel, output) });
+            setReloadError("session advanced elsewhere · reloaded latest turn");
+            setTimeout(() => setReloadError(null), 3000);
+          } catch (reloadCause) {
+            dispatch({ kind: "reset", model: makeErrorModel(reloadCause as Error) });
+          }
+        } else {
+          dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
+        }
       } finally {
         processingRef.current = false;
       }
@@ -368,6 +431,30 @@ export function PlayScreen({
       {renderStage(model, assetMap, game)}
     </GameLayout>
   );
+}
+
+class SessionOwnershipLost extends Error {}
+
+function tuiPublicAction(
+  input: Input,
+  decision?: ReturnType<typeof choiceDecisionContext>,
+  activity?: ReturnType<typeof activityDecisionContext>,
+): SessionPublicAction {
+  switch (input.type) {
+    case "next": return { type: "next" };
+    case "quit": return { type: "quit" };
+    case "choose": return {
+      type: "choose",
+      ...(decision?.choiceId ? { choiceId: decision.choiceId } : {}),
+      ...(decision?.optionId ? { optionId: decision.optionId } : {}),
+    };
+    case "select": return { type: "select", scriptId: input.scriptId };
+    case "doActivity": return {
+      type: "doActivity",
+      id: activity?.activityId ?? input.id,
+      ...(activity?.title ? { title: activity.title } : {}),
+    };
+  }
 }
 
 // "b" is meaningful only when there's something to look at, so the

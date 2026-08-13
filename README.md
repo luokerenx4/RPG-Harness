@@ -18,9 +18,13 @@ or project-module AI persona in the HUD and hand it exactly one decision. The
 turn is fenced to the save revision visible in the GUI, persists through the
 same Headless `autoplay:<persona>` log, and returns control immediately. A
 stochastic persona retains its continuation RNG cursor across successive
-hand-offs; the player's next click takes the next turn without a stop-task
-race. `rpgh personas <game-dir>` exposes the same project-extensible registry
-to other tools.
+hand-offs, page reloads, GUI windows, and Headless commands. That cursor lives
+in the shared session as a state-revision-bound co-play lineage; a player Web,
+TUI, or `rpgh step` move atomically rebinds it to the resulting save, while a
+stale or manually replaced save drops the cursor instead of guessing. The
+player's next click takes the next turn without a stop-task race. `rpgh
+personas <game-dir>` exposes the same project-extensible registry to other
+tools.
 
 ## Make your own
 
