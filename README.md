@@ -257,7 +257,8 @@ specific branch.
 reports, unreadable session state/logs, story coverage gaps, executable choice
 branches, and authored choice debt into one deterministic priority order. JSON
 items classify their actionability as `executable`, `diagnostic`, or `authoring`,
-retain the source coordinates, and expose a structured next operation such
+retain the source coordinates, classify execution cost as inspection,
+verification, checkpoint, search, or authoring, and expose a structured next operation such
 as `reproduce`, `transcript`, `cover`, `reach`, `reach-script`, `inspect-script`,
 `verify-autoplay`, `verify-audit`, or `edit`. Story gaps use the same bounded public-input search
 and exact replay contract as choices instead of being mislabeled as generic
@@ -276,6 +277,9 @@ Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.
 `sweep` executes a bounded snapshot of that same queue for one player lineage.
+Within one product priority it closes inspection/verification and exact
+checkpoint work before spending the shared budget on state-space search, so a
+hard `reach-script` cannot starve dozens of one-step choice branches.
 It preflights every generated branch before its first write, shares one total
 search-node budget across the batch, and pauses normally when that budget is
 spent. The result carries the frozen SHA-256 revision and exact next work key;

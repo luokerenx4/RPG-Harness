@@ -43,11 +43,15 @@ describe("AI development worklist", () => {
       "report/pt-blocker",
       "story/started",
       "report/pt-minor",
-      "story/unseen",
       "choice-branch/ending/coda/friends",
+      "story/unseen",
       "choice-authoring/ending/unseen-choice",
       "choice-authoring/ending/coda/ai-intent",
     ]);
+    expect(report.items.find((item) => item.kind === "choice-branch"))
+      .toMatchObject({ executionCost: "checkpoint" });
+    expect(report.items.find((item) => item.key === "story/unseen"))
+      .toMatchObject({ executionCost: "search" });
     expect(report.items[0]?.operation).toEqual({
       command: "inspect-session",
       args: { session: "broken", surfaces: ["log", "state"] },

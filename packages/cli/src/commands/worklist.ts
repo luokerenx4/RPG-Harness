@@ -91,6 +91,13 @@ export interface DevelopmentWorkItem {
   target?: string;
   detail: string;
   operation: DevelopmentOperation;
+  /** Coarse scheduler cost; priority still wins, then cheaper closure paths run first. */
+  executionCost:
+    | "inspection"
+    | "verification"
+    | "checkpoint"
+    | "search"
+    | "authoring";
   executor: {
     command: "work";
     args: {
@@ -102,7 +109,10 @@ export interface DevelopmentWorkItem {
   coordinates: Record<string, unknown>;
 }
 
-type DevelopmentWorkItemDraft = Omit<DevelopmentWorkItem, "executor">;
+type DevelopmentWorkItemDraft = Omit<
+  DevelopmentWorkItem,
+  "executor" | "executionCost"
+>;
 
 export interface DevelopmentWorklist {
   summary: {
@@ -387,11 +397,13 @@ export function analyzeDevelopmentWorklist(input: {
 
   items.sort((left, right) =>
     priorityRank(left.priority) - priorityRank(right.priority) ||
+    executionCostRank(left.operation) - executionCostRank(right.operation) ||
     kindRank(left.kind) - kindRank(right.kind) ||
     left.key.localeCompare(right.key)
   );
   const finalizedItems: DevelopmentWorkItem[] = items.map((item) => ({
     ...item,
+    executionCost: executionCost(item.operation),
     executor: workExecutor(item, input.session),
   }));
 
@@ -457,7 +469,7 @@ export function formatDevelopmentWorklist(report: DevelopmentWorklist): string {
   }
   for (const item of report.items) {
     lines.push(
-      `${item.priority}  ${item.actionability.padEnd(10)}  ${item.kind.padEnd(16)}  ${item.key}  ${item.title}`,
+      `${item.priority}  ${item.actionability.padEnd(10)}  ${item.executionCost.padEnd(12)}  ${item.kind.padEnd(16)}  ${item.key}  ${item.title}`,
       `    next: ${formatExecutor(item.executor)}`,
     );
   }
@@ -523,6 +535,36 @@ function reportPriority(
 
 function priorityRank(priority: DevelopmentWorkPriority): number {
   return Number(priority.slice(1));
+}
+
+function executionCost(
+  operation: DevelopmentOperation,
+): DevelopmentWorkItem["executionCost"] {
+  if (
+    operation.command === "inspect-session" ||
+    operation.command === "inspect-report"
+  ) return "inspection";
+  if (
+    operation.command === "verify-autoplay" ||
+    operation.command === "verify-audit"
+  ) return "verification";
+  if (operation.command === "reproduce" || operation.command === "cover") {
+    return "checkpoint";
+  }
+  if (operation.command === "reach" || operation.command === "reach-script") {
+    return "search";
+  }
+  return "authoring";
+}
+
+function executionCostRank(operation: DevelopmentOperation): number {
+  return [
+    "inspection",
+    "verification",
+    "checkpoint",
+    "search",
+    "authoring",
+  ].indexOf(executionCost(operation));
 }
 
 function kindRank(kind: DevelopmentWorkKind): number {
