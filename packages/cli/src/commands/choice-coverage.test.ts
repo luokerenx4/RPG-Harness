@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { scriptRevision } from "@rpg-harness/engine";
+import { withSessionLock } from "@rpg-harness/session-store";
 import { analyzeChoiceCoverage, collectAuthoredChoices, collectChoiceCoverage, formatChoiceCoverage } from "./choice-coverage";
 
 const temporaryDirectories: string[] = [];
@@ -32,6 +33,236 @@ const choice = {
 };
 
 describe("choice branch coverage", () => {
+  test("incrementally indexes appended global logs without losing response traces", async () => {
+    const gameDir = await temporaryChoiceGame("incremental");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    const logFile = path.join(sessionDir, "log.jsonl");
+    await writeFile(logFile, [
+      JSON.stringify({ output: choice, checkpoint: checkpoint("1".repeat(64)) }),
+      JSON.stringify({
+        input: { type: "choose", index: 0 },
+        decision: {
+          scriptId: "ending",
+          choiceId: "final-tether",
+          optionId: "alone",
+        },
+        output: { type: "narration", text: "The first response." },
+      }),
+    ].join("\n") + "\n");
+
+    const first = await collectChoiceCoverage(gameDir);
+    expect(first.choices[0]?.options).toEqual([
+      expect.objectContaining({ id: "alone", status: "selected" }),
+      expect.objectContaining({ id: "friends", status: "pending" }),
+      expect.objectContaining({ id: "secret", status: "locked" }),
+    ]);
+
+    await appendFile(logFile, [
+      JSON.stringify({ output: { type: "dialogue", speakerId: "friend", text: "Still answering." } }),
+      JSON.stringify({
+        decision: {
+          scriptId: "ending",
+          choiceId: "final-tether",
+          optionId: "friends",
+        },
+        output: { type: "narration", text: "A different response." },
+      }),
+    ].join("\n") + "\n");
+    const second = await collectChoiceCoverage(gameDir);
+
+    expect(second.summary.selectedOptions).toBe(2);
+    expect(second.summary.pendingOptions).toBe(0);
+    expect(second.authoring.summary.convergedResponses).toBe(0);
+    expect(second.choices[0]?.options).toEqual([
+      expect.objectContaining({ id: "alone", status: "selected", selectedSessions: ["web"] }),
+      expect.objectContaining({ id: "friends", status: "selected", selectedSessions: ["web"] }),
+      expect.objectContaining({ id: "secret", status: "locked" }),
+    ]);
+  });
+
+  test("waits for a transactionally appended partial JSONL tail", async () => {
+    const gameDir = await temporaryChoiceGame("partial-tail");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    const logFile = path.join(sessionDir, "log.jsonl");
+    let partialWritten!: () => void;
+    const partialWrittenGate = new Promise<void>((resolve) => {
+      partialWritten = resolve;
+    });
+    let finishAppend!: () => void;
+    const finishAppendGate = new Promise<void>((resolve) => {
+      finishAppend = resolve;
+    });
+    const writer = withSessionLock(gameDir, "web", async () => {
+      const serialized = JSON.stringify({
+        output: choice,
+        checkpoint: checkpoint("8".repeat(64)),
+      }) + "\n";
+      const split = Math.floor(serialized.length / 2);
+      await writeFile(logFile, serialized.slice(0, split));
+      partialWritten();
+      await finishAppendGate;
+      await appendFile(logFile, serialized.slice(split));
+    });
+    await partialWrittenGate;
+
+    const coverage = collectChoiceCoverage(gameDir);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    finishAppend();
+    const report = await coverage;
+    await writer;
+
+    expect(report.sessionErrors).toEqual([]);
+    expect(report.summary.choices).toBe(1);
+    expect(report.workItems).toHaveLength(2);
+  });
+
+  test("rebuilds one cached session after its log is truncated in place", async () => {
+    const gameDir = await temporaryChoiceGame("truncate");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    const logFile = path.join(sessionDir, "log.jsonl");
+    await writeFile(logFile, JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("2".repeat(64)),
+    }) + "\n");
+    expect((await collectChoiceCoverage(gameDir)).summary.choices).toBe(1);
+
+    await writeFile(logFile, "");
+    const rebuilt = await collectChoiceCoverage(gameDir);
+
+    expect(rebuilt.summary.choices).toBe(0);
+    expect(rebuilt.sessions).toEqual(["web"]);
+  });
+
+  test("links a lexically earlier fork decision to its later parent observation", async () => {
+    const gameDir = await temporaryChoiceGame("fork-order");
+    const sessionsRoot = path.join(gameDir, ".rpg-harness", "sessions");
+    await mkdir(path.join(sessionsRoot, "a-child"), { recursive: true });
+    await mkdir(path.join(sessionsRoot, "z-parent"), { recursive: true });
+    await writeFile(path.join(sessionsRoot, "a-child", "log.jsonl"), JSON.stringify({
+      decision: {
+        scriptId: "ending",
+        choiceId: "final-tether",
+        optionId: "friends",
+      },
+      output: { type: "narration", text: "Together." },
+    }) + "\n");
+    await writeFile(path.join(sessionsRoot, "z-parent", "log.jsonl"), JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("4".repeat(64)),
+    }) + "\n");
+
+    const report = await collectChoiceCoverage(gameDir);
+
+    expect(report.choices[0]?.options).toContainEqual(expect.objectContaining({
+      id: "friends",
+      status: "selected",
+      selectedSessions: ["a-child"],
+    }));
+  });
+
+  test("self-heals a malformed derived choice-log index", async () => {
+    const gameDir = await temporaryChoiceGame("cache-recovery");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(path.join(sessionDir, "log.jsonl"), JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("3".repeat(64)),
+    }) + "\n");
+    await collectChoiceCoverage(gameDir);
+    const indexFile = path.join(
+      gameDir,
+      ".rpg-harness",
+      "cache",
+      "choice-coverage-log-index-v1.json",
+    );
+    await writeFile(indexFile, "{broken");
+
+    const recovered = await collectChoiceCoverage(gameDir);
+
+    expect(recovered.summary.choices).toBe(1);
+    expect(JSON.parse(await readFile(indexFile, "utf-8"))).toMatchObject({
+      schemaVersion: 1,
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      sessions: { web: { summary: { entryCount: 1 } } },
+    });
+  });
+
+  test("rejects a syntactically valid cache whose derived content was edited", async () => {
+    const gameDir = await temporaryChoiceGame("cache-integrity");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(path.join(sessionDir, "log.jsonl"), JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("5".repeat(64)),
+    }) + "\n");
+    await collectChoiceCoverage(gameDir);
+    const indexFile = path.join(
+      gameDir,
+      ".rpg-harness",
+      "cache",
+      "choice-coverage-log-index-v1.json",
+    );
+    const edited = JSON.parse(await readFile(indexFile, "utf-8"));
+    edited.sessions.web.summary.observations = [];
+    await writeFile(indexFile, JSON.stringify(edited));
+
+    const recovered = await collectChoiceCoverage(gameDir);
+
+    expect(recovered.summary.choices).toBe(1);
+  });
+
+  test("rejects a hash-valid cache with an invalid derived schema", async () => {
+    const gameDir = await temporaryChoiceGame("cache-schema");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(path.join(sessionDir, "log.jsonl"), JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("7".repeat(64)),
+    }) + "\n");
+    await collectChoiceCoverage(gameDir);
+    const indexFile = path.join(
+      gameDir,
+      ".rpg-harness",
+      "cache",
+      "choice-coverage-log-index-v1.json",
+    );
+    const edited = JSON.parse(await readFile(indexFile, "utf-8"));
+    edited.sessions.web.summary.entryCount = "not-a-count";
+    const { createHash } = await import("node:crypto");
+    edited.contentHash = createHash("sha256")
+      .update(JSON.stringify(edited.sessions))
+      .digest("hex");
+    await writeFile(indexFile, JSON.stringify(edited));
+
+    const recovered = await collectChoiceCoverage(gameDir);
+
+    expect(recovered.summary.choices).toBe(1);
+  });
+
+  test("keeps coverage readable when the derived cache cannot be published", async () => {
+    const gameDir = await temporaryChoiceGame("cache-read-only");
+    const sessionDir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(path.join(sessionDir, "log.jsonl"), JSON.stringify({
+      output: choice,
+      checkpoint: checkpoint("6".repeat(64)),
+    }) + "\n");
+    // A file where the cache directory belongs makes mkdir fail deterministically,
+    // including in privileged test environments where chmod is not authoritative.
+    await writeFile(path.join(gameDir, ".rpg-harness", "cache"), "read-only boundary");
+
+    const report = await collectChoiceCoverage(gameDir);
+
+    expect(report.summary.choices).toBe(1);
+    expect(report.choices[0]?.options).toContainEqual(expect.objectContaining({
+      id: "friends",
+      status: "pending",
+    }));
+  });
+
   test("separates authored identity debt from runtime branch coverage", () => {
     const game = {
       title: "Inventory",
@@ -641,3 +872,10 @@ describe("choice branch coverage", () => {
     ]);
   });
 });
+
+async function temporaryChoiceGame(label: string): Promise<string> {
+  const gameDir = await mkdtemp(path.join(tmpdir(), `rpgh-choice-${label}-`));
+  temporaryDirectories.push(gameDir);
+  await writeFile(path.join(gameDir, "game.yaml"), `title: Choice ${label} test\n`);
+  return gameDir;
+}

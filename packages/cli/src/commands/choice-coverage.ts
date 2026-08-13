@@ -1,5 +1,13 @@
-import { assertSessionName, isSessionCheckpointRef } from "@rpg-harness/session-store";
+import {
+  assertSessionName,
+  isSessionCheckpointRef,
+  withSessionLock,
+} from "@rpg-harness/session-store";
 import { scriptRevision, type Condition, type Game } from "@rpg-harness/engine";
+import { createHash, randomUUID } from "node:crypto";
+import type { Stats } from "node:fs";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { loadGame } from "../loader";
 import { normalizeAuthoringSource } from "../authoring-source";
 import { listSessions } from "../session";
@@ -178,6 +186,65 @@ interface RuntimeChoiceOutput {
   options?: unknown;
 }
 
+interface ChoiceLogObservation {
+  logEntry: number;
+  scriptId: string;
+  scriptRevision?: string;
+  choiceId: string;
+  prompt: string | null;
+  options: Array<{ id: string; text: string; available: boolean }>;
+  checkpoint?: ChoiceCoverageEvidence["checkpoint"];
+}
+
+interface ChoiceLogSelection {
+  scriptId: string;
+  scriptRevision?: string;
+  choiceId: string;
+  optionId: string;
+  responseTrace: NarrativeResponse[];
+}
+
+interface ChoiceLogScanState {
+  pending?: {
+    scriptId: string;
+    scriptRevision?: string;
+    choiceId: string;
+    options: Array<{ id: string; text: string; available: boolean }>;
+  };
+  activeSelection?: number;
+}
+
+interface ChoiceLogSummary {
+  entryCount: number;
+  untrackedChoiceEvents: number;
+  unversionedChoiceEvents: number;
+  observations: ChoiceLogObservation[];
+  selections: ChoiceLogSelection[];
+  scanState: ChoiceLogScanState;
+}
+
+interface ChoiceLogSignature {
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  endsWithNewline: boolean;
+}
+
+interface ChoiceLogIndexEntry {
+  signature: ChoiceLogSignature | null;
+  summary: ChoiceLogSummary;
+}
+
+interface ChoiceLogIndex {
+  schemaVersion: 1;
+  contentHash: string;
+  sessions: Record<string, ChoiceLogIndexEntry>;
+}
+
+const CHOICE_LOG_INDEX_FILE = "choice-coverage-log-index-v1.json";
+
 export interface ChoiceCoverageArgs {
   gameDir: string;
   session?: string;
@@ -248,6 +315,9 @@ export async function collectChoiceCoverage(
     : includeDescendants
       ? await sessionFamily(gameDir, onlySession)
       : [onlySession];
+  if (onlySession === undefined) {
+    return collectIndexedChoiceCoverage(gameDir, names, authored);
+  }
   const logs: Array<{ session: string; entries: LoggedStep[] }> = [];
   const sessionErrors: Array<{ session: string; error: string }> = [];
   if (onlySession !== undefined && !includeDescendants) {
@@ -288,19 +358,399 @@ export async function collectChoiceCoverage(
   );
 }
 
+async function collectIndexedChoiceCoverage(
+  gameDir: string,
+  names: string[],
+  authored: AuthoredChoiceRow[],
+): Promise<ChoiceCoverageReport> {
+  const index = await readChoiceLogIndex(gameDir);
+  const nextSessions = Object.create(null) as Record<string, ChoiceLogIndexEntry>;
+  const summaries: Array<{ session: string; summary: ChoiceLogSummary }> = [];
+  const sessionErrors: Array<{ session: string; error: string }> = [];
+  let changed = false;
+  for (const session of names) {
+    try {
+      let entry: ChoiceLogIndexEntry;
+      try {
+        entry = await indexedChoiceLogSummary(gameDir, session, index.sessions[session]);
+      } catch (error) {
+        if (!(error instanceof RetryableChoiceLogReadError)) throw error;
+        // GUI and Headless append under this same transaction boundary. Only
+        // the rare partial-tail reader waits; ordinary global scans stay free
+        // of thousands of per-session lock acquisitions.
+        entry = await withSessionLock(gameDir, session, () =>
+          indexedChoiceLogSummary(gameDir, session, index.sessions[session])
+        );
+      }
+      nextSessions[session] = entry;
+      summaries.push({ session, summary: entry.summary });
+      if (entry !== index.sessions[session]) changed = true;
+    } catch (error) {
+      sessionErrors.push({ session, error: (error as Error).message });
+      if (index.sessions[session] !== undefined) changed = true;
+    }
+  }
+  if (!changed && Object.keys(index.sessions).length !== names.length) changed = true;
+  if (changed) {
+    // Coverage remains a read operation. A read-only checkout or a racing
+    // cache publisher may lose acceleration, but never evidence or the report.
+    await writeChoiceLogIndex(gameDir, nextSessions).catch(() => {});
+  }
+  return analyzeChoiceCoverageSummaries(summaries, sessionErrors, authored);
+}
+
+async function indexedChoiceLogSummary(
+  gameDir: string,
+  session: string,
+  cached?: ChoiceLogIndexEntry,
+): Promise<ChoiceLogIndexEntry> {
+  const file = path.join(gameDir, ".rpg-harness", "sessions", session, "log.jsonl");
+  let handle;
+  try {
+    handle = await open(file, "r");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (cached?.signature === null) return cached;
+    return { signature: null, summary: emptyChoiceLogSummary() };
+  }
+  try {
+    const fileStat = await handle.stat();
+    const baseSignature = signatureFromStat(fileStat, true);
+    if (cached?.signature && sameChoiceLogSignature(cached.signature, baseSignature)) {
+      return cached;
+    }
+    const canAppend = cached?.signature !== null && cached?.signature !== undefined &&
+      cached.signature.dev === fileStat.dev &&
+      cached.signature.ino === fileStat.ino &&
+      cached.signature.size < fileStat.size &&
+      cached.signature.endsWithNewline;
+    const start = canAppend ? cached!.signature!.size : 0;
+    const buffer = Buffer.allocUnsafe(fileStat.size - start);
+    let cursor = 0;
+    while (cursor < buffer.length) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        cursor,
+        buffer.length - cursor,
+        start + cursor,
+      );
+      if (bytesRead === 0) break;
+      cursor += bytesRead;
+    }
+    if (cursor !== buffer.length) {
+      throw new RetryableChoiceLogReadError(`Session log changed while indexing: ${session}`);
+    }
+    const verifiedStat = await handle.stat();
+    if (!sameChoiceLogFileIdentity(fileStat, verifiedStat)) {
+      throw new RetryableChoiceLogReadError(`Session log changed while indexing: ${session}`);
+    }
+    const text = buffer.toString("utf-8");
+    const summary = canAppend
+      ? summarizeChoiceLog(parseLoggedSteps(text, cached!.summary.entryCount), cached!.summary)
+      : summarizeChoiceLog(parseLoggedSteps(text, 0));
+    return {
+      signature: signatureFromStat(fileStat, buffer.length === 0
+        ? true
+        : buffer[buffer.length - 1] === 0x0a),
+      summary,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function parseLoggedSteps(text: string, previousEntries: number): LoggedStep[] {
+  const lines = text.split(/\r?\n/);
+  const hasTerminatingNewline = /(?:\r?\n)$/.test(text);
+  const nonemptyLines = lines.filter((line) => line.trim().length > 0);
+  return nonemptyLines.map(
+    (line, index) => {
+      try {
+        return JSON.parse(line) as LoggedStep;
+      } catch (error) {
+        const message =
+          `Invalid JSON in log entry ${previousEntries + index + 1}: ${(error as Error).message}`;
+        if (!hasTerminatingNewline && index === nonemptyLines.length - 1) {
+          throw new RetryableChoiceLogReadError(message);
+        }
+        throw new Error(message);
+      }
+    },
+  );
+}
+
+class RetryableChoiceLogReadError extends Error {}
+
+function summarizeChoiceLog(
+  entries: LoggedStep[],
+  previous: ChoiceLogSummary = emptyChoiceLogSummary(),
+): ChoiceLogSummary {
+  const summary = structuredClone(previous);
+  let pending = summary.scanState.pending;
+  let activeSelection = summary.scanState.activeSelection;
+  for (let localOffset = 0; localOffset < entries.length; localOffset += 1) {
+    const entry = entries[localOffset]!;
+    const logEntry = summary.entryCount + localOffset + 1;
+    const output = asChoiceOutput(entry.output);
+    if (typeof output?.scriptId === "string" && output.scriptRevision === undefined) {
+      summary.unversionedChoiceEvents += 1;
+    }
+    const explicitDecision = asStableDecision(entry.decision);
+    if (explicitDecision) {
+      summary.selections.push({ ...explicitDecision, responseTrace: [] });
+      activeSelection = summary.selections.length - 1;
+    }
+    if (activeSelection !== undefined) {
+      const selection = summary.selections[activeSelection];
+      const response = asNarrativeResponse(entry.output);
+      if (selection && response) {
+        selection.responseTrace.push(response);
+      } else if (!isPacingChoice(entry.output)) {
+        activeSelection = undefined;
+      }
+    }
+    const input = asChooseInput(entry.input);
+    if (!explicitDecision && input && pending) {
+      const selected = pending.options[input.index];
+      if (selected) {
+        summary.selections.push({
+          scriptId: pending.scriptId,
+          ...(pending.scriptRevision ? { scriptRevision: pending.scriptRevision } : {}),
+          choiceId: pending.choiceId,
+          optionId: selected.id,
+          responseTrace: [],
+        });
+      }
+    }
+    pending = undefined;
+    if (!output || (output.options as RuntimeChoiceOption[]).length < 2) continue;
+    const stable = stableChoice(output);
+    if (!stable) {
+      summary.untrackedChoiceEvents += 1;
+      continue;
+    }
+    summary.observations.push({
+      logEntry,
+      scriptId: stable.scriptId,
+      ...(stable.scriptRevision ? { scriptRevision: stable.scriptRevision } : {}),
+      choiceId: stable.choiceId,
+      prompt: typeof output.prompt === "string" ? output.prompt : null,
+      options: stable.options,
+      ...(isSessionCheckpointRef(entry.checkpoint) ? { checkpoint: entry.checkpoint } : {}),
+    });
+    pending = stable;
+  }
+  summary.entryCount += entries.length;
+  summary.scanState = {
+    ...(pending ? { pending } : {}),
+    ...(activeSelection !== undefined ? { activeSelection } : {}),
+  };
+  return summary;
+}
+
+function emptyChoiceLogSummary(): ChoiceLogSummary {
+  return {
+    entryCount: 0,
+    untrackedChoiceEvents: 0,
+    unversionedChoiceEvents: 0,
+    observations: [],
+    selections: [],
+    scanState: {},
+  };
+}
+
+function signatureFromStat(
+  fileStat: Stats,
+  endsWithNewline: boolean,
+): ChoiceLogSignature {
+  return {
+    dev: fileStat.dev,
+    ino: fileStat.ino,
+    size: fileStat.size,
+    mtimeMs: fileStat.mtimeMs,
+    ctimeMs: fileStat.ctimeMs,
+    endsWithNewline,
+  };
+}
+
+function sameChoiceLogSignature(
+  left: ChoiceLogSignature,
+  right: ChoiceLogSignature,
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+
+function sameChoiceLogFileIdentity(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+
+async function readChoiceLogIndex(gameDir: string): Promise<ChoiceLogIndex> {
+  try {
+    const value = JSON.parse(await readFile(choiceLogIndexPath(gameDir), "utf-8")) as unknown;
+    return parseChoiceLogIndex(value) ?? emptyChoiceLogIndex();
+  } catch {
+    // This file is disposable acceleration, never evidence. Missing,
+    // unreadable, malformed, or structurally invalid caches all cold-scan the
+    // authoritative session JSONL instead of turning into development work.
+    return emptyChoiceLogIndex();
+  }
+}
+
+async function writeChoiceLogIndex(
+  gameDir: string,
+  sessions: Record<string, ChoiceLogIndexEntry>,
+): Promise<void> {
+  const target = choiceLogIndexPath(gameDir);
+  await mkdir(path.dirname(target), { recursive: true });
+  const temporary = `${target}.${randomUUID()}.tmp`;
+  const index: ChoiceLogIndex = {
+    schemaVersion: 1,
+    contentHash: choiceLogIndexContentHash(sessions),
+    sessions,
+  };
+  try {
+    await writeFile(temporary, JSON.stringify(index), "utf-8");
+    await rename(temporary, target);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+function choiceLogIndexPath(gameDir: string): string {
+  return path.join(gameDir, ".rpg-harness", "cache", CHOICE_LOG_INDEX_FILE);
+}
+
+function parseChoiceLogIndex(value: unknown): ChoiceLogIndex | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const index = value as Partial<ChoiceLogIndex>;
+  if (!(index.schemaVersion === 1 && !!index.sessions &&
+    typeof index.sessions === "object" && !Array.isArray(index.sessions) &&
+    typeof index.contentHash === "string" &&
+    index.contentHash === choiceLogIndexContentHash(
+      index.sessions as Record<string, ChoiceLogIndexEntry>,
+    ))) return null;
+  const sessions = Object.create(null) as Record<string, ChoiceLogIndexEntry>;
+  for (const [session, entry] of Object.entries(index.sessions)) {
+    if (!isChoiceLogIndexEntry(entry)) return null;
+    sessions[session] = entry;
+  }
+  return {
+    schemaVersion: 1,
+    contentHash: index.contentHash,
+    sessions,
+  };
+}
+
+function isChoiceLogIndexEntry(value: unknown): value is ChoiceLogIndexEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Partial<ChoiceLogIndexEntry>;
+  return (entry.signature === null || isChoiceLogSignature(entry.signature)) &&
+    isChoiceLogSummary(entry.summary);
+}
+
+function isChoiceLogSignature(value: unknown): value is ChoiceLogSignature {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const signature = value as Partial<ChoiceLogSignature>;
+  return [signature.dev, signature.ino, signature.size, signature.mtimeMs, signature.ctimeMs]
+    .every((part) => typeof part === "number" && Number.isFinite(part) && part >= 0) &&
+    typeof signature.endsWithNewline === "boolean";
+}
+
+function isChoiceLogSummary(value: unknown): value is ChoiceLogSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const summary = value as Partial<ChoiceLogSummary>;
+  return [summary.entryCount, summary.untrackedChoiceEvents, summary.unversionedChoiceEvents]
+    .every((part) => Number.isInteger(part) && (part as number) >= 0) &&
+    Array.isArray(summary.observations) && summary.observations.every(isChoiceLogObservation) &&
+    Array.isArray(summary.selections) && summary.selections.every(isChoiceLogSelection) &&
+    isChoiceLogScanState(summary.scanState, summary.selections.length);
+}
+
+function isChoiceLogObservation(value: unknown): value is ChoiceLogObservation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const observation = value as Partial<ChoiceLogObservation>;
+  return Number.isInteger(observation.logEntry) && (observation.logEntry as number) > 0 &&
+    typeof observation.scriptId === "string" &&
+    (observation.scriptRevision === undefined || typeof observation.scriptRevision === "string") &&
+    typeof observation.choiceId === "string" &&
+    (observation.prompt === null || typeof observation.prompt === "string") &&
+    Array.isArray(observation.options) && observation.options.every(isIndexedChoiceOption) &&
+    (observation.checkpoint === undefined || isSessionCheckpointRef(observation.checkpoint));
+}
+
+function isChoiceLogSelection(value: unknown): value is ChoiceLogSelection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const selection = value as Partial<ChoiceLogSelection>;
+  return typeof selection.scriptId === "string" &&
+    (selection.scriptRevision === undefined || typeof selection.scriptRevision === "string") &&
+    typeof selection.choiceId === "string" && typeof selection.optionId === "string" &&
+    Array.isArray(selection.responseTrace) &&
+    selection.responseTrace.every((response) => asNarrativeResponse(response) !== null);
+}
+
+function isChoiceLogScanState(value: unknown, selectionCount: number): value is ChoiceLogScanState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const state = value as Partial<ChoiceLogScanState>;
+  return (state.pending === undefined || (
+      typeof state.pending.scriptId === "string" &&
+      (state.pending.scriptRevision === undefined || typeof state.pending.scriptRevision === "string") &&
+      typeof state.pending.choiceId === "string" && Array.isArray(state.pending.options) &&
+      state.pending.options.every(isIndexedChoiceOption)
+    )) &&
+    (state.activeSelection === undefined || (
+      Number.isInteger(state.activeSelection) && state.activeSelection >= 0 &&
+      state.activeSelection < selectionCount
+    ));
+}
+
+function isIndexedChoiceOption(
+  value: unknown,
+): value is { id: string; text: string; available: boolean } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const option = value as Record<string, unknown>;
+  return typeof option.id === "string" && typeof option.text === "string" &&
+    typeof option.available === "boolean";
+}
+
+function emptyChoiceLogIndex(): ChoiceLogIndex {
+  const sessions = Object.create(null) as Record<string, ChoiceLogIndexEntry>;
+  return {
+    schemaVersion: 1,
+    contentHash: choiceLogIndexContentHash(sessions),
+    sessions,
+  };
+}
+
+function choiceLogIndexContentHash(
+  sessions: Record<string, ChoiceLogIndexEntry>,
+): string {
+  return createHash("sha256").update(JSON.stringify(sessions)).digest("hex");
+}
+
 export function analyzeChoiceCoverage(
   logs: Array<{ session: string; entries: LoggedStep[] }>,
   sessionErrors: Array<{ session: string; error: string }> = [],
   authoredChoices: AuthoredChoiceRow[] = [],
 ): ChoiceCoverageReport {
+  return analyzeChoiceCoverageSummaries(
+    logs.map(({ session, entries }) => ({
+      session,
+      summary: summarizeChoiceLog(entries),
+    })),
+    sessionErrors,
+    authoredChoices,
+  );
+}
+
+function analyzeChoiceCoverageSummaries(
+  logs: Array<{ session: string; summary: ChoiceLogSummary }>,
+  sessionErrors: Array<{ session: string; error: string }> = [],
+  authoredChoices: AuthoredChoiceRow[] = [],
+): ChoiceCoverageReport {
   const choices = new Map<string, MutableChoice>();
-  const explicitSelections: Array<{
-    session: string;
-    scriptId: string;
-    choiceId: string;
-    optionId: string;
-    responseTrace: NarrativeResponse[];
-  }> = [];
+  const explicitSelections: Array<ChoiceLogSelection & { session: string }> = [];
   let untrackedChoiceEvents = 0;
   let staleChoiceEvents = 0;
   let unversionedChoiceEvents = 0;
@@ -315,83 +765,35 @@ export function analyzeChoiceCoverage(
         : []
     ),
   );
-  for (const { entries } of logs) {
-    for (const entry of entries) {
-      const output = asChoiceOutput(entry.output);
-      if (typeof output?.scriptId === "string" && output.scriptRevision === undefined) {
-        unversionedChoiceEvents += 1;
-      }
-    }
-  }
   const isCurrentEvidence = (scriptId: string, revision?: string): boolean => {
     const authoredRevision = authoredRevisions.get(scriptId);
     return authoredRevision === undefined ||
       revision === authoredRevision;
   };
 
-  for (const { session, entries } of logs) {
-    let pending: { choice: MutableChoice; options: RuntimeChoiceOption[] } | null = null;
-    let activeSelection: typeof explicitSelections[number] | null = null;
-    for (let offset = 0; offset < entries.length; offset += 1) {
-      const entry = entries[offset]!;
-      const explicitDecision = asStableDecision(entry.decision);
-      if (explicitDecision && isCurrentEvidence(
-        explicitDecision.scriptId,
-        explicitDecision.scriptRevision,
-      )) {
-        const selection = {
-          session,
-          ...explicitDecision,
-          responseTrace: [] as NarrativeResponse[],
-        };
-        explicitSelections.push(selection);
-        activeSelection = selection;
-      }
-      if (activeSelection) {
-        const response = asNarrativeResponse(entry.output);
-        if (response) {
-          activeSelection.responseTrace.push(response);
-        } else if (!isPacingChoice(entry.output)) {
-          activeSelection = null;
-        }
-      }
-      const input = asChooseInput(entry.input);
-      if (!explicitDecision && input && pending) {
-        const selected = pending.options[input.index];
-        const selectedId = typeof selected?.id === "string" ? selected.id : null;
-        if (selectedId) {
-          pending.choice.options.get(selectedId)?.selectedSessions.add(session);
-        }
-      }
-      pending = null;
-
-      const output = asChoiceOutput(entry.output);
-      if (!output) continue;
-      // A one-button choice is authored pacing/acknowledgement, not a branch.
-      // It remains an interactive engine output, but must not create coverage
-      // debt or a coding work item for an AI author.
-      if ((output.options as RuntimeChoiceOption[]).length < 2) continue;
-      const stable = stableChoice(output);
-      if (!stable) {
-        untrackedChoiceEvents += 1;
-        continue;
-      }
-      const currentEvidence = isCurrentEvidence(stable.scriptId, stable.scriptRevision);
+  for (const { session, summary } of logs) {
+    untrackedChoiceEvents += summary.untrackedChoiceEvents;
+    unversionedChoiceEvents += summary.unversionedChoiceEvents;
+    for (const observation of summary.observations) {
+      const currentEvidence = isCurrentEvidence(
+        observation.scriptId,
+        observation.scriptRevision,
+      );
       if (!currentEvidence) staleChoiceEvents += 1;
-      const key = `${stable.scriptId}/${stable.choiceId}`;
+      const key = `${observation.scriptId}/${observation.choiceId}`;
       if (currentEvidence) currentObservedKeys.add(key);
       let choice = choices.get(key);
       if (!choice) {
         choice = {
           key,
-          scriptId: stable.scriptId,
-          choiceId: stable.choiceId,
-          prompt: typeof output.prompt === "string" ? output.prompt : null,
+          scriptId: observation.scriptId,
+          choiceId: observation.choiceId,
+          prompt: observation.prompt,
           options: new Map(),
         };
         choices.set(key, choice);
       }
-      stable.options.forEach((option, index) => {
+      observation.options.forEach((option, index) => {
         let row = choice!.options.get(option.id);
         if (!row) {
           row = {
@@ -414,28 +816,32 @@ export function analyzeChoiceCoverage(
         }
         if (option.available && currentEvidence) {
           row.everAvailable = true;
-          if (isSessionCheckpointRef(entry.checkpoint)) {
+          if (observation.checkpoint) {
             row.evidence = {
               session,
-              logEntry: offset + 1,
-              checkpoint: entry.checkpoint,
+              logEntry: observation.logEntry,
+              checkpoint: observation.checkpoint,
               input: {
                 type: "choose",
-                choiceId: stable.choiceId,
+                choiceId: observation.choiceId,
                 optionId: option.id,
               },
-              fork: { from: session, at: offset + 1 },
+              fork: { from: session, at: observation.logEntry },
               webPathTemplate: "/?session=<new-session>",
             };
           }
         }
       });
-      pending = currentEvidence
-        ? { choice, options: output.options as RuntimeChoiceOption[] }
-        : null;
+    }
+    for (const selection of summary.selections) {
+      if (!isCurrentEvidence(selection.scriptId, selection.scriptRevision)) continue;
+      explicitSelections.push({ session, ...selection });
     }
   }
 
+  // A fork can contain a stable decision without repeating its parent's
+  // choice output, and its name can sort before that parent. Resolve all
+  // selections only after every session has contributed its observations.
   for (const selection of explicitSelections) {
     const option = choices
       .get(`${selection.scriptId}/${selection.choiceId}`)

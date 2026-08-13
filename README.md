@@ -323,6 +323,16 @@ autoplay.
 The default table keeps long-lived projects readable by abbreviating large
 evidence-session histories; `--format json` retains the complete provenance
 array for audits and automation.
+Global choice coverage incrementally indexes per-session JSONL facts under the
+ignored `.rpg-harness/cache/` directory. The raw session logs and immutable
+checkpoints remain authoritative: new, appended, truncated, replaced, or
+corrupt logs are detected from file identity, size, and timestamps; the
+content-hashed cache is discarded and rebuilt whenever it cannot be trusted.
+If a GUI or Headless writer is between bytes of one append or session reset,
+coverage waits on that session's shared transaction lock and rereads a stable
+snapshot instead of emitting a transient coding issue.
+Cache publication is atomic and best-effort, so read-only projects retain the
+same result with only a cold-scan performance cost.
 Placeholders such as
 `<new-session>` remain explicit so an AI never silently overwrites player state.
 `work` consumes that contract without asking the agent to translate camelCase
