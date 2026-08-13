@@ -5,12 +5,12 @@ characters: [mio]
 requires:
   all:
     - { variable: { name: shogun_chapter, min: 2 } }
-    - { variable: { name: raidsCompleted, min: 12 } }
+    - { variable: { name: raidsCompleted, min: 7 } }
 ---
 
 :cg assets/cgs/letter-03-choice
 
-十二度目の出帰り。
+七度目の出帰り。
 
 大広間の襖が左右に開く。座しているのは将軍家の側用人——そして、その隣に澪。
 

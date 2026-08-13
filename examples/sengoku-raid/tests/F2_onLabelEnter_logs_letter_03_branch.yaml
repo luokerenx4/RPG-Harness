@@ -1,7 +1,7 @@
 name: 提案F：onLabelEnter observer — letter_03 で end_silent label に入ると "御沙汰：silent"
   が記録される
 description: |
-  Player at chapter 2, raidsCompleted 12, in raid at extract zone.
+  Player at chapter 2, raidsCompleted 6, in raid at extract zone.
   Extract → letter_03 fires. Player picks the silent branch
   (fenced choice option 2 → goto end_silent → onLabelEnter fires).
   Achievement log gets "御沙汰：silent".
@@ -22,7 +22,7 @@ state:
           spectral: 20
           intellect: 8
     variables:
-      raidsCompleted: 11
+      raidsCompleted: 6
       shogun_chapter: 2
     currentMapId: kuro_swamp_shrine
   runtime:

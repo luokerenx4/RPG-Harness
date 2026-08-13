@@ -141,6 +141,7 @@ export interface PlaytestAuditMatrixEvidence {
     personas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
+    maxActivityRepetitions?: number;
     requiredActivityTags?: string[];
     requiredScripts?: string[];
   };
@@ -149,6 +150,11 @@ export interface PlaytestAuditMatrixEvidence {
     uniqueDecisionPaths: number;
     coveredActivityTags?: string[];
     completedScripts?: string[];
+    maxActivityRepetition?: {
+      persona: string;
+      activityId: string;
+      count: number;
+    };
   };
   classification:
     | "identical-path"
@@ -167,6 +173,7 @@ export interface PlaytestAuditMatrixEvidence {
     pathRevision: string;
     activityTags?: string[];
     completedScripts?: string[];
+    activityCounts?: Record<string, number>;
   }>;
   choiceDivergences: Array<{
     scriptId: string;
@@ -189,6 +196,15 @@ export function hasVerifiableAuditEvidence(
     !Array.isArray(evidence.lanes) || evidence.lanes.length === 0
   ) return false;
   const personas = evidence.lanes.map((lane) => lane.persona);
+  if (evidence.policy.maxActivityRepetitions !== undefined) {
+    if (!Number.isInteger(evidence.policy.maxActivityRepetitions) ||
+      evidence.policy.maxActivityRepetitions < 1 ||
+      evidence.lanes.some((lane) => !isActivityCountRecord(lane.activityCounts)) ||
+      JSON.stringify(evidence.observed.maxActivityRepetition) !==
+        JSON.stringify(maximumActivityRepetition(evidence.lanes))) {
+      return false;
+    }
+  }
   return personas.every((persona) =>
     typeof persona === "string" && persona.trim().length > 0
   ) &&
@@ -244,6 +260,7 @@ export interface PlaytestAuditVerification {
     personas?: string[];
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
+    maxActivityRepetitions?: number;
     requiredActivityTags?: string[];
     requiredScripts?: string[];
   };
@@ -252,6 +269,11 @@ export interface PlaytestAuditVerification {
     uniqueDecisionPaths: number;
     coveredActivityTags?: string[];
     completedScripts?: string[];
+    maxActivityRepetition?: {
+      persona: string;
+      activityId: string;
+      count: number;
+    };
   };
   classification:
     | "identical-path"
@@ -265,6 +287,7 @@ export interface PlaytestAuditVerification {
     pathRevision: string;
     activityTags?: string[];
     completedScripts?: string[];
+    activityCounts?: Record<string, number>;
   }>;
 }
 
@@ -775,6 +798,37 @@ function assertAuditVerificationMatches(
   ) {
     throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
   }
+  if (verification.policy.maxActivityRepetitions !== undefined) {
+    if (verification.lanes.some((lane) => !isActivityCountRecord(lane.activityCounts))) {
+      throw new Error(`AI audit verification lacks activity repetition evidence for report ${report.id}`);
+    }
+    const maximum = maximumActivityRepetition(verification.lanes);
+    if (
+      JSON.stringify(verification.observed.maxActivityRepetition) !== JSON.stringify(maximum) ||
+      (maximum !== undefined && maximum.count > verification.policy.maxActivityRepetitions)
+    ) {
+      throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
+    }
+  }
+}
+
+function isActivityCountRecord(value: unknown): value is Record<string, number> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    Object.entries(value).every(([id, count]) =>
+      id.trim().length > 0 && Number.isInteger(count) && (count as number) > 0
+    );
+}
+
+function maximumActivityRepetition(
+  lanes: Array<{ persona: string; activityCounts?: Record<string, number> }>,
+): { persona: string; activityId: string; count: number } | undefined {
+  return lanes.flatMap((lane) => Object.entries(lane.activityCounts ?? {}).map(
+    ([activityId, count]) => ({ persona: lane.persona, activityId, count }),
+  )).sort((left, right) =>
+    right.count - left.count ||
+    left.persona.localeCompare(right.persona) ||
+    left.activityId.localeCompare(right.activityId)
+  )[0];
 }
 
 function sortJson(value: unknown): unknown {

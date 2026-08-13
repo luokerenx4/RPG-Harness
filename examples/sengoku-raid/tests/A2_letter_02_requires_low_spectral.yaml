@@ -1,8 +1,8 @@
 name: 提案A：letter_02 は spectral < 50 でないと dispatch しない（composite trigger）
 description: |
-  Letter_02 trigger requires `all: [shogun_chapter>=1, raidsCompleted>=7, spectral<=49]`.
-  Seed with raidsCompleted=6 AND spectral=80 — after extracting, raidsCompleted
-  goes to 7 but the composite gate fails because spectral is too high.
+  Letter_02 trigger requires `all: [shogun_chapter>=1, raidsCompleted>=4, spectral<=49]`.
+  Seed with raidsCompleted=3 AND spectral=80 — after extracting, raidsCompleted
+  goes to 4 but the composite gate fails because spectral is too high.
   No letter_02 dispatch. Letter_01_dispatch is already marked fired (firedTriggers).
 state:
   baseline:
@@ -14,7 +14,7 @@ state:
       player:
         stats: { hp: 30, mental: 8, spectral: 80, intellect: 5 }
     variables:
-      raidsCompleted: 6
+      raidsCompleted: 3
       raidsFailed: 0
       shogun_chapter: 1
   runtime:
@@ -39,7 +39,7 @@ inputs:
 assertions:
   - kind: state
     path: baseline.variables.raidsCompleted
-    eq: 7
+    eq: 4
   - kind: state
     path: baseline.variables.shogun_chapter
     eq: 1

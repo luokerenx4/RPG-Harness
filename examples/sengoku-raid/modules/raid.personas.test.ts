@@ -67,7 +67,7 @@ describe("sengoku-raid project personas", () => {
     });
   });
 
-  test("extractor understands one-at-a-time material sales", async () => {
+  test("extractor understands bounded material batch sales", async () => {
     const output = hub([
       activity("sell_material:soul_shard"),
       activity("depart:kuro_swamp"),

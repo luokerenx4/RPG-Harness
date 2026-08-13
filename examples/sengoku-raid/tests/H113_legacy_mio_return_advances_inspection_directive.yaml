@@ -6,7 +6,7 @@ state:
       befriended_mio: true
       mio_inspection_duty: true
     variables:
-      raidsCompleted: 8
+      raidsCompleted: 5
       shogun_chapter: 2
       last_directive: "澪と共に出帰り、見立てを受けよ。"
   runtime:

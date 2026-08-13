@@ -1,8 +1,8 @@
-name: 提案A：raidsCompleted=2 で extract → 3 になった瞬間 letter_01 が dispatch される
+name: 提案A：raidsCompleted=1 で extract → 2 になった瞬間 letter_01 が dispatch される
 description: |
-  Trigger letter_01_dispatch has `once: true, when: variable raidsCompleted >= 3`.
-  Seed state with raidsCompleted=2 and a raid in progress at the extract zone,
-  then extract — raidsCompleted increments to 3, the rising edge fires the
+  Trigger letter_01_dispatch has `once: true, when: variable raidsCompleted >= 2`.
+  Seed state with raidsCompleted=1 and a raid in progress at the extract zone,
+  then extract — raidsCompleted increments to 2, the rising edge fires the
   trigger, currentScriptId becomes letter_01_suspicion.
 state:
   baseline:
@@ -11,7 +11,7 @@ state:
     weapons:
       ancestor_yaodao: { power: 6 }
     variables:
-      raidsCompleted: 2
+      raidsCompleted: 1
       raidsFailed: 0
       shogun_chapter: 0
   sengoku-raid:
@@ -34,7 +34,7 @@ inputs:
 assertions:
   - kind: state
     path: baseline.variables.raidsCompleted
-    eq: 3
+    eq: 2
   - kind: state
     path: baseline.variables.shogun_chapter
     eq: 1

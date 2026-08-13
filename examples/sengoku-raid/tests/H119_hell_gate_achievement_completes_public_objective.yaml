@@ -4,7 +4,7 @@ state:
     completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
     variables:
       shogun_chapter: 2
-      raidsCompleted: 9
+      raidsCompleted: 5
       pulse_oni: 8
     knownSkills: [chinkonho, mizukagami]
     weapons:

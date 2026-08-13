@@ -5,13 +5,13 @@ characters: [mio]
 requires:
   all:
     - { variable: { name: shogun_chapter, min: 1 } }
-    - { variable: { name: raidsCompleted, min: 7 } }
+    - { variable: { name: raidsCompleted, min: 4 } }
     - { characterStat: { character: player, name: spectral, max: 49 } }
 ---
 
 :cg assets/cgs/letter-02-rival
 
-七度目の出帰り。蔵を出ると、大名府の中庭に若い妖刀使いが一人、片膝をついている。
+四度目の出帰り。蔵を出ると、大名府の中庭に若い妖刀使いが一人、片膝をついている。
 
 深い藍の打掛。腰には家伝の脇差。
 

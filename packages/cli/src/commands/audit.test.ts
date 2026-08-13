@@ -498,6 +498,47 @@ describe("autoplay audit matrix", () => {
     expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
   });
 
+  test("turns a grindy but completable activity loop into reproducible work", async () => {
+    const gameDir = await temporaryRepetitionGame();
+    const summary = await runAudit({
+      gameDir,
+      sessionPrefix: "repetition-matrix",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: 23,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.totals.completed).toBe(1);
+    expect(summary.lanes[0]?.path.activityCounts).toEqual({ search: 3 });
+    expect(summary.qualityGate).toMatchObject({
+      policy: { maxActivityRepetitions: 2 },
+      status: "failed",
+      observed: {
+        maxActivityRepetition: {
+          persona: "objective",
+          activityId: "search",
+          count: 3,
+        },
+      },
+      violations: ["activity repetition objective/search = 3 > allowed 2"],
+      report: { severity: "major" },
+    });
+    const [report] = await listPlaytestReports(gameDir);
+    expect(report?.evidence.auditMatrix).toMatchObject({
+      policy: { maxActivityRepetitions: 2 },
+      observed: {
+        maxActivityRepetition: {
+          persona: "objective",
+          activityId: "search",
+          count: 3,
+        },
+      },
+      lanes: [{ persona: "objective", activityCounts: { search: 3 } }],
+    });
+  });
+
   test("fails when no acceptance lane completes a required deep script", async () => {
     const gameDir = await temporaryRequiredScriptGame();
     const game = await loadGame(gameDir);
@@ -1070,6 +1111,34 @@ async function temporaryActivityGame(): Promise<string> {
     "  ] } };",
     '  ctx.state.baseline.completionOrder.push("ending");',
     '  yield { type: "gameEnd", reason: "activity selected" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepetitionGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-repetition-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Audit repetition test",
+    "preset: ./modules/run.ts",
+    "ai_audit:",
+    "  max_activity_repetitions: 2",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    "  for (let index = 0; index < 3; index += 1) {",
+    '    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "search-loop", title: "Search again", scope: "main", terminal: false, status: "active", relatedActivityIds: ["search"] }], activities: [',
+    '      { id: "search", kind: "action", title: "Search", cost: 0, available: true },',
+    "    ] } };",
+    "  }",
+    '  ctx.state.baseline.completionOrder.push("ending");',
+    '  yield { type: "gameEnd", reason: "search complete", endingId: "ending" };',
     "};",
     "export default run;",
     "",

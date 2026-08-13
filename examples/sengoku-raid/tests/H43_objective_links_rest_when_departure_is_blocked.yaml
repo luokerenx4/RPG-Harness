@@ -20,4 +20,4 @@ assertions:
     relatedActivityIncludes: rest
     requirementId: raidsCompleted
     current: 1
-    target: 3
+    target: 2

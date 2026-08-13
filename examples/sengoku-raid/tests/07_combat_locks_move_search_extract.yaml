@@ -39,7 +39,7 @@ inputs:
   - type: doActivity
     id: move:kuro_swamp_crossroads
   - type: doActivity
-    id: search
+    id: search:kuro_swamp_deep_grove
   - type: doActivity
     id: extract
 assertions:

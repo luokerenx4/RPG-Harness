@@ -7,7 +7,7 @@ state:
       befriended_kasumi: true
       befriended_mio: true
     variables:
-      raidsCompleted: 6
+      raidsCompleted: 3
       shogun_chapter: 1
   runtime:
     firedTriggers: [letter_01_dispatch]

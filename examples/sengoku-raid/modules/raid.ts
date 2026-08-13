@@ -505,7 +505,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       scope: "main" as const,
       terminal: false,
       status: "active" as const,
-      requirements: [requirement("raidsCompleted", "成功撤退", raids, 3, raids >= 3)],
+      requirements: [requirement("raidsCompleted", "成功撤退", raids, 2, raids >= 2)],
       relatedActivityIds: executableProgressActivityIds,
     }]);
   }
@@ -519,7 +519,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       terminal: false,
       status: "active" as const,
       requirements: [
-        requirement("raidsCompleted", "成功撤退", raids, 7, raids >= 7),
+        requirement("raidsCompleted", "成功撤退", raids, 4, raids >= 4),
         requirement("spectral", "霊体化上限", spectral, "49 以下", spectral <= 49),
       ],
       relatedActivityIds: executableProgressActivityIds,
@@ -533,7 +533,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       scope: "main" as const,
       terminal: false,
       status: "active" as const,
-      requirements: [requirement("raidsCompleted", "成功撤退", raids, 12, raids >= 12)],
+      requirements: [requirement("raidsCompleted", "成功撤退", raids, 7, raids >= 7)],
       relatedActivityIds: executableProgressActivityIds,
     }]);
   }
@@ -873,20 +873,21 @@ function buildHubMenu(ctx: Ctx): Output {
     });
   }
 
-  // Materials are deliberately excluded from the bulk-sale action because
-  // they also fuel upgrades and intel.  Still honour their authored
-  // sell_value one item at a time, so converting a spare never destroys the
-  // player's whole crafting stockpile.
+  // Materials remain separate from the all-loot action because they also fuel
+  // upgrades and intel. Sell at most five of one chosen material per action:
+  // this preserves the resource choice without turning a large stack into
+  // dozens of identical hub inputs.
   for (const [id, count] of Object.entries(ctx.state.baseline.inventory)) {
     if (count <= 0 || !isMaterial(ctx, id)) continue;
     const value = sellValue(ctx, id);
+    const quantity = Math.min(count, 5);
     activities.push({
       id: `sell_material:${id}`,
       kind: "action",
       actionKind: "sell_material",
-      payload: { itemId: id },
-      title: `${itemName(ctx, id)}を一つ売る（${value} 両）`,
-      description: `所持 ${count}。鍛冶師は一度に一つだけ買い取る`,
+      payload: { itemId: id, quantity },
+      title: `${itemName(ctx, id)}を${quantity}個売る（${value * quantity} 両）`,
+      description: `所持 ${count}。素材を選び、一度に最大五個まで売る`,
       category: "shop",
       aiTags: ["economic", "profit"],
       cost: 0,
@@ -1632,7 +1633,7 @@ function buildRaidMenu(ctx: Ctx): Output {
           polarity: "benefit" as const,
         }));
       activities.push({
-        id: "search",
+        id: `search:${map.id}`,
         kind: "action",
         actionKind: "search",
         title: "この区域を探る",
@@ -2429,16 +2430,20 @@ const sellAllLootHandler: ActionHandler = (ctx) => {
 
 const sellMaterialHandler: ActionHandler = (ctx) => {
   const itemId = ctx.action.payload?.itemId as string | undefined;
+  const quantity = ctx.action.payload?.quantity;
   if (!itemId || !isMaterial(ctx, itemId)) {
     return denial("鍛冶師が買い取れる材料ではない。");
   }
+  if (!Number.isInteger(quantity) || (quantity as number) < 1 || (quantity as number) > 5) {
+    return denial("売る材料の数が正しくない。");
+  }
   const count = ctx.state.baseline.inventory[itemId] ?? 0;
-  if (count < 1) return denial(`${itemName(ctx, itemId)}は手元にない。`);
-  const value = sellValue(ctx, itemId);
+  if (count < (quantity as number)) return denial(`${itemName(ctx, itemId)}が足りない。`);
+  const value = sellValue(ctx, itemId) * (quantity as number);
   return {
-    deltas: { inventory: { [itemId]: -1, ryo: value } },
+    deltas: { inventory: { [itemId]: -(quantity as number), ryo: value } },
     narrations: [
-      `鍛冶師に${itemName(ctx, itemId)}を一つ渡した。秤の分銅が沈む——${value} 両を受け取った（残り ${count - 1}）。`,
+      `鍛冶師に${itemName(ctx, itemId)}を${quantity}個渡した。秤の分銅が沈む——${value} 両を受け取った（残り ${count - (quantity as number)}）。`,
     ],
   };
 };
@@ -3152,7 +3157,7 @@ const triggers: Trigger[] = [
   {
     id: "letter_01_dispatch",
     once: true,
-    when: { variable: { name: "raidsCompleted", min: 3 } },
+    when: { variable: { name: "raidsCompleted", min: 2 } },
     do: (ctx) => {
       queueLetterIfHub(ctx, "letter_01_suspicion");
       return {
@@ -3166,7 +3171,7 @@ const triggers: Trigger[] = [
     when: {
       all: [
         { variable: { name: "shogun_chapter", min: 1 } },
-        { variable: { name: "raidsCompleted", min: 7 } },
+        { variable: { name: "raidsCompleted", min: 4 } },
         { characterStat: { character: "player", name: "spectral", max: 49 } },
       ],
     },
@@ -3183,7 +3188,7 @@ const triggers: Trigger[] = [
     when: {
       all: [
         { variable: { name: "shogun_chapter", min: 2 } },
-        { variable: { name: "raidsCompleted", min: 12 } },
+        { variable: { name: "raidsCompleted", min: 7 } },
       ],
     },
     do: (ctx) => {
@@ -3342,7 +3347,7 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           if (attack) return { type: "doActivity", id: attack.id };
           const sneak = find(({ id }) => id === "sneak_strike");
           if (sneak) return { type: "doActivity", id: sneak.id };
-          const search = find(({ id }) => id === "search");
+          const search = find(({ id }) => id.startsWith("search:"));
           if (search) return { type: "doActivity", id: search.id };
           const moves = acts.filter(({ id }) => id.startsWith("move:"));
           const zones = m?.raid?.visited;
@@ -3445,7 +3450,7 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         if (extract) return { type: "doActivity", id: extract.id };
         const flee = find((id) => id === "flee");
         if (flee) return { type: "doActivity", id: flee.id };
-        const search = find((id) => id === "search");
+        const search = find((id) => id.startsWith("search:"));
         if (search) return { type: "doActivity", id: search.id };
         const move = find((id) => id.startsWith("move:"));
         if (move) return { type: "doActivity", id: move.id };
@@ -3496,7 +3501,7 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         if (attack) return { type: "doActivity", id: attack.id };
         const sneak = find((id) => id === "sneak_strike");
         if (sneak) return { type: "doActivity", id: sneak.id };
-        const search = find((id) => id === "search");
+        const search = find((id) => id.startsWith("search:"));
         if (search) return { type: "doActivity", id: search.id };
         const raid = (state as Record<string, unknown>)[MODULE_ID] as
           | { raid?: { visited?: Record<string, { visited?: boolean }> } }

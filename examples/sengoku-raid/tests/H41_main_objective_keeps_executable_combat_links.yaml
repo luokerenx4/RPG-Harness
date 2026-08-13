@@ -5,7 +5,7 @@ state:
     currentMapId: kuro_swamp_crossroads
     variables:
       shogun_chapter: 2
-      raidsCompleted: 9
+      raidsCompleted: 5
     weapons:
       ancestor_yaodao: { power: 14 }
   runtime:
@@ -32,5 +32,5 @@ assertions:
     id: letter_03_dispatch
     relatedActivityIncludes: attack
     requirementId: raidsCompleted
-    current: 9
-    target: 12
+    current: 5
+    target: 7

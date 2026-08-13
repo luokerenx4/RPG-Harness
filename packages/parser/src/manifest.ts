@@ -95,6 +95,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     "personas",
     "min_unique_endings",
     "min_unique_decision_paths",
+    "max_activity_repetitions",
     "required_activity_tags",
     "required_scripts",
   ]);
@@ -160,6 +161,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   for (const [source, target] of [
     ["min_unique_endings", "minUniqueEndings"],
     ["min_unique_decision_paths", "minUniqueDecisionPaths"],
+    ["max_activity_repetitions", "maxActivityRepetitions"],
   ] as const) {
     const value = obj[source];
     if (value === undefined) continue;
@@ -184,6 +186,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   if (
     config.minUniqueEndings === undefined &&
     config.minUniqueDecisionPaths === undefined &&
+    config.maxActivityRepetitions === undefined &&
     config.requiredActivityTags === undefined &&
     config.requiredScripts === undefined
   ) {

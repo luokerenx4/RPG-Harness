@@ -1,6 +1,6 @@
 name: 提案A：letter_03 の三択で「公儀に刀を抜く」を選ぶと chose_court_defy が立つ
 description: |
-  Seed raidsCompleted=11, shogun_chapter=2, in raid at extract zone.
+  Seed raidsCompleted=6, shogun_chapter=2, in raid at extract zone.
   Extract → trigger fires, letter_03 launches (fenced choice block).
   Pick option 1 (公儀に刀を抜く); the option's effects set
   chose_court_defy=true and goto end_defy. Verify the correct switch
@@ -22,7 +22,7 @@ state:
           spectral: 30
           intellect: 8
     variables:
-      raidsCompleted: 11
+      raidsCompleted: 6
       raidsFailed: 0
       shogun_chapter: 2
     currentMapId: kuro_swamp_shrine

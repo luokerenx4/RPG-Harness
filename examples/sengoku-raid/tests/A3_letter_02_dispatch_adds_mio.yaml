@@ -1,6 +1,6 @@
 name: 提案A：letter_02 が drain 完了後に mio が metCharacters に登録される
 description: |
-  Seed raidsCompleted=6, shogun_chapter=1, spectral=20. Extract — trigger
+  Seed raidsCompleted=3, shogun_chapter=1, spectral=20. Extract — trigger
   fires, letter_02 launches. Drain the letter's beats, pick option 0,
   drain trailing narrations. onScriptComplete hook adds "mio" to
   metCharacters. The explicit 「同行を頼む」 answer must also schedule her
@@ -15,7 +15,7 @@ state:
       player:
         stats: { hp: 30, mental: 8, spectral: 20, intellect: 5 }
     variables:
-      raidsCompleted: 6
+      raidsCompleted: 3
       raidsFailed: 0
       shogun_chapter: 1
   runtime:

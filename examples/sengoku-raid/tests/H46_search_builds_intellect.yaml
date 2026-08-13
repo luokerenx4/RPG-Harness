@@ -29,7 +29,7 @@ state:
           pendingLoot:
             soul_shard: 1
 inputs:
-  - { type: doActivity, id: search }
+  - { type: doActivity, id: "search:mt_houkyou_stone_paths" }
 assertions:
   - kind: output
     type: narration

@@ -148,6 +148,7 @@ describe("parseManifest — AI audit quality gate", () => {
       "  personas: [objective, charmer, rude]",
       "  min_unique_endings: 2",
       "  min_unique_decision_paths: 3",
+      "  max_activity_repetitions: 30",
       "  required_activity_tags: [cautious, economic, aggressive]",
       "  required_scripts: [three_flowers_alliance]",
     ].join("\n"));
@@ -156,6 +157,7 @@ describe("parseManifest — AI audit quality gate", () => {
       personas: ["objective", "charmer", "rude"],
       minUniqueEndings: 2,
       minUniqueDecisionPaths: 3,
+      maxActivityRepetitions: 30,
       requiredActivityTags: ["cautious", "economic", "aggressive"],
       requiredScripts: ["three_flowers_alliance"],
     });
@@ -166,6 +168,9 @@ describe("parseManifest — AI audit quality gate", () => {
       .toThrow(/must declare/);
     expect(() => parseManifest(
       "title: t\nai_audit:\n  min_unique_endings: 0\n",
+    )).toThrow(/positive integer/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  max_activity_repetitions: 0\n",
     )).toThrow(/positive integer/);
     expect(() => parseManifest(
       "title: t\nai_audit:\n  mystery: 2\n",

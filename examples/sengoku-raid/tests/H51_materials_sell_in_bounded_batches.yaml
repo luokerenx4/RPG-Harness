@@ -1,10 +1,10 @@
-name: crafting materials can be sold one at a time without clearing the stack
+name: crafting materials sell in bounded batches without mixing resource types
 state:
   baseline:
     completedScripts: [000_intro]
     inventory:
       ryo: 181
-      oni_horn: 3
+      oni_horn: 6
       soul_shard: 2
       cursed_blade_fragment: 1
     characters:
@@ -18,10 +18,10 @@ inputs:
 assertions:
   - kind: state
     path: baseline.inventory.oni_horn
-    eq: 2
+    eq: 1
   - kind: state
     path: baseline.inventory.ryo
-    eq: 261
+    eq: 581
   - kind: activity
     id: sell_material:oni_horn
     available: true

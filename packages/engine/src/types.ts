@@ -27,6 +27,8 @@ export interface AiAuditConfig {
   personas?: string[];
   minUniqueEndings?: number;
   minUniqueDecisionPaths?: number;
+  /** Maximum times one stable activity id may repeat in any acceptance lane. */
+  maxActivityRepetitions?: number;
   /** Semantic activity surfaces that at least one acceptance lane must execute. */
   requiredActivityTags?: string[];
   /** Deep authored events that at least one acceptance lane must complete. */
