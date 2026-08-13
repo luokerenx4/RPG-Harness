@@ -82,13 +82,19 @@ export interface PlaytestEvidence {
 }
 
 export interface PlaytestSourceTarget {
-  kind: "module-action" | "module-persona" | "module-setup" | "script";
+  kind:
+    | "module-action"
+    | "module-persona"
+    | "module-setup"
+    | "preset"
+    | "script";
   file: string;
   moduleId?: string;
   actionKind?: string;
   activityId?: string;
   persona?: string;
   setupPhase?: "initialize" | "engine";
+  runtimePhase?: "prime" | "input";
   scriptId?: string;
   scriptRevision?: string;
   choiceId?: string;

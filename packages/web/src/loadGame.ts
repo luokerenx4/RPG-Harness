@@ -153,6 +153,7 @@ export function loadWebGame(gameId: string): WebGame {
       );
     }
     game.runFn = fn as RunFunction;
+    game.runSource = stripDot(manifest.preset);
   }
 
   return { game, assetUrls: collectAssetUrls(gameId) };

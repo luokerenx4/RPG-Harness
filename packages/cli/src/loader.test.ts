@@ -41,6 +41,7 @@ describe("project code loading", () => {
     await writeVersion(path.join(dir, "modules", "version.ts"), "first");
 
     const first = await loadGame(dir);
+    expect(first.runSource).toBe("modules/run.ts");
     expect(first.modules?.find(({ id }) => id === "revision-module")?.version).toBe("first");
     expect((await first.runFn!({} as never).next()).value).toMatchObject({
       type: "gameEnd",
@@ -56,6 +57,7 @@ describe("project code loading", () => {
     await writeVersion(path.join(dir, "modules", "version.ts"), "second");
 
     const second = await loadGame(dir);
+    expect(second.runSource).toBe("modules/run.ts");
     expect(second.modules?.find(({ id }) => id === "revision-module")?.version).toBe("second");
     expect((await second.runFn!({} as never).next()).value).toMatchObject({
       type: "gameEnd",

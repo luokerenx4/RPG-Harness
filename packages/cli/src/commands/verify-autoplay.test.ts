@@ -190,6 +190,91 @@ describe("autoplay issue verification", () => {
     });
   });
 
+  test("resolves a project preset crash from its frozen pre-run checkpoint", async () => {
+    const gameDir = await temporaryRepairablePresetErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 37,
+      session: "original-preset-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a preset issue");
+    expect(original).toMatchObject({
+      reason: "error",
+      failure: {
+        phase: "prime",
+        name: "TypeError",
+        message: "preset bootstrap failed",
+      },
+    });
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/run.ts",
+      title: "Autoplay greedy failed in project preset during prime",
+      evidence: {
+        checkpoint: expect.objectContaining({ revision: expect.any(String) }),
+        autoplay: {
+          replayCheckpoint: expect.objectContaining({
+            revision: expect.any(String),
+          }),
+          seed: 37,
+        },
+        sourceTargets: [{
+          kind: "preset",
+          file: "modules/run.ts",
+          runtimePhase: "prime",
+        }],
+      },
+    });
+
+    const stillBroken = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "preset-still-broken",
+    });
+    expect(stillBroken).toMatchObject({
+      status: "failed",
+      result: { reason: "error", ending: null },
+    });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+
+    await writeFile(path.join(gameDir, "modules", "run.ts"), [
+      'import type { RunFunction } from "@rpg-harness/engine";',
+      "const run: RunFunction = async function* (ctx) {",
+      '  ctx.state.baseline.completionOrder.push("preset-fixed");',
+      '  yield { type: "gameEnd", endingId: "preset-fixed", reason: "preset repaired" };',
+      "};",
+      "export default run;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "preset-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      original: { stopReason: "error", persona: "greedy", seed: 37 },
+      result: {
+        reason: "completed",
+        ending: "preset-fixed",
+        webPath: "/?session=preset-fixed-run",
+      },
+      resolvedReport: {
+        status: "resolved",
+        verification: {
+          kind: "autoplay",
+          originalStopReason: "error",
+          result: { ending: "preset-fixed" },
+        },
+      },
+    });
+  });
+
   test("resolves a project persona crash only after its repaired policy reaches gameEnd", async () => {
     const gameDir = await temporaryRepairablePersonaErrorGame();
     const original = await runAutoplay({
@@ -604,6 +689,27 @@ async function temporaryRepairableModuleContractGame(): Promise<string> {
     'import type { RunFunction } from "@rpg-harness/engine";',
     "const run: RunFunction = async function* () {",
     '  yield { type: "gameEnd", endingId: "contract-ready", reason: "valid" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairablePresetErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-preset-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable preset error",
+    "preset: ./modules/run.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  throw new TypeError("preset bootstrap failed");',
+    '  yield { type: "gameEnd", endingId: "unreachable" };',
     "};",
     "export default run;",
     "",

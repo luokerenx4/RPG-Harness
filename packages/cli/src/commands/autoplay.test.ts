@@ -416,6 +416,34 @@ describe("autoplay semantic decision paths", () => {
       moduleId: "raid",
       persona: "delver",
     }]);
+
+    const presetGame = {
+      ...game,
+      runSource: "modules/run.ts",
+    };
+    for (const phase of ["prime", "input"] as const) {
+      expect(collectAutoplaySourceTargets(
+        gameDir,
+        presetGame,
+        [],
+        undefined,
+        null,
+        {
+          phase,
+          name: "Error",
+          message: `preset failed during ${phase}`,
+          input: phase === "input" ? { type: "next" } : null,
+          output: phase === "input"
+            ? { type: "narration", text: "About to fail." }
+            : null,
+        },
+        "greedy",
+      )).toEqual([{
+        kind: "preset",
+        file: "modules/run.ts",
+        runtimePhase: phase,
+      }]);
+    }
   });
 
   test("uses the terminal save cursor when a narration has no inline script id", () => {
@@ -629,13 +657,20 @@ describe("autoplay autonomous development lane", () => {
               actionKind: "broken-actions:explode",
             },
           },
-          sourceTargets: [{
-            kind: "module-action",
-            file: "modules/actions.ts",
-            moduleId: "broken-actions",
-            actionKind: "broken-actions:explode",
-            activityId: "forge",
-          }],
+          sourceTargets: [
+            {
+              kind: "preset",
+              file: "modules/run.ts",
+              runtimePhase: "input",
+            },
+            {
+              kind: "module-action",
+              file: "modules/actions.ts",
+              moduleId: "broken-actions",
+              actionKind: "broken-actions:explode",
+              activityId: "forge",
+            },
+          ],
         },
       },
     });

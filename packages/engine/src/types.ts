@@ -1185,6 +1185,10 @@ export interface Game {
   // Resolved RunFunction (set by CLI loader after a path-based preset
   // is imported). Engine prefers this over the built-in lookup.
   runFn?: RunFunction;
+  // Portable authoring coordinate for a path-based runFn. Loaders retain
+  // this separately from the executable function so runtime failures can
+  // become coding issues against the project file that owns the preset.
+  runSource?: string;
 }
 
 export interface ScriptInfo {

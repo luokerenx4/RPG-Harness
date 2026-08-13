@@ -718,6 +718,8 @@ export async function runAutoplay(
           ? `Autoplay persona ${args.persona} failed while deciding`
           : result.failure?.phase === "setup" && failureTarget
           ? `Autoplay setup failed in ${failureTarget.moduleId}`
+          : failureTarget?.kind === "preset"
+          ? `Autoplay ${args.persona} failed in project preset during ${result.failure?.phase}`
           : result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
@@ -959,6 +961,19 @@ export function collectAutoplaySourceTargets(
       activityId,
     });
   }
+  // A custom run function owns the generator boundary itself. Record it as a
+  // fallback before narrower semantic coordinates so a failed action, choice,
+  // or script remains the primary target when one is available.
+  if (
+    game.runSource &&
+    (failure?.phase === "prime" || failure?.phase === "input")
+  ) {
+    targets.push({
+      kind: "preset",
+      file: normalizeAuthoringSource(gameDir, game.runSource),
+      runtimePhase: failure.phase,
+    });
+  }
   if (failure?.decision) {
     addScript(failure.decision.scriptId, {
       ...(failure.decision.scriptRevision
@@ -1056,6 +1071,10 @@ function sourceTargetMatchesFailure(
   if (target.kind === "module-setup") {
     return failure.phase === "setup" &&
       (failure.moduleIds ?? []).includes(target.moduleId ?? "");
+  }
+  if (target.kind === "preset") {
+    return (failure.phase === "prime" || failure.phase === "input") &&
+      target.runtimePhase === failure.phase;
   }
   if (target.kind === "module-action" && failure.activityDecision) {
     return target.actionKind === failure.activityDecision.actionKind &&

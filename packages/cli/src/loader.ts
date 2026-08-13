@@ -127,6 +127,7 @@ export async function loadGame(dir: string): Promise<Game> {
       );
     }
     game.runFn = fn as RunFunction;
+    game.runSource = toGameRelativePath(dir, abs);
   }
 
   return game;
