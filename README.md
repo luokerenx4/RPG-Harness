@@ -28,6 +28,19 @@ tools. Entering a Web game also retains both `session` and `game` in the URL,
 so refreshing or sharing that address resumes the same playable branch instead
 of dropping back to the project picker.
 
+Autonomous runtime failures retain the attempted public input separately from
+the successful trace. The resulting coding issue records the failure phase,
+error type and stack, frozen Choice/Hub semantics, and the owning script or
+module action source. An action handler crash therefore points directly at its
+stable `activityId` / `actionKind` and editable module file instead of asking a
+later AI to infer the cause from prose or a terminal save.
+
+Project TypeScript entrypoints are content-addressed together with their local
+dependency graph before evaluation. A long-running TUI or verifier therefore
+executes a newly edited module/preset/helper immediately rather than silently
+reusing Bun's earlier ESM namespace; unchanged content still shares one module
+identity inside the process.
+
 ## Make your own
 
 ```bash

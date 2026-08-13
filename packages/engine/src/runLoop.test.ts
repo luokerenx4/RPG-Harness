@@ -3,6 +3,7 @@ import { createInitialState } from "./state";
 import { runLoop } from "./runLoop";
 import { makeGame } from "./test-utils";
 import type { Game } from "./types";
+import { dispatchActivity } from "./primitives";
 
 const terminalGame: Game = {
   title: "terminal",
@@ -21,6 +22,80 @@ const terminalGame: Game = {
 };
 
 describe("runLoop terminal output", () => {
+  test("retains the failed public action outside the successful trace", async () => {
+    const game = makeGame({
+      modules: [{
+        id: "broken-actions",
+        actionHandlers: {
+          explode: ({ state }) => {
+            state.runtime.lastHubActivities[0]!.title = "Corrupted after dispatch";
+            throw new TypeError("forge overheated");
+          },
+        },
+      }],
+      runFn: async function* (ctx) {
+        ctx.state.runtime.lastHubActivities = [{
+          id: "forge",
+          kind: "action",
+          title: "Use forge",
+          cost: 0,
+          available: true,
+          actionKind: "broken-actions:explode",
+        }];
+        const input = yield {
+          type: "hubMenu" as const,
+          snapshot: {
+            day: 1,
+            maxDay: 1,
+            slot: 0,
+            slotName: "day",
+            slotsPerDay: 1,
+            stats: [],
+            affections: [],
+            activities: [{
+              id: "forge",
+              kind: "action" as const,
+              title: "Use forge",
+              cost: 0,
+              available: true,
+              actionKind: "broken-actions:explode",
+            }],
+          },
+        };
+        if (input.type === "doActivity") yield* dispatchActivity(ctx, input.id);
+      },
+    });
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async () => ({ type: "doActivity", id: "forge" }),
+    );
+
+    expect(result.reason).toBe("error");
+    expect(result.error).toBe("forge overheated");
+    expect(result.trace).toHaveLength(1);
+    expect(result.trace[0]?.input).toBeNull();
+    expect(result.failure).toMatchObject({
+      phase: "input",
+      name: "TypeError",
+      message: "forge overheated",
+      input: { type: "doActivity", id: "forge" },
+      output: { type: "hubMenu" },
+      activityDecision: {
+        activityId: "forge",
+        title: "Use forge",
+        kind: "action",
+        actionKind: "broken-actions:explode",
+      },
+    });
+    expect(result.failure?.output?.type === "hubMenu" &&
+      result.failure.output.snapshot.activities[0]?.title).toBe("Use forge");
+    expect(result.finalState.runtime.lastHubActivities[0]?.title).toBe(
+      "Corrupted after dispatch",
+    );
+    expect(result.failure?.stack).toContain("forge overheated");
+  });
+
   test("stops at a caller-owned observable condition without claiming game completion", async () => {
     const game = makeGame({
       runFn: async function* (ctx) {

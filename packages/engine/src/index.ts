@@ -58,6 +58,7 @@ export type {
   TraceEntry,
   LoopReason,
   LoopResult,
+  LoopFailure,
   BehaviorCycleDiagnostic,
   StallCycleStep,
   StallDiagnostic,

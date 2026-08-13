@@ -56,8 +56,22 @@ export interface LoopResult {
   done: boolean;
   reason: LoopReason;
   error?: string;
+  failure?: LoopFailure;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+}
+
+export interface LoopFailure {
+  phase: "prime" | "input" | "decision" | "observer";
+  name: string;
+  message: string;
+  /** The attempted input is present only when the engine failed consuming it. */
+  input: Input | null;
+  /** Last successfully yielded public output that established input meaning. */
+  output: Output | null;
+  decision?: ChoiceDecisionContext;
+  activityDecision?: ActivityDecisionContext;
+  stack?: string;
 }
 
 export type InputSource =
@@ -103,10 +117,16 @@ export async function runLoop(
   let lastInput: Input | null = null;
   let lastOutput: Output | null = null;
   let stepIndex = 0;
+  let failurePhase: LoopFailure["phase"] = "prime";
+  let failureInput: Input | null = null;
+  let failureOutput: Output | null = null;
 
   try {
     let priming = true;
     while (true) {
+      failurePhase = priming ? "prime" : "input";
+      failureInput = !priming && lastInput ? structuredClone(lastInput) : null;
+      failureOutput = lastOutput ? structuredClone(lastOutput) : null;
       const classifiedInput: InputResult | undefined = !priming && lastOutput && lastInput
         ? classifyInput(lastOutput, lastInput)
         : undefined;
@@ -145,6 +165,8 @@ export async function runLoop(
       lastOutput = result.value;
       trace.push(entry);
       const currentState = engine.getState();
+      failurePhase = "observer";
+      failureOutput = structuredClone(result.value);
       await options.onStep?.(entry, currentState);
 
       // gameEnd is a terminal public output. Do not ask an input source for
@@ -244,6 +266,8 @@ export async function runLoop(
         }
         nextInput = inputsArray[cursor++] ?? null;
       } else {
+        failurePhase = "decision";
+        failureOutput = structuredClone(result.value);
         nextInput = await inputsFn!(result.value, engine.getState(), stepIndex);
       }
       if (!nextInput) {
@@ -268,14 +292,41 @@ export async function runLoop(
       stepIndex++;
     }
   } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    const attemptedInput = failurePhase === "input" && failureInput
+      ? failureInput
+      : null;
+    const semanticOutput = failureOutput;
     return {
       trace,
       finalState: engine.getState(),
       done: false,
       reason: "error",
-      error: (err as Error).message,
+      error: error.message,
+      failure: {
+        phase: failurePhase,
+        name: error.name,
+        message: error.message,
+        input: attemptedInput,
+        output: semanticOutput,
+        ...failureDecisionContext(semanticOutput, attemptedInput),
+        ...(error.stack ? { stack: error.stack } : {}),
+      },
     };
   }
+}
+
+function failureDecisionContext(
+  output: Output | null,
+  input: Input | null,
+): Pick<LoopFailure, "decision" | "activityDecision"> {
+  if (!output || !input) return {};
+  const decision = choiceDecisionContext(output, input);
+  const activityDecision = activityDecisionContext(output, input);
+  return {
+    ...(decision ? { decision } : {}),
+    ...(activityDecision ? { activityDecision } : {}),
+  };
 }
 
 function detectBehaviorCycle(

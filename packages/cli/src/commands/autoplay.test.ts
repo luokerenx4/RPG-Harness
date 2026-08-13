@@ -353,6 +353,35 @@ describe("autoplay semantic decision paths", () => {
       actionKind: "raid:depart",
       activityId: "depart:kuro",
     }]);
+
+    expect(collectAutoplaySourceTargets(gameDir, game, [], undefined, null, {
+      phase: "input",
+      name: "Error",
+      message: "script hook failed",
+      input: { type: "doActivity", id: "script:route" },
+      output: {
+        ...hub,
+        snapshot: {
+          ...hub.snapshot,
+          activities: [{
+            id: "script:route",
+            kind: "script",
+            title: "Route",
+            cost: 1,
+            available: true,
+          }],
+        },
+      },
+      activityDecision: {
+        activityId: "script:route",
+        title: "Route",
+        kind: "script",
+      },
+    })).toEqual([{
+      kind: "script",
+      file: "scripts/route.md",
+      scriptId: "route",
+    }]);
   });
 
   test("uses the terminal save cursor when a narration has no inline script id", () => {
@@ -524,6 +553,71 @@ describe("autoplay autonomous development lane", () => {
       decisionPathRevision: summary.decisionPath.revision,
     });
     expect(summary.report?.details).toContain("exact 2-output cycle");
+  });
+
+  test("turns a failed public action into a module-owned coding target", async () => {
+    const gameDir = await temporaryThrowingActionGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 7,
+      session: "ai-handler-error",
+      reportOnStop: true,
+    });
+
+    expect(summary).toMatchObject({
+      reason: "error",
+      error: "forge overheated",
+      failure: {
+        phase: "input",
+        name: "TypeError",
+        message: "forge overheated",
+        input: { type: "doActivity", id: "forge" },
+        output: { type: "hubMenu" },
+        activityDecision: {
+          activityId: "forge",
+          actionKind: "broken-actions:explode",
+        },
+      },
+      report: {
+        severity: "blocker",
+        title: "Autoplay greedy failed in broken-actions:explode",
+        target: "modules/actions.ts",
+        evidence: {
+          failure: {
+            phase: "input",
+            input: { type: "doActivity", id: "forge" },
+            output: { type: "hubMenu" },
+            activityDecision: {
+              activityId: "forge",
+              actionKind: "broken-actions:explode",
+            },
+          },
+          sourceTargets: [{
+            kind: "module-action",
+            file: "modules/actions.ts",
+            moduleId: "broken-actions",
+            actionKind: "broken-actions:explode",
+            activityId: "forge",
+          }],
+        },
+      },
+    });
+    expect(summary.report?.evidence.failure?.stack).toContain("forge overheated");
+    expect(compactAutoplaySummary(summary).failure).toEqual({
+      phase: "input",
+      name: "TypeError",
+      message: "forge overheated",
+      input: { type: "doActivity", id: "forge" },
+      outputType: "hubMenu",
+      activityDecision: expect.objectContaining({
+        activityId: "forge",
+        actionKind: "broken-actions:explode",
+      }),
+    });
+    expect(JSON.stringify(compactAutoplaySummary(summary))).not.toContain("stack");
   });
 
   test("reports repeated behavior whose state counter masks an exact stall", async () => {
@@ -1068,6 +1162,43 @@ async function temporaryToggleGame(): Promise<string> {
     '    yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "toggle", kind: "action", title: "Toggle", cost: 0, effectsHint: "+1", available: true, actionKind: "toggle-actions:toggle", payload: { direction: "flip" } }] } };',
     '    yield { type: "narration", text: "Nothing changes." };',
     "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryThrowingActionGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-handler-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay handler error test",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/actions.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "actions.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const actions: Module = {",
+    '  id: "broken-actions",',
+    "  actionHandlers: {",
+    '    explode: () => { throw new TypeError("forge overheated"); },',
+    "  },",
+    "};",
+    "export default actions;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import { dispatchActivity } from "@rpg-harness/engine";',
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    "  const activity = { id: \"forge\", kind: \"action\" as const, title: \"Use forge\", cost: 0, available: true, actionKind: \"broken-actions:explode\" };",
+    "  ctx.state.runtime.lastHubActivities = [activity];",
+    '  const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [activity] } };',
+    '  if (input.type === "doActivity") yield* dispatchActivity(ctx, input.id);',
     "};",
     "export default run;",
     "",

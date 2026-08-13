@@ -1,6 +1,75 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { AssetSpec, Game } from "@rpg-harness/engine";
-import { collectDanglingRefs } from "./loader";
+import { collectDanglingRefs, loadGame } from "./loader";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((directory) =>
+    rm(directory, { recursive: true, force: true })
+  ));
+});
+
+describe("project code loading", () => {
+  test("reloads an edited module and ejected preset in the same process", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "rpgh-loader-revision-"));
+    temporaryDirectories.push(dir);
+    await mkdir(path.join(dir, "modules"), { recursive: true });
+    await writeFile(path.join(dir, "game.yaml"), [
+      "title: Loader revision",
+      "preset: ./modules/run.ts",
+      "modules:",
+      "  - ./modules/actions.ts",
+      "",
+    ].join("\n"), "utf-8");
+    await writeFile(path.join(dir, "modules", "run.ts"), [
+      'import type { RunFunction } from "@rpg-harness/engine";',
+      'const run: RunFunction = async function* () { yield { type: "gameEnd", endingId: "first" }; };',
+      "export default run;",
+      "",
+    ].join("\n"), "utf-8");
+    await writeFile(path.join(dir, "modules", "actions.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      'import { version } from "./version.ts";',
+      'const module: Module = { id: "revision-module", version };',
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    await writeVersion(path.join(dir, "modules", "version.ts"), "first");
+
+    const first = await loadGame(dir);
+    expect(first.modules?.find(({ id }) => id === "revision-module")?.version).toBe("first");
+    expect((await first.runFn!({} as never).next()).value).toMatchObject({
+      type: "gameEnd",
+      endingId: "first",
+    });
+
+    await writeFile(path.join(dir, "modules", "run.ts"), [
+      'import type { RunFunction } from "@rpg-harness/engine";',
+      'const run: RunFunction = async function* () { yield { type: "gameEnd", endingId: "second" }; };',
+      "export default run;",
+      "",
+    ].join("\n"), "utf-8");
+    await writeVersion(path.join(dir, "modules", "version.ts"), "second");
+
+    const second = await loadGame(dir);
+    expect(second.modules?.find(({ id }) => id === "revision-module")?.version).toBe("second");
+    expect((await second.runFn!({} as never).next()).value).toMatchObject({
+      type: "gameEnd",
+      endingId: "second",
+    });
+  });
+});
+
+async function writeVersion(file: string, version: string): Promise<void> {
+  await writeFile(file, [
+    `export const version = "${version}";`,
+    "",
+  ].join("\n"), "utf-8");
+}
 
 function makeAsset(path: string): AssetSpec {
   return {

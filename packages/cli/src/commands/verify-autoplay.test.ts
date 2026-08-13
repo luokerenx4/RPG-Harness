@@ -17,6 +17,75 @@ afterEach(async () => {
 });
 
 describe("autoplay issue verification", () => {
+  test("resolves a module action crash only after causal replay reaches gameEnd", async () => {
+    const gameDir = await temporaryRepairableActionErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 10,
+      seed: 7,
+      session: "original-action-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create an action failure issue");
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/actions.ts",
+      evidence: {
+        failure: {
+          phase: "input",
+          activityDecision: {
+            activityId: "forge",
+            actionKind: "broken-actions:explode",
+          },
+        },
+      },
+    });
+
+    const failed = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "action-still-broken",
+    });
+    expect(failed).toMatchObject({
+      status: "failed",
+      original: { stopReason: "error", persona: "greedy", seed: 7 },
+      result: { reason: "error", ending: null },
+    });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
+
+    await writeFile(path.join(gameDir, "modules", "actions.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const actions: Module = {",
+      '  id: "broken-actions",',
+      "  actionHandlers: { explode: () => ({}) },",
+      "};",
+      "export default actions;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "action-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      original: { stopReason: "error" },
+      result: { reason: "completed", ending: "forge-fixed" },
+      resolvedReport: {
+        status: "resolved",
+        verification: {
+          kind: "autoplay",
+          originalStopReason: "error",
+          result: { ending: "forge-fixed" },
+        },
+      },
+    });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("resolved");
+  });
+
   test("rejects a final-state-only patch and resolves only after a full causal replay", async () => {
     const gameDir = await temporaryRepairableStallGame();
     const original = await runAutoplay({
@@ -239,6 +308,44 @@ async function temporaryRepairableStallGame(): Promise<string> {
     "      return;",
     "    }",
     '    yield { type: "narration", text: "Still blocked." };',
+    "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairableActionErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-action-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable action error",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/actions.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "actions.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const actions: Module = {",
+    '  id: "broken-actions",',
+    '  actionHandlers: { explode: () => { throw new TypeError("forge overheated"); } },',
+    "};",
+    "export default actions;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import { dispatchActivity } from "@rpg-harness/engine";',
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  const activity = { id: "forge", kind: "action" as const, title: "Use forge", cost: 0, available: true, actionKind: "broken-actions:explode" };',
+    "  ctx.state.runtime.lastHubActivities = [activity];",
+    '  const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [activity] } };',
+    '  if (input.type === "doActivity") {',
+    '    yield* dispatchActivity(ctx, input.id);',
+    '    yield { type: "gameEnd", endingId: "forge-fixed", reason: "handler completed" };',
     "  }",
     "};",
     "export default run;",

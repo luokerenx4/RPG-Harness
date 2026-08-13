@@ -13,6 +13,7 @@ import type {
   BehaviorCycleDiagnostic,
   ComposedState,
   LoopReason,
+  LoopFailure,
   StallDiagnostic,
 } from "@rpg-harness/engine";
 import {
@@ -72,6 +73,7 @@ export interface PlaytestEvidence {
   replayCheckpoint?: PlaytestCheckpointRef;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  failure?: PlaytestFailureEvidence;
   autoplay?: PlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
   /** Author-owned files and stable runtime symbols implicated by the trace. */
@@ -90,6 +92,17 @@ export interface PlaytestSourceTarget {
   choiceId?: string;
 }
 
+export interface PlaytestFailureEvidence {
+  phase: LoopFailure["phase"];
+  name: string;
+  message: string;
+  input: unknown;
+  output: unknown;
+  decision?: LoopFailure["decision"];
+  activityDecision?: LoopFailure["activityDecision"];
+  stack?: string;
+}
+
 /**
  * Base incident evidence frozen at one session transaction boundary.
  *
@@ -99,7 +112,7 @@ export interface PlaytestSourceTarget {
  */
 export type PlaytestEvidenceSnapshot = Omit<
   PlaytestEvidence,
-  "stall" | "behaviorCycle" | "autoplay" | "auditMatrix"
+  "stall" | "behaviorCycle" | "failure" | "autoplay" | "auditMatrix"
 >;
 
 export interface PlaytestAutoplayEvidence {
@@ -381,6 +394,7 @@ export interface RecordPlaytestReportArgs {
   sourceTargets?: PlaytestSourceTarget[];
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
+  failure?: LoopFailure;
   autoplay?: RecordPlaytestAutoplayEvidence;
   auditMatrix?: PlaytestAuditMatrixEvidence;
   /** @internal Evidence captured while the causal session transaction was held. */
@@ -475,6 +489,7 @@ export async function recordPlaytestReport(
           : {}),
         ...(args.stall ? { stall: args.stall } : {}),
         ...(args.behaviorCycle ? { behaviorCycle: args.behaviorCycle } : {}),
+        ...(args.failure ? { failure: compactLoopFailure(args.failure) } : {}),
         ...(autoplay ? { autoplay } : {}),
         ...(args.auditMatrix ? { auditMatrix: args.auditMatrix } : {}),
       },
@@ -488,6 +503,21 @@ export async function recordPlaytestReport(
     await writeReportFileAtomically(file, reports);
     return report;
   });
+}
+
+function compactLoopFailure(failure: LoopFailure): PlaytestFailureEvidence {
+  return {
+    phase: failure.phase,
+    name: failure.name,
+    message: failure.message,
+    input: structuredClone(failure.input),
+    output: compactOutput(failure.output),
+    ...(failure.decision ? { decision: structuredClone(failure.decision) } : {}),
+    ...(failure.activityDecision
+      ? { activityDecision: structuredClone(failure.activityDecision) }
+      : {}),
+    ...(failure.stack ? { stack: failure.stack } : {}),
+  };
 }
 
 async function persistAutoplayEvidence(

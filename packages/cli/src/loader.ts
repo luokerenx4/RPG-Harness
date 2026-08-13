@@ -1,5 +1,7 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type {
   Action,
   AssetKind,
@@ -117,7 +119,7 @@ export async function loadGame(dir: string): Promise<Game> {
   // to game.runFn. Engine prefers game.runFn over the preset name.
   if (manifest.preset && isRelativePath(manifest.preset)) {
     const abs = path.resolve(dir, manifest.preset);
-    const imported = (await import(abs)) as { default?: unknown };
+    const imported = await importProjectSource(abs);
     const fn = imported.default;
     if (typeof fn !== "function") {
       throw new Error(
@@ -141,7 +143,7 @@ async function loadModules(
   const modules: Module[] = [];
   for (const rel of paths) {
     const abs = path.resolve(gameDir, rel);
-    const imported = (await import(abs)) as { default?: unknown };
+    const imported = await importProjectSource(abs);
     const mod = imported.default;
     if (!mod || typeof mod !== "object" || typeof (mod as Module).id !== "string") {
       throw new Error(
@@ -154,6 +156,67 @@ async function loadModules(
     });
   }
   return modules;
+}
+
+/**
+ * Project code is edited and re-verified inside one long-lived AI/TUI process.
+ * Native ESM caches by URL, so content identity must be part of that URL or a
+ * repaired handler silently keeps executing its previous implementation.
+ */
+async function importProjectSource(file: string): Promise<{ default?: unknown }> {
+  const build = await Bun.build({
+    entrypoints: [file],
+    target: "bun",
+    format: "esm",
+    packages: "external",
+    sourcemap: "inline",
+    minify: false,
+  });
+  if (!build.success || build.outputs.length !== 1) {
+    const diagnostics = build.logs.map((entry) => entry.message).join("\n");
+    throw new Error(`Cannot compile project source ${file}: ${diagnostics}`);
+  }
+  const bundled = await build.outputs[0]!.text();
+  const revision = createHash("sha256").update(bundled).digest("hex");
+  const key = `${file}\0${revision}`;
+  const cached = projectImportCache.get(key);
+  if (cached) return cached;
+  const loading = importBundledProjectSource(file, revision, bundled);
+  projectImportCache.set(key, loading);
+  try {
+    return await loading;
+  } catch (error) {
+    projectImportCache.delete(key);
+    throw error;
+  }
+}
+
+const projectImportCache = new Map<string, Promise<{ default?: unknown }>>();
+
+async function importBundledProjectSource(
+  source: string,
+  revision: string,
+  bundled: string,
+): Promise<{ default?: unknown }> {
+  // Keep the artifact under this package's node_modules so external workspace
+  // dependencies resolve exactly as they do for the CLI without exposing
+  // transient files to source watchers. UUID prevents two CLI processes from
+  // deleting each other's in-flight import of the same content revision.
+  const cacheDir = path.resolve(
+    import.meta.dirname,
+    "../node_modules/.cache/rpg-harness-project-imports",
+  );
+  await mkdir(cacheDir, { recursive: true });
+  const artifact = path.join(
+    cacheDir,
+    `${path.basename(source).replace(/[^a-z0-9.-]/gi, "-")}-${revision}-${randomUUID()}.mjs`,
+  );
+  await writeFile(artifact, bundled, "utf-8");
+  try {
+    return await import(pathToFileURL(artifact).href) as { default?: unknown };
+  } finally {
+    await rm(artifact, { force: true });
+  }
 }
 
 function toGameRelativePath(gameDir: string, file: string): string {

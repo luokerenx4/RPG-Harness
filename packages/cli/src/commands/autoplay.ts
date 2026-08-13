@@ -12,6 +12,7 @@ import type {
   VisualState,
   ComposedState,
   Game,
+  LoopFailure,
 } from "@rpg-harness/engine";
 import {
   buildHubView,
@@ -101,6 +102,7 @@ export interface AutoplaySummary {
   /** Shared fresh-world and persona seed, or the persona seed for a resumed save. */
   seed: number;
   error?: string;
+  failure?: LoopFailure;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
   progress: AutoplayProgress;
@@ -126,7 +128,7 @@ export interface AutoplaySummary {
 
 export type AutoplayCommandSummary = Omit<
   AutoplaySummary,
-  "progress" | "decisionPath" | "finalState" | "report" | "choiceCoverage"
+  "progress" | "decisionPath" | "finalState" | "report" | "choiceCoverage" | "failure"
 > & {
   progress: {
     madeProgress: boolean;
@@ -141,6 +143,9 @@ export type AutoplayCommandSummary = Omit<
   decisionPath: { revision: string };
   /** Stable identity for the terminal save; inspect the persisted session for details. */
   finalStateRevision: string;
+  failure?: Omit<LoopFailure, "output" | "stack"> & {
+    outputType: Output["type"] | null;
+  };
   choiceCoverage?: {
     summary: ChoiceCoverageReport["summary"];
     pendingBranches: number;
@@ -253,6 +258,7 @@ export function compactAutoplaySummary(
     finalState,
     report,
     choiceCoverage,
+    failure,
     ...rest
   } = summary;
   const recentLimit = 10;
@@ -276,6 +282,21 @@ export function compactAutoplaySummary(
     finalStateRevision: createHash("sha256")
       .update(JSON.stringify(finalState))
       .digest("hex"),
+    ...(failure
+      ? {
+          failure: {
+            phase: failure.phase,
+            name: failure.name,
+            message: failure.message,
+            input: failure.input,
+            outputType: failure.output?.type ?? null,
+            ...(failure.decision ? { decision: failure.decision } : {}),
+            ...(failure.activityDecision
+              ? { activityDecision: failure.activityDecision }
+              : {}),
+          },
+        }
+      : {}),
     ...(choiceCoverage && summary.session
       ? {
           choiceCoverage: {
@@ -656,25 +677,33 @@ export async function runAutoplay(
       result.trace,
       result.stall ?? result.behaviorCycle,
       result.finalState.baseline.currentScriptId,
+      result.failure,
     );
+    const failureTarget = result.failure
+      ? [...sourceTargets].reverse().find((target) =>
+          sourceTargetMatchesFailure(target, result.failure!)
+        )
+      : undefined;
     const terminalScriptTarget = sourceTargets.find((target) =>
       target.kind === "script" &&
       target.scriptId === result.finalState.baseline.currentScriptId
     );
-    const primaryTarget = terminalScriptTarget?.file ??
+    const primaryTarget = failureTarget?.file ?? terminalScriptTarget?.file ??
       sourceTargets.at(-1)?.file;
     report = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: args.session,
       area: "tooling",
       severity: result.reason === "error" ? "blocker" : "major",
-      title: result.reason === "completed"
+      title: result.failure?.activityDecision?.actionKind
+          ? `Autoplay ${args.persona} failed in ${result.failure.activityDecision.actionKind}`
+          : result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
       ...(primaryTarget ? { target: primaryTarget } : {}),
       ...(sourceTargets.length > 0 ? { sourceTargets } : {}),
       details: [
-        `Built-in persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
+        `Registered persona \`${args.persona}\` stopped after ${countDecisions(result.trace)} committed decisions, ${countRejectedInputs(result.trace)} rejected inputs, and ${result.trace.length} visible outputs.`,
         `Reason: \`${result.reason}\`.`,
         `Replay seed: \`${effectiveSeed}\`.`,
         ...(result.reason === "completed"
@@ -694,6 +723,11 @@ export async function runAutoplay(
             ]
           : []),
         ...(result.error ? [`Engine error: ${result.error}`] : []),
+        ...(result.failure
+          ? [
+              `Failure phase: \`${result.failure.phase}\`; attempted input: \`${JSON.stringify(result.failure.input)}\`${result.failure.activityDecision?.actionKind ? `; action contract: \`${result.failure.activityDecision.actionKind}\` / \`${result.failure.activityDecision.activityId}\`` : ""}.`,
+            ]
+          : []),
         ...(fork
           ? [
               `AI branch \`${args.session}\` was forked from player session \`${fork.fromSession}\` at source log entry ${fork.sourceLogEntry}.`,
@@ -703,6 +737,7 @@ export async function runAutoplay(
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
+      ...(result.failure ? { failure: result.failure } : {}),
       evidenceSnapshot: incidentEvidence,
       autoplay: {
         replayState: autoplayInitialState,
@@ -734,6 +769,7 @@ export async function runAutoplay(
     persona: args.persona,
     seed: effectiveSeed,
     ...(result.error ? { error: result.error } : {}),
+    ...(result.failure ? { failure: result.failure } : {}),
     ...(result.stall ? { stall: result.stall } : {}),
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
     progress,
@@ -781,6 +817,7 @@ export function collectAutoplaySourceTargets(
   trace: ReadonlyArray<TraceEntry>,
   diagnostic?: Pick<StallDiagnostic, "firstTraceIndex" | "lastTraceIndex">,
   terminalScriptId?: string | null,
+  failure?: LoopFailure,
 ): PlaytestSourceTarget[] {
   const firstIndex = diagnostic?.firstTraceIndex ?? Math.max(0, trace.length - 20);
   const lastIndex = diagnostic?.lastTraceIndex ?? trace.length - 1;
@@ -831,7 +868,9 @@ export function collectAutoplaySourceTargets(
     );
     const activityKind = entry.activityDecision?.kind ?? activity?.kind;
     if (activityKind === "script") {
-      addScript(activityId);
+      addScript(activityId.startsWith("script:")
+        ? activityId.slice("script:".length)
+        : activityId);
       continue;
     }
     const actionKind = entry.activityDecision?.actionKind ?? activity?.actionKind ??
@@ -848,6 +887,35 @@ export function collectAutoplaySourceTargets(
       actionKind,
       activityId,
     });
+  }
+  if (failure?.decision) {
+    addScript(failure.decision.scriptId, {
+      ...(failure.decision.scriptRevision
+        ? { scriptRevision: failure.decision.scriptRevision }
+        : {}),
+      choiceId: failure.decision.choiceId,
+    });
+  }
+  if (failure?.input?.type === "select") addScript(failure.input.scriptId);
+  if (failure?.activityDecision) {
+    const activity = failure.activityDecision;
+    if (activity.kind === "script") {
+      addScript(activity.activityId.startsWith("script:")
+        ? activity.activityId.slice("script:".length)
+        : activity.activityId);
+    }
+    else if (activity.actionKind) {
+      const owner = actionOwner(game, activity.actionKind);
+      if (owner?.source) {
+        targets.push({
+          kind: "module-action",
+          file: normalizeAuthoringSource(gameDir, owner.source),
+          moduleId: owner.id,
+          actionKind: activity.actionKind,
+          activityId: activity.activityId,
+        });
+      }
+    }
   }
   addScript(terminalScriptId ?? undefined);
 
@@ -875,6 +943,29 @@ function actionOwner(game: Game, actionKind: string) {
     Object.hasOwn(mod.actionHandlers ?? {}, actionKind)
   );
   return owners.length === 1 ? owners[0] : undefined;
+}
+
+function sourceTargetMatchesFailure(
+  target: PlaytestSourceTarget,
+  failure: LoopFailure,
+): boolean {
+  if (target.kind === "module-action" && failure.activityDecision) {
+    return target.actionKind === failure.activityDecision.actionKind &&
+      target.activityId === failure.activityDecision.activityId;
+  }
+  if (target.kind !== "script") return false;
+  if (failure.decision) {
+    return target.scriptId === failure.decision.scriptId &&
+      target.choiceId === failure.decision.choiceId;
+  }
+  if (failure.activityDecision?.kind === "script") {
+    return target.scriptId === failure.activityDecision.activityId.replace(
+      /^script:/,
+      "",
+    );
+  }
+  return failure.input?.type === "select" &&
+    target.scriptId === failure.input.scriptId;
 }
 
 export function summarizeDecisionPath(
