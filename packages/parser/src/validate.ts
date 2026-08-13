@@ -73,6 +73,15 @@ export function validateGame(game: Game): void {
 
   const issues: Issue[] = [];
 
+  for (const scriptId of game.aiAudit?.requiredScripts ?? []) {
+    if (!reg.scripts.has(scriptId)) {
+      issues.push({
+        path: "ai_audit.required_scripts",
+        message: `undeclared script "${scriptId}". Declared: ${listOrNone(reg.scripts)}`,
+      });
+    }
+  }
+
   for (const s of game.scripts) {
     const seenChoiceIds = new Set<string>();
     const labels = new Set(s.beats.flatMap((beat) =>

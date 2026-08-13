@@ -581,10 +581,11 @@ Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
 
 ```yaml
 ai_audit:
-  personas: [objective, greedy, charmer, rude, extractor, delver]
+  personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
   min_unique_endings: 2
   min_unique_decision_paths: 3
   required_activity_tags: [cautious, economic, aggressive]
+  required_scripts: [deep_route_coda]
 ```
 
 Projects may declare the acceptance `personas` beside their thresholds. With no
@@ -593,7 +594,8 @@ diagnostic subset remains runnable but is `not-evaluated` against the project
 gate, so an impossible subset cannot create false quality debt. Thresholds may
 not exceed the declared matrix size. The gate is evaluated only when every lane
 reaches a terminal ending. Passing matrices stay silent. A completed matrix
-below either threshold or missing a required activity tag creates one
+below either threshold, missing a required activity tag, or never completing a
+required script creates one
 major gameplay report at a frozen copy of the audit source, including every
 lane's GUI path, ending, semantic path revision, executed activity tags, and
 choice divergences. The
@@ -619,6 +621,12 @@ gameplay surface. The audit counts a tag only when an accepted `doActivity`
 selects an activity carrying that author-owned `aiTags` value. Missing tags join
 the same replayable quality report and remain part of its verification floor,
 so deleting the requirement cannot silently close existing debt.
+`required_scripts` is the authored-event counterpart. It requires at least one
+lane, starting from the frozen audit source, to newly complete each named script.
+Merely declaring a script, covering it in an isolated fixture, or inheriting it
+as already completed at the source checkpoint does not satisfy the gate. This
+lets a project make a deep quest, alliance scene, or optional boss resolution a
+replayable autonomous acceptance condition rather than an informal promise.
 Each lane also receives a content-addressed semantic decision-path revision
 derived from stable choice identities, selected scripts, and activity ids plus
 the selected activities' author-owned semantic tags.

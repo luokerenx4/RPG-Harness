@@ -28,6 +28,7 @@ export interface VerifyAuditSummary {
     ending: string | null;
     pathRevision: string;
     activityTags: string[];
+    completedScripts: string[];
   }>;
   resolvedReport?: {
     id: string;
@@ -97,6 +98,7 @@ export async function verifyAuditReport(
     ending: lane.ending,
     pathRevision: lane.path.revision,
     activityTags: lane.path.activityTags,
+    completedScripts: lane.progress.completedScripts,
   }));
   const passed = sourceRevisionMatches && audit.qualityGate?.status === "passed";
   if (!passed) {
@@ -131,6 +133,7 @@ export async function verifyAuditReport(
       ending: lane.ending!,
       pathRevision: lane.pathRevision,
       activityTags: lane.activityTags,
+      completedScripts: lane.completedScripts,
     })),
   };
   const resolved = await resolvePlaytestReport({

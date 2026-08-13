@@ -36,3 +36,12 @@ assertions:
     current: false
     target: true
     satisfied: false
+  - kind: objective
+    id: hell_gate_mastery
+    status: active
+    titleIncludes: 地獄門
+    relatedActivityIncludes: bond:kagari
+    requirementId: chinkonho
+    current: false
+    target: true
+    satisfied: false

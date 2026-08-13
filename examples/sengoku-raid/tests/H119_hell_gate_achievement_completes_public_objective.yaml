@@ -1,0 +1,29 @@
+name: 地獄門生還の永続証拠は次の Hub で公開目標を完遂済みにする
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    variables:
+      shogun_chapter: 2
+      raidsCompleted: 9
+      pulse_oni: 8
+    knownSkills: [chinkonho, mizukagami]
+    weapons:
+      ancestor_yaodao: { power: 14 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    raid: null
+    metCharacters: [kagari, mio]
+    companion: null
+    companionHp: 0
+    pulsePending: null
+    achievementLog: [地獄門踏破 — 映し井戸より生還]
+inputs: []
+assertions:
+  - kind: objective
+    id: hell_gate_mastery
+    status: completed
+    requirementId: hell_gate_extract
+    current: true
+    target: true
+    satisfied: true

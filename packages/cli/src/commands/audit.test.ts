@@ -318,6 +318,48 @@ describe("autoplay audit matrix", () => {
     expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
   });
 
+  test("fails when no acceptance lane completes a required deep script", async () => {
+    const gameDir = await temporaryRequiredScriptGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "deep-script-matrix",
+      personas: ["objective"],
+      maxSteps: 5,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.scriptCoverage).toEqual({
+      completedScripts: ["ending"],
+      byPersona: { objective: ["ending"] },
+    });
+    expect(summary.qualityGate).toMatchObject({
+      policy: {
+        personas: ["objective"],
+        requiredScripts: ["deep_scene"],
+      },
+      status: "failed",
+      observed: {
+        completedScripts: ["ending"],
+      },
+      violations: ["required scripts not completed: deep_scene"],
+      report: { severity: "major" },
+    });
+    const [report] = await listPlaytestReports(gameDir);
+    expect(report?.evidence.auditMatrix).toMatchObject({
+      observed: { completedScripts: ["ending"] },
+      violations: ["required scripts not completed: deep_scene"],
+      lanes: [expect.objectContaining({
+        persona: "objective",
+        completedScripts: ["ending"],
+      })],
+    });
+  });
+
   test("turns a failed diversity gate into reproducible development work", async () => {
     const gameDir = await temporaryChoiceGame();
     await writeFile(path.join(gameDir, "game.yaml"), [
@@ -617,6 +659,43 @@ async function temporaryActivityGame(): Promise<string> {
     "  ] } };",
     '  ctx.state.baseline.completionOrder.push("ending");',
     '  yield { type: "gameEnd", reason: "activity selected" };',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRequiredScriptGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-required-script-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Audit required script test",
+    "preset: ./modules/run.ts",
+    "ai_audit:",
+    "  personas: [objective]",
+    "  required_scripts: [deep_scene]",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "deep_scene.md"), [
+    "---",
+    "id: deep_scene",
+    "title: Deep scene",
+    "characters: []",
+    "---",
+    "",
+    "This scene is deliberately never selected by the custom run.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  ctx.state.baseline.completionOrder.push("ending");',
+    '  yield { type: "gameEnd", reason: "shallow ending" };',
     "};",
     "export default run;",
     "",

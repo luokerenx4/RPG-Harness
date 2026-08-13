@@ -96,6 +96,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     "min_unique_endings",
     "min_unique_decision_paths",
     "required_activity_tags",
+    "required_scripts",
   ]);
   const unknown = Object.keys(obj).filter((key) => !known.has(key));
   if (unknown.length > 0) {
@@ -138,6 +139,24 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     }
     config.requiredActivityTags = [...tags];
   }
+  if (obj.required_scripts !== undefined) {
+    if (
+      !Array.isArray(obj.required_scripts) ||
+      obj.required_scripts.length === 0 ||
+      obj.required_scripts.some((id) =>
+        typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(id)
+      )
+    ) {
+      throw new ManifestParseError(
+        "ai_audit.required_scripts must be a non-empty array of stable script ids",
+      );
+    }
+    const scripts = obj.required_scripts as string[];
+    if (new Set(scripts).size !== scripts.length) {
+      throw new ManifestParseError("ai_audit.required_scripts must not contain duplicates");
+    }
+    config.requiredScripts = [...scripts];
+  }
   for (const [source, target] of [
     ["min_unique_endings", "minUniqueEndings"],
     ["min_unique_decision_paths", "minUniqueDecisionPaths"],
@@ -165,10 +184,11 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   if (
     config.minUniqueEndings === undefined &&
     config.minUniqueDecisionPaths === undefined &&
-    config.requiredActivityTags === undefined
+    config.requiredActivityTags === undefined &&
+    config.requiredScripts === undefined
   ) {
     throw new ManifestParseError(
-      "`ai_audit` must declare min_unique_endings, min_unique_decision_paths, and/or required_activity_tags",
+      "`ai_audit` must declare min_unique_endings, min_unique_decision_paths, required_activity_tags, and/or required_scripts",
     );
   }
   return config;

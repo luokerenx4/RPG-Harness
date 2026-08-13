@@ -242,6 +242,32 @@ describe("charmer persona exploration", () => {
     ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
   });
 
+  test("uses a social objective to disambiguate multiple social toggles", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "invite:kasumi",
+        kind: "action",
+        title: "Invite Kasumi",
+        cost: 0,
+        available: true,
+        aiTags: ["social", "progression"],
+      },
+      {
+        id: "invite:mio",
+        kind: "action",
+        title: "Invite Mio",
+        cost: 0,
+        available: true,
+        aiTags: ["social", "progression"],
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = ["invite:kasumi"];
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "invite:kasumi" });
+  });
+
   test("finishes an available ending before pursuing another relationship", async () => {
     const output = objectiveHub();
     output.snapshot.activities = [
@@ -262,8 +288,14 @@ describe("charmer persona exploration", () => {
       },
     ];
     output.snapshot.objectives![0]!.relatedActivityIds = [
-      "script:ending_pure_rite",
+      "script:bond_mio_01",
     ];
+    output.snapshot.objectives!.push({
+      id: "ending_pure_rite",
+      title: "Pure ending",
+      status: "active",
+      relatedActivityIds: ["script:ending_pure_rite"],
+    });
     await expect(
       personas.charmer!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "script:ending_pure_rite" });
@@ -340,8 +372,14 @@ describe("rude persona progression", () => {
       },
     ];
     output.snapshot.objectives![0]!.relatedActivityIds = [
-      "script:ending_oni_self",
+      "depart:mt_houkyou",
     ];
+    output.snapshot.objectives!.push({
+      id: "ending_oni_self",
+      title: "Oni ending",
+      status: "active",
+      relatedActivityIds: ["script:ending_oni_self"],
+    });
     await expect(
       personas.rude!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "script:ending_oni_self" });

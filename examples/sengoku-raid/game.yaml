@@ -7,13 +7,17 @@ modules:
 # Missing a numeric threshold or required activity surface creates a
 # reproducible coding issue at the frozen audit source checkpoint.
 ai_audit:
-  personas: [objective, greedy, charmer, rude, extractor, delver]
+  personas: [objective, greedy, charmer, rude, extractor, delver, completionist]
   min_unique_endings: 2
   min_unique_decision_paths: 3
   # These tags are observed on activities the lanes actually execute, not
   # inferred from persona names or merely available buttons. Together they
   # prove that the acceptance matrix reaches all three authored raid styles.
-  required_activity_tags: [route/kuro_swamp, route/sumida_river, route/mt_houkyou]
+  required_activity_tags: [route/kuro_swamp, route/sumida_river, route/mt_houkyou, route/hell_gate]
+  # A route tag proves that a lane entered the deep raid. Requiring this script
+  # separately proves that at least one lane also built all three relationships
+  # and reached their authored alliance scene before ending the campaign.
+  required_scripts: [three_flowers_alliance]
 
 switches:
   learnedChinkonho: false

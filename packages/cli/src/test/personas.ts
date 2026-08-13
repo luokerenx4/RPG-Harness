@@ -250,11 +250,19 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
 function pickEndingObjectiveActivity(
   output: Extract<Output, { type: "hubMenu" }>,
 ): Input | null {
-  const objective = pickObjectiveActivity(output);
-  return objective?.type === "doActivity" &&
-      objective.id.startsWith("script:ending_")
-    ? objective
-    : null;
+  const available = new Set(
+    output.snapshot.activities
+      .filter((activity) => activity.available)
+      .map((activity) => activity.id),
+  );
+  for (const objective of output.snapshot.objectives ?? []) {
+    if (objective.status !== "active") continue;
+    const ending = (objective.relatedActivityIds ?? []).find(
+      (id) => id.startsWith("script:ending_") && available.has(id),
+    );
+    if (ending) return { type: "doActivity", id: ending };
+  }
+  return null;
 }
 
 function pickTaggedActivity(
@@ -357,15 +365,26 @@ export const personas: Record<string, Persona> = {
       if (recommended.length > 0) {
         return { type: "doActivity", id: recommended.at(-1)!.id };
       }
-      const semantic = pickTaggedActivity(output, [
+      const socialTags = [
         "story",
         "social",
         "compassionate",
         "romantic",
         "loyal",
-      ]);
-      if (semantic) return semantic;
+      ] as const;
       const objective = pickObjectiveActivity(output);
+      const objectiveActivity = objective?.type === "doActivity"
+        ? available.find((activity) => activity.id === objective.id)
+        : undefined;
+      // When several equally social actions are visible (for example party
+      // invitations), let the public objective disambiguate the intended
+      // commitment. This preserves the charmer's social identity without
+      // cycling forever between reversible relationship toggles.
+      if (objectiveActivity?.aiTags?.some((tag) => socialTags.includes(
+        tag as typeof socialTags[number],
+      ))) return objective;
+      const semantic = pickTaggedActivity(output, socialTags);
+      if (semantic) return semantic;
       if (objective) return objective;
       return pickActivity(output, (acts) => acts[acts.length - 1]!.idx);
     }

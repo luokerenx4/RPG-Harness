@@ -36,6 +36,31 @@ describe("sengoku-raid project personas", () => {
     });
   });
 
+  test("extractor finds an ending behind an optional deep objective", async () => {
+    const output = hub([
+      activity("depart:hell_gate"),
+      activity("script:ending_mundane_seal"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "hell_gate_mastery",
+        title: "Hell gate",
+        status: "active",
+        relatedActivityIds: ["depart:hell_gate"],
+      },
+      {
+        id: "ending_mundane_seal",
+        title: "Ending",
+        status: "active",
+        relatedActivityIds: ["script:ending_mundane_seal"],
+      },
+    ];
+    await expect(decide("extractor", output, {})).resolves.toEqual({
+      type: "doActivity",
+      id: "script:ending_mundane_seal",
+    });
+  });
+
   test("extractor understands one-at-a-time material sales", async () => {
     const output = hub([
       activity("sell_material:soul_shard"),
@@ -77,9 +102,79 @@ describe("sengoku-raid project personas", () => {
       id: "extract",
     });
   });
+
+  test("delver finds an ending behind an optional deep objective", async () => {
+    const output = hub([
+      activity("depart:hell_gate"),
+      activity("script:ending_oni_self"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "hell_gate_mastery",
+        title: "Hell gate",
+        status: "active",
+        relatedActivityIds: ["depart:hell_gate"],
+      },
+      {
+        id: "ending_oni_self",
+        title: "Ending",
+        status: "active",
+        relatedActivityIds: ["script:ending_oni_self"],
+      },
+    ];
+    await expect(decide("delver", output, {})).resolves.toEqual({
+      type: "doActivity",
+      id: "script:ending_oni_self",
+    });
+  });
+
+  test("completionist defers an ending for the public three-flowers objective", async () => {
+    const output = hub([
+      activity("script:ending_oni_self"),
+      activity("invite:kagari"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "three_flowers_alliance",
+        title: "Three flowers",
+        status: "active",
+        relatedActivityIds: ["invite:kagari"],
+      },
+      {
+        id: "ending_oni_self",
+        title: "Ending",
+        status: "active",
+        relatedActivityIds: ["script:ending_oni_self"],
+      },
+    ];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { achievementLog: [] },
+    })).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
+  test("completionist preserves a companion by fleeing before exploring", async () => {
+    const output = hub([
+      activity("attack"),
+      activity("flee"),
+      activity("move:shrine"),
+    ]);
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": {
+        companion: "kagari",
+        achievementLog: [],
+        raid: { visited: { shrine: { visited: false } } },
+      },
+    })).resolves.toEqual({ type: "doActivity", id: "flee" });
+  });
 });
 
-function decide(name: "extractor" | "delver", output: Output, state: unknown) {
+function decide(
+  name: "extractor" | "delver" | "completionist",
+  output: Output,
+  state: unknown,
+) {
   return raidAiPersonas[name]!.decide(output, state as ComposedState, 0);
 }
 

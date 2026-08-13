@@ -105,6 +105,14 @@ describe("validateGame — choice coverage ids", () => {
 });
 
 describe("validateGame — undeclared references throw", () => {
+  test("undeclared script in ai audit required scripts", () => {
+    const game = baseGame({
+      aiAudit: { requiredScripts: ["missing_deep_scene"] },
+    });
+    expect(() => validateGame(game)).toThrow(/ai_audit\.required_scripts/);
+    expect(() => validateGame(game)).toThrow(/missing_deep_scene/);
+  });
+
   test("undeclared switch in script requires", () => {
     const game = baseGame({
       switches: [{ id: "real_switch", initial: false }],

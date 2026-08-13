@@ -81,11 +81,13 @@ export interface PlaytestAuditMatrixEvidence {
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     requiredActivityTags?: string[];
+    requiredScripts?: string[];
   };
   observed: {
     uniqueEndings: number;
     uniqueDecisionPaths: number;
     coveredActivityTags?: string[];
+    completedScripts?: string[];
   };
   classification:
     | "identical-path"
@@ -101,6 +103,7 @@ export interface PlaytestAuditMatrixEvidence {
     reason: string;
     pathRevision: string;
     activityTags?: string[];
+    completedScripts?: string[];
   }>;
   choiceDivergences: Array<{
     scriptId: string;
@@ -137,11 +140,13 @@ export interface PlaytestVerification {
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     requiredActivityTags?: string[];
+    requiredScripts?: string[];
   };
   observed: {
     uniqueEndings: number;
     uniqueDecisionPaths: number;
     coveredActivityTags?: string[];
+    completedScripts?: string[];
   };
   classification:
     | "identical-path"
@@ -154,6 +159,7 @@ export interface PlaytestVerification {
     ending: string;
     pathRevision: string;
     activityTags?: string[];
+    completedScripts?: string[];
   }>;
 }
 

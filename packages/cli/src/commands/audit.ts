@@ -96,6 +96,10 @@ export interface AuditSummary {
     coveredTags: string[];
     byPersona: Record<string, string[]>;
   };
+  scriptCoverage: {
+    completedScripts: string[];
+    byPersona: Record<string, string[]>;
+  };
   diversity: {
     classification:
       | "identical-path"
@@ -118,6 +122,7 @@ export interface AuditSummary {
       uniqueEndings: number;
       uniqueDecisionPaths: number;
       coveredActivityTags?: string[];
+      completedScripts?: string[];
     };
     violations: string[];
     evidenceSession?: string;
@@ -269,6 +274,12 @@ export async function runAudit(
   const coveredActivityTags = [...new Set(
     lanes.flatMap((lane) => lane.path.activityTags),
   )].sort();
+  const completedScriptsByPersona = Object.fromEntries(
+    lanes.map((lane) => [lane.persona, [...lane.progress.completedScripts].sort()]),
+  );
+  const completedScripts = [...new Set(
+    lanes.flatMap((lane) => lane.progress.completedScripts),
+  )].sort();
   const choiceDivergences = summarizeChoiceDivergences(
     args.personas,
     choicesByPersona,
@@ -291,6 +302,7 @@ export async function runAudit(
         uniqueEndings,
         uniqueDecisionPaths,
         coveredActivityTags,
+        completedScripts,
       )
     : undefined;
   let qualityReport: PlaytestReport | undefined;
@@ -312,6 +324,7 @@ export async function runAudit(
         `The deterministic persona matrix completed ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
         `Observed endings: ${formatEndingCounts(endings)}.`,
         `Covered activity tags: ${coveredActivityTags.join(", ") || "none"}.`,
+        `Completed scripts: ${completedScripts.join(", ") || "none"}.`,
         `Quality violations: ${quality.violations.join("; ")}.`,
         `Classification: ${classification}.`,
         `Personas: ${args.personas.join(", ")}.`,
@@ -330,6 +343,9 @@ export async function runAudit(
           ...(quality.observed.coveredActivityTags
             ? { coveredActivityTags: quality.observed.coveredActivityTags }
             : {}),
+          ...(quality.observed.completedScripts
+            ? { completedScripts: quality.observed.completedScripts }
+            : {}),
         },
         classification,
         violations: quality.violations,
@@ -341,6 +357,7 @@ export async function runAudit(
           reason: lane.reason,
           pathRevision: lane.path.revision,
           activityTags: lane.path.activityTags,
+          completedScripts: lane.progress.completedScripts,
         })),
         choiceDivergences,
       },
@@ -374,6 +391,10 @@ export async function runAudit(
     activityCoverage: {
       coveredTags: coveredActivityTags,
       byPersona: activityTagsByPersona,
+    },
+    scriptCoverage: {
+      completedScripts,
+      byPersona: completedScriptsByPersona,
     },
     diversity: {
       classification,
@@ -429,6 +450,10 @@ function mergeQualityPolicies(
     matricesCompatible ? current?.requiredActivityTags : undefined,
     floor?.requiredActivityTags,
   );
+  const requiredScripts = mergeRequiredTags(
+    matricesCompatible ? current?.requiredScripts : undefined,
+    floor?.requiredScripts,
+  );
   return {
     ...(floor?.personas !== undefined
       ? { personas: [...floor.personas] }
@@ -438,6 +463,7 @@ function mergeQualityPolicies(
     ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
     ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
     ...(requiredActivityTags !== undefined ? { requiredActivityTags } : {}),
+    ...(requiredScripts !== undefined ? { requiredScripts } : {}),
   };
 }
 
@@ -462,6 +488,7 @@ function evaluateQualityGate(
   uniqueEndings: number,
   uniqueDecisionPaths: number,
   coveredActivityTags: string[],
+  completedScripts: string[],
 ): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
   const observed = {
     uniqueEndings,
@@ -469,6 +496,7 @@ function evaluateQualityGate(
     ...(policy.requiredActivityTags
       ? { coveredActivityTags: [...coveredActivityTags] }
       : {}),
+    ...(policy.requiredScripts ? { completedScripts: [...completedScripts] } : {}),
   };
   if (!acceptanceMatrixMatches) {
     return {
@@ -504,6 +532,13 @@ function evaluateQualityGate(
     const missing = policy.requiredActivityTags.filter((tag) => !covered.has(tag));
     if (missing.length > 0) {
       violations.push(`required activity tags not covered: ${missing.join(", ")}`);
+    }
+  }
+  if (policy.requiredScripts !== undefined) {
+    const completed = new Set(completedScripts);
+    const missing = policy.requiredScripts.filter((id) => !completed.has(id));
+    if (missing.length > 0) {
+      violations.push(`required scripts not completed: ${missing.join(", ")}`);
     }
   }
   return {

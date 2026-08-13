@@ -29,6 +29,8 @@ export interface AiAuditConfig {
   minUniqueDecisionPaths?: number;
   /** Semantic activity surfaces that at least one acceptance lane must execute. */
   requiredActivityTags?: string[];
+  /** Deep authored events that at least one acceptance lane must complete. */
+  requiredScripts?: string[];
 }
 
 export interface CharacterState {

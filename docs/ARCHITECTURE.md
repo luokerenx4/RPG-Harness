@@ -131,7 +131,8 @@ content-addresses the accepted semantic inputs (`choose` by authored identity,
 `select` by script id, and `doActivity` by activity id plus its `aiTags`), while
 `audit` reports unique path and ending counts, executed activity-tag coverage,
 and persona-grouped stable-choice divergences. A project may require critical
-activity tags in `ai_audit`, turning skipped gameplay surfaces into replayable
+activity tags and newly completed script ids in `ai_audit`, turning skipped
+gameplay surfaces or unreachable deep authored events into replayable
 quality-gate work instead of trusting path hashes as an indirect proxy.
 This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.

@@ -1,0 +1,47 @@
+name: 映し井戸からの生還は公開された地獄門目標を完遂する
+description: |
+  地獄門の出立ボタンを押しただけでは踏破にならない。最深部の撤退点から
+  実際に生還した時だけ、永続 achievement と GUI/Headless 共通 objective
+  が completed になる。
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival]
+    currentMapId: hell_gate_mirror_pool
+    variables:
+      shogun_chapter: 2
+      raidsCompleted: 8
+      pulse_oni: 8
+    knownSkills: [chinkonho, mizukagami]
+    weapons:
+      ancestor_yaodao: { power: 14 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 8, spectral: 30, intellect: 10 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari, mio]
+    companion: null
+    companionHp: 0
+    pulsePending: null
+    achievementLog: []
+    raid:
+      chain: hell_gate
+      entryMapId: hell_gate_mouth
+      turnsTaken: 5
+      pendingLoot: {}
+      visited:
+        hell_gate_mirror_pool:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: extract }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: sengoku-raid.achievementLog
+    includes: 地獄門踏破 — 映し井戸より生還

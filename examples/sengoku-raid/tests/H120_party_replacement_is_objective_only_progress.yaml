@@ -1,0 +1,46 @@
+name: 同行者の交代は可逆設定として扱い、目標だけが必要な交代を指す
+description: |
+  篝を既に同行者に選んだ状態で、次の三花目標は霞との生還を求める。
+  invite:kasumi は目標から実行可能に辿れる一方、一般の social/progression
+  意図は持たない。これにより社交人格が複数の交代候補を往復せず、必要な
+  ときだけ公共目標を根拠に同行者を替える。
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - encounter_kagari_first
+      - encounter_kasumi_first
+      - bond_kasumi_01
+      - bond_kasumi_02
+    variables:
+      shogun_chapter: 2
+    switches:
+      befriended_kagari: true
+      companion_kagari: true
+    characters:
+      kagari:
+        affection: 6
+        custom: {}
+      kasumi:
+        affection: 6
+        custom: {}
+  sengoku-raid:
+    raid: null
+    companion: kagari
+    companionHp: 10
+    metCharacters:
+      - kagari
+      - kasumi
+inputs: []
+assertions:
+  - kind: activity
+    id: invite:kasumi
+    available: true
+    aiTagsExcludes: progression
+  - kind: activity
+    id: invite:kasumi
+    aiTagsExcludes: social
+  - kind: objective
+    id: three_flowers_alliance
+    status: active
+    relatedActivityIncludes: invite:kasumi

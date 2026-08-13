@@ -348,12 +348,12 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     satisfied: boolean,
   ) => ({ id, label, current, target, satisfied });
   const withThreeFlowers = <T>(main: T[]) => {
-    const metAll = ["kagari", "kasumi", "mio"].every((id) =>
-      moduleState(ctx).metCharacters.includes(id)
-    );
     const completed =
       ctx.state.baseline.scripts.three_flowers_alliance?.completed === true;
-    if (!metAll || completed) return main;
+    // Reveal the long-term alliance after Mio's chapter introduces the full
+    // cast. Before this, keeping the third companion secret is intentional;
+    // afterwards both GUI and Headless players deserve an executable plan.
+    if (chapter < 2 || completed) return main;
     const companions = [
       { id: "kagari", name: "篝" },
       { id: "kasumi", name: "霞" },
@@ -368,7 +368,16 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       const available = (id: string) => activities.some(
         (activity) => activity.id === id && activity.available,
       );
-      if (m.companion === missing.id) {
+      if (!m.metCharacters.includes(missing.id)) {
+        const encounterRoute = missing.id === "kagari"
+          ? "depart:kuro_swamp"
+          : missing.id === "kasumi"
+            ? "depart:mt_houkyou"
+            : null;
+        relatedActivityIds = encounterRoute && available(encounterRoute)
+          ? [encounterRoute]
+          : executableProgressActivityIds;
+      } else if (m.companion === missing.id) {
         relatedActivityIds = executableProgressActivityIds;
       } else if (available(`invite:${missing.id}`)) {
         relatedActivityIds = [`invite:${missing.id}`];
@@ -401,8 +410,60 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     }, ...main];
   };
 
+  const withHellGate = <T>(main: T[]) => {
+    if (chapter < 2) return main;
+    const m = moduleState(ctx);
+    const pulseOni = Number(variables.pulse_oni ?? 0);
+    const power = ctx.state.baseline.weapons.ancestor_yaodao?.power ?? 0;
+    const knowsChinkonho = ctx.state.baseline.knownSkills.includes("chinkonho");
+    const knowsMizukagami = ctx.state.baseline.knownSkills.includes("mizukagami");
+    const completed = m.achievementLog.includes("地獄門踏破 — 映し井戸より生還");
+    const departAvailable = availableActivity(activities, "depart:hell_gate");
+    const firstAvailable = (ids: string[]) => ids.find((id) =>
+      availableActivity(activities, id)
+    );
+    let relatedActivityIds: string[] = [];
+    if (!completed && departAvailable) {
+      relatedActivityIds = ["depart:hell_gate"];
+    } else if (!completed && !knowsChinkonho) {
+      const next = firstAvailable([
+        "script:bond_kagari_01",
+        "script:bond_kagari_02",
+        "bond:kagari",
+        "depart:kuro_swamp",
+      ]);
+      relatedActivityIds = next ? [next] : executableProgressActivityIds;
+    } else if (!completed && !knowsMizukagami) {
+      const next = firstAvailable([
+        "script:bond_mio_01",
+        "script:bond_mio_02",
+        "bond:mio",
+      ]);
+      relatedActivityIds = next ? [next] : executableProgressActivityIds;
+    } else if (!completed && (pulseOni < 8 || power < 12)) {
+      const next = firstAvailable(["imbue:oni", "upgrade_oni"]);
+      relatedActivityIds = next ? [next] : executableProgressActivityIds;
+    }
+    return [{
+      id: "hell_gate_mastery",
+      title: completed ? "地獄門踏破 — 完遂" : "地獄門を開き、映し井戸から生還する",
+      description: "鬼の脈、妖刀の威力、篝の鎮魂法、澪の水鏡を揃える。",
+      status: completed ? "completed" as const : "active" as const,
+      requirements: [
+        requirement("pulse_oni", "脈絡: 鬼", pulseOni, 8, pulseOni >= 8),
+        requirement("weapon_power", "妖刀威力", power, 12, power >= 12),
+        requirement("chinkonho", "鎮魂法", knowsChinkonho, true, knowsChinkonho),
+        requirement("mizukagami", "水鏡", knowsMizukagami, true, knowsMizukagami),
+        requirement("hell_gate_extract", "映し井戸から生還", completed, true, completed),
+      ],
+      relatedActivityIds,
+    }, ...main];
+  };
+
+  const withDeepGoals = <T>(main: T[]) => withThreeFlowers(withHellGate(main));
+
   if (chapter < 1) {
-    return withThreeFlowers([{
+    return withDeepGoals([{
       id: "letter_01_dispatch",
       title: "最初の密書を待つ",
       description: `現在の御沙汰：${directive}`,
@@ -413,7 +474,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   }
   if (chapter < 2) {
     const spectral = playerStat(ctx, "spectral");
-    return withThreeFlowers([{
+    return withDeepGoals([{
       id: "letter_02_dispatch",
       title: "公儀の見立てを待つ",
       description: `現在の御沙汰：${directive}`,
@@ -426,7 +487,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     }]);
   }
   if (chapter < 3) {
-    return withThreeFlowers([{
+    return withDeepGoals([{
       id: "letter_03_dispatch",
       title: "最後の御沙汰を待つ",
       description: `現在の御沙汰：${directive}`,
@@ -443,7 +504,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       : switches.chose_court_silent
         ? { id: "ending_mundane_seal", title: "妖刀を祠へ納める", variable: "pulse_mundane", label: "脈絡: 凡", target: 5 }
         : null;
-  if (!route) return withThreeFlowers([]);
+  if (!route) return withDeepGoals([]);
   const completed = ctx.state.baseline.scripts[route.id]?.completed === true;
   const current = Number(variables[route.variable] ?? 0);
   const endingActivityId = `script:${route.id}`;
@@ -454,7 +515,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const routeImbueAvailable = activities.some(
     (activity) => activity.id === routeImbueActivityId && activity.available,
   );
-  return withThreeFlowers([{
+  return withDeepGoals([{
     id: route.id,
     title: completed ? `${route.title} — 完遂` : route.title,
     description: directive,
@@ -1004,7 +1065,12 @@ function buildHubMenu(ctx: Ctx): Output {
           ? "公儀の見立てが済むまで同行可。他者を誘うと自動的に交代"
           : "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
-      ...(!alreadyInvited && storyCompanionRecommendations.has(charId)
+      // A fresh invitation can advance a relationship objective. Replacing
+      // an already selected companion is merely a reversible party-loadout
+      // change; tagging every replacement as progression makes social agents
+      // oscillate between equally attractive companions. A public objective
+      // may still point directly at a required replacement when appropriate.
+      ...(!alreadyInvited && m.companion === null && storyCompanionRecommendations.has(charId)
         ? { aiTags: ["social", "progression"] }
         : {}),
       cost: 0,
@@ -1843,6 +1909,12 @@ function endRaidExtract(ctx: Ctx): void {
     lootSummary.push(`${itemName(ctx, itemId)} ×${count}`);
   }
   const chainLabel = chainDisplayName(m.raid.chain) ?? m.raid.chain;
+  if (
+    m.raid.chain === "hell_gate" &&
+    !m.achievementLog.includes("地獄門踏破 — 映し井戸より生還")
+  ) {
+    m.achievementLog.push("地獄門踏破 — 映し井戸より生還");
+  }
 
   // If companion survived the raid (HP > 0), mark the persistent
   // "befriended" switch and grant +1 affection. This is the loop:
@@ -2993,7 +3065,172 @@ function personaObjectiveActivity(
   return null;
 }
 
+function personaNamedObjectiveActivity(
+  output: Extract<Output, { type: "hubMenu" }>,
+  objectiveId: string,
+): Input | null {
+  const available = new Set(
+    output.snapshot.activities
+      .filter((activity) => activity.available)
+      .map((activity) => activity.id),
+  );
+  const objective = output.snapshot.objectives?.find(
+    ({ id, status }) => id === objectiveId && status === "active",
+  );
+  const id = objective?.relatedActivityIds?.find((candidate) =>
+    available.has(candidate)
+  );
+  return id ? { type: "doActivity", id } : null;
+}
+
+function personaEndingObjectiveActivity(
+  output: Extract<Output, { type: "hubMenu" }>,
+): Input | null {
+  const available = new Set(
+    output.snapshot.activities
+      .filter((activity) => activity.available)
+      .map((activity) => activity.id),
+  );
+  for (const objective of output.snapshot.objectives ?? []) {
+    if (objective.status !== "active") continue;
+    const id = (objective.relatedActivityIds ?? []).find(
+      (candidate) => candidate.startsWith("script:ending_") && available.has(candidate),
+    );
+    if (id) return { type: "doActivity", id };
+  }
+  return null;
+}
+
 export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
+  // Project completionist: proves that optional systems are autonomously
+  // reachable from a real new game, rather than only from hand-authored seed
+  // states. Long-term planning reads public objectives; module-private state
+  // is used only for safe in-raid traversal and encounter-route discovery.
+  completionist: {
+    description: "深層検証：三花の盟を結び、地獄門を踏破してから終局へ進む",
+    decide: async (output, state) => {
+      if (output.type === "hubMenu") {
+        const acts = output.snapshot.activities.filter((activity) => activity.available);
+        const find = (predicate: (activity: HubActivity) => boolean) =>
+          acts.find(predicate);
+        const m = (state as Record<string, unknown>)[MODULE_ID] as
+          | {
+              raid?: { visited?: Record<string, { visited?: boolean }> } | null;
+              metCharacters?: string[];
+              companion?: string | null;
+              achievementLog?: string[];
+            }
+          | undefined;
+        const inRaid = m?.raid != null;
+
+        if (inRaid) {
+          const oni = find(({ id }) => id === "imbue:oni");
+          if (oni) return { type: "doActivity", id: oni.id };
+          // When earning a companion's survival flag, avoiding the fight is
+          // the completionist move: a failed flee damages the player, while
+          // direct counter-attacks can down the companion and erase progress.
+          if (m?.companion) {
+            const flee = find(({ id }) => id === "flee");
+            if (flee) return { type: "doActivity", id: flee.id };
+          }
+          const attack = find(({ id }) => id === "attack");
+          if (attack) return { type: "doActivity", id: attack.id };
+          const sneak = find(({ id }) => id === "sneak_strike");
+          if (sneak) return { type: "doActivity", id: sneak.id };
+          const search = find(({ id }) => id === "search");
+          if (search) return { type: "doActivity", id: search.id };
+          const moves = acts.filter(({ id }) => id.startsWith("move:"));
+          const zones = m?.raid?.visited;
+          const unvisited = zones && moves.find(({ id }) => {
+            const target = id.slice("move:".length);
+            return zones[target]?.visited !== true;
+          });
+          if (unvisited) return { type: "doActivity", id: unvisited.id };
+          const extract = find(({ id }) => id === "extract");
+          if (extract) return { type: "doActivity", id: extract.id };
+          if (moves[0]) return { type: "doActivity", id: moves[0].id };
+        }
+
+        const soldLoot = find(({ id }) => id === "sell_all_loot");
+        if (soldLoot) return { type: "doActivity", id: soldLoot.id };
+
+        const threeFlowersComplete =
+          state.baseline.scripts.three_flowers_alliance?.completed === true;
+        const hellGateComplete =
+          m?.achievementLog?.includes("地獄門踏破 — 映し井戸より生還") === true;
+        if (!threeFlowersComplete) {
+          const objective = personaNamedObjectiveActivity(
+            output,
+            "three_flowers_alliance",
+          );
+          if (objective) return objective;
+        }
+        if (!hellGateComplete) {
+          const objective = personaNamedObjectiveActivity(output, "hell_gate_mastery");
+          if (objective) return objective;
+        }
+
+        if (!threeFlowersComplete || !hellGateComplete) {
+          const chapterObjective = output.snapshot.objectives
+            ?.filter(({ id, status }) => id.startsWith("letter_") && status === "active")
+            .flatMap(({ relatedActivityIds }) => relatedActivityIds ?? [])
+            .find((id) => acts.some((activity) => activity.id === id));
+          if (chapterObjective) {
+            return { type: "doActivity", id: chapterObjective };
+          }
+          const progression = find(({ id, aiTags }) =>
+            !id.startsWith("invite:") &&
+            (aiTags?.includes("progression") || aiTags?.includes("story"))
+          );
+          if (progression) return { type: "doActivity", id: progression.id };
+          const sellMaterial = find(({ id }) => id.startsWith("sell_material:"));
+          if (sellMaterial) return { type: "doActivity", id: sellMaterial.id };
+          const rest = find(({ id }) => id === "rest");
+          if (rest) return { type: "doActivity", id: rest.id };
+          const met = new Set(m?.metCharacters ?? []);
+          const encounterRoute = !met.has("kagari")
+            ? "depart:kuro_swamp"
+            : !met.has("kasumi")
+              ? "depart:mt_houkyou"
+              : null;
+          const depart = find(({ id }) =>
+            encounterRoute ? id === encounterRoute : id.startsWith("depart:")
+          );
+          if (depart) return { type: "doActivity", id: depart.id };
+        }
+
+        const ending = output.snapshot.objectives
+          ?.filter(({ id, status }) => id.startsWith("ending_") && status === "active")
+          .flatMap(({ relatedActivityIds }) => relatedActivityIds ?? [])
+          .find((id) => acts.some((activity) => activity.id === id));
+        if (ending) return { type: "doActivity", id: ending };
+        const objective = personaEndingObjectiveActivity(output) ??
+          personaObjectiveActivity(output);
+        if (objective) return objective;
+        const first = acts[0];
+        return first ? { type: "doActivity", id: first.id } : { type: "quit" };
+      }
+      if (output.type === "choice") {
+        return personaChoice(output, [
+          "collective",
+          "social",
+          "compassionate",
+          "loyal",
+          "aggressive",
+          "defiant",
+          "bold",
+          "risky",
+        ]);
+      }
+      if (output.type === "scriptComplete") {
+        const first = output.nextAvailable[0];
+        return first ? { type: "select", scriptId: first.id } : null;
+      }
+      if (output.type === "gameEnd") return null;
+      return { type: "next" };
+    },
+  },
+
   // Cautious extraction-shooter player: cashes out early and avoids fights.
   extractor: {
     description: "撤离玩法：能撤就撤，能逃就逃，从不打硬仗",
@@ -3002,7 +3239,8 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         const acts = output.snapshot.activities.filter((activity) => activity.available);
         const find = (predicate: (id: string) => boolean) =>
           acts.find((activity) => predicate(activity.id));
-        const objective = personaObjectiveActivity(output);
+        const objective = personaEndingObjectiveActivity(output) ??
+          personaObjectiveActivity(output);
         if (
           objective?.type === "doActivity" &&
           (objective.id.startsWith("imbue:") || objective.id.startsWith("script:ending_"))
@@ -3054,7 +3292,7 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         const acts = output.snapshot.activities.filter((activity) => activity.available);
         const find = (predicate: (id: string) => boolean) =>
           acts.find((activity) => predicate(activity.id));
-        const objective = personaObjectiveActivity(output);
+        const objective = personaEndingObjectiveActivity(output);
         if (
           objective?.type === "doActivity" &&
           objective.id.startsWith("script:ending_")

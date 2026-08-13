@@ -149,6 +149,7 @@ describe("parseManifest — AI audit quality gate", () => {
       "  min_unique_endings: 2",
       "  min_unique_decision_paths: 3",
       "  required_activity_tags: [cautious, economic, aggressive]",
+      "  required_scripts: [three_flowers_alliance]",
     ].join("\n"));
 
     expect(manifest.aiAudit).toEqual({
@@ -156,6 +157,7 @@ describe("parseManifest — AI audit quality gate", () => {
       minUniqueEndings: 2,
       minUniqueDecisionPaths: 3,
       requiredActivityTags: ["cautious", "economic", "aggressive"],
+      requiredScripts: ["three_flowers_alliance"],
     });
   });
 
@@ -182,6 +184,12 @@ describe("parseManifest — AI audit quality gate", () => {
     )).toThrow(/stable tag strings/);
     expect(() => parseManifest(
       "title: t\nai_audit:\n  required_activity_tags: [economic, economic]\n",
+    )).toThrow(/duplicates/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  required_scripts: ['not stable']\n",
+    )).toThrow(/stable script ids/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  required_scripts: [ending, ending]\n",
     )).toThrow(/duplicates/);
   });
 });
