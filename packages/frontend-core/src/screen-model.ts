@@ -46,7 +46,7 @@ export type Stage =
       nextAvailable: ScriptInfo[];
       cursor: number;
     }
-  | { kind: "ended"; reason?: string };
+  | { kind: "ended"; endingId?: string; reason?: string };
 
 export type BacklogEntry =
   | { kind: "narration"; text: string }
@@ -162,6 +162,7 @@ export function applyOutput(model: ScreenModel, output: Output): ScreenModel {
       return {
         stage: {
           kind: "ended",
+          ...(output.endingId !== undefined ? { endingId: output.endingId } : {}),
           ...(output.reason !== undefined ? { reason: output.reason } : {}),
         },
         backlog: demote(model.stage, model.backlog),

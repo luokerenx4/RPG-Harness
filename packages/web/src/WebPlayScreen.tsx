@@ -213,7 +213,7 @@ export function WebPlayScreen({
         <StatusBar snapshot={model.stage.snapshot} />
       )}
       <div className="stage-area">
-        <StageView stage={model.stage} onInput={sendInput} />
+        <StageView stage={model.stage} game={game} onInput={sendInput} />
       </div>
       {inputNotice && !inputNotice.accepted && (
         <div className="input-notice" role="status">
@@ -252,11 +252,13 @@ export function WebPlayScreen({
   );
 }
 
-function StageView({
+export function StageView({
   stage,
+  game,
   onInput,
 }: {
   stage: Stage;
+  game: Game;
   onInput: (input: Input) => void;
 }) {
   switch (stage.kind) {
@@ -451,9 +453,14 @@ function StageView({
         </div>
       );
     case "ended":
+      const endingTitle = stage.endingId === undefined
+        ? undefined
+        : game.scripts.find((script) => script.id === stage.endingId)?.title;
       return (
         <div className="ended-panel">
           <div className="ended-title">― 終 ―</div>
+          {endingTitle && <div className="ended-ending-title">{endingTitle}</div>}
+          {stage.endingId && <code className="ended-ending-id">{stage.endingId}</code>}
           {stage.reason && <div className="ended-reason">{stage.reason}</div>}
         </div>
       );

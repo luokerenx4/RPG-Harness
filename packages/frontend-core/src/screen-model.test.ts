@@ -85,14 +85,19 @@ describe("applyOutput — stage transitions", () => {
     });
   });
 
-  test("gameEnd → ended; reason preserved when provided", () => {
+  test("gameEnd → ended; stable ending identity and reason are preserved", () => {
     const m1 = applyOutput(initialModel, { type: "gameEnd" });
     expect(m1.stage).toEqual({ kind: "ended" });
     const m2 = applyOutput(initialModel, {
       type: "gameEnd",
+      endingId: "ending-pure",
       reason: "fin",
     });
-    expect(m2.stage).toEqual({ kind: "ended", reason: "fin" });
+    expect(m2.stage).toEqual({
+      kind: "ended",
+      endingId: "ending-pure",
+      reason: "fin",
+    });
   });
 });
 

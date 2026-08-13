@@ -2,10 +2,12 @@ import React from "react";
 import { Box, Text } from "ink";
 
 interface Props {
+  endingId?: string;
+  endingTitle?: string;
   reason?: string;
 }
 
-export function EndedStage({ reason }: Props) {
+export function EndedStage({ endingId, endingTitle, reason }: Props) {
   return (
     <Box
       flexGrow={1}
@@ -14,6 +16,12 @@ export function EndedStage({ reason }: Props) {
       alignItems="center"
     >
       <Text color="gray">— 完 —</Text>
+      {endingTitle ? (
+        <Box marginTop={1}>
+          <Text>{endingTitle}</Text>
+        </Box>
+      ) : null}
+      {endingId ? <Text dimColor>{endingId}</Text> : null}
       {reason ? (
         <Box marginTop={1}>
           <Text dimColor>{reason}</Text>

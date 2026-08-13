@@ -453,6 +453,18 @@ body {
   letter-spacing: 0.3em;
   color: var(--accent);
 }
+.ended-ending-title {
+  margin-top: 22px;
+  font-size: 21px;
+  color: var(--text);
+}
+.ended-ending-id {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
 .ended-reason {
   margin-top: 16px;
   color: var(--dim);

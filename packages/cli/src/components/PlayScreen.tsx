@@ -341,7 +341,7 @@ export function PlayScreen({
   // buffer) — the fix for macOS Terminal's partial-refresh artifacts.
   return (
     <GameLayout key={repaintTick} header={header} footer={footer}>
-      {renderStage(model, assetMap)}
+      {renderStage(model, assetMap, game)}
     </GameLayout>
   );
 }
@@ -355,6 +355,7 @@ function hasBacklog(model: ScreenModel): boolean {
 function renderStage(
   model: ScreenModel,
   assetMap: Map<string, AssetSpec>,
+  game: Game,
 ): React.ReactNode {
   const s = model.stage;
   switch (s.kind) {
@@ -399,6 +400,14 @@ function renderStage(
         />
       );
     case "ended":
-      return <EndedStage {...(s.reason !== undefined ? { reason: s.reason } : {})} />;
+      return (
+        <EndedStage
+          {...(s.endingId !== undefined ? {
+            endingId: s.endingId,
+            endingTitle: game.scripts.find((script) => script.id === s.endingId)?.title,
+          } : {})}
+          {...(s.reason !== undefined ? { reason: s.reason } : {})}
+        />
+      );
   }
 }
