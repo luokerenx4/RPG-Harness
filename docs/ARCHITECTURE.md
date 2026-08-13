@@ -153,6 +153,11 @@ Web bridge exposes it read-only and the GUI renders it in the HUD. This closes
 the human/agent handoff: Headless can prepare an exact coding-issue scene while
 the player understands why that isolated save exists before making the next
 choice.
+Stable choice coordinates in that handoff also let the bridge project a live
+outcome from the session log after the player answers. The fork metadata stays
+immutable, the GUI shows the selected authored option, and Headless coverage
+consumes the same decision record—there is no parallel “completed” flag to
+drift away from replay evidence.
 The final `sweep --until-clean` acceptance is also persisted as a project
 quality certificate. Its input revision covers authored behavior plus the
 Headless engine, parser, session-store, CLI evaluator, Web GUI/input bridge,

@@ -121,7 +121,7 @@ export function App() {
     if (
       !loaded ||
       loaded.sessionInfo.mode !== "shared" ||
-      loaded.branchContext?.handoff
+      !needsBranchContextPolling(loaded.branchContext)
     ) return;
     let cancelled = false;
     let checking = false;
@@ -131,6 +131,9 @@ export function App() {
       try {
         const branchContext = await loadBranchContext(loaded.id);
         if (cancelled || !branchContext?.handoff) return;
+        const currentHasHandoff = loaded.branchContext?.handoff !== null &&
+          loaded.branchContext?.handoff !== undefined;
+        if (currentHasHandoff && !branchContext.outcome) return;
         setLoaded((current) =>
           current && current.id === loaded.id
             ? { ...current, branchContext }
@@ -149,7 +152,12 @@ export function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [loaded?.id, loaded?.sessionInfo.mode, loaded?.branchContext?.handoff]);
+  }, [
+    loaded?.id,
+    loaded?.sessionInfo.mode,
+    loaded?.branchContext?.handoff,
+    loaded?.branchContext?.outcome,
+  ]);
 
   useEffect(() => {
     if (!loaded || loaded.sessionInfo.mode !== "shared") return;
@@ -242,4 +250,9 @@ export function App() {
       </ul>
     </div>
   );
+}
+
+function needsBranchContextPolling(branch: WebBranchContext | undefined): boolean {
+  if (!branch?.handoff) return true;
+  return typeof branch.handoff.coordinates?.choiceId === "string" && !branch.outcome;
 }

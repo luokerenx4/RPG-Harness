@@ -265,6 +265,7 @@ export function WebPlayScreen({
 export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {
   const handoff = branch.handoff;
   if (!handoff) return null;
+  const outcome = branch.outcome;
   const state = handoff.state === "target-reached"
     ? "exact target reached"
     : handoff.state === "closest"
@@ -277,10 +278,16 @@ export function BranchHandoffBadge({ branch }: { branch: WebBranchContext }) {
     `Source: ${branch.fromSession} @ log ${branch.sourceLogEntry} (${branch.mode})`,
     `Operation: ${handoff.operation}; state: ${state}.`,
     ...(handoff.target ? [`Target: ${handoff.target}`] : []),
+    ...(outcome
+      ? [`Outcome: selected ${outcome.optionId} via ${outcome.source ?? "unknown"} at log ${outcome.logEntry}.`]
+      : []),
   ].join("\n");
+  const label = outcome
+    ? `已选择: ${outcome.optionText ?? outcome.optionId}`
+    : handoff.title;
   return (
     <span className={`hud-handoff ${handoff.state}`} role="status" title={detail}>
-      AI 分支 · {handoff.priority} · {handoff.title}
+      AI 分支 · {handoff.priority} · {label}
     </span>
   );
 }

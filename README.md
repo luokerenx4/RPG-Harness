@@ -794,6 +794,10 @@ or the work was already covered are persisted beside
 pretending to track later player inputs. The local Web GUI projects that metadata into its HUD, so a player
 opening the returned `webPath` can see why the AI prepared this exact scene
 without reading terminal output or letting the agent advance the player save.
+When the handoff names a stable choice, the bridge derives the player's selected
+option and display text from the locked session log. The HUD updates in place,
+while `log.jsonl` remains the single evidence source that also removes that
+option from the player's structured worklist family.
 Choice authors may set numeric `aiPriority` in fenced YAML; `objective` prefers
 the highest available value while GUI/TUI presentation remains unchanged.
 Concise Markdown options may declare space-separated open semantic tags with

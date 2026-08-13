@@ -53,6 +53,12 @@ export interface DevelopmentBranchHandoff {
   state: "target-reached" | "closest" | "reproduced" | "covered";
   preparedAt: string;
   target?: string;
+  coordinates?: {
+    reportId?: string;
+    scriptId?: string;
+    choiceId?: string;
+    optionId?: string;
+  };
 }
 
 export async function forkCommand(args: ForkArgs): Promise<void> {

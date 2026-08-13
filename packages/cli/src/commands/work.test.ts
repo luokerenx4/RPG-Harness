@@ -335,6 +335,7 @@ describe("structured development work execution", () => {
         operation: "reach",
         state: "target-reached",
         preparedAt: expect.any(String),
+        coordinates: { scriptId: "scene", choiceId: "reply" },
       },
     });
     expect(await snapshotTree(sessionDir(gameDir, "fresh-player"))).toEqual(sourceBefore);

@@ -168,6 +168,7 @@ describe("Web development session bridge", () => {
         preparedAt: "2026-08-13T00:00:01.000Z",
         target: "scripts/scene.md",
       },
+      outcome: null,
     });
     await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
       schemaVersion: 1,
@@ -180,6 +181,7 @@ describe("Web development session bridge", () => {
       sourceLogEntry: 7,
       mode: "checkpoint",
       handoff: null,
+      outcome: null,
     });
     await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
       schemaVersion: 1,
@@ -189,6 +191,75 @@ describe("Web development session bridge", () => {
     }), "utf-8");
     await expect(loadBridgeBranchContext(gameDir, "ai-branch"))
       .rejects.toThrow("Invalid source session");
+  });
+
+  test("derives a player choice outcome from stable handoff coordinates", async () => {
+    const gameDir = await temporaryGame();
+    const branchDir = path.join(gameDir, ".rpg-harness", "sessions", "ai-choice");
+    await mkdir(branchDir, { recursive: true });
+    await writeFile(path.join(branchDir, "fork.json"), JSON.stringify({
+      schemaVersion: 1,
+      fromSession: "player",
+      sourceLogEntry: 4,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply?",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        coordinates: { scriptId: "scene", choiceId: "reply" },
+      },
+    }), "utf-8");
+    await writeFile(path.join(branchDir, "log.jsonl"), [
+      JSON.stringify({
+        source: "reach-choice",
+        output: {
+          type: "choice",
+          scriptId: "scene",
+          choiceId: "reply",
+          options: [{ id: "leave", text: "Old answer" }],
+        },
+      }),
+      JSON.stringify({
+        source: "reach-choice",
+        decision: { scriptId: "scene", choiceId: "reply", optionId: "leave" },
+      }),
+      JSON.stringify({
+        source: "reach-choice:checkpoint",
+        output: {
+          type: "choice",
+          scriptId: "scene",
+          choiceId: "reply",
+          options: [
+            { id: "stay", text: "Stay together" },
+            { id: "leave", text: "Walk away" },
+          ],
+        },
+      }),
+      JSON.stringify({
+        source: "web",
+        decision: { scriptId: "scene", choiceId: "reply", optionId: "stay" },
+        output: { type: "dialogue", text: "Then stay." },
+      }),
+      "",
+    ].join("\n"), "utf-8");
+
+    expect(await loadBridgeBranchContext(gameDir, "ai-choice")).toMatchObject({
+      handoff: { coordinates: { scriptId: "scene", choiceId: "reply" } },
+      outcome: {
+        kind: "choice-selected",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "stay",
+        optionText: "Stay together",
+        source: "web",
+        logEntry: 4,
+      },
+    });
   });
 
   test("projects the global AI development state without writing the player session", async () => {

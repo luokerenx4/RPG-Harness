@@ -327,6 +327,7 @@ async function attachWorkHandoff(
   session: string,
   state: DevelopmentBranchHandoff["state"],
 ): Promise<DevelopmentBranchHandoff> {
+  const coordinates = workHandoffCoordinates(item);
   return attachDevelopmentBranchHandoff(args.gameDir, session, {
     schemaVersion: 1,
     workKey: item.key,
@@ -337,7 +338,22 @@ async function attachWorkHandoff(
     state,
     preparedAt: new Date().toISOString(),
     ...(item.target ? { target: item.target } : {}),
+    ...(coordinates ? { coordinates } : {}),
   });
+}
+
+function workHandoffCoordinates(
+  item: DevelopmentWorkItem,
+): NonNullable<DevelopmentBranchHandoff["coordinates"]> | null {
+  const coordinates = Object.fromEntries(
+    (["reportId", "scriptId", "choiceId", "optionId"] as const)
+      .flatMap((key) =>
+        typeof item.coordinates[key] === "string" && item.coordinates[key].trim()
+          ? [[key, item.coordinates[key]]]
+          : []
+      ),
+  ) as NonNullable<DevelopmentBranchHandoff["coordinates"]>;
+  return Object.keys(coordinates).length > 0 ? coordinates : null;
 }
 
 function compactCoverResult(result: CoverChoiceSummary) {

@@ -67,12 +67,44 @@ describe("Web terminal handoff", () => {
         preparedAt: "2026-08-13T00:00:01.000Z",
         target: "scripts/scene.md",
       },
+      outcome: null,
     }} />);
 
     expect(html).toContain("AI 分支 · P2 · Reach authored choice: Reply?");
     expect(html).toContain("Work: choice-authoring/scene/reply");
     expect(html).toContain("Source: player @ log 7 (checkpoint)");
     expect(html).toContain("Target: scripts/scene.md");
+  });
+
+  test("surfaces the stable option selected by the player in an AI branch", () => {
+    const html = renderToStaticMarkup(<BranchHandoffBadge branch={{
+      fromSession: "player",
+      sourceLogEntry: 7,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1,
+        workKey: "choice-authoring/scene/reply",
+        priority: "P2",
+        kind: "choice-authoring",
+        title: "Reach authored choice: Reply?",
+        operation: "reach",
+        state: "target-reached",
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        coordinates: { scriptId: "scene", choiceId: "reply" },
+      },
+      outcome: {
+        kind: "choice-selected",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "stay",
+        optionText: "Stay together",
+        source: "web",
+        logEntry: 2,
+      },
+    }} />);
+
+    expect(html).toContain("AI 分支 · P2 · 已选择: Stay together");
+    expect(html).toContain("Outcome: selected stay via web at log 2.");
   });
 
   test("shows a certified project verdict next to the shared GUI session", () => {

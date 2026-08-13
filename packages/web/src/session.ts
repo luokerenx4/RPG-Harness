@@ -42,6 +42,21 @@ export interface WebBranchContext {
     state: "target-reached" | "closest" | "reproduced" | "covered";
     preparedAt: string;
     target?: string;
+    coordinates?: {
+      reportId?: string;
+      scriptId?: string;
+      choiceId?: string;
+      optionId?: string;
+    };
+  } | null;
+  outcome: {
+    kind: "choice-selected";
+    scriptId?: string;
+    choiceId: string;
+    optionId: string;
+    optionText?: string;
+    source?: string;
+    logEntry: number;
   } | null;
 }
 

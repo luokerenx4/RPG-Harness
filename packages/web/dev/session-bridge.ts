@@ -61,6 +61,21 @@ export interface BridgeBranchContext {
     state: "target-reached" | "closest" | "reproduced" | "covered";
     preparedAt: string;
     target?: string;
+    coordinates?: {
+      reportId?: string;
+      scriptId?: string;
+      choiceId?: string;
+      optionId?: string;
+    };
+  } | null;
+  outcome: {
+    kind: "choice-selected";
+    scriptId?: string;
+    choiceId: string;
+    optionId: string;
+    optionText?: string;
+    source?: string;
+    logEntry: number;
   } | null;
 }
 
@@ -231,39 +246,45 @@ export async function loadBridgeBranchContext(
   session: string,
 ): Promise<BridgeBranchContext | null> {
   assertSegment(session, "session");
-  let raw: string;
-  try {
-    raw = await readFile(
-      path.join(sessionDirectory(gameDir, session), "fork.json"),
-      "utf-8",
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-  const value = JSON.parse(raw) as Record<string, unknown>;
-  const modes = new Set([
-    "checkpoint",
-    "initial-state",
-    "current-state",
-    "playtest-checkpoint",
-    "playtest-replay-checkpoint",
-  ]);
-  if (
-    typeof value.fromSession !== "string" ||
-    !Number.isInteger(value.sourceLogEntry) || (value.sourceLogEntry as number) < 0 ||
-    typeof value.mode !== "string" || !modes.has(value.mode)
-  ) {
-    throw new Error(`Invalid fork provenance for session: ${session}`);
-  }
-  assertSegment(value.fromSession, "source session");
-  const handoff = parseBridgeHandoff(value.handoff);
-  return {
-    fromSession: value.fromSession,
-    sourceLogEntry: value.sourceLogEntry as number,
-    mode: value.mode,
-    handoff,
-  };
+  return withSessionLock(gameDir, session, async () => {
+    let raw: string;
+    try {
+      raw = await readFile(
+        path.join(sessionDirectory(gameDir, session), "fork.json"),
+        "utf-8",
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const modes = new Set([
+      "checkpoint",
+      "initial-state",
+      "current-state",
+      "playtest-checkpoint",
+      "playtest-replay-checkpoint",
+    ]);
+    if (
+      value.schemaVersion !== 1 ||
+      typeof value.fromSession !== "string" ||
+      !Number.isInteger(value.sourceLogEntry) || (value.sourceLogEntry as number) < 0 ||
+      typeof value.mode !== "string" || !modes.has(value.mode)
+    ) {
+      throw new Error(`Invalid fork provenance for session: ${session}`);
+    }
+    assertSegment(value.fromSession, "source session");
+    const handoff = parseBridgeHandoff(value.handoff);
+    return {
+      fromSession: value.fromSession,
+      sourceLogEntry: value.sourceLogEntry as number,
+      mode: value.mode,
+      handoff,
+      outcome: handoff
+        ? await readBridgeBranchOutcome(gameDir, session, handoff)
+        : null,
+    };
+  });
 }
 
 export async function saveBridgeSession(
@@ -508,11 +529,95 @@ function parseBridgeHandoff(value: unknown): BridgeBranchContext["handoff"] {
     typeof handoff.operation !== "string" || !handoff.operation.trim() ||
     typeof handoff.state !== "string" || !states.has(handoff.state) ||
     typeof handoff.preparedAt !== "string" || !handoff.preparedAt.trim() ||
-    (handoff.target !== undefined && typeof handoff.target !== "string")
+    (handoff.target !== undefined && typeof handoff.target !== "string") ||
+    !isBridgeHandoffCoordinates(handoff.coordinates)
   ) {
     throw new Error("Invalid development branch handoff");
   }
   return handoff as unknown as NonNullable<BridgeBranchContext["handoff"]>;
+}
+
+function isBridgeHandoffCoordinates(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const coordinates = value as Record<string, unknown>;
+  const allowed = new Set(["reportId", "scriptId", "choiceId", "optionId"]);
+  return Object.keys(coordinates).length > 0 &&
+    Object.entries(coordinates).every(([key, nested]) =>
+      allowed.has(key) && typeof nested === "string" && nested.trim().length > 0
+    );
+}
+
+async function readBridgeBranchOutcome(
+  gameDir: string,
+  session: string,
+  handoff: NonNullable<BridgeBranchContext["handoff"]>,
+): Promise<BridgeBranchContext["outcome"]> {
+  const choiceId = handoff.coordinates?.choiceId;
+  if (!choiceId) return null;
+  let raw: string;
+  try {
+    raw = await readFile(
+      path.join(sessionDirectory(gameDir, session), "log.jsonl"),
+      "utf-8",
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const entries = raw.split(/\r?\n/).filter((line) => line.trim()).map((line) =>
+    JSON.parse(line) as Record<string, unknown>
+  );
+  const presentedAt = entries.findLastIndex((entry) => {
+    const output = entry.output;
+    if (!output || typeof output !== "object" || Array.isArray(output)) return false;
+    const choice = output as Record<string, unknown>;
+    return choice.type === "choice" && choice.choiceId === choiceId &&
+      (handoff.coordinates?.scriptId === undefined ||
+        choice.scriptId === handoff.coordinates.scriptId);
+  });
+  if (presentedAt < 0) return null;
+  const presented = entries[presentedAt]!.output as Record<string, unknown>;
+  for (let index = presentedAt + 1; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    const decision = entry.decision;
+    if (!decision || typeof decision !== "object" || Array.isArray(decision)) continue;
+    const selected = decision as Record<string, unknown>;
+    if (
+      selected.choiceId !== choiceId ||
+      typeof selected.optionId !== "string" ||
+      (handoff.coordinates?.scriptId !== undefined &&
+        selected.scriptId !== handoff.coordinates.scriptId) ||
+      (handoff.coordinates?.optionId !== undefined &&
+        selected.optionId !== handoff.coordinates.optionId)
+    ) continue;
+    const optionText = choiceOptionText(
+      presented,
+      selected.optionId,
+    );
+    return {
+      kind: "choice-selected",
+      ...(typeof selected.scriptId === "string" ? { scriptId: selected.scriptId } : {}),
+      choiceId,
+      optionId: selected.optionId,
+      ...(optionText ? { optionText } : {}),
+      ...(typeof entry.source === "string" ? { source: entry.source } : {}),
+      logEntry: index + 1,
+    };
+  }
+  return null;
+}
+
+function choiceOptionText(
+  choice: Record<string, unknown>,
+  optionId: string,
+): string | null {
+  if (!Array.isArray(choice.options)) return null;
+  const option = choice.options.find((candidate) =>
+    candidate && typeof candidate === "object" && !Array.isArray(candidate) &&
+    (candidate as Record<string, unknown>).id === optionId
+  ) as Record<string, unknown> | undefined;
+  return typeof option?.text === "string" ? option.text : null;
 }
 
 function revisionOf(state: unknown): string {
