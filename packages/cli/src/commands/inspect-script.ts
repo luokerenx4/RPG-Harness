@@ -1,4 +1,4 @@
-import path from "node:path";
+import { normalizeAuthoringSource } from "../authoring-source";
 import {
   buildPresetContext,
   cloneState,
@@ -72,7 +72,7 @@ export async function inspectScript(args: InspectScriptArgs): Promise<ScriptInsp
     .map((mod) => mod.id)
     .sort();
   const source = script.source
-    ? normalizeSource(args.gameDir, script.source)
+    ? normalizeAuthoringSource(args.gameDir, script.source)
     : null;
   let session: ScriptInspection["session"] = null;
 
@@ -128,9 +128,4 @@ export async function inspectScript(args: InspectScriptArgs): Promise<ScriptInsp
     },
     session,
   };
-}
-
-function normalizeSource(gameDir: string, source: string): string {
-  const relative = path.relative(path.resolve(gameDir), path.resolve(source));
-  return relative.startsWith("..") ? source : relative.split(path.sep).join("/");
 }

@@ -74,6 +74,8 @@ describe("AI development worklist", () => {
           sourceSession: "player",
         },
       });
+    expect(report.items.find((item) => item.kind === "choice-branch")?.target)
+      .toBe("scripts/ending.md");
     expect(report.items.find((item) => item.key === "report/pt-minor")?.operation)
       .toEqual({
         command: "inspect-report",
@@ -452,6 +454,7 @@ function storyReport(): ScriptCoverageReport {
       {
         id: "started",
         title: "Started",
+        source: "scripts/started.md",
         status: "started",
         completedSessions: [],
         staleSessions: [],
@@ -461,6 +464,7 @@ function storyReport(): ScriptCoverageReport {
       {
         id: "unseen",
         title: "Unseen",
+        source: "scripts/unseen.md",
         status: "uncovered",
         completedSessions: [],
         staleSessions: [],
@@ -498,6 +502,7 @@ function choiceReport(): ChoiceCoverageReport {
     workItems: [{
       key: "ending/coda/friends",
       scriptId: "ending",
+      source: "scripts/ending.md",
       choiceId: "coda",
       optionId: "friends",
       optionText: "Friends",

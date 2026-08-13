@@ -281,6 +281,7 @@ export function analyzeDevelopmentWorklist(input: {
         : script.status === "stale"
           ? `Re-verify edited script: ${script.title}`
         : `Reach uncovered script: ${script.title}`,
+      ...(script.source ? { target: script.source } : {}),
       detail: `${script.id} is ${script.status} in real session coverage`,
       operation: {
         command: "reach-script",
@@ -292,6 +293,7 @@ export function analyzeDevelopmentWorklist(input: {
       },
       coordinates: {
         scriptId: script.id,
+        ...(script.source ? { source: script.source } : {}),
         status: script.status,
         completedSessions: script.completedSessions,
         startedSessions: script.startedSessions,
@@ -307,6 +309,7 @@ export function analyzeDevelopmentWorklist(input: {
       priority: "P2",
       actionability: "executable",
       title: `Exercise choice branch: ${workItem.optionText}`,
+      ...(workItem.source ? { target: workItem.source } : {}),
       detail: `${workItem.choiceId}/${workItem.optionId} has an executable checkpoint but no selected evidence`,
       operation: {
         command: "cover",
@@ -321,6 +324,7 @@ export function analyzeDevelopmentWorklist(input: {
       },
       coordinates: {
         scriptId: workItem.scriptId,
+        ...(workItem.source ? { source: workItem.source } : {}),
         choiceId: workItem.choiceId,
         optionId: workItem.optionId,
         evidence: workItem.evidence,

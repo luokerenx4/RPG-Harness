@@ -17,6 +17,7 @@ import {
 import { access } from "node:fs/promises";
 import { createHash, randomInt } from "node:crypto";
 import path from "node:path";
+import { normalizeAuthoringSource } from "../authoring-source";
 import { loadGame } from "../loader";
 import { diffVisualLines } from "../presenters/visualSummary";
 import { collectAiPersonas } from "../test/personas";
@@ -599,7 +600,7 @@ export function collectAutoplaySourceTargets(
     if (!script?.source) return;
     targets.push({
       kind: "script",
-      file: authoringPath(gameDir, script.source),
+      file: normalizeAuthoringSource(gameDir, script.source),
       scriptId,
       ...details,
     });
@@ -646,7 +647,7 @@ export function collectAutoplaySourceTargets(
     if (!owner?.source) continue;
     targets.push({
       kind: "module-action",
-      file: authoringPath(gameDir, owner.source),
+      file: normalizeAuthoringSource(gameDir, owner.source),
       moduleId: owner.id,
       actionKind,
       activityId: activity.id,
@@ -678,17 +679,6 @@ function actionOwner(game: Game, actionKind: string) {
     Object.hasOwn(mod.actionHandlers ?? {}, actionKind)
   );
   return owners.length === 1 ? owners[0] : undefined;
-}
-
-function authoringPath(gameDir: string, source: string): string {
-  const normalizedGame = path.resolve(gameDir);
-  const normalizedSource = path.resolve(source);
-  const relativeToGame = path.relative(normalizedGame, normalizedSource);
-  const relative = path.isAbsolute(source) ||
-      (!relativeToGame.startsWith(`..${path.sep}`) && relativeToGame !== "..")
-    ? relativeToGame
-    : source;
-  return relative.split(path.sep).join(path.posix.sep);
 }
 
 export function summarizeDecisionPath(

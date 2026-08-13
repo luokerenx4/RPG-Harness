@@ -13,6 +13,7 @@ import {
 } from "@rpg-harness/engine";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
+import { normalizeAuthoringSource } from "../authoring-source";
 import { appendLog, loadSession, saveSession } from "../session";
 import {
   historicalActiveScriptCheckpoint,
@@ -215,7 +216,9 @@ export async function runReachScript(args: ReachScriptArgs): Promise<ReachScript
     target: {
       scriptId: script.id,
       title: script.title,
-      ...(script.source ? { source: script.source } : {}),
+      ...(script.source
+        ? { source: normalizeAuthoringSource(args.gameDir, script.source) }
+        : {}),
     },
     inputs: found ? foundAttempt.search.inputs : [],
     path: summarizeReachPath(found ? foundAttempt.search.inputs : []),

@@ -5,6 +5,7 @@ import { assertSessionName } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { listSessions, sessionDir } from "../session";
 import { sessionFamily } from "../session-lineage";
+import { normalizeAuthoringSource } from "../authoring-source";
 
 export type CoverageStatus =
   | "completed"
@@ -16,6 +17,7 @@ export type CoverageStatus =
 export interface ScriptCoverageRow {
   id: string;
   title: string;
+  source?: string;
   status: CoverageStatus;
   completedSessions: string[];
   staleSessions: string[];
@@ -95,13 +97,14 @@ export async function collectScriptCoverage(
       sessionErrors.push({ session, error: (error as Error).message });
     }
   }
-  return analyzeScriptCoverage(game, states, sessionErrors);
+  return analyzeScriptCoverage(game, states, sessionErrors, gameDir);
 }
 
 export function analyzeScriptCoverage(
   game: Game,
   states: Array<{ session: string; state: ComposedState }>,
   sessionErrors: Array<{ session: string; error: string }> = [],
+  gameDir?: string,
 ): ScriptCoverageReport {
   const scripts = game.scripts.map((script): ScriptCoverageRow => {
     const currentRevision = scriptRevision(script);
@@ -140,6 +143,13 @@ export function analyzeScriptCoverage(
     return {
       id: script.id,
       title: script.title,
+      ...(script.source
+        ? {
+            source: gameDir
+              ? normalizeAuthoringSource(gameDir, script.source)
+              : script.source,
+          }
+        : {}),
       status,
       completedSessions,
       staleSessions,

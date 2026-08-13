@@ -1,7 +1,7 @@
 import { assertSessionName, isSessionCheckpointRef } from "@rpg-harness/session-store";
 import { scriptRevision, type Condition, type Game } from "@rpg-harness/engine";
-import path from "node:path";
 import { loadGame } from "../loader";
+import { normalizeAuthoringSource } from "../authoring-source";
 import { listSessions } from "../session";
 import { readSessionLineage, sessionFamily } from "../session-lineage";
 import { readSessionLog, type LoggedStep } from "./fork";
@@ -42,6 +42,7 @@ export interface ChoiceCoverageRow {
 export interface ChoiceCoverageWorkItem {
   key: string;
   scriptId: string;
+  source?: string;
   choiceId: string;
   optionId: string;
   optionText: string;
@@ -306,6 +307,13 @@ export function analyzeChoiceCoverage(
   const authoredRevisions = new Map(
     authoredChoices.map((choice) => [choice.scriptId, choice.scriptRevision]),
   );
+  const authoredSources = new Map<string, string>(
+    authoredChoices.flatMap((choice) =>
+      choice.choiceId && choice.source
+        ? [[`${choice.scriptId}/${choice.choiceId}`, choice.source] as const]
+        : []
+    ),
+  );
   for (const { entries } of logs) {
     for (const entry of entries) {
       const output = asChoiceOutput(entry.output);
@@ -455,6 +463,9 @@ export function analyzeChoiceCoverage(
         ? [{
             key: `${choice.key}/${option.id}`,
             scriptId: choice.scriptId,
+            ...(authoredSources.get(choice.key)
+              ? { source: authoredSources.get(choice.key)! }
+              : {}),
             choiceId: choice.choiceId,
             optionId: option.id,
             optionText: option.text,
@@ -623,7 +634,7 @@ export function collectAuthoredChoices(game: Game, gameDir?: string): AuthoredCh
       ? undefined
       : gameDir === undefined
         ? script.source
-        : path.relative(gameDir, script.source).split(path.sep).join("/");
+        : normalizeAuthoringSource(gameDir, script.source);
     const optionIntents = beat.options.map((option) => ({
       ...(option.id ? { optionId: option.id } : {}),
       text: option.text,

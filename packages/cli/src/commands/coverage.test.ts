@@ -193,6 +193,7 @@ describe("story coverage", () => {
     const family = await collectScriptCoverage(gameDir, "player", true);
 
     expect(sourceOnly.scripts[0]?.status).toBe("uncovered");
+    expect(sourceOnly.scripts[0]?.source).toBe("scripts/scene.md");
     expect(family.sessions).toEqual(["child", "grandchild", "player"]);
     expect(family.scripts[0]).toMatchObject({
       status: "completed",
