@@ -8,6 +8,13 @@ requires:
     - { affection: { character: kasumi, min: 8 } }
     - { scriptCompleted: bond_kasumi_03 }
     - { switch: { name: road_kasumi_2_seen } }
+ai:
+  relatedActivityIds:
+    - bond:kasumi
+    - invite:kasumi
+    - depart:mt_houkyou
+    - move:mt_houkyou_stone_paths
+    - script:bond_kasumi_04
 ---
 
 昼下がり。山際の道。気づけば、霞より半歩先をお主が歩いていた。

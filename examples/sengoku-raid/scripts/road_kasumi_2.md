@@ -2,6 +2,11 @@
 id: road_kasumi_2
 title: 道中 ・ 霞 ・ 二
 characters: [kasumi]
+ai:
+  relatedActivityIds:
+    - invite:kasumi
+    - depart:mt_houkyou
+    - move:mt_houkyou_stone_paths
 ---
 
 :hide-cg

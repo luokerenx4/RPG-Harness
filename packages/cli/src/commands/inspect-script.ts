@@ -25,6 +25,7 @@ export interface ScriptInspection {
     characters: string[];
     cost: number | null;
     coverage: { ignore: true; reason?: string } | null;
+    ai: { relatedActivityIds: string[] } | null;
     requires: unknown | null;
     beats: Array<{ index: number; beat: Beat }>;
   };
@@ -117,6 +118,9 @@ export async function inspectScript(args: InspectScriptArgs): Promise<ScriptInsp
       characters: [...(script.characters ?? [])],
       cost: script.cost ?? null,
       coverage: script.coverage ?? null,
+      ai: script.ai
+        ? { relatedActivityIds: [...script.ai.relatedActivityIds] }
+        : null,
       requires: script.requires ?? null,
       beats: script.beats.map((beat, index) => ({ index, beat })),
     },

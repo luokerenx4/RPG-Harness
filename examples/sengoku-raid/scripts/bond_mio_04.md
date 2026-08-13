@@ -8,6 +8,13 @@ requires:
     - { affection: { character: mio, min: 8 } }
     - { scriptCompleted: bond_mio_03 }
     - { switch: { name: road_mio_2_seen } }
+ai:
+  relatedActivityIds:
+    - bond:mio
+    - invite:mio
+    - depart:sumida_river
+    - move:sumida_river_under_eaves
+    - script:bond_mio_04
 ---
 
 夜。宿の灯の下で、澪が文を書いていた。お主が入っても、珍しく筆を止めない。

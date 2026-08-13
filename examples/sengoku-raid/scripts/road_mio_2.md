@@ -2,6 +2,11 @@
 id: road_mio_2
 title: 道中 ・ 澪 ・ 二
 characters: [mio]
+ai:
+  relatedActivityIds:
+    - invite:mio
+    - depart:sumida_river
+    - move:sumida_river_under_eaves
 ---
 
 :hide-cg

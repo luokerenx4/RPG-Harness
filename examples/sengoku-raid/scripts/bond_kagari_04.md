@@ -8,6 +8,13 @@ requires:
     - { affection: { character: kagari, min: 8 } }
     - { scriptCompleted: bond_kagari_03 }
     - { switch: { name: road_kagari_2_seen } }
+ai:
+  relatedActivityIds:
+    - bond:kagari
+    - invite:kagari
+    - depart:kuro_swamp
+    - move:kuro_swamp_crossroads
+    - script:bond_kagari_04
 ---
 
 夜半。雨が屋根を叩いている。眠れずに縁側へ出ると、篝が先にいた。

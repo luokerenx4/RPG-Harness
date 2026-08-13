@@ -25,6 +25,9 @@ describe("read-only script inspection", () => {
 
     expect(inspection.script.id).toBe("scene");
     expect(inspection.script.source).toBe("scripts/scene.md");
+    expect(inspection.script.ai).toEqual({
+      relatedActivityIds: ["prepare", "script:scene"],
+    });
     expect(inspection.script.beats[1]).toMatchObject({
       index: 1,
       beat: {
@@ -103,6 +106,8 @@ async function temporaryInspectionGame(): Promise<string> {
       "id: scene",
       "title: Scene",
       "characters: []",
+      "ai:",
+      "  relatedActivityIds: [prepare, script:scene]",
       "---",
       "",
       "Placeholder",

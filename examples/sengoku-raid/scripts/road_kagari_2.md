@@ -2,6 +2,11 @@
 id: road_kagari_2
 title: 道中 ・ 篝 ・ 二
 characters: [kagari]
+ai:
+  relatedActivityIds:
+    - invite:kagari
+    - depart:kuro_swamp
+    - move:kuro_swamp_crossroads
 ---
 
 :hide-cg
