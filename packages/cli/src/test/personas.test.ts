@@ -117,6 +117,62 @@ describe("greedy persona progress tie-breaker", () => {
       personas.greedy!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
   });
+
+  test("uses authored economic intent instead of collapsing onto the first route", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "depart:kuro_swamp",
+        kind: "action",
+        title: "Swamp",
+        cost: 0,
+        available: true,
+        aiTags: ["cautious"],
+      },
+      {
+        id: "depart:sumida_river",
+        kind: "action",
+        title: "River",
+        cost: 0,
+        available: true,
+        aiTags: ["economic", "reward", "exploration"],
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = [
+      "depart:kuro_swamp",
+      "depart:sumida_river",
+    ];
+    await expect(
+      personas.greedy!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "depart:sumida_river" });
+  });
+
+  test("finishes an available ending before pursuing more profit", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "sell_material:oni_horn",
+        kind: "action",
+        title: "Sell",
+        cost: 0,
+        available: true,
+        aiTags: ["economic", "profit"],
+      },
+      {
+        id: "script:ending_pure_rite",
+        kind: "script",
+        title: "Ending",
+        cost: 0,
+        available: true,
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = [
+      "script:ending_pure_rite",
+    ];
+    await expect(
+      personas.greedy!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "script:ending_pure_rite" });
+  });
 });
 
 describe("charmer persona exploration", () => {
@@ -185,6 +241,33 @@ describe("charmer persona exploration", () => {
       personas.charmer!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
   });
+
+  test("finishes an available ending before pursuing another relationship", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "script:bond_mio_01",
+        kind: "script",
+        title: "Bond",
+        cost: 0,
+        available: true,
+        aiTags: ["social", "story"],
+      },
+      {
+        id: "script:ending_pure_rite",
+        kind: "script",
+        title: "Ending",
+        cost: 0,
+        available: true,
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = [
+      "script:ending_pure_rite",
+    ];
+    await expect(
+      personas.charmer!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "script:ending_pure_rite" });
+  });
 });
 
 describe("rude persona progression", () => {
@@ -235,6 +318,33 @@ describe("rude persona progression", () => {
     await expect(
       personas.rude!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "imbue:oni" });
+  });
+
+  test("finishes an available ending before seeking another risky route", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "depart:mt_houkyou",
+        kind: "action",
+        title: "Mountain",
+        cost: 0,
+        available: true,
+        aiTags: ["aggressive", "risky"],
+      },
+      {
+        id: "script:ending_oni_self",
+        kind: "script",
+        title: "Ending",
+        cost: 0,
+        available: true,
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = [
+      "script:ending_oni_self",
+    ];
+    await expect(
+      personas.rude!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "script:ending_oni_self" });
   });
 });
 

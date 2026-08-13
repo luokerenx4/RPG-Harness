@@ -763,6 +763,7 @@ function buildHubMenu(ctx: Ctx): Output {
       title: `戦利品を鍛冶師に売る（${total} 両）`,
       description: lootIds.map(([id, n]) => `${itemName(ctx, id)} ×${n}`).join("、"),
       category: "shop",
+      aiTags: ["economic", "profit"],
       cost: 0,
       available: true,
     });
@@ -783,6 +784,7 @@ function buildHubMenu(ctx: Ctx): Output {
       title: `${itemName(ctx, id)}を一つ売る（${value} 両）`,
       description: `所持 ${count}。鍛冶師は一度に一つだけ買い取る`,
       category: "shop",
+      aiTags: ["economic", "profit"],
       cost: 0,
       available: true,
     });
@@ -1028,6 +1030,13 @@ function buildHubMenu(ctx: Ctx): Output {
       title: `出立 — ${label}（難度 ${entry.difficulty ?? 1}）`,
       description: entry.description,
       category: "raid",
+      aiTags: chain === "sumida_river"
+        ? ["economic", "reward", "exploration"]
+        : chain === "mt_houkyou"
+          ? ["aggressive", "risky", "exploration"]
+          : chain === "hell_gate"
+            ? ["defiant", "story"]
+            : ["cautious", "familiar"],
       cost: 0,
       available: !retiredFromRaids && hpFull,
       lockedReason: retiredFromRaids

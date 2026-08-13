@@ -1,0 +1,26 @@
+name: 出立先が表示順ではなく経路の意味を公開する
+description: |
+  主目標に複数の等価な出立先が並んでも、AI は先頭要素を人格と誤認しては
+  ならない。隅田河は収益・探索、砲響山は攻勢・危険という作者意図を
+  GUI/Headless 共通の activity contract で公開する。
+state:
+  baseline:
+    completedScripts: [000_intro]
+  sengoku-raid:
+    raid: null
+inputs: []
+assertions:
+  - kind: activity
+    id: depart:sumida_river
+    available: true
+    aiTagsIncludes: reward
+  - kind: activity
+    id: depart:sumida_river
+    aiTagsIncludes: exploration
+  - kind: activity
+    id: depart:mt_houkyou
+    available: true
+    aiTagsIncludes: aggressive
+  - kind: activity
+    id: depart:mt_houkyou
+    aiTagsIncludes: risky

@@ -247,6 +247,16 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
   return null;
 }
 
+function pickEndingObjectiveActivity(
+  output: Extract<Output, { type: "hubMenu" }>,
+): Input | null {
+  const objective = pickObjectiveActivity(output);
+  return objective?.type === "doActivity" &&
+      objective.id.startsWith("script:ending_")
+    ? objective
+    : null;
+}
+
 function pickTaggedActivity(
   output: Extract<Output, { type: "hubMenu" }>,
   preferredTags: readonly string[],
@@ -291,6 +301,16 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const objectiveInput = pickObjectiveActivity(output);
+      const ending = pickEndingObjectiveActivity(output);
+      if (ending) return ending;
+      const semantic = pickTaggedActivity(output, [
+        "profit",
+        "economic",
+        "reward",
+        "exploration",
+      ]);
+      if (semantic) return semantic;
       const available = output.snapshot.activities.filter((a) => a.available);
       if (available.length === 0) return { type: "quit" };
       // Pick highest-scoring activity; first-wins on ties (hub order).
@@ -306,7 +326,6 @@ export const personas: Record<string, Persona> = {
       // Preserve greed as the primary policy, but let the public objective
       // break score ties. This avoids reversible zero-value toggles winning
       // forever merely because they appear earlier in the Hub.
-      const objectiveInput = pickObjectiveActivity(output);
       if (objectiveInput?.type === "doActivity") {
         const objectiveActivity = available.find(
           (activity) => activity.id === objectiveInput.id,
@@ -331,6 +350,8 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const ending = pickEndingObjectiveActivity(output);
+      if (ending) return ending;
       const available = output.snapshot.activities.filter((activity) => activity.available);
       const recommended = available.filter((activity) => activity.recommended);
       if (recommended.length > 0) {
@@ -361,6 +382,8 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const ending = pickEndingObjectiveActivity(output);
+      if (ending) return ending;
       const semantic = pickTaggedActivity(output, [
         "defiant",
         "aggressive",
