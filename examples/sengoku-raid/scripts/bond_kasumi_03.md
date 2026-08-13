@@ -6,6 +6,7 @@ requires:
   all:
     - { affection: { character: kasumi, min: 6 } }
     - { switch: { name: befriended_kasumi } }
+    - { scriptCompleted: bond_kasumi_02 }
 ---
 
 :bg assets/backgrounds/mountain-path-morning

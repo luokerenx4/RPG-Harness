@@ -4,7 +4,9 @@ title: 霞が伝授する——「早駆け」
 characters: [kasumi]
 bg: assets/backgrounds/inn-garden-dawn
 requires:
-  affection: { character: kasumi, min: 4 }
+  all:
+    - { affection: { character: kasumi, min: 4 } }
+    - { scriptCompleted: bond_kasumi_01 }
 ---
 
 夜明け前。霞が裏庭で何かを巻物に書いている。

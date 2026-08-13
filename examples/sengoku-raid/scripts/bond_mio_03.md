@@ -7,6 +7,7 @@ requires:
   all:
     - { affection: { character: mio, min: 6 } }
     - { switch: { name: befriended_mio } }
+    - { scriptCompleted: bond_mio_02 }
 ---
 
 :cg assets/cgs/bond-mio-03

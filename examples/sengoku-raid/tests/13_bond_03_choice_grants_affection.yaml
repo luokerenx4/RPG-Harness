@@ -10,6 +10,7 @@ state:
   baseline:
     completedScripts:
       - 000_intro
+      - bond_kasumi_02
     characters:
       kasumi:
         stats: { affection: 6 }

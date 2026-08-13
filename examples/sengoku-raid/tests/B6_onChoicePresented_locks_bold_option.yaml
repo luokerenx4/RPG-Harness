@@ -9,6 +9,7 @@ state:
   baseline:
     completedScripts:
       - 000_intro
+      - bond_kagari_02
     weapons:
       ancestor_yaodao:
         power: 6

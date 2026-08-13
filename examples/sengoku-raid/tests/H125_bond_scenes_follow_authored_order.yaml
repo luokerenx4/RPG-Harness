@@ -1,0 +1,50 @@
+name: all companion bond scenes expose their authored predecessor locks
+description: |
+  Affection and a safe return are not substitutes for story causality. GUI,
+  TUI, and Headless keep later bond scenes visible for planning, but an AI may
+  not learn a character's second lesson before hearing their first confession,
+  or enter the third scene before receiving that lesson.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    characters:
+      kagari: { stats: { affection: 10 } }
+      kasumi: { stats: { affection: 10 } }
+      mio: { stats: { affection: 10 } }
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    raid: null
+    companion: null
+    companionHp: 0
+inputs: []
+assertions:
+  - kind: activity
+    id: script:bond_kagari_02
+    present: true
+    available: false
+    lockedReasonIncludes: bond_kagari_01
+  - kind: activity
+    id: script:bond_kagari_03
+    present: true
+    available: false
+    lockedReasonIncludes: bond_kagari_02
+  - kind: activity
+    id: script:bond_kasumi_02
+    present: true
+    available: false
+    lockedReasonIncludes: bond_kasumi_01
+  - kind: activity
+    id: script:bond_kasumi_03
+    present: true
+    available: false
+    lockedReasonIncludes: bond_kasumi_02
+  - kind: activity
+    id: script:bond_mio_02
+    present: true
+    available: false
+    lockedReasonIncludes: bond_mio_01
+  - kind: activity
+    id: script:bond_mio_03
+    present: true
+    available: false
+    lockedReasonIncludes: bond_mio_02

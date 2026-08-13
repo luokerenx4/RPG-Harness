@@ -9,6 +9,7 @@ state:
   baseline:
     completedScripts:
       - 000_intro
+      - bond_mio_01
     characters:
       mio:
         affection: 4

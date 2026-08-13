@@ -9,6 +9,7 @@ state:
     completedScripts:
       - 000_intro
       - encounter_kasumi_first
+      - bond_kasumi_01
     characters:
       kasumi:
         affection: 4

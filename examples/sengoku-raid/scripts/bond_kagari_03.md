@@ -7,6 +7,7 @@ requires:
   all:
     - { affection: { character: kagari, min: 6 } }
     - { switch: { name: befriended_kagari } }
+    - { scriptCompleted: bond_kagari_02 }
 ---
 
 :cg assets/cgs/bond-kagari-03

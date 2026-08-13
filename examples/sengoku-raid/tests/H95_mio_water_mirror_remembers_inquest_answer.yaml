@@ -1,7 +1,7 @@
 name: Mio's shared water mirror remembers the player's first judgment
 state:
   baseline:
-    completedScripts: [000_intro, bond_mio_01]
+    completedScripts: [000_intro, bond_mio_01, bond_mio_02]
     variables: { mio_inquest_reply: second-death }
     switches: { befriended_mio: true }
     characters:

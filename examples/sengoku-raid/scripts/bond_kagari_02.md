@@ -4,7 +4,9 @@ title: 鎮魂法
 characters: [kagari]
 bg: assets/backgrounds/inn-garden-dawn
 requires:
-  affection: { character: kagari, min: 4 }
+  all:
+    - { affection: { character: kagari, min: 4 } }
+    - { scriptCompleted: bond_kagari_01 }
 defaultPortraits:
   - { characterId: kagari, emotion: default }
 ---

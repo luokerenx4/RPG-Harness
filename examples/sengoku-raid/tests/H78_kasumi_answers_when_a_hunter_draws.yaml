@@ -1,7 +1,7 @@
 name: Kasumi directly answers when a hunter takes up a blade
 state:
   baseline:
-    completedScripts: [000_intro]
+    completedScripts: [000_intro, bond_kasumi_02]
     characters:
       kasumi:
         stats: { affection: 6 }

@@ -10,6 +10,7 @@ state:
     completedScripts:
       - 000_intro
       - encounter_kagari_first
+      - bond_kagari_01
     characters:
       kagari:
         affection: 4

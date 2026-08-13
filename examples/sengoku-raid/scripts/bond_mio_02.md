@@ -4,7 +4,9 @@ title: 水鏡を授ける
 characters: [mio]
 bg: assets/backgrounds/sumida-shallows-predawn
 requires:
-  affection: { character: mio, min: 4 }
+  all:
+    - { affection: { character: mio, min: 4 } }
+    - { scriptCompleted: bond_mio_01 }
 ---
 
 夜明け前。隅田河の浅瀬。風がなく、水面は鏡のように凪いでいる。

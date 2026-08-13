@@ -1,7 +1,7 @@
 name: Kagari's sleep answer exposes the unlearned Chinkonho gate to every client
 state:
   baseline:
-    completedScripts: [000_intro]
+    completedScripts: [000_intro, bond_kagari_02]
     characters:
       kagari:
         stats: { affection: 6 }
