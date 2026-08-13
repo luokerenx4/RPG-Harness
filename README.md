@@ -30,10 +30,11 @@ of dropping back to the project picker.
 
 Autonomous runtime failures retain the attempted public input separately from
 the successful trace. The resulting coding issue records the failure phase,
-error type and stack, frozen Choice/Hub semantics, and the owning script or
-module action source. An action handler crash therefore points directly at its
-stable `activityId` / `actionKind` and editable module file instead of asking a
-later AI to infer the cause from prose or a terminal save.
+error type and stack, frozen Choice/Hub semantics, and the owning script,
+module action, or project persona source. Action-handler and decision-policy
+crashes therefore point directly at their stable `activityId` / `actionKind`
+or persona name and editable module file instead of asking a later AI to infer
+the cause from prose or a terminal save.
 
 Project TypeScript entrypoints are content-addressed together with their local
 dependency graph before evaluation. A long-running TUI or verifier therefore

@@ -82,11 +82,12 @@ export interface PlaytestEvidence {
 }
 
 export interface PlaytestSourceTarget {
-  kind: "module-action" | "script";
+  kind: "module-action" | "module-persona" | "script";
   file: string;
   moduleId?: string;
   actionKind?: string;
   activityId?: string;
+  persona?: string;
   scriptId?: string;
   scriptRevision?: string;
   choiceId?: string;

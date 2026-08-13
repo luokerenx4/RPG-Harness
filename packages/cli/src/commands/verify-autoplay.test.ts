@@ -17,6 +17,65 @@ afterEach(async () => {
 });
 
 describe("autoplay issue verification", () => {
+  test("resolves a project persona crash only after its repaired policy reaches gameEnd", async () => {
+    const gameDir = await temporaryRepairablePersonaErrorGame();
+    const original = await runAutoplay({
+      gameDir,
+      persona: "oracle",
+      verbose: false,
+      maxSteps: 10,
+      seed: 11,
+      session: "original-persona-error",
+      reportOnStop: true,
+    });
+    const report = original.report;
+    if (!report) throw new Error("fixture did not create a persona failure issue");
+    expect(report).toMatchObject({
+      status: "open",
+      target: "modules/persona.ts",
+      evidence: {
+        failure: { phase: "decision", message: "oracle lost the thread" },
+        sourceTargets: [{
+          kind: "module-persona",
+          file: "modules/persona.ts",
+          moduleId: "road-oracle",
+          persona: "oracle",
+        }],
+      },
+    });
+
+    await writeFile(path.join(gameDir, "modules", "persona.ts"), [
+      'import type { Module } from "@rpg-harness/engine";',
+      "const module: Module = {",
+      '  id: "road-oracle",',
+      "  aiPersonas: {",
+      '    oracle: { description: "Reads the road", decide: async () => ({ type: "next" }) },',
+      "  },",
+      "};",
+      "export default module;",
+      "",
+    ].join("\n"), "utf-8");
+    const verified = await verifyAutoplayReport({
+      gameDir,
+      reportId: report.id,
+      sessionPrefix: "persona-fixed",
+    });
+    expect(verified).toMatchObject({
+      status: "verified",
+      original: { stopReason: "error", persona: "oracle", seed: 11 },
+      result: { reason: "completed", ending: "road-found" },
+      resolvedReport: {
+        status: "resolved",
+        verification: {
+          kind: "autoplay",
+          originalStopReason: "error",
+          persona: "oracle",
+          result: { ending: "road-found" },
+        },
+      },
+    });
+  });
+
   test("resolves a module action crash only after causal replay reaches gameEnd", async () => {
     const gameDir = await temporaryRepairableActionErrorGame();
     const original = await runAutoplay({
@@ -347,6 +406,40 @@ async function temporaryRepairableActionErrorGame(): Promise<string> {
     '    yield* dispatchActivity(ctx, input.id);',
     '    yield { type: "gameEnd", endingId: "forge-fixed", reason: "handler completed" };',
     "  }",
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryRepairablePersonaErrorGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-verify-persona-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Repairable persona error",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/persona.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "persona.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "road-oracle",',
+    "  aiPersonas: {",
+    '    oracle: { description: "Reads the road", decide: async () => { throw new RangeError("oracle lost the thread"); } },',
+    "  },",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  yield { type: "narration", text: "A road waits." };',
+    '  yield { type: "gameEnd", endingId: "road-found", reason: "continued" };',
     "};",
     "export default run;",
     "",

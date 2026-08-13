@@ -678,10 +678,11 @@ export async function runAutoplay(
       result.stall ?? result.behaviorCycle,
       result.finalState.baseline.currentScriptId,
       result.failure,
+      args.persona,
     );
     const failureTarget = result.failure
       ? [...sourceTargets].reverse().find((target) =>
-          sourceTargetMatchesFailure(target, result.failure!)
+          sourceTargetMatchesFailure(target, result.failure!, args.persona)
         )
       : undefined;
     const terminalScriptTarget = sourceTargets.find((target) =>
@@ -697,6 +698,9 @@ export async function runAutoplay(
       severity: result.reason === "error" ? "blocker" : "major",
       title: result.failure?.activityDecision?.actionKind
           ? `Autoplay ${args.persona} failed in ${result.failure.activityDecision.actionKind}`
+          : result.failure?.phase === "decision" &&
+              failureTarget?.kind === "module-persona"
+          ? `Autoplay persona ${args.persona} failed while deciding`
           : result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
@@ -818,6 +822,7 @@ export function collectAutoplaySourceTargets(
   diagnostic?: Pick<StallDiagnostic, "firstTraceIndex" | "lastTraceIndex">,
   terminalScriptId?: string | null,
   failure?: LoopFailure,
+  personaName?: string,
 ): PlaytestSourceTarget[] {
   const firstIndex = diagnostic?.firstTraceIndex ?? Math.max(0, trace.length - 20);
   const lastIndex = diagnostic?.lastTraceIndex ?? trace.length - 1;
@@ -917,6 +922,17 @@ export function collectAutoplaySourceTargets(
       }
     }
   }
+  if (failure?.phase === "decision" && personaName) {
+    const owner = personaOwner(game, personaName);
+    if (owner?.source) {
+      targets.push({
+        kind: "module-persona",
+        file: normalizeAuthoringSource(gameDir, owner.source),
+        moduleId: owner.id,
+        persona: personaName,
+      });
+    }
+  }
   addScript(terminalScriptId ?? undefined);
 
   const unique = new Map<string, PlaytestSourceTarget>();
@@ -945,10 +961,20 @@ function actionOwner(game: Game, actionKind: string) {
   return owners.length === 1 ? owners[0] : undefined;
 }
 
+function personaOwner(game: Game, personaName: string) {
+  return game.modules?.find((mod) =>
+    Object.hasOwn(mod.aiPersonas ?? {}, personaName)
+  );
+}
+
 function sourceTargetMatchesFailure(
   target: PlaytestSourceTarget,
   failure: LoopFailure,
+  personaName: string,
 ): boolean {
+  if (target.kind === "module-persona") {
+    return failure.phase === "decision" && target.persona === personaName;
+  }
   if (target.kind === "module-action" && failure.activityDecision) {
     return target.actionKind === failure.activityDecision.actionKind &&
       target.activityId === failure.activityDecision.activityId;

@@ -382,6 +382,40 @@ describe("autoplay semantic decision paths", () => {
       file: "scripts/route.md",
       scriptId: "route",
     }]);
+
+    const personaGame = {
+      ...game,
+      modules: [{
+        id: "raid",
+        source: "modules/raid.ts",
+        aiPersonas: {
+          delver: {
+            description: "Explore deeply",
+            decide: async () => null,
+          },
+        },
+      }],
+    };
+    expect(collectAutoplaySourceTargets(
+      gameDir,
+      personaGame,
+      [],
+      undefined,
+      null,
+      {
+        phase: "decision",
+        name: "RangeError",
+        message: "policy exhausted",
+        input: null,
+        output: { type: "narration", text: "Choose" },
+      },
+      "delver",
+    )).toEqual([{
+      kind: "module-persona",
+      file: "modules/raid.ts",
+      moduleId: "raid",
+      persona: "delver",
+    }]);
   });
 
   test("uses the terminal save cursor when a narration has no inline script id", () => {
@@ -618,6 +652,44 @@ describe("autoplay autonomous development lane", () => {
       }),
     });
     expect(JSON.stringify(compactAutoplaySummary(summary))).not.toContain("stack");
+  });
+
+  test("turns a project persona crash into a module-owned coding target", async () => {
+    const gameDir = await temporaryThrowingPersonaGame();
+    const summary = await runAutoplay({
+      gameDir,
+      persona: "oracle",
+      verbose: false,
+      maxSteps: 10,
+      seed: 11,
+      session: "ai-persona-error",
+      reportOnStop: true,
+    });
+
+    expect(summary).toMatchObject({
+      reason: "error",
+      error: "oracle lost the thread",
+      failure: {
+        phase: "decision",
+        name: "RangeError",
+        message: "oracle lost the thread",
+        input: null,
+        output: { type: "narration", text: "A road waits." },
+      },
+      report: {
+        severity: "blocker",
+        title: "Autoplay persona oracle failed while deciding",
+        target: "modules/persona.ts",
+        evidence: {
+          sourceTargets: [{
+            kind: "module-persona",
+            file: "modules/persona.ts",
+            moduleId: "road-oracle",
+            persona: "oracle",
+          }],
+        },
+      },
+    });
   });
 
   test("reports repeated behavior whose state counter masks an exact stall", async () => {
@@ -1199,6 +1271,40 @@ async function temporaryThrowingActionGame(): Promise<string> {
     "  ctx.state.runtime.lastHubActivities = [activity];",
     '  const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [activity] } };',
     '  if (input.type === "doActivity") yield* dispatchActivity(ctx, input.id);',
+    "};",
+    "export default run;",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryThrowingPersonaGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-autoplay-persona-error-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Autoplay persona error test",
+    "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/persona.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "persona.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const module: Module = {",
+    '  id: "road-oracle",',
+    "  aiPersonas: {",
+    '    oracle: { description: "Reads the road", decide: async () => { throw new RangeError("oracle lost the thread"); } },',
+    "  },",
+    "};",
+    "export default module;",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* () {",
+    '  yield { type: "narration", text: "A road waits." };',
+    '  yield { type: "gameEnd", endingId: "road-found", reason: "continued" };',
     "};",
     "export default run;",
     "",
