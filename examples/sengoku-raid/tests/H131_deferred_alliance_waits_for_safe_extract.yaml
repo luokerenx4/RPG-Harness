@@ -1,0 +1,51 @@
+name: a deferred alliance scene waits until the raid safely extracts
+description: |
+  Recovering a fired trigger must not interrupt a live expedition. The scene
+  remains persisted while the raid is active, then claims currentScriptId as
+  part of the successful extraction transaction.
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, letter_03_choice]
+    currentMapId: kuro_swamp_shrine
+    switches:
+      befriended_kagari: true
+      befriended_kasumi: true
+      befriended_mio: true
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 20
+  runtime:
+    firedTriggers:
+      - letter_01_dispatch
+      - letter_02_dispatch
+      - letter_03_dispatch
+      - three_flowers_alliance
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    companion: null
+    companionHp: 0
+    raid:
+      chain: kuro_swamp
+      entryMapId: kuro_swamp_edge
+      turnsTaken: 3
+      pendingLoot: {}
+      visited:
+        kuro_swamp_shrine:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: false
+          pendingLoot: {}
+inputs:
+  - { type: doActivity, id: extract }
+assertions:
+  - kind: state
+    path: sengoku-raid.raid
+    eq: null
+  - kind: state
+    path: baseline.currentScriptId
+    eq: three_flowers_alliance
+  - kind: state
+    path: sengoku-raid.pendingScripts
+    eq: []

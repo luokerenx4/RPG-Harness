@@ -198,11 +198,17 @@ interface RaidModuleState {
   // for the first time, and by onLabelEnter for letter_03 endings.
   // Duplicates are filtered at append time.
   achievementLog: string[];
+  // Once-only triggers can fire while another script owns currentScriptId.
+  // Persist their payloads until the current script/action completes so the
+  // authored scene is never lost merely because two milestones coincided.
+  pendingScripts: string[];
 }
 
 function moduleState(ctx: Ctx): RaidModuleState {
   const s = ctx.state[MODULE_ID] as RaidModuleState | undefined;
   if (!s) throw new Error(`${MODULE_ID}: module state missing`);
+  // Live saves from before deferred trigger delivery had no queue.
+  s.pendingScripts ??= [];
   return s;
 }
 
@@ -386,6 +392,26 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         relatedActivityIds = executableProgressActivityIds;
       } else if (available(`invite:${missing.id}`)) {
         relatedActivityIds = [`invite:${missing.id}`];
+      } else if (
+        switches.mio_inspection_duty === true &&
+        missing.id !== "mio"
+      ) {
+        // Mio's authored court assignment locks every other companion. The
+        // alliance objective must expose the prerequisite route that ends her
+        // inspection instead of pointing at an endlessly repeatable gift for
+        // the companion who is currently impossible to invite.
+        const availableMioBond = activities.find((activity) =>
+          activity.available && activity.id.startsWith("script:bond_mio_")
+        )?.id;
+        if (availableMioBond) {
+          relatedActivityIds = [availableMioBond];
+        } else if (m.companion === "mio") {
+          relatedActivityIds = executableProgressActivityIds;
+        } else if (available("invite:mio")) {
+          relatedActivityIds = ["invite:mio"];
+        } else if (available("bond:mio")) {
+          relatedActivityIds = ["bond:mio"];
+        }
       } else if (available(`bond:${missing.id}`)) {
         relatedActivityIds = [`bond:${missing.id}`];
       } else {
@@ -3049,16 +3075,36 @@ const dismissHandler: ActionHandler = (ctx) => {
 // Triggers: HP <= 0 or spectral >= 100 during a raid → failure
 // ============================================================================
 
-// Queue a letter script — but only when we're safely in the hub between
-// scripts. If the player is mid-script (very rare; only if a trigger
-// somehow fires during a script's effects block), the chapter advance
-// still happens via the delta below, and onHubBuild can show a "未読の
-// 文" hint until the next hub cycle. The next time `currentScriptId`
-// becomes null in the run loop, the letter will queue.
+// Promote-or-defer a milestone script. Triggers are once-only, so silently
+// dropping a payload while another script is active would make that scene
+// permanently unreachable.
 function queueLetterIfHub(ctx: PresetContext, scriptId: string): void {
-  if (ctx.state.baseline.currentScriptId === null) {
+  const m = moduleState(ctx);
+  if (
+    ctx.state.baseline.currentScriptId === null &&
+    m.raid === null
+  ) {
     ctx.state.baseline.currentScriptId = scriptId;
     ctx.state.baseline.beatIndex = 0;
+    return;
+  }
+  if (ctx.state.baseline.currentScriptId === scriptId) return;
+  if (!m.pendingScripts.includes(scriptId)) {
+    m.pendingScripts.push(scriptId);
+  }
+}
+
+function drainPendingScript(ctx: PresetContext): void {
+  if (ctx.state.baseline.currentScriptId !== null) return;
+  const m = moduleState(ctx);
+  if (m.raid !== null) return;
+  while (m.pendingScripts.length > 0) {
+    const next = m.pendingScripts.shift()!;
+    if (ctx.state.baseline.scripts[next]?.completed === true) continue;
+    if (!ctx.scriptMap.has(next)) continue;
+    ctx.state.baseline.currentScriptId = next;
+    ctx.state.baseline.beatIndex = 0;
+    return;
   }
 }
 
@@ -3495,6 +3541,7 @@ const raidModule: Module = {
     companionHp: 0,
     pulsePending: null,
     achievementLog: [],
+    pendingScripts: [],
   }),
 
   // Action handler kinds the module supplies. Engine namespaces them as
@@ -3662,6 +3709,15 @@ const raidModule: Module = {
       ctx.state.baseline.currentScriptId = "000_intro";
       ctx.state.baseline.beatIndex = 0;
     }
+    // Recover saves produced by the old fire-and-forget trigger delivery:
+    // fired proves the composite milestone happened, while an incomplete
+    // alliance script proves its payload never reached the player.
+    if (
+      ctx.state.runtime.firedTriggers.includes("three_flowers_alliance") &&
+      ctx.state.baseline.scripts.three_flowers_alliance?.completed !== true
+    ) {
+      queueLetterIfHub(ctx, "three_flowers_alliance");
+    }
   },
 
   triggers,
@@ -3677,6 +3733,10 @@ const raidModule: Module = {
         `——— 公儀御沙汰 ———`,
       );
     }
+  },
+
+  onActionComplete: (ctx) => {
+    drainPendingScript(ctx);
   },
 
   // onScriptSelect (first-wins): when the player picks the generic
@@ -3776,6 +3836,7 @@ const raidModule: Module = {
     if (scriptId.startsWith("intel_briefing_")) {
       ctx.state.baseline.variables.intel_active = "";
     }
+    drainPendingScript(ctx);
   },
 
   // Letter 02 is an official inspection order, so every reply accepts the

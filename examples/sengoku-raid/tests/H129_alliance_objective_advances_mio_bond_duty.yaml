@@ -1,0 +1,52 @@
+name: alliance objective advances Mio's bond while court duty is active
+description: |
+  Once Mio is accompanying the player during her court inspection, an
+  available authored bond scene is the next causal step toward ending that
+  duty. The alliance objective must select it before generic repeatable raid
+  progress, or completionist play can raid forever without advancing the
+  inspection story.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+      - road_mio
+      - road_mio_2
+    switches:
+      chose_court_defy: true
+      mio_met: true
+      mio_inspection_duty: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      kagari:
+        stats: { affection: 100 }
+      mio:
+        stats: { affection: 9 }
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari, mio]
+    companion: mio
+    companionHp: 25
+    raid: null
+    pulsePending: null
+inputs: []
+assertions:
+  - kind: activity
+    id: script:bond_mio_01
+    available: true
+  - kind: objective
+    id: three_flowers_alliance
+    status: active
+    titleIncludes: 篝と生還する
+    relatedActivityIncludes: script:bond_mio_01
+    relatedActivityExcludes: depart:kuro_swamp

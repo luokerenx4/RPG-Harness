@@ -1,0 +1,40 @@
+name: a fired but undelivered alliance trigger is recovered
+description: |
+  Older saves could mark the once-only three-flowers trigger fired while a
+  different script occupied currentScriptId, permanently dropping the scene.
+  Session migration must recover that exact causal state instead of leaving
+  the public mastery objective active forever.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+    switches:
+      befriended_kagari: true
+      befriended_kasumi: true
+      befriended_mio: true
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 20
+  runtime:
+    firedTriggers:
+      - letter_01_dispatch
+      - letter_02_dispatch
+      - letter_03_dispatch
+      - three_flowers_alliance
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    companion: null
+    companionHp: 0
+    raid: null
+inputs: []
+assertions:
+  - kind: state
+    path: baseline.currentScriptId
+    eq: three_flowers_alliance
+  - kind: state
+    path: sengoku-raid.pendingScripts
+    eq: []

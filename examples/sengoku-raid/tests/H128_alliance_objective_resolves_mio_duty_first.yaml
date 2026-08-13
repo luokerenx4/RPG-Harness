@@ -1,0 +1,59 @@
+name: alliance objective resolves Mio's court duty before a locked companion
+description: |
+  Mio's active inspection forbids replacing her with another companion. When
+  the alliance still needs Kagari, the public objective must therefore guide
+  GUI and Headless players through Mio's prerequisite route first; repeatedly
+  gifting Kagari cannot make the locked invitation executable.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - bond_kagari_01
+      - bond_kagari_02
+      - bond_mio_01
+      - bond_mio_02
+      - bond_mio_03
+      - letter_03_choice
+    switches:
+      chose_court_defy: true
+      befriended_mio: true
+      mio_met: true
+      mio_inspection_duty: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      kagari:
+        stats: { affection: 100 }
+      mio:
+        stats: { affection: 9 }
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari, mio]
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+inputs: []
+assertions:
+  - kind: activity
+    id: invite:kagari
+    available: false
+    lockedReasonIncludes: 公儀
+  - kind: activity
+    id: invite:mio
+    available: true
+  - kind: objective
+    id: three_flowers_alliance
+    status: active
+    titleIncludes: 篝と生還する
+    relatedActivityIncludes: invite:mio
+    relatedActivityExcludes: bond:kagari
