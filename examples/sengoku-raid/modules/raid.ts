@@ -1063,6 +1063,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       title: `浄の脈に流す（威力 +1、霊体化触発率 −0.2%）`,
       description: `「鎮魂」の脈絡。次の戦闘で霊体化暴走が起きにくくなる`,
       category: "spirit",
+      aiTags: ["cautious", "loyal"],
       cost: 0,
       available: true,
       forecast: {
@@ -1096,6 +1097,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       title: `鬼の脈に流す（威力 +${Math.max(3, Math.floor(absorb / 2))}、霊体化 +3）`,
       description: `「喰らう」の脈絡。刀が跳ね上がる代償に、お主の身体も鬼に近づく`,
       category: "spirit",
+      aiTags: ["aggressive", "defiant", "risky"],
       cost: 0,
       available: true,
       forecast: {
@@ -1129,6 +1131,7 @@ function buildRaidMenu(ctx: Ctx): Output {
       title: `凡の脈に流す（威力 +2、副作用なし）`,
       description: `「整える」の脈絡。穏当に育てる道`,
       category: "spirit",
+      aiTags: ["independent", "restrained"],
       cost: 0,
       available: true,
       forecast: {

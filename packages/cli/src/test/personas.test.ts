@@ -210,6 +210,32 @@ describe("rude persona progression", () => {
       personas.rude!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
   });
+
+  test("commits to authored defiant activity intent before a neutral objective", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities = [
+      {
+        id: "imbue:pure",
+        kind: "action",
+        title: "Pure",
+        cost: 0,
+        available: true,
+        aiTags: ["cautious", "loyal"],
+      },
+      {
+        id: "imbue:oni",
+        kind: "action",
+        title: "Oni",
+        cost: 0,
+        available: true,
+        aiTags: ["aggressive", "defiant", "risky"],
+      },
+    ];
+    output.snapshot.objectives![0]!.relatedActivityIds = ["imbue:pure", "imbue:oni"];
+    await expect(
+      personas.rude!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "imbue:oni" });
+  });
 });
 
 function objectiveHub(): Extract<Output, { type: "hubMenu" }> {

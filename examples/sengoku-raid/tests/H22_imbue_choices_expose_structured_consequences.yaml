@@ -27,6 +27,9 @@ inputs: []
 assertions:
   - kind: activity
     id: imbue:pure
+    aiTagsIncludes: loyal
+  - kind: activity
+    id: imbue:pure
     forecastMetric: weapon_power_delta
     metricValue: 1
   - kind: activity
@@ -35,12 +38,18 @@ assertions:
     metricValue: -1
   - kind: activity
     id: imbue:oni
+    aiTagsIncludes: defiant
+  - kind: activity
+    id: imbue:oni
     forecastMetric: weapon_power_delta
     metricValue: 4
   - kind: activity
     id: imbue:oni
     forecastMetric: spectral_delta
     metricValue: 3
+  - kind: activity
+    id: imbue:mundane
+    aiTagsIncludes: independent
   - kind: activity
     id: imbue:mundane
     forecastMetric: weapon_power_delta

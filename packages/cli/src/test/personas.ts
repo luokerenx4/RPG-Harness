@@ -361,6 +361,14 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
+      const semantic = pickTaggedActivity(output, [
+        "defiant",
+        "aggressive",
+        "risky",
+        "independent",
+        "restrained",
+      ]);
+      if (semantic) return semantic;
       const objective = pickObjectiveActivity(output);
       if (objective) return objective;
       return pickActivity(output, (acts) => {
