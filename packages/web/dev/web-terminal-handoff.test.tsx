@@ -3,8 +3,24 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
 import { DevelopmentBadge, StageView } from "../src/WebPlayScreen";
+import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
+  test("dispatches stable engine inputs from every interactive GUI surface", () => {
+    expect(runWebQualitySurfaceCheck()).toMatchObject({
+      schemaVersion: 1,
+      id: "web-input-contract",
+      status: "passed",
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      interactions: [
+        { surface: "narration", input: { type: "next" } },
+        { surface: "choice", input: { type: "choose", choiceId: "route", optionId: "friends" } },
+        { surface: "hub-activity", input: { type: "doActivity", id: "invite:kasumi" } },
+        { surface: "script-select", input: { type: "select", scriptId: "ending" } },
+      ],
+    });
+  });
+
   test("shows the authored title and stable ending id from Headless gameEnd", () => {
     const game = {
       scripts: [{ id: "ending_oni_self", title: "鬼の器" }],

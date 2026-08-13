@@ -320,10 +320,13 @@ slice. The source player save is never written.
 Before `--until-clean` returns clean, it runs the exact `game.yaml ai_audit`
 acceptance matrix from a seeded fresh game. A passing verdict becomes a
 immutable content-addressed certificate under `.rpg-harness/evidence/quality/`, binding
-the game behavior files, local Headless engine/parser/CLI implementation, audit
-policy, personas, budgets, and seed. Repeating the same clean convergence
+the game behavior files, local Headless engine/parser/CLI implementation, Web
+GUI/input bridge, audit policy, personas, budgets, and seed. Repeating the same clean convergence
 reuses that certificate without creating another set of audit sessions; any
 bound source edit changes the input revision and reruns the matrix.
+Certificate issuance also executes the current React controls and records their
+stable `next`, `choose`, `doActivity`, and `select` inputs, so a Headless-only
+pass cannot certify a broken GUI dispatch surface.
 `--force-audit` deliberately bypasses a matching certificate.
 During local Web development the same compact project status is bridged into a
 read-only HUD badge beside the shared-session label. Players can see pending

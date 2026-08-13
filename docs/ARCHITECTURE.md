@@ -138,12 +138,17 @@ This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.
 The final `sweep --until-clean` acceptance is also persisted as a project
 quality certificate. Its input revision covers authored behavior plus the
-Headless engine, parser, session-store, CLI evaluator, and exact matrix inputs.
+Headless engine, parser, session-store, CLI evaluator, Web GUI/input bridge,
+and exact matrix inputs.
+Issuance also executes the current React controls for narration, stable choices,
+hub activities, and script selection. Their renderer-neutral `Input` evidence is
+content-addressed inside the certificate; a Headless-only pass cannot mint green
+status when the GUI dispatch contract is broken.
 It also records the Bun/Node/platform/architecture execution identity in the
 input digest, so a local certificate is never silently promoted across unlike
 runtimes.
 Consequently an unchanged clean loop is cheap and creates no new lane sessions,
-while either a game edit or evaluator edit invalidates the verdict instead of
+while either a game, Headless evaluator, or GUI evaluator edit invalidates the verdict instead of
 silently inheriting green status. The certificate is a local derived artifact;
 `--force-audit` provides an explicit full rerun when environmental validation is
 more important than reuse.

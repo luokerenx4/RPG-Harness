@@ -195,6 +195,22 @@ describe("Web development session bridge", () => {
       root,
     )).toEqual({ scope: "all" });
     expect(developmentStatusInvalidation(
+      path.resolve("/repo/packages/web/src/WebPlayScreen.tsx"),
+      root,
+    )).toEqual({ scope: "all" });
+    expect(developmentStatusInvalidation(
+      path.resolve("/repo/packages/web/dev/session-bridge.ts"),
+      root,
+    )).toEqual({ scope: "all" });
+    expect(developmentStatusInvalidation(
+      path.resolve("/repo/packages/web/vite.config.ts"),
+      root,
+    )).toEqual({ scope: "all" });
+    expect(developmentStatusInvalidation(
+      path.resolve("/repo/packages/web/dist/index.html"),
+      root,
+    )).toBeNull();
+    expect(developmentStatusInvalidation(
       path.resolve("/repo/README.md"),
       root,
     )).toBeNull();
@@ -215,6 +231,11 @@ describe("Web development session bridge", () => {
       "/repo/packages/frontend-core/src",
       "/repo/packages/parser/src",
       "/repo/packages/session-store/src",
+      "/repo/packages/web/src",
+      "/repo/packages/web/dev",
+      "/repo/packages/web/vite.config.ts",
+      "/repo/packages/web/package.json",
+      "/repo/packages/web/index.html",
     ]));
   });
 });

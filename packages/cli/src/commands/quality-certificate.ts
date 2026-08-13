@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { AiAuditConfig } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
 import type { ProjectQualityAuditSummary } from "./sweep";
@@ -14,12 +16,13 @@ export interface QualityAuditInputs {
 }
 
 export interface QualityAuditCertificate {
-  schemaVersion: 1;
+  schemaVersion: 2;
   revision: string;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
   audit: ProjectQualityAuditSummary;
+  surfaces: QualitySurfaceEvidence[];
 }
 
 export interface CurrentQualityAuditCertificate {
@@ -28,12 +31,38 @@ export interface CurrentQualityAuditCertificate {
 }
 
 interface QualityAuditCertificatePayload {
-  schemaVersion: 1;
+  schemaVersion: 2;
   inputRevision: string;
   createdAt: string;
   sessionPrefix: string;
   audit: ProjectQualityAuditSummary;
+  surfaces: QualitySurfaceEvidence[];
 }
+
+export interface QualitySurfaceEvidence {
+  schemaVersion: 1;
+  id: "web-input-contract";
+  status: "passed";
+  revision: string;
+  interactions: Array<{ surface: string; input: unknown }>;
+}
+
+const execFileAsync = promisify(execFile);
+const REQUIRED_WEB_INTERACTIONS = [
+  { surface: "narration", input: { type: "next" } },
+  {
+    surface: "choice",
+    input: { type: "choose", choiceId: "route", optionId: "friends" },
+  },
+  {
+    surface: "hub-activity",
+    input: { type: "doActivity", id: "invite:kasumi" },
+  },
+  {
+    surface: "script-select",
+    input: { type: "select", scriptId: "ending" },
+  },
+] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
   ".avif",
@@ -63,28 +92,45 @@ const SOURCE_BINARY_EXTENSIONS = new Set([
 export async function qualityAuditInputRevision(
   gameDir: string,
   inputs: QualityAuditInputs,
+  options: { workspaceRoot?: string } = {},
 ): Promise<string> {
+  const workspaceRoot = options.workspaceRoot ??
+    path.resolve(import.meta.dirname, "../../../..");
   const sourceRoots = [
     { label: "game", root: path.resolve(gameDir), game: true },
-    { label: "cli", root: path.resolve(import.meta.dirname, ".."), game: false },
+    {
+      label: "cli",
+      root: path.join(workspaceRoot, "packages", "cli", "src"),
+      game: false,
+    },
     {
       label: "engine",
-      root: path.resolve(import.meta.dirname, "../../../engine/src"),
+      root: path.join(workspaceRoot, "packages", "engine", "src"),
       game: false,
     },
     {
       label: "parser",
-      root: path.resolve(import.meta.dirname, "../../../parser/src"),
+      root: path.join(workspaceRoot, "packages", "parser", "src"),
       game: false,
     },
     {
       label: "frontend-core",
-      root: path.resolve(import.meta.dirname, "../../../frontend-core/src"),
+      root: path.join(workspaceRoot, "packages", "frontend-core", "src"),
       game: false,
     },
     {
       label: "session-store",
-      root: path.resolve(import.meta.dirname, "../../../session-store/src"),
+      root: path.join(workspaceRoot, "packages", "session-store", "src"),
+      game: false,
+    },
+    {
+      label: "web",
+      root: path.join(workspaceRoot, "packages", "web", "src"),
+      game: false,
+    },
+    {
+      label: "web-dev",
+      root: path.join(workspaceRoot, "packages", "web", "dev"),
       game: false,
     },
   ];
@@ -99,7 +145,6 @@ export async function qualityAuditInputRevision(
       });
     }
   }
-  const workspaceRoot = path.resolve(import.meta.dirname, "../../../..");
   for (const relative of [
     "bun.lock",
     "package.json",
@@ -109,6 +154,9 @@ export async function qualityAuditInputRevision(
     "packages/frontend-core/package.json",
     "packages/parser/package.json",
     "packages/session-store/package.json",
+    "packages/web/package.json",
+    "packages/web/vite.config.ts",
+    "packages/web/index.html",
   ]) {
     const content = await readFile(path.join(workspaceRoot, relative));
     files.push({
@@ -148,7 +196,7 @@ export async function readQualityAuditCertificate(
   }
   if (
     !isRecord(reference) ||
-    reference.schemaVersion !== 1 ||
+    reference.schemaVersion !== 2 ||
     reference.inputRevision !== inputRevision ||
     !isSha256(reference.certificateRevision)
   ) return null;
@@ -165,13 +213,14 @@ export async function readQualityAuditCertificate(
     }
     throw error;
   }
-  if (!isRecord(value) || value.schemaVersion !== 1) return null;
+  if (!isRecord(value) || value.schemaVersion !== 2) return null;
   const certificate = value as unknown as QualityAuditCertificate;
   if (
     certificate.inputRevision !== inputRevision ||
     !isSha256(certificate.revision) ||
     certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
-    certificate.audit?.qualityGate?.status !== "passed"
+    certificate.audit?.qualityGate?.status !== "passed" ||
+    !hasRequiredQualitySurfaces(certificate.surfaces)
   ) return null;
   return { certificate, file };
 }
@@ -207,13 +256,14 @@ export async function findCurrentQualityAuditCertificate(
     } catch {
       continue;
     }
-    if (!isRecord(value) || value.schemaVersion !== 1) continue;
+    if (!isRecord(value) || value.schemaVersion !== 2) continue;
     const certificate = value as unknown as QualityAuditCertificate;
     const filenameRevision = entry.slice(0, -".json".length);
     if (
       certificate.revision !== filenameRevision ||
       certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
-      certificate.audit?.qualityGate?.status !== "passed"
+      certificate.audit?.qualityGate?.status !== "passed" ||
+      !hasRequiredQualitySurfaces(certificate.surfaces)
     ) continue;
     const policy = certificate.audit.qualityGate.policy;
     const personas = certificate.audit.lanes.map((lane) => lane.persona);
@@ -256,12 +306,14 @@ export async function writeQualityAuditCertificate(
   if (args.audit.qualityGate?.status !== "passed") {
     throw new Error("Only a passed project audit can be certified");
   }
+  const surfaces = await runQualitySurfaceChecks();
   const payload: QualityAuditCertificatePayload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     inputRevision: args.inputRevision,
     createdAt: new Date().toISOString(),
     sessionPrefix: args.sessionPrefix,
     audit: args.audit,
+    surfaces,
   };
   const certificate: QualityAuditCertificate = {
     ...payload,
@@ -276,11 +328,57 @@ export async function writeQualityAuditCertificate(
   );
   await mkdir(path.dirname(referenceFile), { recursive: true });
   await writeJsonAtomically(referenceFile, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     inputRevision: args.inputRevision,
     certificateRevision: certificate.revision,
   });
   return { certificate, file };
+}
+
+export async function runQualitySurfaceChecks(
+  workspaceRoot = path.resolve(import.meta.dirname, "../../../.."),
+): Promise<QualitySurfaceEvidence[]> {
+  const checker = path.join(
+    workspaceRoot,
+    "packages",
+    "web",
+    "dev",
+    "quality-surface-check.tsx",
+  );
+  const { stdout } = await execFileAsync("bun", [checker], {
+    maxBuffer: 1024 * 1024,
+  });
+  let value: unknown;
+  try {
+    value = JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(
+      `Web quality surface check returned invalid JSON: ${(error as Error).message}`,
+    );
+  }
+  if (!isQualitySurfaceEvidence(value)) {
+    throw new Error("Web quality surface check did not return passing evidence");
+  }
+  return [value];
+}
+
+function hasRequiredQualitySurfaces(
+  surfaces: unknown,
+): surfaces is QualitySurfaceEvidence[] {
+  return Array.isArray(surfaces) && surfaces.length === 1 &&
+    isQualitySurfaceEvidence(surfaces[0]);
+}
+
+function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
+  if (!(isRecord(value) &&
+    value.schemaVersion === 1 &&
+    value.id === "web-input-contract" &&
+    value.status === "passed" &&
+    isSha256(value.revision) &&
+    Array.isArray(value.interactions))) return false;
+  const serialized = JSON.stringify(value.interactions);
+  return serialized === JSON.stringify(REQUIRED_WEB_INTERACTIONS) &&
+    value.revision === createHash("sha256").update(serialized).digest("hex");
 }
 
 function qualityAuditCertificateReferenceFile(

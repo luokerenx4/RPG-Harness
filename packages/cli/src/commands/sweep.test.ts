@@ -458,6 +458,8 @@ describe("bounded development sweep", () => {
       pretty: false,
     });
 
+    const certificateFile = result.qualityGate?.certificate?.file;
+    if (!certificateFile) throw new Error("quality gate did not emit a certificate");
     expect(result).toMatchObject({
       status: "clean",
       reason: "clean",
@@ -479,6 +481,21 @@ describe("bounded development sweep", () => {
           qualityGate: { status: "passed" },
         },
       },
+    });
+    expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
+      schemaVersion: 2,
+      surfaces: [{
+        schemaVersion: 1,
+        id: "web-input-contract",
+        status: "passed",
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        interactions: [
+          { surface: "narration", input: { type: "next" } },
+          { surface: "choice", input: { type: "choose", choiceId: "route", optionId: "friends" } },
+          { surface: "hub-activity", input: { type: "doActivity", id: "invite:kasumi" } },
+          { surface: "script-select", input: { type: "select", scriptId: "ending" } },
+        ],
+      }],
     });
     expect(await snapshotTree(sessionDir(gameDir, "player"))).toEqual(sourceBefore);
   });

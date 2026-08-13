@@ -97,6 +97,11 @@ export function installDevelopmentStatusInvalidation(
     path.join(repoRoot, "packages", "frontend-core", "src"),
     path.join(repoRoot, "packages", "parser", "src"),
     path.join(repoRoot, "packages", "session-store", "src"),
+    path.join(repoRoot, "packages", "web", "src"),
+    path.join(repoRoot, "packages", "web", "dev"),
+    path.join(repoRoot, "packages", "web", "vite.config.ts"),
+    path.join(repoRoot, "packages", "web", "package.json"),
+    path.join(repoRoot, "packages", "web", "index.html"),
   ]);
   const invalidate = (file: string) => {
     const invalidation = developmentStatusInvalidation(file, examplesRoot);
@@ -138,7 +143,7 @@ export function developmentStatusInvalidation(
     runtimeRelative !== "" &&
     !runtimeRelative.startsWith(`..${path.sep}`) &&
     !path.isAbsolute(runtimeRelative) &&
-    /^(?:cli|engine|frontend-core|parser|session-store)\/src\//.test(
+    /^(?:(?:cli|engine|frontend-core|parser|session-store)\/src\/|web\/(?:src|dev)\/|web\/(?:vite\.config\.ts|package\.json|index\.html)$)/.test(
       runtimeRelative.split(path.sep).join("/"),
     )
   ) return { scope: "all" };
