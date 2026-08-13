@@ -28,7 +28,11 @@
 //   our onHubBuild to win first-wins. Skipping game.training avoids
 //   both.
 
-import { enterMap, evaluateCondition } from "@rpg-harness/engine";
+import {
+  enterMap,
+  evaluateCondition,
+  explainCondition,
+} from "@rpg-harness/engine";
 import type {
   ActionContext,
   ActionHandler,
@@ -821,7 +825,10 @@ function buildHubMenu(ctx: Ctx): Output {
           : {}),
         cost: 0,
         available: r.ok,
-        ...(r.ok ? {} : { lockedReason: r.reason }),
+        ...(reqs ? { requires: reqs } : {}),
+        ...(r.ok
+          ? {}
+          : { lockedReason: explainCondition(reqs!, ctx.state, ctx.game) }),
       });
     }
   }

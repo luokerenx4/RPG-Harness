@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -14,7 +14,7 @@ export interface WebQualitySurfaceEvidence {
     input: Input;
   }>;
   projections: Array<{
-    surface: "player-feedback-proof" | "objective-requirement";
+    surface: "player-feedback-proof" | "objective-requirement" | "locked-condition";
     text: string;
   }>;
 }
@@ -142,19 +142,65 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   const projections = [{
     surface: "player-feedback-proof" as const,
     text: expectedProof,
-  }, objectiveRequirementProjection()];
+  }, objectiveRequirementProjection(), lockedConditionProjection()];
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function lockedConditionProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const humanReason = "Kagariの親密度 4 以上（現在 0）、先に「Moonlit promise」を完了";
+  const tree = StageView({
+    stage: {
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "bond:kagari:02",
+          kind: "script",
+          title: "Kagari — Chinkonho",
+          description: "",
+          category: "social",
+          cost: 0,
+          available: false,
+          requires: {
+            all: [
+              { affection: { character: "kagari", min: 4 } },
+              { scriptCompleted: "bond_kagari_01" },
+            ],
+          },
+          lockedReason: humanReason,
+        }],
+      },
+    },
+    game: { scripts: [] } as unknown as Game,
+    onInput: () => {},
+  });
+  const text = nodeText(tree);
+  if (
+    !text.includes(`🔒 ${humanReason}`) ||
+    text.includes("affection.kagari") ||
+    text.includes("bond_kagari_01")
+  ) {
+    throw new Error("Web quality surface leaks raw locked-condition identifiers");
+  }
+  return { surface: "locked-condition", text: `🔒 ${humanReason}` };
 }
 
 function objectiveRequirementProjection(): WebQualitySurfaceEvidence["projections"][number] {

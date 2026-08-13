@@ -15,9 +15,9 @@ export interface Manifest {
   /** Optional deterministic-persona diversity acceptance gate. */
   aiAudit?: AiAuditConfig;
   training?: TrainingConfig;
-  // Declared boolean switches. Each entry: { initial, description? }.
+  // Declared boolean switches. Each entry: { initial, label?, description? }.
   switches?: SwitchDef[];
-  // Declared typed variables. Each entry: { type, initial, description? }.
+  // Declared typed variables. Each entry: { type, initial, label?, description? }.
   variables?: VariableDef[];
   // Relative paths (from game dir) of ts modules to load at runtime.
   // The loader dynamically imports each path and registers its default
@@ -262,7 +262,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
   return config;
 }
 
-// Switches block: a map of id → { initial: boolean, description? }.
+// Switches block: a map of id → { initial: boolean, label?, description? }.
 // Shorthand `{ id: false }` (bare boolean) also accepted; expands to
 // { initial: <bool> }.
 function parseSwitches(raw: unknown): SwitchDef[] {
@@ -277,7 +277,7 @@ function parseSwitches(raw: unknown): SwitchDef[] {
     }
     if (!val || typeof val !== "object") {
       throw new ManifestParseError(
-        `switches.${id}: expected boolean or { initial, description? }`,
+        `switches.${id}: expected boolean or { initial, label?, description? }`,
       );
     }
     const obj = val as Record<string, unknown>;
@@ -287,6 +287,7 @@ function parseSwitches(raw: unknown): SwitchDef[] {
       );
     }
     const def: SwitchDef = { id, initial: obj.initial };
+    if (typeof obj.label === "string") def.label = obj.label;
     if (typeof obj.description === "string") def.description = obj.description;
     out.push(def);
   }
@@ -330,6 +331,7 @@ function parseVariables(raw: unknown): VariableDef[] {
       type: declaredType,
       initial,
     };
+    if (typeof obj.label === "string") def.label = obj.label;
     if (typeof obj.description === "string") def.description = obj.description;
     out.push(def);
   }

@@ -1,4 +1,4 @@
-import { evaluateCondition } from "../condition";
+import { evaluateCondition, explainCondition } from "../condition";
 import type {
   Action,
   HubActivity,
@@ -76,7 +76,10 @@ export function collectMapActivities(ctx: PresetContext): HubActivity[] {
         category: "move",
         cost: 0,
         available: r.ok,
-        ...(r.ok ? {} : { lockedReason: conn.lockedHint ?? r.reason }),
+        ...(conn.requires ? { requires: conn.requires } : {}),
+        ...(r.ok
+          ? {}
+          : { lockedReason: conn.lockedHint ?? explainCondition(conn.requires!, ctx.state, ctx.game) }),
       });
     }
     for (const a of currentMap.actions ?? []) {
@@ -113,6 +116,9 @@ function pushAction(
     ...(a.aiTags ? { aiTags: [...a.aiTags] } : {}),
     cost: a.cost,
     available: r.ok,
-    ...(r.ok ? {} : { lockedReason: r.reason }),
+    ...(a.requires ? { requires: a.requires } : {}),
+    ...(r.ok
+      ? {}
+      : { lockedReason: explainCondition(a.requires!, ctx.state, ctx.game) }),
   });
 }

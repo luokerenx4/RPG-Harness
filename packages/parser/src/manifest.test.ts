@@ -12,13 +12,14 @@ describe("parseManifest — switches", () => {
     ]);
   });
 
-  test("verbose: { id: { initial, description } }", () => {
+  test("verbose: { id: { initial, label, description } }", () => {
     const m = parseManifest(
       [
         "title: t",
         "switches:",
         "  met_alice:",
         "    initial: false",
+        "    label: '樱と出会う'",
         "    description: '已经见过樱'",
       ].join("\n"),
     );
@@ -26,6 +27,7 @@ describe("parseManifest — switches", () => {
       {
         id: "met_alice",
         initial: false,
+        label: "樱と出会う",
         description: "已经见过樱",
       },
     ]);

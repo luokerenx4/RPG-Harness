@@ -97,6 +97,7 @@ function parseStat(
   const def: CharacterStatDef = { initial: obj.initial };
   if (typeof obj.min === "number") def.min = obj.min;
   if (typeof obj.max === "number") def.max = obj.max;
+  if (typeof obj.label === "string") def.label = obj.label;
   if (typeof obj.description === "string") def.description = obj.description;
   return def;
 }

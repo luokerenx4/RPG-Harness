@@ -1,7 +1,8 @@
 ---
 id: kasumi
 name: 霞
-defaultAffection: 0
+stats:
+  affection: { initial: 0, label: 親密度 }
 portraits:
   default: assets/portraits/kasumi-smile
   smile: assets/portraits/kasumi-smile

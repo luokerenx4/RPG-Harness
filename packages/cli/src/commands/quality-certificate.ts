@@ -302,13 +302,13 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: "web-input-contract";
   status: "passed";
   revision: string;
   interactions: Array<{ surface: string; input: unknown }>;
   projections: Array<{
-    surface: "player-feedback-proof" | "objective-requirement";
+    surface: "player-feedback-proof" | "objective-requirement" | "locked-condition";
     text: string;
   }>;
 }
@@ -335,6 +335,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "objective-requirement",
   text: "○ Vow kept○ Pulse: Oni 0 / 6",
+}, {
+  surface: "locked-condition",
+  text: "🔒 Kagariの親密度 4 以上（現在 0）、先に「Moonlit promise」を完了",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -653,7 +656,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 3 &&
+    value.schemaVersion === 4 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

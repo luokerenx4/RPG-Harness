@@ -1,4 +1,9 @@
-import type { ComposedState, Condition } from "./types";
+import type {
+  ComposedState,
+  Condition,
+  Game,
+  VariableValue,
+} from "./types";
 
 // Result of evaluating a Condition. `reason` is populated only when
 // ok=false, with a short structured string describing which atomic
@@ -9,6 +14,154 @@ import type { ComposedState, Condition } from "./types";
 export interface ConditionResult {
   ok: boolean;
   reason?: string;
+}
+
+/**
+ * Convert the same condition DSL consumed by AI/search into a player-facing
+ * explanation. Stable ids remain in `requires` and diagnostic `reason`; this
+ * projection resolves author-owned labels instead of asking renderers to
+ * reverse-engineer implementation names.
+ */
+export function explainCondition(
+  condition: Condition,
+  state: ComposedState,
+  game: Game,
+): string {
+  if ("all" in condition) {
+    return condition.all
+      .filter((child) => !evaluateCondition(child, state).ok)
+      .map((child) => explainCondition(child, state, game))
+      .join("、");
+  }
+  if ("any" in condition) {
+    return `次のいずれか：${condition.any
+      .map((child) => explainCondition(child, state, game))
+      .join("／")}`;
+  }
+  if ("not" in condition) {
+    return `${explainCondition(condition.not, state, game)}を満たさない`;
+  }
+  if ("scriptCompleted" in condition) {
+    return `先に「${scriptLabel(game, condition.scriptCompleted)}」を完了`;
+  }
+  if ("selfSwitch" in condition) {
+    return `「${scriptLabel(game, condition.selfSwitch.scriptId)}」の条件を進める`;
+  }
+  if ("affection" in condition) {
+    return rangeExplanation(
+      characterStatLabel(game, condition.affection.character, "affection"),
+      state.baseline.characters[condition.affection.character]?.stats.affection ?? 0,
+      condition.affection,
+    );
+  }
+  if ("characterStat" in condition) {
+    return rangeExplanation(
+      characterStatLabel(
+        game,
+        condition.characterStat.character,
+        condition.characterStat.name,
+      ),
+      state.baseline.characters[condition.characterStat.character]?.stats[
+        condition.characterStat.name
+      ] ?? 0,
+      condition.characterStat,
+    );
+  }
+  if ("switch" in condition) {
+    const label = switchLabel(game, condition.switch.name);
+    return condition.switch.eq === false ? `${label}を満たさない` : label;
+  }
+  if ("variable" in condition) {
+    const def = game.variables?.find((item) => item.id === condition.variable.name);
+    return valueExplanation(
+      def?.label ?? def?.description ?? humanizeId(condition.variable.name),
+      state.baseline.variables[condition.variable.name],
+      condition.variable,
+    );
+  }
+  if ("stat" in condition) {
+    const def = game.training?.stats.find((item) => item.id === condition.stat.name);
+    return rangeExplanation(
+      def?.name ?? humanizeId(condition.stat.name),
+      state.training?.stats[condition.stat.name] ?? 0,
+      condition.stat,
+    );
+  }
+  if ("inventory" in condition) {
+    const item = game.items?.find((entry) => entry.id === condition.inventory.itemId);
+    return rangeExplanation(
+      item?.name ?? humanizeId(condition.inventory.itemId),
+      state.baseline.inventory[condition.inventory.itemId] ?? 0,
+      condition.inventory,
+    );
+  }
+  if ("weaponPower" in condition) {
+    const weapon = game.weapons?.find((entry) => entry.id === condition.weaponPower.weaponId);
+    return rangeExplanation(
+      `${weapon?.name ?? humanizeId(condition.weaponPower.weaponId)}の威力`,
+      state.baseline.weapons[condition.weaponPower.weaponId]?.power ?? 0,
+      condition.weaponPower,
+    );
+  }
+  if ("knowsSkill" in condition) {
+    const skill = game.skills?.find((entry) => entry.id === condition.knowsSkill);
+    return `「${skill?.name ?? humanizeId(condition.knowsSkill)}」を習得`;
+  }
+  if ("day" in condition) {
+    return rangeExplanation("日数", state.training?.day ?? 0, condition.day);
+  }
+  if ("slot" in condition) {
+    return rangeExplanation("時間帯", state.training?.slot ?? 0, condition.slot);
+  }
+  return "解放条件を満たす";
+}
+
+function characterStatLabel(game: Game, characterId: string, statId: string): string {
+  const character = game.characters.find((entry) => entry.id === characterId);
+  const characterName = character?.name ?? humanizeId(characterId);
+  const stat = character?.stats?.[statId];
+  const statName = stat?.label ?? stat?.description ??
+    (statId === "affection" ? "親密度" : humanizeId(statId));
+  return `${characterName}の${statName}`;
+}
+
+function scriptLabel(game: Game, scriptId: string): string {
+  return game.scripts.find((entry) => entry.id === scriptId)?.title ?? humanizeId(scriptId);
+}
+
+function switchLabel(game: Game, switchId: string): string {
+  const entry = game.switches?.find((item) => item.id === switchId);
+  return entry?.label ?? entry?.description ?? humanizeId(switchId);
+}
+
+function rangeExplanation(
+  label: string,
+  current: number,
+  query: { min?: number; max?: number; eq?: number },
+): string {
+  if (query.eq !== undefined) return `${label} ${query.eq}（現在 ${current}）`;
+  if (query.min !== undefined) return `${label} ${query.min} 以上（現在 ${current}）`;
+  if (query.max !== undefined) return `${label} ${query.max} 以下（現在 ${current}）`;
+  return label;
+}
+
+function valueExplanation(
+  label: string,
+  current: VariableValue | undefined,
+  query: { eq?: VariableValue; min?: number; max?: number },
+): string {
+  if (query.eq !== undefined) {
+    return `${label}「${String(query.eq)}」（現在「${String(current ?? "")}」）`;
+  }
+  return rangeExplanation(
+    label,
+    typeof current === "number" ? current : 0,
+    { min: query.min, max: query.max },
+  );
+}
+
+function humanizeId(id: string): string {
+  return id.replace(/[._:/-]+/gu, " ").replace(/\s+/gu, " ").trim();
 }
 
 export function evaluateCondition(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateCondition } from "./condition";
+import { evaluateCondition, explainCondition } from "./condition";
 import { applyDelta, createInitialState } from "./state";
 import { makeCharacter, makeGame, makeState, twoCharGame } from "./test-utils";
 import type { Condition } from "./types";
@@ -104,6 +104,55 @@ describe("ConditionResult.reason — atomic leaves", () => {
     );
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("yaodao");
+  });
+});
+
+describe("explainCondition — player projection", () => {
+  test("resolves author labels while preserving exact thresholds", () => {
+    const game = twoCharGame();
+    game.scripts.push({ id: "bond_alice_01", title: "月下の約束", beats: [] });
+    game.switches = [{
+      id: "survived_with_alice",
+      initial: false,
+      label: "Aliceと一度、生還する",
+    }];
+    game.characters[0]!.stats = {
+      affection: { initial: 0, label: "親密度" },
+    };
+    game.characters[0]!.name = "Alice";
+    const state = createInitialState(game);
+    applyDelta(state, { characterStats: { alice: { affection: 1 } } });
+    const condition: Condition = {
+      all: [
+        { affection: { character: "alice", min: 4 } },
+        { switch: { name: "survived_with_alice" } },
+        { scriptCompleted: "bond_alice_01" },
+      ],
+    };
+
+    expect(explainCondition(condition, state, game)).toBe(
+      "Aliceの親密度 4 以上（現在 1）、Aliceと一度、生還する、先に「月下の約束」を完了",
+    );
+    expect(explainCondition(condition, state, game)).not.toContain("affection.");
+    expect(explainCondition(condition, state, game)).not.toContain("switch.");
+    expect(explainCondition(condition, state, game)).not.toContain("bond_alice_01");
+  });
+
+  test("uses resource and skill names instead of stable ids", () => {
+    const game = makeGame({
+      items: [{
+        id: "oni_horn",
+        name: "鬼の角",
+        description: "",
+        kind: "key",
+      }],
+      skills: [{ id: "chinkonho", name: "鎮魂法", description: "" }],
+    });
+    const state = createInitialState(game);
+    expect(explainCondition({ inventory: { itemId: "oni_horn", min: 2 } }, state, game))
+      .toBe("鬼の角 2 以上（現在 0）");
+    expect(explainCondition({ knowsSkill: "chinkonho" }, state, game))
+      .toBe("「鎮魂法」を習得");
   });
 });
 

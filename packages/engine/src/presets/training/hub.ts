@@ -2,7 +2,7 @@
 // + game.actions, filters by slot / availability / current-map scope,
 // surfaces map-connection moves as activities, builds a HubSnapshot.
 
-import { evaluateCondition } from "../../condition";
+import { evaluateCondition, explainCondition } from "../../condition";
 import type {
   ComposedState,
   Game,
@@ -61,7 +61,10 @@ export function buildHubSnapshot(state: ComposedState, game: Game): Output {
         category: "move",
         cost: 0,
         available: r.ok,
-        ...(r.ok ? {} : { lockedReason: conn.lockedHint ?? r.reason }),
+        ...(conn.requires ? { requires: conn.requires } : {}),
+        ...(r.ok
+          ? {}
+          : { lockedReason: conn.lockedHint ?? explainCondition(conn.requires!, state, game) }),
       });
     }
     // Map-inline actions — same gating + slot rules as game.actions.
@@ -80,7 +83,10 @@ export function buildHubSnapshot(state: ComposedState, game: Game): Output {
         cost: a.cost,
         effectsHint: formatEffectsHint(a.effects),
         available: r.ok,
-        ...(r.ok ? {} : { lockedReason: r.reason }),
+        ...(a.requires ? { requires: a.requires } : {}),
+        ...(r.ok
+          ? {}
+          : { lockedReason: explainCondition(a.requires!, state, game) }),
       });
     }
   }
@@ -105,7 +111,10 @@ export function buildHubSnapshot(state: ComposedState, game: Game): Output {
       cost: a.cost,
       effectsHint: formatEffectsHint(a.effects),
       available: r.ok,
-      ...(r.ok ? {} : { lockedReason: r.reason }),
+      ...(a.requires ? { requires: a.requires } : {}),
+      ...(r.ok
+        ? {}
+        : { lockedReason: explainCondition(a.requires!, state, game) }),
     });
   }
 

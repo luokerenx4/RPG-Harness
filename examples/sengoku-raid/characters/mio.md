@@ -1,7 +1,8 @@
 ---
 id: mio
 name: 澪
-defaultAffection: 0
+stats:
+  affection: { initial: 0, label: 親密度 }
 portraits:
   default: assets/portraits/mio-default
 custom:

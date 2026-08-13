@@ -152,4 +152,28 @@ describe("buildMapHubSnapshot", () => {
     expect(act.available).toBe(false);
     expect(act.lockedReason).toBe("鍵がない");
   });
+
+  test("keeps the exact machine gate while deriving a player-facing reason", () => {
+    const requires = { switch: { name: "key_held", eq: true } } as const;
+    const game = gameWith(
+      [{
+        id: "gate",
+        name: "Gate",
+        description: "",
+        connections: [{ dir: "奥", target: "inner", requires }],
+      }, {
+        id: "inner",
+        name: "Inner",
+        description: "",
+      }],
+      { switches: [{ id: "key_held", initial: false, label: "門の鍵を入手" }] },
+    );
+    const ctx = makeCtx(game);
+    enterMap(ctx.state, game, "gate");
+    expect(collectMapActivities(ctx)[0]).toMatchObject({
+      available: false,
+      requires,
+      lockedReason: "門の鍵を入手",
+    });
+  });
 });

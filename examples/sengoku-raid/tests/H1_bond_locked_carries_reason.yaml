@@ -1,10 +1,9 @@
-name: bond_kagari_01 在 affection 不足时显示且 lockedReason 含 affection.kagari
+name: bond_kagari_01 在亲密度不足时显示自然提示并保留机器条件
 description: |
   After meeting kagari (intro + encounter_kagari_first complete), but
   before giving any gifts, bond_kagari_01 should appear in the hub
-  with available=false and lockedReason naming the affection gap.
-  This validates the WU1 plumbing: evaluateCondition returns a
-  structured reason and raid.ts surfaces it on bond_* scripts.
+  with available=false and a player-facing lockedReason naming the affection
+  gap. The exact condition stays on the activity for Headless planning.
 state:
   baseline:
     completedScripts:
@@ -23,4 +22,5 @@ assertions:
   - kind: activity
     id: script:bond_kagari_01
     available: false
-    lockedReasonIncludes: affection.kagari
+    lockedReasonIncludes: 篝の親密度 2 以上（現在 1）
+    requires: { affection: { character: kagari, min: 2 } }

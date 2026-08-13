@@ -46,3 +46,20 @@ describe("parseCharacter — portraits", () => {
     expect(c.defaultPortrait).toBeUndefined();
   });
 });
+
+describe("parseCharacter — author-facing stat metadata", () => {
+  test("preserves labels used to explain machine gates to players", () => {
+    const c = parseCharacter(front([
+      "stats:",
+      "  affection:",
+      "    initial: 0",
+      "    label: 親密度",
+      "    description: 篝との距離",
+    ].join("\n") + "\n"));
+    expect(c.stats?.affection).toEqual({
+      initial: 0,
+      label: "親密度",
+      description: "篝との距離",
+    });
+  });
+});

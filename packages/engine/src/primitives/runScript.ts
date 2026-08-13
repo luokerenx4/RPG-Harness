@@ -1,4 +1,4 @@
-import { evaluateCondition } from "../condition";
+import { evaluateCondition, explainCondition } from "../condition";
 import { resolveChoiceInput } from "../decision";
 import type {
   Beat,
@@ -146,7 +146,7 @@ export async function* runScript(
             ...(opt.aiTags !== undefined ? { aiTags: [...opt.aiTags] } : {}),
             ...(r.ok
               ? {}
-              : { lockedReason: opt.lockedHint ?? r.reason }),
+              : { lockedReason: opt.lockedHint ?? explainCondition(opt.requires!, state, ctx.game) }),
             ...(opt.requires !== undefined ? { requires: opt.requires } : {}),
             ...(opt.effects !== undefined || opt.goto !== undefined
               ? {

@@ -34,12 +34,12 @@ ai_audit:
   required_scripts: [three_flowers_alliance]
 
 switches:
-  learnedChinkonho: false
-  learnedHayagake: false
+  learnedChinkonho: { initial: false, label: 「鎮魂法」を習得 }
+  learnedHayagake: { initial: false, label: 「早駆け」を習得 }
   # 澪の bond_mio_02 で伝授される「水鏡」。chinkonho / hayagake と
   # 対になる三つ目の邦絆技能フラグ。hell_gate chain の解錠は
   # knownSkills を直接読むが、他二技と揃える形でスイッチも立てる。
-  learnedMizukagami: false
+  learnedMizukagami: { initial: false, label: 「水鏡」を習得 }
   # Companion currently in party (one of three exclusive). invite:<id> sets
   # it and dismiss:<id> clears it; raid end also clears it. Read by raid menu
   # passives + onActionDispatch veto guard.
@@ -48,9 +48,9 @@ switches:
   companion_mio: false
   # Persistent "ever survived a raid together" — gates the bond_*_03
   # script tier and unlocks the three_flowers_alliance trigger.
-  befriended_kagari: false
-  befriended_kasumi: false
-  befriended_mio: false
+  befriended_kagari: { initial: false, label: 篝と一度、出帰りから生還 }
+  befriended_kasumi: { initial: false, label: 霞と一度、出帰りから生還 }
+  befriended_mio: { initial: false, label: 澪と一度、出帰りから生還 }
   # Met-mio flag for milestone triggers. Module also tracks via
   # metCharacters; this switch exists so trigger `when:` conditions
   # can compose against `switch:` predicates uniformly.
@@ -75,14 +75,14 @@ switches:
   # 同行道中の一幕 — 各同行者と初めて静かな新 zone に着いた時に一度だけ
   # 流れる road_<id> シーンを観たら立つ。moveHandler が switch を見て
   # 再発火を防ぐ（シーンの effects ブロック自身が立てる）。
-  road_kagari_seen: false
-  road_kasumi_seen: false
-  road_mio_seen:    false
+  road_kagari_seen: { initial: false, label: 篝との最初の道中を経験 }
+  road_kasumi_seen: { initial: false, label: 霞との最初の道中を経験 }
+  road_mio_seen:    { initial: false, label: 澪との最初の道中を経験 }
   # 同行道中の二幕目 — befriended（一度生還を共にした）後に解錠される、より
   # 踏み込んだ道中シーン road_<id>_2。一幕目を観た後の静かな zone で流れる。
-  road_kagari_2_seen: false
-  road_kasumi_2_seen: false
-  road_mio_2_seen:    false
+  road_kagari_2_seen: { initial: false, label: 篝と再び道中を共にする }
+  road_kasumi_2_seen: { initial: false, label: 霞と再び道中を共にする }
+  road_mio_2_seen:    { initial: false, label: 澪と再び道中を共にする }
 
 variables:
   # Raid counters — incremented by endRaidExtract / endRaidFailure.

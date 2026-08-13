@@ -11,6 +11,8 @@ export type VariableValue = number | string;
 export interface SwitchDef {
   id: string;
   initial: boolean;
+  /** Player-facing phrase used when this switch gates visible content. */
+  label?: string;
   description?: string;
 }
 
@@ -18,6 +20,8 @@ export interface VariableDef {
   id: string;
   type: "string" | "number";
   initial: VariableValue;
+  /** Player-facing name used when this variable gates visible content. */
+  label?: string;
   description?: string;
 }
 
@@ -247,6 +251,8 @@ export interface CharacterStatDef {
   initial: number;
   min?: number;
   max?: number;
+  /** Player-facing stat name; ids stay stable for AI/runtime contracts. */
+  label?: string;
   description?: string;
 }
 

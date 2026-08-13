@@ -1,7 +1,8 @@
 ---
 id: kagari
 name: 篝
-defaultAffection: 0
+stats:
+  affection: { initial: 0, label: 親密度 }
 portraits:
   default: assets/portraits/kagari-smile
   smile: assets/portraits/kagari-smile

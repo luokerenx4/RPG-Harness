@@ -407,6 +407,25 @@ requires:
 
 Full grammar lives in `packages/engine/src/types.ts` (the `Condition` union) and `packages/engine/src/condition.ts` (the evaluator). Parser-side mirror in `packages/parser/src/condition.ts`.
 
+Conditions have two projections. Headless outputs retain the exact `requires`
+tree so an AI can plan and repair against stable ids. Player surfaces render a
+separate `lockedReason`, derived from the same tree. Give switches, variables,
+and character stats author-facing `label` metadata to keep that explanation in
+the game's voice; resource names and script titles are resolved automatically:
+
+```yaml
+# game.yaml
+switches:
+  learnedChinkonho: { initial: false, label: 「鎮魂法」を習得 }
+
+# characters/kagari.md frontmatter
+stats:
+  affection: { initial: 0, label: 親密度 }
+```
+
+An explicit `lockedHint` still takes precedence when a gate needs bespoke
+wording. Labels and hints never replace the machine-readable condition.
+
 ## State model
 
 State is plain JSON. No class instances, no functions, no `Date`s, no `Map`s. Survives `JSON.stringify` round-trip without loss.

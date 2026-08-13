@@ -22,29 +22,33 @@ assertions:
     id: script:bond_kagari_02
     present: true
     available: false
-    lockedReasonIncludes: bond_kagari_01
+    lockedReasonIncludes: 先に「篝の話を聞く」を完了
+    requires:
+      all:
+        - { affection: { character: kagari, min: 4 } }
+        - { scriptCompleted: bond_kagari_01 }
   - kind: activity
     id: script:bond_kagari_03
     present: true
     available: false
-    lockedReasonIncludes: bond_kagari_02
+    lockedReasonIncludes: 先に「鎮魂法」を完了
   - kind: activity
     id: script:bond_kasumi_02
     present: true
     available: false
-    lockedReasonIncludes: bond_kasumi_01
+    lockedReasonIncludes: 先に「霞の弓を借りる夜」を完了
   - kind: activity
     id: script:bond_kasumi_03
     present: true
     available: false
-    lockedReasonIncludes: bond_kasumi_02
+    lockedReasonIncludes: 先に「霞が伝授する——「早駆け」」を完了
   - kind: activity
     id: script:bond_mio_02
     present: true
     available: false
-    lockedReasonIncludes: bond_mio_01
+    lockedReasonIncludes: 先に「査問する者」を完了
   - kind: activity
     id: script:bond_mio_03
     present: true
     available: false
-    lockedReasonIncludes: bond_mio_02
+    lockedReasonIncludes: 先に「水鏡を授ける」を完了
