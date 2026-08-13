@@ -1,4 +1,5 @@
 import {
+  activityDecisionContext,
   choiceDecisionContext,
   cloneState,
   compareChoiceSearchAssessment,
@@ -541,12 +542,14 @@ async function materializeReachChoicePath(
       state = current.state;
       await saveSession(args.gameDir, args.session, state);
       const decision = choiceDecisionContext(before, input);
+      const activityDecision = activityDecisionContext(before, input);
       await appendLog(args.gameDir, args.session, {
         t: Date.now(),
         source: "reach-choice",
         input,
         output: current.output,
         ...(decision ? { decision } : {}),
+        ...(activityDecision ? { activityDecision } : {}),
       }, state);
     }
     if (inputs.length === 0 && current.output !== null) {

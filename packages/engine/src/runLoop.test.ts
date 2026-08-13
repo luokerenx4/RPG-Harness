@@ -125,6 +125,51 @@ describe("runLoop terminal output", () => {
 });
 
 describe("runLoop input diagnostics", () => {
+  test("freezes accepted Hub activity semantics on the resulting trace entry", async () => {
+    const game: Game = {
+      ...terminalGame,
+      runFn: async function* () {
+        yield {
+          type: "hubMenu" as const,
+          snapshot: {
+            day: 1,
+            maxDay: 1,
+            slot: 0,
+            slotName: "",
+            slotsPerDay: 1,
+            stats: [],
+            affections: [],
+            activities: [{
+              id: "release",
+              kind: "action" as const,
+              title: "Release the oni",
+              category: "combat",
+              aiTags: ["nonlethal", "mercy", "memory"],
+              recommended: true,
+              cost: 0,
+              available: true,
+              actionKind: "raid:release",
+            }],
+          },
+        };
+        yield { type: "narration" as const, text: "The oni leaves alive." };
+      },
+    };
+    const result = await runLoop(game, createInitialState(game), [
+      { type: "doActivity", id: "release" },
+    ]);
+
+    expect(result.trace[1]?.activityDecision).toEqual({
+      activityId: "release",
+      title: "Release the oni",
+      kind: "action",
+      category: "combat",
+      aiTags: ["nonlethal", "mercy", "memory"],
+      recommended: true,
+      actionKind: "raid:release",
+    });
+  });
+
   test("records a rejected input without delivering it to the generator", async () => {
     const received: string[] = [];
     const game: Game = {

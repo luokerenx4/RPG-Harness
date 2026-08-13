@@ -17,6 +17,17 @@ export interface TranscriptEvent {
   source?: string;
   input?: unknown;
   decision?: { scriptId: string; choiceId: string; optionId: string };
+  activityDecision?: {
+    activityId: string;
+    title: string;
+    kind: "script" | "action";
+    category?: string;
+    aiTags?: string[];
+    recommended?: boolean;
+    actionKind?: string;
+    pacingInstanceId?: string;
+    relatedObjectiveIds?: string[];
+  };
   inputResult?: { accepted: boolean; code: string; message: string };
   output?: Record<string, unknown>;
   fork?: Record<string, unknown>;
@@ -103,6 +114,8 @@ export function buildTranscriptEvents(lineage: SessionLineageSlice[]): Transcrip
       if (input !== undefined) event.input = input;
       const decision = stableDecision(entry.decision);
       if (decision) event.decision = decision;
+      const activityDecision = stableActivityDecision(entry.activityDecision);
+      if (activityDecision) event.activityDecision = activityDecision;
       const inputResult = compactInputResult(entry.inputResult);
       if (inputResult) event.inputResult = inputResult;
       const output = compactOutput(entry.output);
@@ -110,7 +123,9 @@ export function buildTranscriptEvents(lineage: SessionLineageSlice[]): Transcrip
       const fork = compactFork(entry.fork);
       if (fork) event.fork = fork;
       if (isSessionCheckpointRef(entry.checkpoint)) event.checkpoint = entry.checkpoint;
-      if (input !== undefined || decision || inputResult || output || fork) events.push(event);
+      if (
+        input !== undefined || decision || activityDecision || inputResult || output || fork
+      ) events.push(event);
     });
   }
   return events;
@@ -244,6 +259,38 @@ function stableDecision(value: unknown): TranscriptEvent["decision"] | null {
     : null;
 }
 
+function stableActivityDecision(
+  value: unknown,
+): TranscriptEvent["activityDecision"] | null {
+  if (
+    !isRecord(value) ||
+    typeof value.activityId !== "string" ||
+    typeof value.title !== "string" ||
+    (value.kind !== "script" && value.kind !== "action")
+  ) return null;
+  const stringArray = (candidate: unknown): string[] | undefined =>
+    Array.isArray(candidate) && candidate.every((item) => typeof item === "string")
+      ? candidate
+      : undefined;
+  const aiTags = stringArray(value.aiTags);
+  const relatedObjectiveIds = stringArray(value.relatedObjectiveIds);
+  return {
+    activityId: value.activityId,
+    title: value.title,
+    kind: value.kind,
+    ...(typeof value.category === "string" ? { category: value.category } : {}),
+    ...(aiTags ? { aiTags } : {}),
+    ...(typeof value.recommended === "boolean"
+      ? { recommended: value.recommended }
+      : {}),
+    ...(typeof value.actionKind === "string" ? { actionKind: value.actionKind } : {}),
+    ...(typeof value.pacingInstanceId === "string"
+      ? { pacingInstanceId: value.pacingInstanceId }
+      : {}),
+    ...(relatedObjectiveIds ? { relatedObjectiveIds } : {}),
+  };
+}
+
 function compactInputResult(value: unknown): TranscriptEvent["inputResult"] | null {
   if (!isRecord(value)) return null;
   return typeof value.accepted === "boolean" &&
@@ -283,12 +330,28 @@ export function formatSessionTranscript(transcript: SessionTranscript): string {
     const decision = event.decision
       ? ` decision=${event.decision.scriptId}/${event.decision.choiceId}/${event.decision.optionId}`
       : "";
+    const activityDecision = formatActivityDecision(event.activityDecision);
     const inputResult = event.inputResult?.accepted === false
       ? ` rejected=${event.inputResult.code}(${event.inputResult.message})`
       : "";
-    lines.push(`${prefix}${input ? ` ${input} ->` : ""} ${formatOutput(event.output)}${decision}${inputResult}`);
+    lines.push(`${prefix}${input ? ` ${input}${activityDecision} ->` : ""} ${formatOutput(event.output)}${decision}${inputResult}`);
   }
   return lines.join("\n") + "\n";
+}
+
+function formatActivityDecision(
+  decision: TranscriptEvent["activityDecision"] | undefined,
+): string {
+  if (!decision) return "";
+  const semantics = [
+    ...(decision.category ? [`category=${decision.category}`] : []),
+    ...(decision.aiTags?.length ? [`tags=${decision.aiTags.join(",")}`] : []),
+    ...(decision.relatedObjectiveIds?.length
+      ? [`objectives=${decision.relatedObjectiveIds.join(",")}`]
+      : []),
+    ...(decision.recommended === true ? ["recommended"] : []),
+  ];
+  return ` "${decision.title}"${semantics.length ? ` [${semantics.join("; ")}]` : ""}`;
 }
 
 function formatFork(fork: Record<string, unknown>): string {

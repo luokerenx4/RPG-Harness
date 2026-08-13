@@ -504,6 +504,9 @@ export async function runAutoplay(
             output: entry.output,
             ...(entry.inputResult ? { inputResult: entry.inputResult } : {}),
             ...(entry.decision ? { decision: entry.decision } : {}),
+            ...(entry.activityDecision
+              ? { activityDecision: entry.activityDecision }
+              : {}),
           }, state);
         }
         if (!args.verbose) return;
@@ -774,7 +777,7 @@ export function collectAutoplaySourceTargets(
       continue;
     }
     if (entry.input?.type !== "doActivity") continue;
-    const activityId = entry.input.id;
+    const activityId = entry.activityDecision?.activityId ?? entry.input.id;
     const hub = previousOutput?.type === "hubMenu"
       ? previousOutput
       : entry.output.type === "hubMenu"
@@ -783,13 +786,14 @@ export function collectAutoplaySourceTargets(
     const activity = hub?.snapshot.activities.find(
       ({ id }) => id === activityId,
     );
-    if (!activity) continue;
-    if (activity.kind === "script") {
-      addScript(activity.id);
+    const activityKind = entry.activityDecision?.kind ?? activity?.kind;
+    if (activityKind === "script") {
+      addScript(activityId);
       continue;
     }
-    const actionKind = activity.actionKind ?? game.actions?.find(
-      ({ id }) => id === activity.id,
+    const actionKind = entry.activityDecision?.actionKind ?? activity?.actionKind ??
+      game.actions?.find(
+      ({ id }) => id === activityId,
     )?.kind;
     if (!actionKind) continue;
     const owner = actionOwner(game, actionKind);
@@ -799,7 +803,7 @@ export function collectAutoplaySourceTargets(
       file: normalizeAuthoringSource(gameDir, owner.source),
       moduleId: owner.id,
       actionKind,
-      activityId: activity.id,
+      activityId,
     });
   }
   addScript(terminalScriptId ?? undefined);
@@ -831,7 +835,10 @@ function actionOwner(game: Game, actionKind: string) {
 }
 
 export function summarizeDecisionPath(
-  trace: ReadonlyArray<Pick<TraceEntry, "input" | "decision" | "inputResult"> &
+  trace: ReadonlyArray<Pick<
+    TraceEntry,
+    "input" | "decision" | "activityDecision" | "inputResult"
+  > &
     Partial<Pick<TraceEntry, "output">>>,
 ): AutoplayDecisionPath {
   const decisions: AutoplaySemanticDecision[] = [];
@@ -852,7 +859,7 @@ export function summarizeDecisionPath(
           : entry.output?.type === "hubMenu"
             ? entry.output
             : undefined;
-        const activityId = entry.input.id;
+        const activityId = entry.activityDecision?.activityId ?? entry.input.id;
         const activity = activitySource?.snapshot.activities.find(
           ({ id }) => id === activityId,
         );
@@ -866,12 +873,22 @@ export function summarizeDecisionPath(
         decisions.push({
           type: "doActivity",
           id: activityId,
-          ...(activity?.actionKind ? { actionKind: activity.actionKind } : {}),
-          ...(activity?.pacingInstanceId
-            ? { pacingInstanceId: activity.pacingInstanceId }
+          ...(entry.activityDecision?.actionKind ?? activity?.actionKind
+            ? { actionKind: entry.activityDecision?.actionKind ?? activity?.actionKind }
             : {}),
-          ...(activity?.aiTags?.length ? { aiTags: [...activity.aiTags] } : {}),
-          ...(linkedObjectiveIds?.length ? { linkedObjectiveIds } : {}),
+          ...(entry.activityDecision?.pacingInstanceId ?? activity?.pacingInstanceId
+            ? { pacingInstanceId: entry.activityDecision?.pacingInstanceId ?? activity?.pacingInstanceId }
+            : {}),
+          ...(entry.activityDecision?.aiTags?.length
+            ? { aiTags: [...entry.activityDecision.aiTags] }
+            : activity?.aiTags?.length
+              ? { aiTags: [...activity.aiTags] }
+              : {}),
+          ...(entry.activityDecision?.relatedObjectiveIds?.length
+            ? { linkedObjectiveIds: [...entry.activityDecision.relatedObjectiveIds].sort() }
+            : linkedObjectiveIds?.length
+              ? { linkedObjectiveIds }
+              : {}),
         });
       }
     }

@@ -44,6 +44,13 @@ describe("Web development session bridge", () => {
         output: { type: "dialogue", text: "同じ一歩。" },
         inputResult: { accepted: true, code: "accepted", message: "Input accepted.", expected: [] },
         decision: { scriptId: "ending", choiceId: "route", optionId: "friends" },
+        activityDecision: {
+          activityId: "release",
+          title: "Release",
+          kind: "action",
+          category: "combat",
+          aiTags: ["nonlethal", "mercy"],
+        },
       },
       now: () => 1234,
     });
@@ -63,6 +70,13 @@ describe("Web development session bridge", () => {
         output: { type: "dialogue", text: "同じ一歩。" },
         inputResult: { accepted: true, code: "accepted", message: "Input accepted.", expected: [] },
         decision: { scriptId: "ending", choiceId: "route", optionId: "friends" },
+        activityDecision: {
+          activityId: "release",
+          title: "Release",
+          kind: "action",
+          category: "combat",
+          aiTags: ["nonlethal", "mercy"],
+        },
         checkpoint: expect.objectContaining({
           schemaVersion: 1,
           file: expect.stringMatching(/^checkpoints\/[a-f0-9]{64}\.json$/),

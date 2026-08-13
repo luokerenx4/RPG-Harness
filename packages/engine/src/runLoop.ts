@@ -1,5 +1,10 @@
 import { Engine } from "./engine";
-import { choiceDecisionContext, type ChoiceDecisionContext } from "./decision";
+import {
+  activityDecisionContext,
+  choiceDecisionContext,
+  type ActivityDecisionContext,
+  type ChoiceDecisionContext,
+} from "./decision";
 import { classifyInput, type InputResult } from "./input";
 import { cloneState, createInitialState } from "./state";
 import type { ComposedState, Game, Input, Output } from "./types";
@@ -9,6 +14,7 @@ export interface TraceEntry {
   input: Input | null;
   output: Output;
   decision?: ChoiceDecisionContext;
+  activityDecision?: ActivityDecisionContext;
   inputResult?: InputResult;
 }
 
@@ -118,12 +124,16 @@ export async function runLoop(
       const decision = lastInput && inputResult?.accepted !== false
         ? choiceDecisionContext(lastOutput, lastInput)
         : undefined;
+      const activityDecision = lastInput && inputResult?.accepted !== false
+        ? activityDecisionContext(lastOutput, lastInput)
+        : undefined;
       const entry: TraceEntry = {
         index: stepIndex,
         input: lastInput,
         output: result.value,
         ...(inputResult ? { inputResult } : {}),
         ...(decision ? { decision } : {}),
+        ...(activityDecision ? { activityDecision } : {}),
       };
       lastOutput = result.value;
       trace.push(entry);

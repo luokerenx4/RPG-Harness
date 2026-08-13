@@ -91,6 +91,31 @@ describe("autoplay semantic decision paths", () => {
     }]);
   });
 
+  test("uses the frozen activity decision when the preceding Hub was trimmed", () => {
+    expect(summarizeDecisionPath([{
+      input: { type: "doActivity", id: "release-private-id" },
+      activityDecision: {
+        activityId: "release-private-id",
+        title: "Release the oni",
+        kind: "action",
+        category: "combat",
+        aiTags: ["nonlethal", "mercy", "memory"],
+        actionKind: "raid:release",
+        pacingInstanceId: "encounter:oni-1",
+        relatedObjectiveIds: ["remember-the-oni"],
+      },
+      inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
+      output: { type: "narration", text: "The oni leaves alive." },
+    }]).decisions).toEqual([{
+      type: "doActivity",
+      id: "release-private-id",
+      actionKind: "raid:release",
+      pacingInstanceId: "encounter:oni-1",
+      aiTags: ["nonlethal", "mercy", "memory"],
+      linkedObjectiveIds: ["remember-the-oni"],
+    }]);
+  });
+
   test("keeps default CLI output bounded while pointing at exact details", () => {
     const full = {
       reason: "completed",
@@ -265,6 +290,24 @@ describe("autoplay semantic decision paths", () => {
         choiceId: "fork",
       },
     ]);
+
+    expect(collectAutoplaySourceTargets(gameDir, game, [{
+      index: 0,
+      input: { type: "doActivity", id: "depart:kuro" },
+      activityDecision: {
+        activityId: "depart:kuro",
+        title: "Depart",
+        kind: "action",
+        actionKind: "raid:depart",
+      },
+      output: { type: "narration", text: "Departed." },
+    }])).toEqual([{
+      kind: "module-action",
+      file: "modules/raid.ts",
+      moduleId: "raid",
+      actionKind: "raid:depart",
+      activityId: "depart:kuro",
+    }]);
   });
 
   test("uses the terminal save cursor when a narration has no inline script id", () => {

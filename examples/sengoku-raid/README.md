@@ -23,6 +23,11 @@ rpgh transcript . --session NAME --tail 40            # fork 元を含む実プ�
 rpgh test .                                  # fixture 回帰
 ```
 
+`transcript` の Hub 選択行は private id だけでなく、その時点で公開されていた
+title / category / AI tags / 関連 objective を自己完結して保存する。従って末尾一行
+だけを Headless AI に渡しても、`negotiate_release` が単なる action kind ではなく
+`nonlethal / mercy / memory / story` の選択だったことを復元できる。
+
 共有 Web セッションで結末へ到達すると、同じ `choices --family` 証拠が
 **AI BRANCH** として終局画面に現れる。未探索の安定 option を一つ選ぶたび、
 元の結末を残したまま checkpoint から独立セッションを作り、その場で別の

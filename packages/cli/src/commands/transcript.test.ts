@@ -155,6 +155,40 @@ describe("session transcript", () => {
     expect(formatted).not.toContain("day=0 slot=");
   });
 
+  test("keeps selected Hub meaning when surrounding menus are outside the tail", async () => {
+    const gameDir = await mkdtemp(path.join(tmpdir(), "rpgh-transcript-activity-"));
+    temporaryDirectories.push(gameDir);
+    await writeLog(gameDir, "run", [{
+      input: { type: "doActivity", id: "release-private-id" },
+      activityDecision: {
+        activityId: "release-private-id",
+        title: "Release the oni",
+        kind: "action",
+        category: "combat",
+        aiTags: ["nonlethal", "mercy", "memory"],
+        recommended: true,
+        actionKind: "private:release",
+        relatedObjectiveIds: ["remember-the-oni"],
+      },
+      output: { type: "narration", text: "The oni leaves alive." },
+    }]);
+
+    const transcript = await collectSessionTranscript(gameDir, "run", 1);
+    expect(transcript.events[0]?.activityDecision).toEqual({
+      activityId: "release-private-id",
+      title: "Release the oni",
+      kind: "action",
+      category: "combat",
+      aiTags: ["nonlethal", "mercy", "memory"],
+      recommended: true,
+      actionKind: "private:release",
+      relatedObjectiveIds: ["remember-the-oni"],
+    });
+    expect(formatSessionTranscript(transcript)).toContain(
+      'activity release-private-id "Release the oni" [category=combat; tags=nonlethal,mercy,memory; objectives=remember-the-oni; recommended]',
+    );
+  });
+
   test("rejects path traversal and invalid tail sizes", async () => {
     await expect(collectSessionTranscript("/tmp/game", "../escape", 80)).rejects.toThrow(
       "Invalid session name",

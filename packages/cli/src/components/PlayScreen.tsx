@@ -3,7 +3,11 @@ import { Box, Text, useInput } from "ink";
 import { useInkInstance } from "../ink-instance";
 import { watch } from "node:fs";
 import { sep } from "node:path";
-import { choiceDecisionContext, Engine } from "@rpg-harness/engine";
+import {
+  activityDecisionContext,
+  choiceDecisionContext,
+  Engine,
+} from "@rpg-harness/engine";
 import type {
   AssetSpec,
   ComposedState,
@@ -249,6 +253,7 @@ export function PlayScreen({
       processingRef.current = true;
       try {
         const decision = choiceDecisionContext(outputRef.current, input);
+        const activityDecision = activityDecisionContext(outputRef.current, input);
         const { value, done: isDone } = await runner.next(input);
         dispatch({ kind: "choose", input, selectedBy: "player" });
         const finalState = engine.getState();
@@ -260,6 +265,7 @@ export function PlayScreen({
           input,
           output: isDone ? null : value,
           ...(decision ? { decision } : {}),
+          ...(activityDecision ? { activityDecision } : {}),
         }, finalState);
         if (isDone) {
           outputRef.current = { type: "gameEnd" };

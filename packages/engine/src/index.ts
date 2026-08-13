@@ -1,11 +1,15 @@
 export { Engine, buildPresetContext } from "./engine";
 export { evaluateCondition, explainCondition } from "./condition";
-export { choiceDecisionContext, resolveChoiceInput } from "./decision";
+export {
+  activityDecisionContext,
+  choiceDecisionContext,
+  resolveChoiceInput,
+} from "./decision";
 export { classifyInput, expectedInputs } from "./input";
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
-export type { ChoiceDecisionContext } from "./decision";
+export type { ActivityDecisionContext, ChoiceDecisionContext } from "./decision";
 export {
   createInitialState,
   applyDelta,

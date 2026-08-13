@@ -39,6 +39,38 @@ describe("AI-facing output contract", () => {
     expect(() => validateOutput(output)).toThrow(/activities not present.*missing/);
   });
 
+  test("validates activity semantics even when the Hub has no objectives", () => {
+    const output = hub({
+      id: "campaign",
+      title: "Campaign",
+      scope: "main",
+      terminal: false,
+      status: "active",
+    }) as Extract<Output, { type: "hubMenu" }>;
+    delete output.snapshot.objectives;
+    output.snapshot.activities[0]!.aiTags = ["nonlethal", "nonlethal"];
+    expect(() => validateOutput(output)).toThrow(/duplicate aiTags/);
+
+    output.snapshot.activities[0]!.aiTags = ["nonlethal", " mercy "];
+    expect(() => validateOutput(output)).toThrow(/non-empty, trimmed strings/);
+
+    output.snapshot.activities[0]!.aiTags = ["nonlethal", "mercy"];
+    output.snapshot.activities[0]!.actionKind = " ";
+    expect(() => validateOutput(output)).toThrow(/actionKind.*non-empty, trimmed/);
+  });
+
+  test("rejects duplicate activity identities before they can make decisions ambiguous", () => {
+    const output = hub({
+      id: "campaign",
+      title: "Campaign",
+      scope: "main",
+      terminal: false,
+      status: "active",
+    }) as Extract<Output, { type: "hubMenu" }>;
+    output.snapshot.activities.push({ ...output.snapshot.activities[0]! });
+    expect(() => validateOutput(output)).toThrow(/duplicate hub activity id/);
+  });
+
   test("Engine.run enforces the contract before exposing custom preset output", async () => {
     const game: Game = {
       title: "Dynamic output",

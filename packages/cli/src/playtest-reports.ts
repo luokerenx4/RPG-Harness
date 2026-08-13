@@ -58,6 +58,7 @@ export interface PlaytestEvidence {
     input: unknown;
     output: unknown;
     inputResult?: unknown;
+    activityDecision?: unknown;
   } | null;
   visualState?: {
     bg: string | null;
@@ -1181,12 +1182,16 @@ export async function capturePlaytestEvidenceSnapshot(
         input?: unknown;
         output?: unknown;
         inputResult?: unknown;
+        activityDecision?: unknown;
       } | null;
       if (entry) {
         lastEvent = {
           input: entry.input ?? null,
           output: compactOutput(entry.output),
           ...(entry.inputResult !== undefined ? { inputResult: entry.inputResult } : {}),
+          ...(entry.activityDecision !== undefined
+            ? { activityDecision: compactActivityDecision(entry.activityDecision) }
+            : {}),
         };
       }
     }
@@ -1207,6 +1212,21 @@ export async function capturePlaytestEvidenceSnapshot(
     ...(checkpoint !== undefined ? { checkpoint } : {}),
     ...(captureErrors.length > 0 ? { captureErrors } : {}),
   };
+}
+
+function compactActivityDecision(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return pick(value as Record<string, unknown>, [
+    "activityId",
+    "title",
+    "kind",
+    "category",
+    "aiTags",
+    "recommended",
+    "actionKind",
+    "pacingInstanceId",
+    "relatedObjectiveIds",
+  ]);
 }
 
 function compactVisualState(

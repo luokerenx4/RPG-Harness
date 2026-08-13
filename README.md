@@ -397,6 +397,12 @@ where another route was still playable without mutating any ancestor save.
 the player-visible story, activities, choices, stable decisions and checkpoint
 coordinates. An AI can therefore review what a GUI or Headless player actually
 experienced without scraping JSONL or confusing later source edits with history.
+Accepted Hub inputs persist an `activityDecision` beside the input/output pair:
+the exact replay id plus its title, category, AI tags, recommendation, pacing
+identity and linked public objectives. The compact transcript renders that
+evidence on the selected line, so a tailed or forked history still says that an
+opaque module action meant `nonlethal / mercy / memory` without retaining the
+entire preceding menu or leaking its dispatch payload.
 `assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
 visual art for the spec.yaml entries scripts reference.
 

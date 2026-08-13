@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import {
+  activityDecisionContext,
   choiceDecisionContext,
   classifyInput,
   Engine,
@@ -185,6 +186,9 @@ export function WebPlayScreen({
       const decision = input
         ? choiceDecisionContext(outputRef.current, input)
         : undefined;
+      const activityDecision = input
+        ? activityDecisionContext(outputRef.current, input)
+        : undefined;
       outputRef.current = output;
       dispatch({ kind: "apply", output });
       const engine = engineRef.current;
@@ -197,6 +201,7 @@ export function WebPlayScreen({
                 output,
                 ...(inputResult ? { inputResult } : {}),
                 ...(decision ? { decision } : {}),
+                ...(activityDecision ? { activityDecision } : {}),
               } satisfies WebStepEvent]
             : []),
         );

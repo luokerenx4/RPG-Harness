@@ -290,6 +290,47 @@ describe("playtest reports", () => {
     });
   });
 
+  test("retains selected Hub semantics in compact incident evidence", async () => {
+    const gameDir = await temporaryGame();
+    const session = "activity-contract";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "log.jsonl"), JSON.stringify({
+      input: { type: "doActivity", id: "release-private-id" },
+      activityDecision: {
+        activityId: "release-private-id",
+        title: "Release the oni",
+        kind: "action",
+        category: "combat",
+        aiTags: ["nonlethal", "mercy", "memory"],
+        actionKind: "raid:release",
+        pacingInstanceId: "encounter:oni-1",
+        relatedObjectiveIds: ["remember-the-oni"],
+        payload: { private: true },
+      },
+      output: { type: "narration", text: "The oni leaves alive." },
+    }) + "\n");
+
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "tooling",
+      severity: "minor",
+      title: "Headless loses the nonlethal intent",
+    });
+
+    expect(report.evidence.lastEvent?.activityDecision).toEqual({
+      activityId: "release-private-id",
+      title: "Release the oni",
+      kind: "action",
+      category: "combat",
+      aiTags: ["nonlethal", "mercy", "memory"],
+      actionKind: "raid:release",
+      pacingInstanceId: "encounter:oni-1",
+      relatedObjectiveIds: ["remember-the-oni"],
+    });
+  });
+
   test("lists reports across sessions and formats a compact human view", async () => {
     const gameDir = await temporaryGame();
     await recordPlaytestReport({

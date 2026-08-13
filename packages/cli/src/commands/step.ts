@@ -1,4 +1,9 @@
-import { choiceDecisionContext, peek, step } from "@rpg-harness/engine";
+import {
+  activityDecisionContext,
+  choiceDecisionContext,
+  peek,
+  step,
+} from "@rpg-harness/engine";
 import type { Input } from "@rpg-harness/engine";
 import { withSessionLock } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
@@ -30,6 +35,9 @@ export async function stepCommand(args: Args): Promise<void> {
     const decision = next.inputResult?.accepted
       ? choiceDecisionContext(before.output, input)
       : undefined;
+    const activityDecision = next.inputResult?.accepted
+      ? activityDecisionContext(before.output, input)
+      : undefined;
     await appendLog(args.gameDir, args.session, {
       t: Date.now(),
       source: "cli",
@@ -37,6 +45,7 @@ export async function stepCommand(args: Args): Promise<void> {
       output: next.output,
       ...(next.inputResult ? { inputResult: next.inputResult } : {}),
       ...(decision ? { decision } : {}),
+      ...(activityDecision ? { activityDecision } : {}),
     }, next.state);
     return next;
   });

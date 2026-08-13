@@ -606,6 +606,9 @@ export async function saveBridgeSession(
           ...(args.event.decision !== undefined
             ? { decision: args.event.decision }
             : {}),
+          ...(args.event.activityDecision !== undefined
+            ? { activityDecision: args.event.activityDecision }
+            : {}),
         },
         args.state,
       );

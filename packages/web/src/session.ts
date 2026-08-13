@@ -1,4 +1,5 @@
 import type {
+  ActivityDecisionContext,
   ChoiceDecisionContext,
   ComposedState,
   Input,
@@ -20,6 +21,7 @@ export interface WebStepEvent {
   output: Output;
   inputResult?: InputResult;
   decision?: ChoiceDecisionContext;
+  activityDecision?: ActivityDecisionContext;
 }
 
 export interface WebSessionInfo {

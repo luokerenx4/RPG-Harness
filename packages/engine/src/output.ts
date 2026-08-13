@@ -1,4 +1,4 @@
-import type { HubObjectiveSnapshot, Output } from "./types";
+import type { HubActivity, HubObjectiveSnapshot, Output } from "./types";
 
 export class OutputContractError extends Error {
   constructor(message: string) {
@@ -26,13 +26,66 @@ export function validateOutput(output: Output): void {
     }
     return;
   }
-  if (output.type !== "hubMenu" || output.snapshot.objectives === undefined) return;
-  const activityIds = new Set(output.snapshot.activities.map((activity) => activity.id));
+  if (output.type !== "hubMenu") return;
+  const activityIds = new Set<string>();
+  for (const activity of output.snapshot.activities) {
+    validateActivity(activity, activityIds);
+    activityIds.add(activity.id);
+  }
+  if (output.snapshot.objectives === undefined) return;
   const objectiveIds = new Set<string>();
   for (const objective of output.snapshot.objectives) {
     validateObjective(objective, objectiveIds, activityIds);
     objectiveIds.add(objective.id);
   }
+}
+
+function validateActivity(activity: HubActivity, activityIds: Set<string>): void {
+  if (!isStableIdentity(activity.id)) {
+    throw new OutputContractError("hub activity id must be a non-empty, trimmed string");
+  }
+  if (activityIds.has(activity.id)) {
+    throw new OutputContractError(`duplicate hub activity id "${activity.id}"`);
+  }
+  if (typeof activity.title !== "string" || !activity.title.trim()) {
+    throw new OutputContractError(
+      `hub activity "${activity.id}" title must be a non-empty string`,
+    );
+  }
+  if (activity.category !== undefined && !isStableIdentity(activity.category)) {
+    throw new OutputContractError(
+      `hub activity "${activity.id}" category must be a non-empty, trimmed string`,
+    );
+  }
+  if (activity.actionKind !== undefined && !isStableIdentity(activity.actionKind)) {
+    throw new OutputContractError(
+      `hub activity "${activity.id}" actionKind must be a non-empty, trimmed string`,
+    );
+  }
+  if (
+    activity.pacingInstanceId !== undefined &&
+    !isStableIdentity(activity.pacingInstanceId)
+  ) {
+    throw new OutputContractError(
+      `hub activity "${activity.id}" pacingInstanceId must be a non-empty, trimmed string`,
+    );
+  }
+  if (activity.aiTags !== undefined) {
+    if (activity.aiTags.some((tag) => !isStableIdentity(tag))) {
+      throw new OutputContractError(
+        `hub activity "${activity.id}" aiTags must contain non-empty, trimmed strings`,
+      );
+    }
+    if (new Set(activity.aiTags).size !== activity.aiTags.length) {
+      throw new OutputContractError(
+        `hub activity "${activity.id}" contains duplicate aiTags`,
+      );
+    }
+  }
+}
+
+function isStableIdentity(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value === value.trim();
 }
 
 function validateObjective(
