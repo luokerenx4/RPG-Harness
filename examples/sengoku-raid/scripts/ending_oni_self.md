@@ -27,27 +27,32 @@ options:
     text: 映し井戸で見た、もう半分の顔を思い出す
     ai_tags: [introspective]
     requires: { scriptCompleted: zone_haunt_kagami_oni }
+    locked_hint: 鏡鬼を峰打ちで抑え、放した記憶がない。
     goto: tether_kagami
   - id: kagari
     text: 篝の槍の拍を、最後に一度だけ数えてみる
     ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kagari } }
+    locked_hint: 篝と共に戦場を生き延びていない。
     goto: tether_kagari
   - id: kasumi
     text: 霞の言った「鹿の道」を、目で探してみる
     ai_tags: [social, loyal]
     requires: { switch: { name: befriended_kasumi } }
+    locked_hint: 霞と共に戦場を生き延びていない。
     goto: tether_kasumi
   - id: mio
     text: 澪の水鏡に、今の自分が映る様を思う
     ai_tags: [social, loyal]
     requires: { switch: { name: befriended_mio } }
+    locked_hint: 澪と共に戦場を生き延びていない。
     goto: tether_mio
   - id: three-flowers
     text: 月下の「三名連署」を、ひとつの灯として見つめる
     aiPriority: 20
     ai_tags: [social, collective, loyal]
     requires: { switch: { name: three_flowers_pledged } }
+    locked_hint: 三人と月下の誓いを結んでいない。
     goto: tether_three_flowers
   - id: alone
     text: 振り返るのを、やめる

@@ -1,0 +1,49 @@
+name: oni ending explains how its mirror tether was missed
+description: |
+  The terminal choice must keep its exact machine-readable script gate while
+  explaining the authored action sequence to GUI and Headless players. An
+  internal script id is not enough to tell an agent that the mirror oni had
+  to be suppressed and released rather than killed.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - letter_03_choice
+    switches:
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 0, intellect: 99 }
+    weapons:
+      ancestor_yaodao: { power: 50 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: []
+    companion: null
+    companionHp: 0
+    raid: null
+    pulsePending: null
+maxSteps: 10
+inputs:
+  - { type: doActivity, id: script:ending_oni_self }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: output
+    type: choice
+    present: true
+    choiceId: final-tether
+    optionId: kagami
+    optionAvailable: false
+    optionLockedReasonIncludes: 鏡鬼を峰打ちで抑え、放した記憶がない
+    optionRequires:
+      scriptCompleted: zone_haunt_kagami_oni
