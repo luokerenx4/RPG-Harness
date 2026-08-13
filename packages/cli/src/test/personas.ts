@@ -272,13 +272,14 @@ function pickTerminalObjectiveActivity(
 function pickTaggedActivity(
   output: Extract<Output, { type: "hubMenu" }>,
   preferredTags: readonly string[],
+  accepts: (activity: Extract<Output, { type: "hubMenu" }>["snapshot"]["activities"][number]) => boolean = () => true,
 ): Input | null {
   const weights = new Map(
     preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
   );
   let best: { id: string; score: number } | null = null;
   for (const activity of output.snapshot.activities) {
-    if (!activity.available) continue;
+    if (!activity.available || !accepts(activity)) continue;
     const score = (activity.aiTags ?? []).reduce(
       (sum, tag) => sum + (weights.get(tag) ?? 0),
       0,
@@ -384,10 +385,14 @@ export const personas: Record<string, Persona> = {
       // invitations), let the public objective disambiguate the intended
       // commitment. This preserves the charmer's social identity without
       // cycling forever between reversible relationship toggles.
-      if (objectiveActivity?.aiTags?.some((tag) => socialTags.includes(
+      if (objectiveActivity?.category === "social" && objectiveActivity.aiTags?.some((tag) => socialTags.includes(
         tag as typeof socialTags[number],
       ))) return objective;
-      const semantic = pickTaggedActivity(output, socialTags);
+      const semantic = pickTaggedActivity(
+        output,
+        socialTags,
+        (activity) => activity.category === "social",
+      );
       if (semantic) return semantic;
       if (objective) return objective;
       return pickActivity(output, (acts) => acts[acts.length - 1]!.idx);

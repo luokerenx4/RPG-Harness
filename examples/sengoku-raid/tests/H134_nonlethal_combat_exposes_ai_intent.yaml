@@ -1,0 +1,41 @@
+name: 非致死戦術は公開 AI 契約で意味を持つ
+description: |
+  Headless personas must understand why suppressing an enemy differs from a
+  lethal attack without inspecting the raid module or hard-coding action ids.
+state:
+  baseline:
+    completedScripts: [000_intro]
+    currentMapId: mt_houkyou_stone_paths
+    weapons:
+      ancestor_yaodao: { power: 37 }
+    characters:
+      player:
+        stats: { hp: 30, mental: 10, spectral: 3, intellect: 99 }
+  sengoku-raid:
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 1
+      pendingLoot: {}
+      visited:
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter:
+            enemyId: oni_warrior
+            enemyHp: 18
+            enemyHpMax: 18
+          encounterCleared: false
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: activity
+    id: suppress_strike
+    available: true
+    aiTagsIncludes: nonlethal
+  - kind: activity
+    id: suppress_strike
+    aiTagsIncludes: restraint
+  - kind: activity
+    id: suppress_strike
+    aiTagsIncludes: compassionate

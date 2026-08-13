@@ -40,6 +40,10 @@ assertions:
   - kind: activity
     id: negotiate_release
     available: true
+    aiTagsIncludes: nonlethal
+  - kind: activity
+    id: negotiate_release
+    aiTagsIncludes: mercy
   - kind: activity
     id: suppress_strike
     present: false

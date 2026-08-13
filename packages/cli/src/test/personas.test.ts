@@ -270,9 +270,52 @@ describe("charmer persona exploration", () => {
   test("follows semantic activity intent before a non-social main objective", async () => {
     const output = objectiveHub();
     output.snapshot.activities[0]!.aiTags = ["social", "story"];
+    output.snapshot.activities[0]!.category = "social";
     await expect(
       personas.charmer!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
+  test("follows a recommended nonlethal chain without game-private action ids", async () => {
+    const combat = objectiveHub();
+    combat.snapshot.activities = [
+      { id: "finish", kind: "action", title: "Finish", cost: 0, available: true },
+      {
+        id: "spare-opening",
+        kind: "action",
+        title: "Spare",
+        cost: 0,
+        available: true,
+        aiTags: ["nonlethal", "restraint", "compassionate"],
+        recommended: true,
+      },
+    ];
+    await expect(
+      personas.charmer!(combat, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "spare-opening" });
+
+    combat.snapshot.activities = [
+      {
+        id: "question",
+        kind: "action",
+        title: "Question",
+        cost: 0,
+        available: true,
+        aiTags: ["nonlethal", "story", "knowledge"],
+      },
+      {
+        id: "release-memory",
+        kind: "action",
+        title: "Release",
+        cost: 0,
+        available: true,
+        aiTags: ["nonlethal", "compassionate", "mercy", "memory", "story"],
+        recommended: true,
+      },
+    ];
+    await expect(
+      personas.charmer!(combat, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "release-memory" });
   });
 
   test("stays renderer-neutral when module-private visited state is present", async () => {
@@ -319,6 +362,7 @@ describe("charmer persona exploration", () => {
         cost: 0,
         available: true,
         aiTags: ["social", "progression"],
+        category: "social",
       },
       {
         id: "invite:mio",
@@ -327,6 +371,7 @@ describe("charmer persona exploration", () => {
         cost: 0,
         available: true,
         aiTags: ["social", "progression"],
+        category: "social",
       },
     ];
     output.snapshot.objectives![0]!.relatedActivityIds = ["invite:kasumi"];

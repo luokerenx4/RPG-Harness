@@ -37,3 +37,9 @@ assertions:
     id: negotiate_release
     available: true
     descriptionIncludes: 撤退して大名府へ戻ると、その鬼種の回想が現れる
+  - kind: activity
+    id: negotiate_release
+    aiTagsIncludes: memory
+  - kind: activity
+    id: negotiate_release
+    aiTagsIncludes: compassionate

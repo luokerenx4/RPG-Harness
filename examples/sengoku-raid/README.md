@@ -36,6 +36,10 @@ Web は選んだ直後の最初の台詞で止めた premiere branch を渡す�
 プレイヤー接手後の feedback も同じ境界を使う。進行中 script があればその
 authoring source、戦闘や Hub なら live checkpoint/runtime を修正座標とし、首映を
 作った古い script target へ後続の gameplay 指摘を誤配しない。
+戦闘の非致死ルートも公開 AI 契約で表す。`suppress_strike` は
+`nonlethal/restraint/compassionate`、聞き出し・解放は `story/knowledge` や
+`mercy/memory` を持つ。quality gate は `nonlethal` の実行を必須とするため、
+Headless matrix が実際に圧制・交渉系の遊びを通らなければ certified にならない。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
 密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。

@@ -27,7 +27,7 @@ ai_audit:
   # These tags are observed on activities the lanes actually execute, not
   # inferred from persona names or merely available buttons. Together they
   # prove that the acceptance matrix reaches all three authored raid styles.
-  required_activity_tags: [route/kuro_swamp, route/sumida_river, route/mt_houkyou, route/hell_gate]
+  required_activity_tags: [route/kuro_swamp, route/sumida_river, route/mt_houkyou, route/hell_gate, nonlethal]
   # A route tag proves that a lane entered the deep raid. Requiring this script
   # separately proves that at least one lane also built all three relationships
   # and reached their authored alliance scene before ending the campaign.

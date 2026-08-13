@@ -832,6 +832,12 @@ uses its frozen checkpoint without inventing a file target; and the original AI
 handoff target is only a fallback before the player has accepted control. This
 keeps a later balance report from being routed back into the premiere script
 that originally created the save.
+Hub actions use the same renderer-neutral semantic vocabulary as authored
+choices. Games can distinguish combat styles such as `nonlethal`, `restraint`,
+`mercy`, and `memory` without teaching a persona module-private action ids.
+Project quality policies may require those tags; certification then proves a
+fresh-world lane actually executed the authored play style, not merely that a
+tag was present on an unvisited button.
 Web submissions carry a structured player-feedback origin, so the same HUD can
 poll the session's issue history without mixing in autonomous audit findings.
 Players see whether AI is still working, resolved the concern, or explicitly

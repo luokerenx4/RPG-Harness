@@ -1210,6 +1210,11 @@ function buildRaidMenu(ctx: Ctx): Output {
   if (!inst) throw new Error(`${MODULE_ID}: map instance missing for ${map.id}`);
 
   const activities: HubActivity[] = [];
+  const nonlethalMemoryUnseen = ctx.game.scripts
+    .filter((script) => script.id.startsWith("zone_haunt_"))
+    .every((script) =>
+      ctx.state.baseline.scripts[script.id]?.selfSwitches.A !== true
+    );
 
   // 妖刀の業 — pulsePending takes over the menu after a victory.
   // Three exclusive imbue choices; each clears pulsePending.
@@ -1552,6 +1557,8 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: "峰を返して押さえ込む",
         description: "交渉できる体力まで留める。威力に関係なく敵の反撃を受ける",
         category: "combat",
+        aiTags: ["nonlethal", "restraint", "compassionate"],
+        ...(nonlethalMemoryUnseen ? { recommended: true } : {}),
         ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
@@ -1634,6 +1641,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: `聞き出す — ${enemyName(ctx, inst.encounter.enemyId)}`,
         description: `成功率 ${negotiateDropChance(cunning)}%（cunning ${cunning}）。失敗でも斬り直せる`,
         category: "combat",
+        aiTags: ["nonlethal", "story", "knowledge"],
         ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
@@ -1645,6 +1653,8 @@ function buildRaidMenu(ctx: Ctx): Output {
         title: `逃がす — ${enemyName(ctx, inst.encounter.enemyId)}`,
         description: "霊体化 -2、戦利品なし。撤退して大名府へ戻ると、その鬼種の回想が現れる",
         category: "combat",
+        aiTags: ["nonlethal", "compassionate", "mercy", "memory", "story"],
+        ...(nonlethalMemoryUnseen ? { recommended: true } : {}),
         ...(pacingInstanceId ? { pacingInstanceId } : {}),
         cost: 0,
         available: true,
