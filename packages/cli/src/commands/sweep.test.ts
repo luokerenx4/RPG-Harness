@@ -114,6 +114,42 @@ describe("bounded development sweep", () => {
     expect(result.runs).toHaveLength(1);
   });
 
+  test("pauses when one search exhausts its own node budget", async () => {
+    const gameDir = await temporarySweepGame();
+    const result = await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "per-item-budget",
+      limit: 1,
+      maxNodes: 1,
+      maxTotalNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "paused",
+      reason: "search-budget-exhausted",
+      snapshot: {
+        completedItems: 0,
+        nextKey: "story/scene-a",
+        remainingKeys: ["story/scene-a", "story/scene-b"],
+      },
+      safety: {
+        nodeBudget: { limit: 20, used: 1, remaining: 19 },
+      },
+      resume: {
+        fromKey: "story/scene-a",
+        snapshotRevision: expect.any(String),
+      },
+      runs: [{
+        key: "story/scene-a",
+        status: "failed",
+        result: { result: { reason: "max-nodes" } },
+      }],
+    });
+  });
+
   test("resumes from an exact key only while the snapshot revision matches", async () => {
     const gameDir = await temporarySweepGame();
     const first = await runDevelopmentSweep({

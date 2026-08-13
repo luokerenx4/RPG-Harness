@@ -7,6 +7,15 @@ requires:
     scriptId: zone_haunt_oni_lesser
     name: A
     eq: true
+ai:
+  relatedActivityIds:
+    - depart:kuro_swamp
+    - move:kuro_swamp_crossroads
+    - move:kuro_swamp_deep_grove
+    - suppress_strike
+    - negotiate_release
+    - extract
+    - script:zone_haunt_oni_lesser
 ---
 
 あの夜、放した下級の鬼の声が、まだ耳の奥で消えていない。

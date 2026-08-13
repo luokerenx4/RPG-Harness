@@ -490,6 +490,10 @@ describe("choice state-space search", () => {
 
     expect(compareChoiceSearchAssessment(deep, shallow)).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
+      { ...deep, satisfiedRequirements: 1 },
+      { ...shallow, satisfiedRequirements: 1 },
+    )).toBeLessThan(0);
+    expect(compareChoiceSearchAssessment(
       { ...deep, totalRequirements: 0 },
       { ...shallow, totalRequirements: 0 },
     )).toBeLessThan(0);

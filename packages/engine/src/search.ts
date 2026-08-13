@@ -608,12 +608,14 @@ export function compareChoiceSearchAssessment(
   const leftTerminal = left.outputType === "gameEnd";
   const rightTerminal = right.outputType === "gameEnd";
   if (leftTerminal !== rightTerminal) return leftTerminal ? -1 : 1;
-  // With an explicit long-term goal, a shallower tie-break breadth-explores
-  // every hub permutation before any raid-sized path can change a condition.
-  // Follow one plateau deeper instead; as soon as progress changes, the
-  // requirement score takes priority again. Requirement-free story lookup
-  // still prefers the shortest public-input path.
-  return left.totalRequirements > 0
+  // While a gate is still closed, a shallower tie-break breadth-explores every
+  // hub permutation before a raid-sized path can change it. Follow that
+  // plateau deeper. Once every authored requirement is satisfied, however,
+  // extra depth is only churn: prefer the shortest route to the now-open
+  // script activity.
+  const requirementsStillBlocked = left.totalRequirements > 0 &&
+    left.satisfiedRequirements < left.totalRequirements;
+  return requirementsStillBlocked
     ? left.steps - right.steps
     : right.steps - left.steps;
 }

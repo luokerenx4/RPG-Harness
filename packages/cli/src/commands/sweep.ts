@@ -200,7 +200,9 @@ export async function runDevelopmentSweep(args: SweepArgs): Promise<SweepResult>
     const consumedNodes = searchNodes(result);
     usedNodes += consumedNodes;
     if (result.status === "failed") {
-      stoppedReason = searches && consumedNodes >= remainingNodes
+      stoppedReason = searches && (
+        consumedNodes >= remainingNodes || searchHitNodeLimit(result)
+      )
         ? "search-budget-exhausted"
         : "work-failed";
       break;
@@ -455,6 +457,11 @@ function searchNodes(result: WorkResult): number {
   if (!search || typeof search !== "object") return 0;
   const explored = (search as { exploredNodes?: unknown }).exploredNodes;
   return typeof explored === "number" && Number.isFinite(explored) ? explored : 0;
+}
+
+function searchHitNodeLimit(result: WorkResult): boolean {
+  if (!result.result || typeof result.result !== "object") return false;
+  return (result.result as { reason?: unknown }).reason === "max-nodes";
 }
 
 async function anyTargetWritten(gameDir: string, sessions: string[]): Promise<boolean> {
