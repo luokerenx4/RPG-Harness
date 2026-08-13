@@ -404,6 +404,7 @@ describe("autoplay audit matrix", () => {
         auditMatrix: {
           sourceRevision: summary.source.stateRevision,
           seed: 71,
+          maxSegments: 4,
           sessionPrefix: "fresh-failing-matrix",
         },
       },
@@ -597,6 +598,7 @@ describe("autoplay audit matrix", () => {
         checkpoint: { schemaVersion: 1 },
         auditMatrix: {
           seed: expect.any(Number),
+          maxSegments: 4,
           sessionPrefix: "failing-matrix",
           policy: { minUniqueEndings: 2, minUniqueDecisionPaths: 3 },
           observed: { uniqueEndings: 1, uniqueDecisionPaths: 3 },
@@ -806,6 +808,85 @@ describe("autoplay audit matrix", () => {
     expect(await listPlaytestReports(gameDir)).toEqual([]);
   });
 
+  test("resumes progressing lanes across bounded segments before judging quality", async () => {
+    const singleGameDir = await temporaryLongAuditGame();
+    const single = await runAudit({
+      gameDir: singleGameDir,
+      sessionPrefix: "single-segment",
+      personas: ["objective"],
+      maxSteps: 2,
+      maxSegments: 1,
+      seed: 47,
+      reportOnStop: false,
+      pretty: false,
+    });
+    expect(single).toMatchObject({
+      maxSegments: 1,
+      lanes: [{ reason: "max-steps", segments: 1, ending: null }],
+      qualityGate: { status: "not-evaluated" },
+    });
+
+    const resumedGameDir = await temporaryLongAuditGame();
+    const resumed = await runAudit({
+      gameDir: resumedGameDir,
+      sessionPrefix: "resumed-segments",
+      personas: ["objective"],
+      maxSteps: 2,
+      maxSegments: 4,
+      seed: 47,
+      reportOnStop: false,
+      pretty: false,
+    });
+    expect(resumed).toMatchObject({
+      maxSegments: 4,
+      totals: { completed: 1, segments: 3, budgetCheckpoints: 0 },
+      lanes: [{
+        reason: "completed",
+        segments: 3,
+        ending: "long-intro",
+        decisions: 6,
+      }],
+      qualityGate: { status: "passed" },
+    });
+  });
+
+  test("rejects a non-positive audit segment budget", async () => {
+    const gameDir = await temporaryGame();
+    await expect(runAudit({
+      gameDir,
+      sessionPrefix: "bad-segments",
+      personas: ["objective"],
+      maxSteps: 10,
+      maxSegments: 0,
+      reportOnStop: false,
+      pretty: false,
+    })).rejects.toThrow("--max-segments must be a positive integer");
+  });
+
+  test("rejects a GUI write between audit segments instead of mixing evidence", async () => {
+    const gameDir = await temporaryLongAuditGame();
+    const game = await loadGame(gameDir);
+    await expect(runAudit({
+      gameDir,
+      sessionPrefix: "interleaved-segments",
+      personas: ["objective"],
+      maxSteps: 2,
+      maxSegments: 4,
+      seed: 53,
+      reportOnStop: false,
+      pretty: false,
+    }, {
+      onLaneSegmentComplete: async (_persona, session, segment, summary) => {
+        if (segment !== 0 || summary.reason !== "max-steps") return;
+        await withSessionLock(gameDir, session, async () => {
+          const changed = structuredClone(await loadSession(gameDir, session, game));
+          changed.baseline.inventory.gui_interleaved = 1;
+          await saveSession(gameDir, session, changed);
+        });
+      },
+    })).rejects.toThrow("Autoplay resume ownership lost");
+  });
+
   test("treats an explicit persona subset as diagnosis, not project acceptance", async () => {
     const gameDir = await temporaryChoiceGame();
     await writeFile(path.join(gameDir, "game.yaml"), [
@@ -857,6 +938,40 @@ async function temporaryGame(): Promise<string> {
     "---",
     "",
     "One beat.",
+    "",
+    "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryLongAuditGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-long-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Long audit test",
+    "ai_audit:",
+    "  personas: [objective]",
+    "  min_unique_endings: 1",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "scripts", "long-intro.md"), [
+    "---",
+    "id: long-intro",
+    "title: Long intro",
+    "characters: []",
+    "---",
+    "",
+    "First beat.",
+    "",
+    "Second beat.",
+    "",
+    "Third beat.",
+    "",
+    "Fourth beat.",
+    "",
+    "Fifth beat.",
     "",
     "[end]",
     "",

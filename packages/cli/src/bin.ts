@@ -174,7 +174,7 @@ COMMANDS
       Persisted runs also return executable pending choice branches.
 
   audit    <game-dir> --session-prefix PREFIX
-           [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--seed N]
+           [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--max-segments N] [--seed N]
            [--no-report-on-stop] [--pretty]
       Fork one immutable player checkpoint into an isolated AI persona matrix,
       or omit --from-session to materialize a seeded <prefix>-source new game.
@@ -184,6 +184,8 @@ COMMANDS
       Defaults to game.yaml ai_audit.personas, or the built-in
       objective,greedy,charmer,rude,hunter fallback. Including random requires
       --seed so the audit can be reproduced exactly.
+      Progressing max-step lanes resume automatically for up to 4 bounded
+      segments by default, preserving one deterministic quality matrix.
 
   cover    <game-dir> --session NAME [--source-session NAME] [--key WORK-KEY]
            [--persona NAME] [-v|--verbose] [--max-steps N] [--pretty]
@@ -945,6 +947,7 @@ async function runAuditCommand(args: string[]): Promise<void> {
       "session-prefix": { type: "string" },
       personas: { type: "string" },
       "max-steps": { type: "string", default: "1000" },
+      "max-segments": { type: "string", default: "4" },
       seed: { type: "string" },
       "no-report-on-stop": { type: "boolean", default: false },
       pretty: { type: "boolean", default: false },
@@ -953,7 +956,7 @@ async function runAuditCommand(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh audit <game-dir> --session-prefix PREFIX [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--seed N] [--no-report-on-stop] [--pretty]",
+    "rpgh audit <game-dir> --session-prefix PREFIX [--from-session PLAYER] [--from-at N] [--personas CSV] [--max-steps N] [--max-segments N] [--seed N] [--no-report-on-stop] [--pretty]",
   );
   if (!values["session-prefix"]) {
     process.stderr.write("Missing required flag: --session-prefix PREFIX\n");
@@ -981,6 +984,7 @@ async function runAuditCommand(args: string[]): Promise<void> {
     sessionPrefix: values["session-prefix"],
     personas: requestedPersonas,
     maxSteps: Number(values["max-steps"] ?? "1000"),
+    maxSegments: Number(values["max-segments"] ?? "4"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
     reportOnStop: !Boolean(values["no-report-on-stop"]),
     pretty: Boolean(values.pretty),

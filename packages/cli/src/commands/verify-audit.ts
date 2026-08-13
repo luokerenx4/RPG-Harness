@@ -84,6 +84,7 @@ export async function verifyAuditReport(
     sessionPrefix: args.sessionPrefix,
     personas,
     maxSteps: evidence.maxSteps!,
+    maxSegments: evidence.maxSegments ?? 1,
     seed: evidence.seed!,
     reportOnStop: false,
     reportOnQualityFailure: false,
@@ -131,6 +132,7 @@ export async function verifyAuditReport(
     sessionPrefix: args.sessionPrefix,
     sourceRevision: audit.source.stateRevision,
     maxSteps: evidence.maxSteps!,
+    maxSegments: evidence.maxSegments,
     seed: evidence.seed!,
     // Persist the exact frozen policy from the finding. The verification run
     // may add the original persona set internally to make the quality gate

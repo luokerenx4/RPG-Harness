@@ -20,6 +20,7 @@ import {
 } from "./fork";
 import {
   runAutoplay,
+  type AutoplaySemanticDecision,
   type AutoplayProgress,
   type AutoplaySummary,
 } from "./autoplay";
@@ -39,6 +40,8 @@ export interface AuditArgs {
   fromLogEntry?: number;
   sessionPrefix: string;
   personas: string[];
+  /** Maximum resumable autoplay budget slices consumed by each persona lane. */
+  maxSegments?: number;
   maxSteps: number;
   seed?: number;
   reportOnStop: boolean;
@@ -54,6 +57,8 @@ export interface AuditLaneSummary {
   session: string;
   webPath: string;
   reason: AutoplaySummary["reason"];
+  /** Number of bounded autoplay slices consumed by this lane. */
+  segments: number;
   decisions: number;
   steps: number;
   rejectedInputs: number;
@@ -85,10 +90,12 @@ export interface AuditSummary {
   sessionPrefix: string;
   /** Seed shared by fresh-game PRNG initialization and the persona matrix. */
   seed: number;
+  maxSegments: number;
   maxSteps: number;
   lanes: AuditLaneSummary[];
   totals: {
     lanes: number;
+    segments: number;
     completed: number;
     stalled: number;
     behaviorCycles: number;
@@ -144,6 +151,13 @@ export interface AuditHooks {
   // A narrow lifecycle seam for concurrency regression tests and embedding.
   // Production CLI callers do not need it.
   onLaneComplete?: (lane: AuditLaneSummary, index: number) => void | Promise<void>;
+  /** Runs after one bounded lane slice unlocks and before an optional resume. */
+  onLaneSegmentComplete?: (
+    persona: string,
+    session: string,
+    segment: number,
+    summary: AutoplaySummary,
+  ) => void | Promise<void>;
   /** Runs after the quality-evidence fork unlocks but before its report is recorded. */
   onQualityEvidenceForked?: (session: string) => void | Promise<void>;
 }
@@ -191,6 +205,7 @@ export async function runAudit(
   // caller seed or mint one before any lane starts, then freeze it in the
   // audit evidence.
   const effectiveSeed = args.seed ?? randomInt(0, 233_280);
+  const maxSegments = args.maxSegments ?? 4;
   const sourceSession = args.fromSession ?? `${args.sessionPrefix}-source`;
   assertSessionName(sourceSession);
   const qualityPolicy = mergeQualityPolicies(game.aiAudit, args.qualityFloor);
@@ -253,53 +268,52 @@ export async function runAudit(
     // The audit root seed is uint32; derive each independent persona lane in
     // the same closed domain so a valid 0xffffffff root cannot overflow the
     // autoplay fresh-world contract on lane two.
-    const laneSeed = (effectiveSeed + index) >>> 0;
-    const summary = await runAutoplay({
-      gameDir: args.gameDir,
-      persona: target.persona,
-      verbose: false,
-      maxSteps: args.maxSteps,
-      session: target.session,
-      preparedForkSource: {
-        fromSession: sourceSession,
-        source,
-      },
-      reportOnStop: args.reportOnStop,
-      seed: laneSeed,
-    });
-    const lane: AuditLaneSummary = {
-      persona: target.persona,
-      session: target.session,
-      webPath: summary.webPath!,
-      reason: summary.reason,
-      decisions: summary.decisions,
-      steps: summary.steps,
-      rejectedInputs: summary.rejectedInputs,
-      ending: summary.ending,
-      progress: summary.progress,
-      path: {
-        revision: summary.decisionPath.revision,
-        semanticDecisions: summary.decisionPath.decisions.length,
-        choices: summary.decisionPath.decisions.filter(
-          (decision) => decision.type === "choose",
-        ).length,
-        activityTags: collectActivityTags(summary),
-      },
-      ...(summary.stall ? { stall: summary.stall } : {}),
-      ...(summary.behaviorCycle ? { behaviorCycle: summary.behaviorCycle } : {}),
-      ...(summary.report
-        ? {
-            report: {
-              id: summary.report.id,
-              severity: summary.report.severity,
-              title: summary.report.title,
-            },
-          }
-        : {}),
-    };
+    let laneSeed = (effectiveSeed + index) >>> 0;
+    let expectedInitialStateRevision: string | undefined;
+    const segments: AutoplaySummary[] = [];
+    for (let segment = 0; segment < maxSegments; segment += 1) {
+      const summary = await runAutoplay({
+        gameDir: args.gameDir,
+        persona: target.persona,
+        verbose: false,
+        maxSteps: args.maxSteps,
+        session: target.session,
+        ...(segment === 0
+          ? {
+              preparedForkSource: {
+                fromSession: sourceSession,
+                source,
+              },
+            }
+          : {}),
+        reportOnStop: args.reportOnStop,
+        seed: laneSeed,
+        ...(expectedInitialStateRevision
+          ? { expectedInitialStateRevision }
+          : {}),
+      });
+      segments.push(summary);
+      await hooks.onLaneSegmentComplete?.(
+        target.persona,
+        target.session,
+        segment,
+        summary,
+      );
+      if (
+        args.maxSteps === 0 ||
+        summary.reason !== "max-steps" ||
+        summary.behaviorCycle ||
+        !summary.continuation
+      ) break;
+      laneSeed = summary.continuation.next.args.seed;
+      expectedInitialStateRevision = createHash("sha256")
+        .update(JSON.stringify(summary.finalState))
+        .digest("hex");
+    }
+    const { lane, decisions } = summarizeAuditLane(target.persona, segments);
     choicesByPersona.set(
       target.persona,
-      summary.decisionPath.decisions.filter(
+      decisions.filter(
         (decision): decision is Extract<typeof decision, { type: "choose" }> =>
           decision.type === "choose",
       ),
@@ -394,6 +408,7 @@ export async function runAudit(
         sourceRevision: stateRevision,
         sessionPrefix: args.sessionPrefix,
         maxSteps: args.maxSteps,
+        maxSegments,
         seed: effectiveSeed,
         policy: qualityPolicy!,
         observed: {
@@ -433,10 +448,12 @@ export async function runAudit(
     },
     sessionPrefix: args.sessionPrefix,
     seed: effectiveSeed,
+    maxSegments,
     maxSteps: args.maxSteps,
     lanes,
     totals: {
       lanes: lanes.length,
+      segments: lanes.reduce((sum, lane) => sum + lane.segments, 0),
       completed: lanes.filter((lane) => lane.reason === "completed").length,
       stalled: lanes.filter((lane) => lane.reason === "stalled").length,
       behaviorCycles: lanes.filter((lane) => lane.behaviorCycle !== undefined).length,
@@ -483,6 +500,88 @@ export async function runAudit(
           },
         }
       : {}),
+  };
+}
+
+function summarizeAuditLane(
+  persona: string,
+  segments: AutoplaySummary[],
+): { lane: AuditLaneSummary; decisions: AutoplaySemanticDecision[] } {
+  const final = segments.at(-1);
+  if (!final) throw new Error(`AI audit lane ${persona} produced no segments`);
+  const decisions = segments.flatMap((segment) => segment.decisionPath.decisions);
+  const pathRevision = createHash("sha256")
+    .update(JSON.stringify(decisions))
+    .digest("hex");
+  const completedScripts = [...new Set(
+    segments.flatMap((segment) => segment.progress.completedScripts),
+  )];
+  const objectiveChanges = new Map<string, AutoplayProgress["objectiveChanges"][number]>();
+  for (const segment of segments) {
+    for (const change of segment.progress.objectiveChanges) {
+      const key = `${change.objectiveId}\u0000${change.requirementId}`;
+      const previous = objectiveChanges.get(key);
+      objectiveChanges.set(key, previous
+        ? { ...change, from: previous.from }
+        : change);
+    }
+  }
+  const scriptProgress = segments.flatMap((segment) =>
+    segment.progress.scriptProgress ? [segment.progress.scriptProgress] : []
+  );
+  const firstScriptProgress = scriptProgress[0];
+  const lastScriptProgress = scriptProgress.at(-1);
+  const progress: AutoplayProgress = {
+    madeProgress: segments.some((segment) => segment.progress.madeProgress),
+    completedScripts,
+    objectiveChanges: [...objectiveChanges.values()],
+    ...(firstScriptProgress && lastScriptProgress
+      ? {
+          scriptProgress: {
+            from: firstScriptProgress.from,
+            to: lastScriptProgress.to,
+            beatIndexFrom: firstScriptProgress.beatIndexFrom,
+            beatIndexTo: lastScriptProgress.beatIndexTo,
+          },
+        }
+      : {}),
+  };
+  return {
+    decisions,
+    lane: {
+      persona,
+      session: final.session!,
+      webPath: final.webPath!,
+      reason: final.reason,
+      segments: segments.length,
+      decisions: segments.reduce((sum, segment) => sum + segment.decisions, 0),
+      steps: segments.reduce((sum, segment) => sum + segment.steps, 0),
+      rejectedInputs: segments.reduce(
+        (sum, segment) => sum + segment.rejectedInputs,
+        0,
+      ),
+      ending: final.ending,
+      progress,
+      path: {
+        revision: pathRevision,
+        semanticDecisions: decisions.length,
+        choices: decisions.filter((decision) => decision.type === "choose").length,
+        activityTags: [...new Set(decisions.flatMap((decision) =>
+          decision.type === "doActivity" ? decision.aiTags ?? [] : []
+        ))].sort(),
+      },
+      ...(final.stall ? { stall: final.stall } : {}),
+      ...(final.behaviorCycle ? { behaviorCycle: final.behaviorCycle } : {}),
+      ...(final.report
+        ? {
+            report: {
+              id: final.report.id,
+              severity: final.report.severity,
+              title: final.report.title,
+            },
+          }
+        : {}),
+    },
   };
 }
 
@@ -609,12 +708,6 @@ function evaluateQualityGate(
   };
 }
 
-function collectActivityTags(summary: AutoplaySummary): string[] {
-  return [...new Set(summary.decisionPath.decisions.flatMap((decision) =>
-    decision.type === "doActivity" ? decision.aiTags ?? [] : []
-  ))].sort();
-}
-
 function formatEndingCounts(endings: Record<string, number>): string {
   const entries = Object.entries(endings);
   return entries.length > 0
@@ -673,6 +766,10 @@ function summarizeChoiceDivergences(
 function validateAuditArgs(args: AuditArgs): void {
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
     throw new Error("--max-steps must be a non-negative integer");
+  }
+  if (args.maxSegments !== undefined &&
+    (!Number.isInteger(args.maxSegments) || args.maxSegments < 1)) {
+    throw new Error("--max-segments must be a positive integer");
   }
   if (args.fromLogEntry !== undefined && (
     !Number.isInteger(args.fromLogEntry) || args.fromLogEntry < 0

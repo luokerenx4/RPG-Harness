@@ -134,6 +134,8 @@ export interface PlaytestAuditMatrixEvidence {
   sessionPrefix: string;
   /** Present on reports created after deterministic audit verification shipped. */
   maxSteps?: number;
+  /** Bounded autoplay slices available to every lane. Defaults to one on legacy evidence. */
+  maxSegments?: number;
   seed?: number;
   policy: {
     personas?: string[];
@@ -181,6 +183,8 @@ export function hasVerifiableAuditEvidence(
   if (
     evidence === undefined ||
     !Number.isInteger(evidence.maxSteps) || evidence.maxSteps! < 0 ||
+    (evidence.maxSegments !== undefined &&
+      (!Number.isInteger(evidence.maxSegments) || evidence.maxSegments! < 1)) ||
     !Number.isInteger(evidence.seed) || evidence.seed! < 0 ||
     !Array.isArray(evidence.lanes) || evidence.lanes.length === 0
   ) return false;
@@ -234,6 +238,7 @@ export interface PlaytestAuditVerification {
   sessionPrefix: string;
   sourceRevision: string;
   maxSteps: number;
+  maxSegments?: number;
   seed: number;
   policy: {
     personas?: string[];
@@ -711,6 +716,7 @@ function assertAuditVerificationMatches(
   }
   if (
     verification.maxSteps !== audit.maxSteps ||
+    (verification.maxSegments ?? 1) !== (audit.maxSegments ?? 1) ||
     verification.seed !== audit.seed ||
     JSON.stringify(sortJson(verification.policy)) !== JSON.stringify(sortJson(audit.policy))
   ) {

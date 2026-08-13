@@ -66,6 +66,8 @@ export interface AutoplayArgs {
     fromSession: string;
     source: ForkSource;
   };
+  /** Internal resume fence checked under the target transaction lock. */
+  expectedInitialStateRevision?: string;
   // Internal execution target used by `rpgh cover`. The first decision is
   // only submitted after the recoverable checkpoint still presents this
   // exact stable choice and option; option array indexes may safely change.
@@ -470,6 +472,16 @@ export async function runAutoplay(
           { seed: effectiveSeed },
         )
       : createInitialState(game, { seed: effectiveSeed });
+    if (args.expectedInitialStateRevision !== undefined) {
+      const actualRevision = createHash("sha256")
+        .update(JSON.stringify(initialState))
+        .digest("hex");
+      if (actualRevision !== args.expectedInitialStateRevision) {
+        throw new Error(
+          `Autoplay resume ownership lost for ${args.session}: expected state ${args.expectedInitialStateRevision}, found ${actualRevision}`,
+        );
+      }
+    }
     autoplayInitialState = initialState;
     const result = await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,

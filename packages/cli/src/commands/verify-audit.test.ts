@@ -126,6 +126,7 @@ describe("AI audit issue verification", () => {
             issueCheckpointRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
             sessionPrefix: "verify-fixed",
             maxSteps: 10,
+            maxSegments: 4,
             seed: expect.any(Number),
             policy: { minUniqueDecisionPaths: 4 },
             observed: { uniqueEndings: 1, uniqueDecisionPaths: 4 },
