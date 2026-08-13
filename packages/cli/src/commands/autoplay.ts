@@ -1,4 +1,8 @@
-import { emptyVisualState, runLoop } from "@rpg-harness/engine";
+import {
+  createInitialState,
+  emptyVisualState,
+  runLoop,
+} from "@rpg-harness/engine";
 import type {
   BehaviorCycleDiagnostic,
   LoopReason,
@@ -86,7 +90,10 @@ export interface TargetChoiceResult extends TargetChoice {
 
 export interface AutoplaySummary {
   reason: LoopReason;
-  seed?: number;
+  /** Exact registered policy used for this run. */
+  persona: string;
+  /** Shared fresh-world and persona seed, or the persona seed for a resumed save. */
+  seed: number;
   error?: string;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
@@ -154,7 +161,7 @@ export interface AutoplayContinuation {
     args: {
       persona: string;
       maxSteps: number;
-      seed?: number;
+      seed: number;
       session: string;
       reportOnStop: boolean;
     };
@@ -288,8 +295,11 @@ export async function runAutoplay(
   if (!Number.isInteger(args.maxSteps) || args.maxSteps < 0) {
     throw new Error("--max-steps must be a non-negative integer");
   }
-  if (args.seed !== undefined && (!Number.isInteger(args.seed) || args.seed < 0)) {
-    throw new Error("--seed must be a non-negative integer");
+  if (
+    args.seed !== undefined &&
+    (!Number.isInteger(args.seed) || args.seed < 0 || args.seed > 0xffff_ffff)
+  ) {
+    throw new Error("--seed must be a uint32 integer");
   }
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
@@ -325,18 +335,10 @@ export async function runAutoplay(
   if (args.reportOnStop && !args.session) {
     throw new Error("--report-on-stop requires a persisted --session");
   }
-  // Any run that may become an automatically verifiable coding issue must be
-  // replayable even when the persona itself is deterministic: authored combat
-  // and module hooks can still consume RNG. Preserve an explicit caller seed,
-  // otherwise mint and record one before the first output is evaluated.
-  const effectiveSeed = args.seed ?? (args.reportOnStop
-    ? randomInt(0, 233_280)
-    : undefined);
-
   const game = await loadGame(args.gameDir);
   const personaRegistry = collectAiPersonas(game);
-  const persona = personaRegistry[args.persona]?.decide;
-  if (!persona) {
+  const personaDefinition = personaRegistry[args.persona];
+  if (!personaDefinition) {
     const available = Object.entries(personaRegistry)
       .map(([name, entry]) => `  ${name.padEnd(10)} — ${entry.description}`)
       .join("\n");
@@ -344,6 +346,13 @@ export async function runAutoplay(
       `Unknown persona: ${args.persona}\n\nAvailable personas:\n${available}`,
     );
   }
+  const persona = personaDefinition.decide;
+  // Every run needs one public causal seed. On a fresh save it seeds both
+  // world/module initialization and the independent persona stream; on a
+  // resumed save the persisted world cursor wins and it seeds the persona.
+  // This makes ordinary successful exploration reproducible too, rather than
+  // preserving determinism only after a run has already become an incident.
+  const effectiveSeed = args.seed ?? randomInt(0, 0x1_0000_0000);
 
   let fork: Awaited<ReturnType<typeof createForkFromSource>> | undefined;
   let preparedForkSource = args.preparedForkSource;
@@ -454,8 +463,13 @@ export async function runAutoplay(
       ? (await readSessionLog(args.gameDir, args.session)).length
       : 0;
     const initialState = args.session
-      ? await loadSession(args.gameDir, args.session, game)
-      : undefined;
+      ? await loadSession(
+          args.gameDir,
+          args.session,
+          game,
+          { seed: effectiveSeed },
+        )
+      : createInitialState(game, { seed: effectiveSeed });
     autoplayInitialState = initialState;
     const result = await runLoop(game, initialState, targetedPersona, {
       maxSteps: args.maxSteps,
@@ -554,9 +568,7 @@ export async function runAutoplay(
               // A zero-budget inspection still returns a continuation that can
               // actually advance when an orchestrator executes it verbatim.
               maxSteps: Math.max(1, args.maxSteps),
-              ...(effectiveSeed !== undefined
-                ? { seed: personaRng.state() }
-                : {}),
+              seed: personaRng.state(),
               session: args.session,
               reportOnStop: args.reportOnStop ?? false,
             },
@@ -632,7 +644,7 @@ export async function runAutoplay(
         replayLogEntry: autoplayReplayLogEntry,
         persona: args.persona,
         maxSteps: args.maxSteps,
-        seed: effectiveSeed!,
+        seed: effectiveSeed,
         stopReason: result.reason,
         decisions: countDecisions(result.trace),
         rejectedInputs: countRejectedInputs(result.trace),
@@ -654,7 +666,8 @@ export async function runAutoplay(
 
   return {
     reason: result.reason,
-    ...(effectiveSeed !== undefined ? { seed: effectiveSeed } : {}),
+    persona: args.persona,
+    seed: effectiveSeed,
     ...(result.error ? { error: result.error } : {}),
     ...(result.stall ? { stall: result.stall } : {}),
     ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
@@ -932,13 +945,10 @@ export function detectTerminalScriptId(result: {
   return typeof ending === "string" && ending.trim() ? ending : "game-end";
 }
 
-function createPersonaRng(seed: number | undefined): {
+function createPersonaRng(seed: number): {
   next: () => number;
   state: () => number;
 } {
-  if (seed === undefined) {
-    return { next: Math.random, state: () => 0 };
-  }
   let state = seed;
   return {
     next: () => {

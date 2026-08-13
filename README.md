@@ -599,6 +599,14 @@ for any game (always-first / always-last / always-second / uniform-random /
 training-aware). They're useful for fuzz-testing path coverage. For LLM-driven
 personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/SKILL.md).
 
+Every standalone `autoplay` result identifies both the registered `persona` and
+its public uint32 `seed`. On a fresh session that one seed initializes the game
+world (including author module RNG) and the runner-owned persona stream, so
+repeating the command with the returned seed and another fresh session produces
+the same semantic decision path and terminal state. On a resumed session the
+persisted world RNG remains authoritative while the seed resumes persona
+sampling; budget continuations return the exact next seed automatically.
+
 For an autonomous development lane, combine `--from-session`, `--session`, and
 `--report-on-stop`. The source GUI/player save is locked and checkpoint-forked
 before the first AI input; the target must not already exist. A normal game end

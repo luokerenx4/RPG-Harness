@@ -57,6 +57,8 @@ describe("autoplay semantic decision paths", () => {
   test("keeps default CLI output bounded while pointing at exact details", () => {
     const full = {
       reason: "completed",
+      persona: "completionist",
+      seed: 17,
       progress: {
         madeProgress: true,
         completedScripts: Array.from(
@@ -114,6 +116,7 @@ describe("autoplay semantic decision paths", () => {
 
     const compact = compactAutoplaySummary(full);
 
+    expect(compact.persona).toBe("completionist");
     expect(compact.decisionPath).toEqual({ revision: "decision-revision" });
     expect(compact.finalStateRevision).toMatch(/^[a-f0-9]{64}$/);
     expect(compact.progress).toMatchObject({
@@ -650,6 +653,71 @@ describe("autoplay autonomous development lane", () => {
     expect(replay.decisionPath).toEqual(original.decisionPath);
   });
 
+  test("mints and returns a reproducible seed for a standalone stochastic persona", async () => {
+    const gameDir = await temporaryRandomChoiceGame();
+    const originalRandom = Math.random;
+    const first = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      session: "auto-seeded-random",
+    });
+
+    expect(first.persona).toBe("random");
+    expect(first.seed).toBeInteger();
+    expect(first.seed).toBeGreaterThanOrEqual(0);
+    expect(first.seed).toBeLessThan(0x1_0000_0000);
+    expect(Math.random).toBe(originalRandom);
+
+    const replay = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: first.seed,
+      session: "auto-seeded-random-replay",
+    });
+
+    expect(replay.persona).toBe("random");
+    expect(replay.seed).toBe(first.seed);
+    expect(replay.decisionPath).toEqual(first.decisionPath);
+    expect(replay.finalState["random-world"])
+      .toEqual(first.finalState["random-world"]);
+  });
+
+  test("uses the public seed for fresh world initialization as well as the persona", async () => {
+    const gameDir = await temporaryRandomChoiceGame();
+    const originalRandom = Math.random;
+    Math.random = () => 0.5;
+    try {
+      const first = await runAutoplay({
+        gameDir,
+        persona: "random",
+        verbose: false,
+        maxSteps: 3,
+        seed: 1234,
+        session: "seeded-world-a",
+      });
+      const replay = await runAutoplay({
+        gameDir,
+        persona: "random",
+        verbose: false,
+        maxSteps: 3,
+        seed: 1234,
+        session: "seeded-world-b",
+      });
+
+      expect(first.finalState["random-world"]).toMatchObject({ seed: 1234 });
+      expect(replay.finalState["random-world"])
+        .toEqual(first.finalState["random-world"]);
+      expect(replay.decisionPath).toEqual(first.decisionPath);
+      expect(replay.finalState).toEqual(first.finalState);
+    } finally {
+      Math.random = originalRandom;
+    }
+  });
+
   test("keeps runner-owned persona randomness out of global Math.random", async () => {
     const gameDir = await temporaryGlobalRandomGuardGame();
     const originalRandom = Math.random;
@@ -730,6 +798,14 @@ describe("autoplay autonomous development lane", () => {
       session: "missing-source-branch",
     })).rejects.toThrow("Source session does not exist");
     await expect(pathExists(sessionDir(gameDir, "missing-source-branch"))).resolves.toBe(false);
+
+    await expect(runAutoplay({
+      gameDir,
+      persona: "greedy",
+      verbose: false,
+      maxSteps: 1,
+      seed: 0x1_0000_0000,
+    })).rejects.toThrow("--seed must be a uint32 integer");
   });
 
   test("keeps fork initialization and play in one target transaction", async () => {
@@ -878,13 +954,30 @@ async function temporaryRandomChoiceGame(): Promise<string> {
   await writeFile(path.join(dir, "game.yaml"), [
     "title: Autoplay random replay test",
     "preset: ./modules/run.ts",
+    "modules:",
+    "  - ./modules/world.ts",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "world.ts"), [
+    'import type { Module } from "@rpg-harness/engine";',
+    "const world: Module = {",
+    '  id: "random-world",',
+    "  initialize: (_game, context) => ({",
+    "    seed: context.seed,",
+    '    order: context.rng() < 0.5 ? "left-first" : "right-first",',
+    "  }),",
+    "};",
+    "export default world;",
     "",
   ].join("\n"), "utf-8");
   await writeFile(path.join(dir, "modules", "run.ts"), [
     'import type { RunFunction } from "@rpg-harness/engine";',
-    "const run: RunFunction = async function* () {",
+    "const run: RunFunction = async function* (ctx) {",
     "  while (true) {",
-    '    const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities: [{ id: "left", kind: "action", title: "Left", cost: 0, available: true }, { id: "right", kind: "action", title: "Right", cost: 0, available: true }] } };',
+    '    const world = ctx.state["random-world"] as { order: string };',
+    '    const ids = world.order === "left-first" ? ["left", "right"] : ["right", "left"];',
+    '    const activities = ids.map((id) => ({ id, kind: "action" as const, title: id, cost: 0, available: true }));',
+    '    const input = yield { type: "hubMenu", snapshot: { day: 1, maxDay: 1, slot: 0, slotName: "day", slotsPerDay: 1, stats: [], affections: [], activities } };',
     '    yield { type: "narration", text: input.type === "doActivity" ? input.id : "none" };',
     "  }",
     "};",

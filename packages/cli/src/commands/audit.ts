@@ -250,6 +250,10 @@ export async function runAudit(
     optionId: string;
   }>>();
   for (const [index, target] of targets.entries()) {
+    // The audit root seed is uint32; derive each independent persona lane in
+    // the same closed domain so a valid 0xffffffff root cannot overflow the
+    // autoplay fresh-world contract on lane two.
+    const laneSeed = (effectiveSeed + index) >>> 0;
     const summary = await runAutoplay({
       gameDir: args.gameDir,
       persona: target.persona,
@@ -261,7 +265,7 @@ export async function runAudit(
         source,
       },
       reportOnStop: args.reportOnStop,
-      seed: effectiveSeed + index,
+      seed: laneSeed,
     });
     const lane: AuditLaneSummary = {
       persona: target.persona,

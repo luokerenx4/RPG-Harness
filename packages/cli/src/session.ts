@@ -2,7 +2,11 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createInitialState } from "@rpg-harness/engine";
-import type { ComposedState, Game } from "@rpg-harness/engine";
+import type {
+  ComposedState,
+  Game,
+  InitialStateOptions,
+} from "@rpg-harness/engine";
 import { appendCheckpointedSessionEvent } from "@rpg-harness/session-store";
 
 const SESSION_FILE = "state.json";
@@ -16,6 +20,7 @@ export async function loadSession(
   gameDir: string,
   name: string,
   game: Game,
+  initialStateOptions?: InitialStateOptions,
 ): Promise<ComposedState> {
   const file = path.join(sessionDir(gameDir, name), SESSION_FILE);
   try {
@@ -23,7 +28,7 @@ export async function loadSession(
     return JSON.parse(raw) as ComposedState;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return createInitialState(game);
+      return createInitialState(game, initialStateOptions);
     }
     throw err;
   }

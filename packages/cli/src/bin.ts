@@ -161,6 +161,8 @@ COMMANDS
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
       The default JSON is bounded: it keeps trace/state revisions and branch
       counts instead of embedding the entire save and decision history.
+      Every run returns its persona and seed; a fresh run uses that seed for
+      both world initialization and persona sampling so it can be reproduced.
       --full restores the complete trace, state, and branch evidence payload.
       --from-session atomically forks a player/GUI save into --session before
       the AI moves, so autonomous play never mutates the player's branch.

@@ -162,6 +162,22 @@ describe("autoplay audit matrix", () => {
     })).rejects.toThrow("fresh audit --seed must fit in uint32");
   });
 
+  test("keeps persona lane seeds inside uint32 at the top of the seed space", async () => {
+    const gameDir = await temporaryGame();
+    const summary = await runAudit({
+      gameDir,
+      sessionPrefix: "fresh-max-seed",
+      personas: ["objective", "greedy"],
+      maxSteps: 10,
+      seed: 0xffff_ffff,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.seed).toBe(0xffff_ffff);
+    expect(summary.totals).toMatchObject({ completed: 2, errors: 0 });
+  });
+
   test("preflights every target before creating the first lane", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
