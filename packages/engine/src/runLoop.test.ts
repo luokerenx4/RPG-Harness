@@ -168,6 +168,10 @@ describe("runLoop input diagnostics", () => {
       recommended: true,
       actionKind: "raid:release",
     });
+    expect(result.trace[1]?.inputResult).toMatchObject({
+      accepted: true,
+      expected: [{ type: "next" }, { type: "quit" }],
+    });
   });
 
   test("records a rejected input without delivering it to the generator", async () => {

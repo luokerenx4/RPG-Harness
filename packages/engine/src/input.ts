@@ -27,6 +27,20 @@ export interface InputResult {
 }
 
 /**
+ * Attach an accepted input diagnostic to the output now visible to the caller.
+ * Rejections already remain on the previous output and keep its corrective
+ * expectations; successful transitions must advertise the next protocol.
+ */
+export function retargetAcceptedInputResult(
+  result: InputResult,
+  output: Output | null,
+): InputResult {
+  return result.accepted
+    ? { ...result, expected: output ? expectedInputs(output) : [] }
+    : result;
+}
+
+/**
  * Validate an input against the exact public output the caller is looking at.
  * This is deliberately output-driven: a legitimate action may make no state
  * change, so before/after diffs cannot reliably tell accepted inputs from

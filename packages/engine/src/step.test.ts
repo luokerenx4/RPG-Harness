@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { peek, step } from "./step";
-import { markScriptCompleted } from "./state";
+import { createInitialState, markScriptCompleted } from "./state";
 import {
   makeCharacter,
   makeGame,
@@ -90,6 +90,43 @@ describe("step input diagnostics", () => {
     state.baseline.currentScriptId = "intro";
     const result = await step(game, state, { type: "next" });
     expect(result.output).toMatchObject({ type: "narration", text: "second" });
-    expect(result.inputResult?.accepted).toBe(true);
+    expect(result.inputResult).toMatchObject({
+      accepted: true,
+      expected: [{ type: "next" }, { type: "quit" }],
+    });
+  });
+
+  test("accepted Hub input advertises the resulting narration protocol", async () => {
+    const game = makeGame({
+      runFn: async function* () {
+        yield { type: "hubMenu" as const, snapshot: {
+          day: 1,
+          maxDay: 1,
+          slot: 0,
+          slotName: "",
+          slotsPerDay: 1,
+          stats: [],
+          affections: [],
+          activities: [{
+            id: "memory",
+            kind: "action" as const,
+            title: "Recall",
+            cost: 0,
+            available: true,
+          }],
+        } };
+        yield { type: "narration" as const, text: "The memory returns." };
+      },
+    });
+    const result = await step(game, createInitialState(game), {
+      type: "doActivity",
+      id: "memory",
+    });
+
+    expect(result.output).toMatchObject({ type: "narration" });
+    expect(result.inputResult).toMatchObject({
+      accepted: true,
+      expected: [{ type: "next" }, { type: "quit" }],
+    });
   });
 });

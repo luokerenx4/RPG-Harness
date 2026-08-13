@@ -5,7 +5,11 @@ export {
   choiceDecisionContext,
   resolveChoiceInput,
 } from "./decision";
-export { classifyInput, expectedInputs } from "./input";
+export {
+  classifyInput,
+  expectedInputs,
+  retargetAcceptedInputResult,
+} from "./input";
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";

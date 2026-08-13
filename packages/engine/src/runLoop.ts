@@ -5,7 +5,11 @@ import {
   type ActivityDecisionContext,
   type ChoiceDecisionContext,
 } from "./decision";
-import { classifyInput, type InputResult } from "./input";
+import {
+  classifyInput,
+  retargetAcceptedInputResult,
+  type InputResult,
+} from "./input";
 import { cloneState, createInitialState } from "./state";
 import type { ComposedState, Game, Input, Output } from "./types";
 
@@ -103,12 +107,12 @@ export async function runLoop(
   try {
     let priming = true;
     while (true) {
-      const inputResult: InputResult | undefined = !priming && lastOutput && lastInput
+      const classifiedInput: InputResult | undefined = !priming && lastOutput && lastInput
         ? classifyInput(lastOutput, lastInput)
         : undefined;
       const result: IteratorResult<Output, void> = priming
         ? await runner.next()
-        : inputResult?.accepted === false
+        : classifiedInput?.accepted === false
           ? { done: false as const, value: lastOutput! }
           : await runner.next(lastInput!);
       priming = false;
@@ -121,6 +125,9 @@ export async function runLoop(
           reason: "completed",
         };
       }
+      const inputResult = classifiedInput
+        ? retargetAcceptedInputResult(classifiedInput, result.value)
+        : undefined;
       const decision = lastInput && inputResult?.accepted !== false
         ? choiceDecisionContext(lastOutput, lastInput)
         : undefined;

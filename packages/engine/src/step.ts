@@ -1,5 +1,9 @@
 import { Engine } from "./engine";
-import { classifyInput, type InputResult } from "./input";
+import {
+  classifyInput,
+  retargetAcceptedInputResult,
+  type InputResult,
+} from "./input";
 import type { ComposedState, Game, Input, Output } from "./types";
 
 export interface StepResult {
@@ -81,6 +85,6 @@ export async function step(
     output,
     state: engine.getState(),
     done: next.done === true || output?.type === "gameEnd",
-    inputResult,
+    inputResult: retargetAcceptedInputResult(inputResult, output),
   };
 }

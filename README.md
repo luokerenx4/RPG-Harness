@@ -571,8 +571,11 @@ Every `step` response also carries an `inputResult`. `accepted:true` confirms
 the input was routed. A rejected input returns the same current Output plus a
 stable reason code (`unexpected-input`, `stale-choice`, `option-locked`,
 `script-not-available`, `activity-not-present`, …), a human-readable message,
-and the currently expected input ids. Rejections do not advance gameplay; AI
-clients should correct the input instead of retrying it blindly.
+and that unchanged screen's expected input ids. A successful transition instead
+reports the expectations of the newly returned Output, so an AI can execute the
+next protocol directly without reconciling stale Hub ids against narration.
+Rejections do not advance gameplay; AI clients should correct the input instead
+of retrying it blindly.
 
 ```bash
 rpgh fork ./my-game --from claude --to investigate-choice --at 42

@@ -11,6 +11,7 @@ import {
   classifyInput,
   Engine,
   createInitialState,
+  retargetAcceptedInputResult,
 } from "@rpg-harness/engine";
 import type {
   AssetSpec,
@@ -100,9 +101,15 @@ export async function submitWebInput(
   result?: IteratorResult<Output, void>;
 }> {
   const inputResult = classifyInput(currentOutput, input);
-  return inputResult.accepted
-    ? { inputResult, result: await runner.next(input) }
-    : { inputResult };
+  if (!inputResult.accepted) return { inputResult };
+  const result = await runner.next(input);
+  return {
+    inputResult: retargetAcceptedInputResult(
+      inputResult,
+      result.done ? null : result.value,
+    ),
+    result,
+  };
 }
 
 export function WebPlayScreen({
