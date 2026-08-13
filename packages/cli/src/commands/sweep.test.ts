@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 10,
+        schemaVersion: 11,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -528,6 +528,9 @@ describe("bounded development sweep", () => {
         }, {
           surface: "branch-control-handoff",
           text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+        }, {
+          surface: "feedback-live-routing",
+          text: "scripts/current.mdRouting: live checkpoint / current runtime",
         }],
       }],
     });

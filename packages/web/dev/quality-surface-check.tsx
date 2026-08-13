@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 10;
+  schemaVersion: 11;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -23,7 +23,8 @@ export interface WebQualitySurfaceEvidence {
       | "forecast-detail-hidden"
       | "terminal-ai-branch"
       | "ai-choice-backlog"
-      | "branch-control-handoff";
+      | "branch-control-handoff"
+      | "feedback-live-routing";
     text: string;
   }>;
 }
@@ -156,17 +157,72 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(terminalExplorationProjection());
   projections.push(aiChoiceBacklogProjection());
   projections.push(branchControlHandoffProjection());
+  projections.push(feedbackLiveRoutingProjection());
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
+  };
+}
+
+function feedbackLiveRoutingProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const game = {
+    scripts: [{ id: "current", title: "Current", source: "scripts/current.md" }],
+  } as unknown as Game;
+  const branch = {
+    fromSession: "proof",
+    sourceLogEntry: 2,
+    mode: "checkpoint",
+    handoff: {
+      schemaVersion: 1 as const,
+      workKey: "choice-branch/old/reply/stay",
+      priority: "P3" as const,
+      kind: "choice-branch",
+      title: "Old premiere",
+      operation: "cover",
+      state: "covered" as const,
+      preparedAt: "2026-08-13T00:00:00.000Z",
+      target: "scripts/old.md",
+    },
+    outcome: null,
+  };
+  const active = resolveFeedbackTarget(game, "current", {
+    ...branch,
+    playerControl: { source: "web" as const, logEntry: 2 },
+  });
+  const awaiting = resolveFeedbackTarget(game, null, {
+    ...branch,
+    playerControl: null,
+  });
+  const runtime = resolveFeedbackTarget(game, null, {
+    ...branch,
+    playerControl: { source: "web" as const, logEntry: 2 },
+  });
+  const markup = renderToStaticMarkup(React.createElement(FeedbackOverlay, {
+    branchContext: {
+      ...branch,
+      playerControl: { source: "web" as const, logEntry: 2 },
+    },
+    onSubmit: async () => { throw new Error("quality surface does not submit"); },
+    onClose: () => {},
+  }));
+  if (
+    active !== "scripts/current.md" ||
+    awaiting !== "scripts/old.md" ||
+    runtime !== undefined ||
+    !markup.includes("Routing: live checkpoint / current runtime") ||
+    markup.includes("Target: scripts/old.md")
+  ) throw new Error("Web feedback routing revives stale AI handoff targets");
+  return {
+    surface: "feedback-live-routing",
+    text: "scripts/current.mdRouting: live checkpoint / current runtime",
   };
 }
 

@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project quality certificate input", () => {
   test("executes the current Web GUI contract before certification", async () => {
     expect(await runQualitySurfaceChecks()).toMatchObject([{
-      schemaVersion: 10,
+      schemaVersion: 11,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -56,6 +56,9 @@ describe("project quality certificate input", () => {
       }, {
         surface: "branch-control-handoff",
         text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+      }, {
+        surface: "feedback-live-routing",
+        text: "scripts/current.mdRouting: live checkpoint / current runtime",
       }],
     }]);
   });

@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 10;
+  schemaVersion: 11;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -317,7 +317,8 @@ export interface QualitySurfaceEvidence {
       | "forecast-detail-hidden"
       | "terminal-ai-branch"
       | "ai-choice-backlog"
-      | "branch-control-handoff";
+      | "branch-control-handoff"
+      | "feedback-live-routing";
     text: string;
   }>;
 }
@@ -365,6 +366,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "branch-control-handoff",
   text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+}, {
+  surface: "feedback-live-routing",
+  text: "scripts/current.mdRouting: live checkpoint / current runtime",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -683,7 +687,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 10 &&
+    value.schemaVersion === 11 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

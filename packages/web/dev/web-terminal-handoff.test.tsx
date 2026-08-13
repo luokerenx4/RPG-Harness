@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
@@ -25,7 +25,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 10,
+      schemaVersion: 11,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -62,6 +62,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "branch-control-handoff",
         text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
+      }, {
+        surface: "feedback-live-routing",
+        text: "scripts/current.mdRouting: live checkpoint / current runtime",
       }],
     });
   });
@@ -335,5 +338,52 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("検証済み");
     expect(html).toContain("project aaaaaaaaaa → bbbbbbbbbb");
     expect(html).toContain("certificate cccccccccc");
+  });
+
+  test("routes feedback to live script source without reviving consumed handoff targets", () => {
+    const game = {
+      scripts: [{ id: "current", title: "Current", source: "scripts/current.md" }],
+    } as unknown as Game;
+    const branch = {
+      fromSession: "proof",
+      sourceLogEntry: 2,
+      mode: "checkpoint",
+      handoff: {
+        schemaVersion: 1 as const,
+        workKey: "choice-branch/old/reply/stay",
+        priority: "P3" as const,
+        kind: "choice-branch",
+        title: "Old premiere",
+        operation: "cover",
+        state: "covered" as const,
+        preparedAt: "2026-08-13T00:00:01.000Z",
+        target: "scripts/old.md",
+      },
+      outcome: null,
+    };
+
+    expect(resolveFeedbackTarget(game, "current", {
+      ...branch,
+      playerControl: { source: "web", logEntry: 2 },
+    })).toBe("scripts/current.md");
+    expect(resolveFeedbackTarget(game, null, {
+      ...branch,
+      playerControl: null,
+    })).toBe("scripts/old.md");
+    expect(resolveFeedbackTarget(game, null, {
+      ...branch,
+      playerControl: { source: "web", logEntry: 2 },
+    })).toBeUndefined();
+
+    const html = renderToStaticMarkup(<FeedbackOverlay
+      branchContext={{
+        ...branch,
+        playerControl: { source: "web", logEntry: 2 },
+      }}
+      onSubmit={async () => { throw new Error("not submitted"); }}
+      onClose={() => {}}
+    />);
+    expect(html).toContain("Routing: live checkpoint / current runtime");
+    expect(html).not.toContain("Target: scripts/old.md");
   });
 });

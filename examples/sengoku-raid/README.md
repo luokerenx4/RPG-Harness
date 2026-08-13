@@ -33,6 +33,9 @@ Web は選んだ直後の最初の台詞で止めた premiere branch を渡す�
 次回の family coverage にそのまま戻る。最初の有効な Web/TUI 入力を送ると HUD は
 **AI 首映** から **玩家游玩 · AI 来源** へ切り替わる。fork の出所は診断用に残るが、
 その後の raid まで AI が操作中だとは表示しない。
+プレイヤー接手後の feedback も同じ境界を使う。進行中 script があればその
+authoring source、戦闘や Hub なら live checkpoint/runtime を修正座標とし、首映を
+作った古い script target へ後続の gameplay 指摘を誤配しない。
 
 Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
 密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。

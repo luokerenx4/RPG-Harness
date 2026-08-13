@@ -826,6 +826,12 @@ contract used by Headless: the coding issue freezes the live save, log
 coordinate, last input/output, visuals, current script, and a content-addressed
 reproduction checkpoint, then appears immediately in `rpgh worklist`. Static
 browser builds omit the control because they have no local development bridge.
+Feedback source routing follows live ownership rather than stale provenance:
+the active engine script's authoring source wins; a Hub/combat/runtime report
+uses its frozen checkpoint without inventing a file target; and the original AI
+handoff target is only a fallback before the player has accepted control. This
+keeps a later balance report from being routed back into the premiere script
+that originally created the save.
 Web submissions carry a structured player-feedback origin, so the same HUD can
 poll the session's issue history without mixing in autonomous audit findings.
 Players see whether AI is still working, resolved the concern, or explicitly

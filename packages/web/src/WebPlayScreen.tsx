@@ -347,6 +347,11 @@ export function WebPlayScreen({
       {showFeedback && onFeedback && (
         <FeedbackOverlay
           branchContext={branchContext}
+          currentTarget={resolveFeedbackTarget(
+            game,
+            engineRef.current?.getState().baseline.currentScriptId ?? null,
+            branchContext,
+          )}
           feedbackFeed={feedbackFeed}
           onSubmit={onFeedback}
           onClose={() => setShowFeedback(false)}
@@ -358,11 +363,13 @@ export function WebPlayScreen({
 
 export function FeedbackOverlay({
   branchContext,
+  currentTarget,
   feedbackFeed,
   onSubmit,
   onClose,
 }: {
   branchContext?: WebBranchContext;
+  currentTarget?: string;
   feedbackFeed?: WebFeedbackFeed;
   onSubmit: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
   onClose: () => void;
@@ -374,7 +381,9 @@ export function FeedbackOverlay({
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<WebFeedbackReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const target = branchContext?.handoff?.target;
+  const target = currentTarget ?? (
+    branchContext?.playerControl ? undefined : branchContext?.handoff?.target
+  );
   const targetApplies = area === "narrative" || area === "gameplay";
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -439,7 +448,11 @@ export function FeedbackOverlay({
             <label>補足（任意）
               <textarea rows={5} maxLength={2000} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="期待した感触や、直してほしい方向を書けます。" />
             </label>
-            {target && targetApplies && <div className="feedback-target">Target: {target}</div>}
+            {targetApplies && (
+              <div className="feedback-target">
+                {target ? `Target: ${target}` : "Routing: live checkpoint / current runtime"}
+              </div>
+            )}
             {error && <div className="feedback-error" role="alert">{error}</div>}
             <button className="feedback-submit" disabled={!title.trim() || submitting} type="submit">
               {submitting ? "記録中…" : "この瞬間を issue にする"}
@@ -474,6 +487,20 @@ export function FeedbackOverlay({
       </div>
     </div>
   );
+}
+
+export function resolveFeedbackTarget(
+  game: Game,
+  currentScriptId: string | null,
+  branchContext?: WebBranchContext,
+): string | undefined {
+  if (currentScriptId) {
+    const source = game.scripts.find((script) => script.id === currentScriptId)?.source;
+    if (source?.trim()) return source;
+  }
+  return branchContext?.playerControl
+    ? undefined
+    : branchContext?.handoff?.target;
 }
 
 function shortRevision(revision: string): string {
