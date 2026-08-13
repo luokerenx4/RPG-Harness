@@ -405,12 +405,6 @@ body {
   font-size: 13px;
   margin-top: 4px;
 }
-.activity-hint {
-  color: #8a8a96;
-  font-size: 12px;
-  margin-top: 4px;
-  font-style: italic;
-}
 .activity-forecast {
   display: flex;
   flex-wrap: wrap;

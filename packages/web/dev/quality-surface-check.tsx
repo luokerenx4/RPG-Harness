@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 4;
+  schemaVersion: 5;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -14,7 +14,11 @@ export interface WebQualitySurfaceEvidence {
     input: Input;
   }>;
   projections: Array<{
-    surface: "player-feedback-proof" | "objective-requirement" | "locked-condition";
+    surface:
+      | "player-feedback-proof"
+      | "objective-requirement"
+      | "locked-condition"
+      | "machine-effect-hidden";
     text: string;
   }>;
 }
@@ -142,19 +146,56 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   const projections = [{
     surface: "player-feedback-proof" as const,
     text: expectedProof,
-  }, objectiveRequirementProjection(), lockedConditionProjection()];
+  }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection()];
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function machineEffectProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const playerDescription = "親密度 +1（50 両）";
+  const machineHint = "affection.kagari+1 ryo-50";
+  const tree = StageView({
+    stage: {
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "bond:kagari",
+          kind: "action",
+          title: "篝に贈り物をする",
+          description: playerDescription,
+          category: "social",
+          cost: 0,
+          available: true,
+          effectsHint: machineHint,
+        }],
+      },
+    },
+    game: { scripts: [] } as unknown as Game,
+    onInput: () => {},
+  });
+  const text = nodeText(tree);
+  if (!text.includes(playerDescription) || text.includes(machineHint)) {
+    throw new Error("Web quality surface renders machine effectsHint as player prose");
+  }
+  return { surface: "machine-effect-hidden", text: playerDescription };
 }
 
 function lockedConditionProjection(): WebQualitySurfaceEvidence["projections"][number] {

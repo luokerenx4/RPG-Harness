@@ -8,7 +8,7 @@ import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 describe("Web terminal handoff", () => {
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -27,6 +27,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "locked-condition",
         text: "🔒 Kagariの親密度 4 以上（現在 0）、先に「Moonlit promise」を完了",
+      }, {
+        surface: "machine-effect-hidden",
+        text: "親密度 +1（50 両）",
       }],
     });
   });

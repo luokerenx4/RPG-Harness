@@ -302,13 +302,17 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 4;
+  schemaVersion: 5;
   id: "web-input-contract";
   status: "passed";
   revision: string;
   interactions: Array<{ surface: string; input: unknown }>;
   projections: Array<{
-    surface: "player-feedback-proof" | "objective-requirement" | "locked-condition";
+    surface:
+      | "player-feedback-proof"
+      | "objective-requirement"
+      | "locked-condition"
+      | "machine-effect-hidden";
     text: string;
   }>;
 }
@@ -338,6 +342,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "locked-condition",
   text: "🔒 Kagariの親密度 4 以上（現在 0）、先に「Moonlit promise」を完了",
+}, {
+  surface: "machine-effect-hidden",
+  text: "親密度 +1（50 両）",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -656,7 +663,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 4 &&
+    value.schemaVersion === 5 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

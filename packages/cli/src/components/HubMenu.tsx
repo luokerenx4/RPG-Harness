@@ -189,7 +189,7 @@ function ActivityRow({
         ? "★"
         : " "
     : "⛔";
-  const hint = activity.effectsHint;
+  const playerHint = activity.description;
   const forecast = formatActivityForecast(activity);
   return (
     <Box flexDirection="row">
@@ -200,9 +200,9 @@ function ActivityRow({
       >
         {marker} {index}. {activity.title}
       </Text>
-      {hint && activity.available ? (
+      {playerHint ? (
         <Box marginLeft={1}>
-          <Text dimColor>({hint})</Text>
+          <Text dimColor>— {playerHint}</Text>
         </Box>
       ) : null}
       {forecast && activity.available ? (

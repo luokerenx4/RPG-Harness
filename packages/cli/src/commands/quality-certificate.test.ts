@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project quality certificate input", () => {
   test("executes the current Web GUI contract before certification", async () => {
     expect(await runQualitySurfaceChecks()).toMatchObject([{
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -38,6 +38,9 @@ describe("project quality certificate input", () => {
       }, {
         surface: "locked-condition",
         text: "🔒 Kagariの親密度 4 以上（現在 0）、先に「Moonlit promise」を完了",
+      }, {
+        surface: "machine-effect-hidden",
+        text: "親密度 +1（50 両）",
       }],
     }]);
   });

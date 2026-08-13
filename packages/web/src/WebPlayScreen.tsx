@@ -637,9 +637,6 @@ export function StageView({
                       {a.description && (
                         <div className="activity-desc">{a.description}</div>
                       )}
-                      {a.effectsHint && (
-                        <div className="activity-hint">{a.effectsHint}</div>
-                      )}
                       {a.forecast && a.forecast.metrics.length > 0 && (
                         <div className="activity-forecast">
                           {a.forecast.metrics.map((metric) => (

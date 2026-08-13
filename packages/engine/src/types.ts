@@ -1243,6 +1243,11 @@ export interface HubActivity {
   // only while it genuinely advances a relationship rather than forever.
   aiTags?: string[];
   cost: number;
+  /**
+   * Compact machine forecast used by Headless clients and AI personas.
+   * Human shells should render `description` and structured `forecast`
+   * instead; stable resource ids in this field are intentionally not prose.
+   */
   effectsHint?: string;
   available: boolean;
   lockedReason?: string;

@@ -426,6 +426,12 @@ stats:
 An explicit `lockedHint` still takes precedence when a gate needs bespoke
 wording. Labels and hints never replace the machine-readable condition.
 
+Activity consequences follow the same split. `effectsHint` is compact machine
+evidence for Headless candidates and AI persona scoring; it may contain stable
+resource ids and is not player prose. Human shells render `description` plus
+structured `forecast` metrics instead. Authors who need an extra visible line
+should put it in `description`, never overload the AI hint.
+
 ## State model
 
 State is plain JSON. No class instances, no functions, no `Date`s, no `Map`s. Survives `JSON.stringify` round-trip without loss.

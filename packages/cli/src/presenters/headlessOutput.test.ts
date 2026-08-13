@@ -145,6 +145,7 @@ describe("presentHeadlessOutput", () => {
           kind: "action",
           title: "Spend time together",
           description: "Affection +1",
+          effectsHint: "affection.ally+1 ryo-50",
           category: "social",
           cost: 0,
           available: true,
@@ -188,6 +189,7 @@ describe("presentHeadlessOutput", () => {
               input: { type: "doActivity", id: "bond" },
               title: "Spend time together",
               description: "Affection +1",
+              effectsHint: "affection.ally+1 ryo-50",
               forecast: {
                 metrics: [{ id: "affection", value: 1 }],
               },
@@ -288,6 +290,7 @@ describe("presentHeadlessOutput", () => {
           cost: 0,
           available: true,
           recommended: true,
+          effectsHint: "route:kuro_swamp progress+1",
         },
         {
           id: "move",
@@ -326,7 +329,11 @@ describe("presentHeadlessOutput", () => {
           { type: "doActivity", id: "move" },
         ],
         candidates: [
-          { activityId: "depart", title: "Depart" },
+          {
+            activityId: "depart",
+            title: "Depart",
+            effectsHint: "route:kuro_swamp progress+1",
+          },
           { activityId: "move", title: "Move onward" },
         ],
         primaryActivityId: null,
