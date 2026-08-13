@@ -37,7 +37,10 @@ to that game's normal `state.json` / `log.jsonl` with the same `inputResult`
 used by Headless. Stable GUI choices submit authored `choiceId` / `optionId`
 rather than presentation indexes. A rejected input leaves the live generator
 and screen untouched, shows a recoverable notice, and remains visible to
-`rpgh transcript` as diagnostic evidence.
+`rpgh transcript` as diagnostic evidence. In a shared local session, the Web
+shell also follows the append-only log cursor: a rejected Headless/TUI input is
+shown on the unchanged GUI screen with its controller label, even though the
+save-state revision correctly did not move.
 Each event also points at an immutable, content-addressed state checkpoint, so a
 GUI finding is immediately forkable and reportable by a Headless agent. A
 project stores each unique checkpoint body once under

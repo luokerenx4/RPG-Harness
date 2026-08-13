@@ -176,6 +176,17 @@ export interface WebExplorationReceipt {
 
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
+const bridgeLogCursors = new Map<string, number>();
+const bridgeLogIdentities = new Map<string, string | null>();
+
+export interface WebExternalSessionUpdate {
+  state: ComposedState | null;
+  stateChanged: boolean;
+  latestRejectedInput?: {
+    result: InputResult;
+    source?: string;
+  };
+}
 
 export function getSessionInfo(): Promise<WebSessionInfo> {
   if (!infoPromise) infoPromise = detectSessionInfo();
@@ -187,6 +198,8 @@ export async function loadState(gameId: string): Promise<ComposedState | null> {
   if (info.mode === "shared") {
     const snapshot = await fetchBridgeSnapshot(gameId, info.session);
     bridgeRevisions.set(gameId, snapshot.revision);
+    bridgeLogCursors.set(gameId, snapshot.logCursor);
+    bridgeLogIdentities.set(gameId, snapshot.logIdentity);
     return snapshot.state;
   }
   try {
@@ -197,23 +210,51 @@ export async function loadState(gameId: string): Promise<ComposedState | null> {
   }
 }
 
-// Returns undefined when nothing changed, null when another surface cleared
-// the session, or the new state when Headless/TUI advanced it. App polls this
-// only while a shared Web game is open; CAS remains the race-condition guard.
+// Returns undefined when neither the save nor append-only log changed. A save
+// update reloads the current screen; a log-only update can surface a rejected
+// input from Headless/TUI without pretending gameplay advanced. App polls this
+// only while a shared Web game is open; CAS remains the write-conflict guard.
 export async function pollExternalState(
   gameId: string,
-): Promise<ComposedState | null | undefined> {
+): Promise<WebExternalSessionUpdate | undefined> {
   const info = await getSessionInfo();
   if (info.mode !== "shared") return undefined;
   const previous = bridgeRevisions.get(gameId);
-  const snapshot = await fetchBridgeSnapshot(gameId, info.session);
+  const previousLogCursor = bridgeLogCursors.get(gameId);
+  const previousLogIdentity = bridgeLogIdentities.get(gameId);
+  const snapshot = await fetchBridgeSnapshot(
+    gameId,
+    info.session,
+    previousLogCursor,
+    previousLogIdentity,
+  );
   if (previous === undefined) {
     bridgeRevisions.set(gameId, snapshot.revision);
+    bridgeLogCursors.set(gameId, snapshot.logCursor);
+    bridgeLogIdentities.set(gameId, snapshot.logIdentity);
     return undefined;
   }
-  if (snapshot.revision === previous) return undefined;
+  const stateChanged = snapshot.revision !== previous;
+  const logChanged = snapshot.logCursor !== previousLogCursor ||
+    snapshot.logIdentity !== previousLogIdentity;
+  if (!stateChanged && !logChanged) return undefined;
   bridgeRevisions.set(gameId, snapshot.revision);
-  return snapshot.state;
+  bridgeLogCursors.set(gameId, snapshot.logCursor);
+  bridgeLogIdentities.set(gameId, snapshot.logIdentity);
+  const latestRejectedInput = snapshot.latestRejectedEvent?.source !== "web" &&
+      isRejectedInputResult(snapshot.latestRejectedEvent?.inputResult)
+    ? {
+        result: snapshot.latestRejectedEvent.inputResult,
+        ...(snapshot.latestRejectedEvent.source
+          ? { source: snapshot.latestRejectedEvent.source }
+          : {}),
+      }
+    : undefined;
+  return {
+    state: snapshot.state,
+    stateChanged,
+    ...(latestRejectedInput ? { latestRejectedInput } : {}),
+  };
 }
 
 export async function loadDevelopmentStatus(
@@ -325,11 +366,23 @@ export async function saveState(
       }),
     });
     if (!response.ok) throw await bridgeError(response);
-    const payload = (await response.json()) as { revision?: unknown };
+    const payload = (await response.json()) as {
+      revision?: unknown;
+      logCursor?: unknown;
+      logIdentity?: unknown;
+    };
     if (typeof payload.revision !== "string") {
       throw new Error("session bridge did not return a revision");
     }
+    if (!Number.isSafeInteger(payload.logCursor) || (payload.logCursor as number) < 0) {
+      throw new Error("session bridge did not return a valid log cursor");
+    }
+    if (payload.logIdentity !== null && typeof payload.logIdentity !== "string") {
+      throw new Error("session bridge did not return a valid log identity");
+    }
     bridgeRevisions.set(gameId, payload.revision);
+    bridgeLogCursors.set(gameId, payload.logCursor as number);
+    bridgeLogIdentities.set(gameId, payload.logIdentity ?? null);
     return;
   }
   try {
@@ -348,6 +401,8 @@ export async function clearState(gameId: string): Promise<void> {
     });
     if (!response.ok) throw await bridgeError(response);
     bridgeRevisions.set(gameId, null);
+    bridgeLogCursors.set(gameId, 0);
+    bridgeLogIdentities.set(gameId, null);
     return;
   }
   try {
@@ -405,20 +460,66 @@ async function detectSessionInfo(): Promise<WebSessionInfo> {
 async function fetchBridgeSnapshot(
   gameId: string,
   session: string,
-): Promise<{ state: ComposedState | null; revision: string | null }> {
-  const response = await fetch(bridgeEndpoint(gameId, session));
+  knownLogCursor?: number,
+  knownLogIdentity?: string | null,
+): Promise<{
+  state: ComposedState | null;
+  revision: string | null;
+  logCursor: number;
+  logIdentity: string | null;
+  latestRejectedEvent?: { source?: string; inputResult?: unknown };
+}> {
+  const endpoint = new URL(bridgeEndpoint(gameId, session), window.location.origin);
+  if (knownLogCursor !== undefined) {
+    endpoint.searchParams.set("logCursor", String(knownLogCursor));
+    endpoint.searchParams.set("logIdentity", knownLogIdentity ?? "");
+  }
+  const response = await fetch(endpoint);
   if (!response.ok) throw await bridgeError(response);
   const payload = (await response.json()) as {
     state?: unknown;
     revision?: unknown;
+    logCursor?: unknown;
+    logIdentity?: unknown;
+    latestRejectedEvent?: unknown;
   };
   if (payload.revision !== null && typeof payload.revision !== "string") {
     throw new Error("session bridge returned an invalid revision");
   }
+  if (!Number.isSafeInteger(payload.logCursor) || (payload.logCursor as number) < 0) {
+    throw new Error("session bridge returned an invalid log cursor");
+  }
+  if (payload.logIdentity !== null && typeof payload.logIdentity !== "string") {
+    throw new Error("session bridge returned an invalid log identity");
+  }
+  if (
+    payload.latestRejectedEvent !== undefined &&
+    (!payload.latestRejectedEvent ||
+      typeof payload.latestRejectedEvent !== "object" ||
+      Array.isArray(payload.latestRejectedEvent))
+  ) throw new Error("session bridge returned an invalid rejected event");
   return {
     state: (payload.state ?? null) as ComposedState | null,
     revision: payload.revision ?? null,
+    logCursor: payload.logCursor as number,
+    logIdentity: payload.logIdentity ?? null,
+    ...(payload.latestRejectedEvent !== undefined
+      ? {
+          latestRejectedEvent: payload.latestRejectedEvent as {
+            source?: string;
+            inputResult?: unknown;
+          },
+        }
+      : {}),
   };
+}
+
+function isRejectedInputResult(value: unknown): value is InputResult {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>).accepted === false &&
+    typeof (value as Record<string, unknown>).code === "string" &&
+    typeof (value as Record<string, unknown>).message === "string" &&
+    Array.isArray((value as Record<string, unknown>).expected);
 }
 
 function bridgeEndpoint(gameId: string, session: string): string {

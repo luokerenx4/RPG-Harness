@@ -2,10 +2,16 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, inputNoticeSourceLabel, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
+  test("labels cross-surface input diagnostics by their actual controller", () => {
+    expect(inputNoticeSourceLabel("cli")).toBe("HEADLESS");
+    expect(inputNoticeSourceLabel("autoplay")).toBe("HEADLESS");
+    expect(inputNoticeSourceLabel("tui")).toBe("TUI");
+  });
+
   test("renders player and AI stable selections as story context in backlog", () => {
     const html = renderToStaticMarkup(
       <BacklogOverlay

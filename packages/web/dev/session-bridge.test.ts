@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadSessionCheckpoint } from "@rpg-harness/session-store";
@@ -130,13 +130,13 @@ describe("Web development session bridge", () => {
 
   test("rejects a stale writer instead of overwriting a newer session", async () => {
     const gameDir = await temporaryGame();
-    const initialRevision = await saveBridgeSession({
+    const { revision: initialRevision } = await saveBridgeSession({
       gameDir,
       session: "web",
       state: { value: 1 },
       expectedRevision: null,
     });
-    const nextRevision = await saveBridgeSession({
+    const { revision: nextRevision } = await saveBridgeSession({
       gameDir,
       session: "web",
       state: { value: 2 },
@@ -155,6 +155,183 @@ describe("Web development session bridge", () => {
     expect(await loadBridgeSnapshot(gameDir, "web")).toEqual({
       state: { value: 2 },
       revision: nextRevision,
+      logCursor: 0,
+      logIdentity: null,
+    });
+  });
+
+  test("surfaces a rejected Headless input even when the save revision is unchanged", async () => {
+    const gameDir = await temporaryGame();
+    const { revision } = await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { value: 1 },
+    });
+    const initial = await loadBridgeSnapshot(gameDir, "shared");
+
+    const sessionDir = path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "shared",
+    );
+    await writeFile(
+      path.join(sessionDir, "log.jsonl"),
+      JSON.stringify({
+        source: "cli",
+        input: { type: "doActivity", id: "missing" },
+        output: { type: "narration", text: "Still here." },
+        inputResult: {
+          accepted: false,
+          code: "unexpected-input",
+          message: "narration expects next; received doActivity.",
+          expected: [{ type: "next" }, { type: "quit" }],
+        },
+      }) + "\n",
+      "utf-8",
+    );
+
+    const changed = await loadBridgeSnapshot(
+      gameDir,
+      "shared",
+      initial.logCursor,
+      initial.logIdentity,
+    );
+    expect(changed).toMatchObject({
+      state: { value: 1 },
+      revision,
+      latestRejectedEvent: {
+        source: "cli",
+        inputResult: {
+          accepted: false,
+          code: "unexpected-input",
+        },
+      },
+    });
+    expect(changed.logCursor).toBeGreaterThan(initial.logCursor);
+
+    expect(await loadBridgeSnapshot(
+      gameDir,
+      "shared",
+      changed.logCursor,
+      changed.logIdentity,
+    )).toEqual({
+      state: { value: 1 },
+      revision,
+      logCursor: changed.logCursor,
+      logIdentity: changed.logIdentity,
+    });
+  });
+
+  test("does not consume a log cursor while an external append is incomplete", async () => {
+    const gameDir = await temporaryGame();
+    await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { value: 1 },
+    });
+    const sessionDir = path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "shared",
+    );
+    const logFile = path.join(sessionDir, "log.jsonl");
+    await writeFile(logFile, '{"source":"cli","inputResult":', "utf-8");
+
+    expect(await loadBridgeSnapshot(gameDir, "shared", 0, null)).toMatchObject({
+      logCursor: 0,
+    });
+
+    await appendFile(logFile, '{"accepted":false}}\n', "utf-8");
+    const complete = await loadBridgeSnapshot(gameDir, "shared", 0, null);
+    expect(complete.logCursor).toBeGreaterThan(0);
+    expect(complete.latestRejectedEvent).toEqual({
+      source: "cli",
+      inputResult: { accepted: false },
+    });
+  });
+
+  test("retains the newest rejection when a later Headless step also succeeded", async () => {
+    const gameDir = await temporaryGame();
+    await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { value: 1 },
+    });
+    const before = await loadBridgeSnapshot(gameDir, "shared");
+    const logFile = path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "shared",
+      "log.jsonl",
+    );
+    await writeFile(logFile, [
+      JSON.stringify({
+        source: "cli",
+        inputResult: {
+          accepted: false,
+          code: "unexpected-input",
+          message: "Expected next.",
+          expected: [{ type: "next" }],
+        },
+      }),
+      JSON.stringify({
+        source: "cli",
+        inputResult: { accepted: true, code: "accepted" },
+      }),
+    ].join("\n") + "\n", "utf-8");
+
+    const changed = await loadBridgeSnapshot(
+      gameDir,
+      "shared",
+      before.logCursor,
+      before.logIdentity,
+    );
+    expect(changed.latestRejectedEvent).toMatchObject({
+      source: "cli",
+      inputResult: { accepted: false, code: "unexpected-input" },
+    });
+  });
+
+  test("restarts at byte zero when the log file generation changed", async () => {
+    const gameDir = await temporaryGame();
+    await saveBridgeSession({
+      gameDir,
+      session: "shared",
+      state: { value: 1 },
+    });
+    const logFile = path.join(
+      gameDir,
+      ".rpg-harness",
+      "sessions",
+      "shared",
+      "log.jsonl",
+    );
+    await writeFile(logFile, JSON.stringify({ source: "cli", inputResult: {
+      accepted: true,
+    } }) + "\n", "utf-8");
+    const old = await loadBridgeSnapshot(gameDir, "shared");
+
+    await rm(logFile);
+    await writeFile(logFile, JSON.stringify({ source: "tui", inputResult: {
+      accepted: false,
+      code: "unexpected-input",
+      message: "Expected next.",
+      expected: [{ type: "next" }],
+    } }) + "\n", "utf-8");
+    const replacement = await loadBridgeSnapshot(
+      gameDir,
+      "shared",
+      old.logCursor,
+      old.logIdentity,
+    );
+
+    expect(replacement.logIdentity).not.toBe(old.logIdentity);
+    expect(replacement.latestRejectedEvent).toMatchObject({
+      source: "tui",
+      inputResult: { accepted: false },
     });
   });
 

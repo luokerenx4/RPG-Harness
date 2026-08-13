@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComposedState, Game } from "@rpg-harness/engine";
+import type { InputResult } from "@rpg-harness/engine";
 import { listGames, loadWebGame } from "./loadGame";
 import {
   clearState,
@@ -31,6 +32,10 @@ interface Loaded {
   developmentStatus?: WebDevelopmentStatus;
   branchContext?: WebBranchContext;
   feedbackFeed?: WebFeedbackFeed;
+  externalInputNotice?: {
+    result: InputResult;
+    source?: string;
+  };
 }
 
 export function App() {
@@ -106,9 +111,9 @@ export function App() {
       if (checking || cancelled) return;
       checking = true;
       try {
-        const state = await pollExternalState(loaded.id);
-        if (cancelled || state === undefined) return;
-        if (state === null) {
+        const update = await pollExternalState(loaded.id);
+        if (cancelled || update === undefined) return;
+        if (update.stateChanged && update.state === null) {
           setLoaded(null);
           void refreshSessions();
           return;
@@ -117,8 +122,15 @@ export function App() {
           current && current.id === loaded.id
             ? {
                 ...current,
-                initialState: state,
-                revision: current.revision + 1,
+                ...(update.stateChanged && update.state
+                  ? {
+                      initialState: update.state,
+                      revision: current.revision + 1,
+                    }
+                  : {}),
+                ...(update.latestRejectedInput
+                  ? { externalInputNotice: update.latestRejectedInput }
+                  : { externalInputNotice: undefined }),
               }
             : current,
         );
@@ -270,6 +282,7 @@ export function App() {
         feedbackEnabled={loaded.sessionInfo.mode === "shared"}
         onFeedback={(input) => submitFeedback(loaded.id, input)}
         feedbackFeed={loaded.feedbackFeed}
+        externalInputNotice={loaded.externalInputNotice}
         explorationEnabled={loaded.sessionInfo.mode === "shared"}
         onLoadExploration={() => loadExplorationStatus(loaded.id)}
         onExplore={async (key) => {

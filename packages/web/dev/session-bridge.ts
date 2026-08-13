@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { access, mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, open, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -52,6 +52,22 @@ export interface SaveBridgeSessionArgs {
 export interface BridgeSessionSnapshot {
   state: unknown | null;
   revision: string | null;
+  /** Byte cursor for the append-only log; reset to zero with a fresh session. */
+  logCursor: number;
+  /** File generation bound to logCursor so a missed reset cannot splice logs. */
+  logIdentity: string | null;
+  latestRejectedEvent?: BridgeSessionEventSummary;
+}
+
+export interface BridgeSessionEventSummary {
+  source?: string;
+  inputResult?: unknown;
+}
+
+export interface SaveBridgeSessionResult {
+  revision: string;
+  logCursor: number;
+  logIdentity: string | null;
 }
 
 export interface CreateBridgeFeedbackArgs {
@@ -507,11 +523,34 @@ export async function loadBridgeSession(
 export async function loadBridgeSnapshot(
   gameDir: string,
   session: string,
+  knownLogCursor?: number,
+  knownLogIdentity?: string | null,
 ): Promise<BridgeSessionSnapshot> {
+  assertSegment(session, "session");
   const state = await loadBridgeSession(gameDir, session);
+  const log = await readBridgeLogSnapshot(
+    gameDir,
+    session,
+    knownLogCursor,
+    knownLogIdentity,
+  );
   return {
     state,
     revision: state === null ? null : revisionOf(state),
+    logCursor: log.cursor,
+    logIdentity: log.identity,
+    ...(log.latestRejected
+      ? {
+          latestRejectedEvent: {
+            ...(typeof log.latestRejected.source === "string"
+              ? { source: log.latestRejected.source }
+              : {}),
+            ...(log.latestRejected.inputResult !== undefined
+              ? { inputResult: log.latestRejected.inputResult }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -569,7 +608,7 @@ export async function loadBridgeBranchContext(
 
 export async function saveBridgeSession(
   args: SaveBridgeSessionArgs,
-): Promise<string> {
+): Promise<SaveBridgeSessionResult> {
   assertSegment(args.session, "session");
   if (!args.state || typeof args.state !== "object" || Array.isArray(args.state)) {
     throw new Error("state must be a JSON object");
@@ -589,11 +628,12 @@ export async function saveBridgeSession(
     await mkdir(dir, { recursive: true });
 
     if (args.expectedRevision !== undefined) {
-      const current = await loadBridgeSnapshot(args.gameDir, args.session);
-      if (current.revision !== args.expectedRevision) {
+      const currentState = await loadBridgeSession(args.gameDir, args.session);
+      const currentRevision = currentState === null ? null : revisionOf(currentState);
+      if (currentRevision !== args.expectedRevision) {
         throw new RequestError(
           409,
-          `Session revision conflict: expected ${args.expectedRevision ?? "empty"}, current ${current.revision ?? "empty"}`,
+          `Session revision conflict: expected ${args.expectedRevision ?? "empty"}, current ${currentRevision ?? "empty"}`,
         );
       }
     }
@@ -633,7 +673,10 @@ export async function saveBridgeSession(
         args.state,
       );
     }
-    return revisionOf(args.state);
+    return {
+      revision: revisionOf(args.state),
+      ...await bridgeSessionLogMetadata(args.gameDir, args.session),
+    };
   });
 }
 
@@ -824,7 +867,30 @@ async function handleBridgeRequest(
     await access(path.join(gameDir, "game.yaml"));
 
     if (req.method === "GET") {
-      sendJson(res, 200, await loadBridgeSnapshot(gameDir, session));
+      const rawLogCursor = url.searchParams.get("logCursor");
+      const knownLogCursor = rawLogCursor === null ? undefined : Number(rawLogCursor);
+      const rawLogIdentity = url.searchParams.get("logIdentity");
+      const knownLogIdentity = rawLogIdentity === null
+        ? undefined
+        : rawLogIdentity || null;
+      if (
+        knownLogCursor !== undefined &&
+        (!Number.isSafeInteger(knownLogCursor) || knownLogCursor < 0)
+      ) throw new RequestError(400, "logCursor must be a non-negative integer");
+      if (
+        typeof knownLogIdentity === "string" &&
+        (knownLogIdentity.length > 128 || !/^[0-9:.]+$/.test(knownLogIdentity))
+      ) throw new RequestError(400, "logIdentity is invalid");
+      sendJson(
+        res,
+        200,
+        await loadBridgeSnapshot(
+          gameDir,
+          session,
+          knownLogCursor,
+          knownLogIdentity,
+        ),
+      );
       return true;
     }
     if (req.method === "PUT") {
@@ -844,14 +910,14 @@ async function handleBridgeRequest(
           "expectedRevision must be a string or null",
         );
       }
-      const revision = await saveBridgeSession({
+      const saved = await saveBridgeSession({
         gameDir,
         session,
         state,
         expectedRevision,
         ...(event !== undefined ? { event: event as BridgeStepEvent } : {}),
       });
-      sendJson(res, 200, { ok: true, revision });
+      sendJson(res, 200, { ok: true, ...saved });
       return true;
     }
     if (req.method === "DELETE") {
@@ -1052,6 +1118,91 @@ async function readBridgeSessionEntries(
   return raw.split(/\r?\n/).filter((line) => line.trim()).map((line) =>
     JSON.parse(line) as Record<string, unknown>
   );
+}
+
+async function bridgeSessionLogMetadata(
+  gameDir: string,
+  session: string,
+): Promise<{ logCursor: number; logIdentity: string | null }> {
+  try {
+    const logStat = await stat(
+      path.join(sessionDirectory(gameDir, session), "log.jsonl"),
+    );
+    return {
+      logCursor: logStat.size,
+      logIdentity: bridgeLogIdentity(logStat.dev, logStat.ino),
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { logCursor: 0, logIdentity: null };
+    }
+    throw error;
+  }
+}
+
+async function readBridgeLogSnapshot(
+  gameDir: string,
+  session: string,
+  knownCursor?: number,
+  knownIdentity?: string | null,
+): Promise<{
+  cursor: number;
+  identity: string | null;
+  latestRejected?: Record<string, unknown>;
+}> {
+  const file = path.join(sessionDirectory(gameDir, session), "log.jsonl");
+  let handle;
+  try {
+    handle = await open(file, "r");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { cursor: 0, identity: null };
+    }
+    throw error;
+  }
+  try {
+    const logStat = await handle.stat();
+    const size = logStat.size;
+    const identity = bridgeLogIdentity(logStat.dev, logStat.ino);
+    if (
+      knownCursor === undefined ||
+      (size === knownCursor && knownIdentity === identity)
+    ) return { cursor: size, identity };
+    const start = knownIdentity === identity && knownCursor <= size
+      ? knownCursor
+      : 0;
+    const tail = Buffer.allocUnsafe(size - start);
+    const { bytesRead } = await handle.read(tail, 0, tail.length, start);
+    const completeTail = tail.subarray(0, bytesRead);
+    // A writer may be between bytes of one append. Keep the last complete
+    // cursor so the next poll retries instead of consuming a partial event.
+    if (completeTail.at(-1) !== 0x0a) {
+      return { cursor: start, identity };
+    }
+    const entries = completeTail.toString("utf-8")
+      .split(/\r?\n/)
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const latestRejected = entries.findLast((entry) =>
+      isRejectedBridgeInputResult(entry.inputResult)
+    );
+    return {
+      cursor: size,
+      identity,
+      ...(latestRejected ? { latestRejected } : {}),
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function bridgeLogIdentity(dev: number, ino: number): string {
+  return `${dev}:${ino}`;
+}
+
+function isRejectedBridgeInputResult(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>).accepted === false;
 }
 
 function readBridgePlayerControl(

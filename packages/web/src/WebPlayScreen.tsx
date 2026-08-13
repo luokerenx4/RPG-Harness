@@ -86,6 +86,10 @@ interface Props {
   feedbackEnabled?: boolean;
   onFeedback?: (input: WebFeedbackInput) => Promise<WebFeedbackReceipt>;
   feedbackFeed?: WebFeedbackFeed;
+  externalInputNotice?: {
+    result: InputResult;
+    source?: string;
+  };
   explorationEnabled?: boolean;
   onLoadExploration?: () => Promise<WebExplorationStatus | null>;
   onExplore?: (key: string) => Promise<void>;
@@ -112,6 +116,12 @@ export async function submitWebInput(
   };
 }
 
+export function inputNoticeSourceLabel(source: string): string {
+  if (source === "cli" || source === "autoplay") return "HEADLESS";
+  if (source === "tui") return "TUI";
+  return source.toUpperCase();
+}
+
 export function WebPlayScreen({
   game,
   assetUrls,
@@ -123,6 +133,7 @@ export function WebPlayScreen({
   feedbackEnabled = false,
   onFeedback,
   feedbackFeed,
+  externalInputNotice,
   explorationEnabled = false,
   onLoadExploration,
   onExplore,
@@ -146,6 +157,7 @@ export function WebPlayScreen({
   const [showArtBook, setShowArtBook] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
+  const [inputNoticeSource, setInputNoticeSource] = useState<string | null>(null);
   const [exploration, setExploration] = useState<WebExplorationStatus | null>(null);
   const [exploring, setExploring] = useState(false);
   const [explorationError, setExplorationError] = useState<string | null>(null);
@@ -153,6 +165,16 @@ export function WebPlayScreen({
   const assetMap = useRef(
     new Map((game.assets ?? []).map((a) => [a.path, a] as const)),
   ).current;
+
+  useEffect(() => {
+    if (externalInputNotice?.result.accepted === false) {
+      setInputNotice(externalInputNotice.result);
+      setInputNoticeSource(externalInputNotice.source ?? "external");
+      return;
+    }
+    setInputNotice(null);
+    setInputNoticeSource(null);
+  }, [externalInputNotice]);
 
   useEffect(() => {
     if (model.stage.kind !== "ended" || !explorationEnabled || !onLoadExploration) {
@@ -256,6 +278,7 @@ export function WebPlayScreen({
         const submitted = await submitWebInput(currentOutput, input, runner);
         if (!submitted.inputResult.accepted) {
           setInputNotice(submitted.inputResult);
+          setInputNoticeSource(null);
           const engine = engineRef.current;
           if (engine && onCommit) {
             await onCommit(engine.getState(), {
@@ -267,6 +290,7 @@ export function WebPlayScreen({
           return;
         }
         setInputNotice(null);
+        setInputNoticeSource(null);
         dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(
           submitted.result!,
@@ -322,9 +346,18 @@ export function WebPlayScreen({
       </div>
       {inputNotice && !inputNotice.accepted && (
         <div className="input-notice" role="status">
-          <strong>{inputNotice.code}</strong>
+          <strong>
+            {inputNoticeSource ? `${inputNoticeSourceLabel(inputNoticeSource)} · ` : ""}
+            {inputNotice.code}
+          </strong>
           <span>{inputNotice.message}</span>
-          <button onClick={() => setInputNotice(null)} aria-label="入力通知を閉じる">×</button>
+          <button
+            onClick={() => {
+              setInputNotice(null);
+              setInputNoticeSource(null);
+            }}
+            aria-label="入力通知を閉じる"
+          >×</button>
         </div>
       )}
       <div className="hud">
