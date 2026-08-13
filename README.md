@@ -52,6 +52,10 @@ later story edit makes the affected facts stale instead of silently preserving
 an obsolete green check.
 A report also freezes its own issue checkpoint, so `rpgh reproduce` still opens
 the observed state after the live save and ordinary replay log are cleared.
+Web feedback after an accepted input additionally freezes the state from just
+before that input. Its incident checkpoint remains the exact screen the player
+reported, while `reproduce` defaults to the causal boundary and returns the
+original `replayInput` so repaired live code can execute the same action again.
 Structured autoplay findings additionally freeze the pre-run state and replay
 seed: their verifier reruns the whole causal path, not merely the already-stuck
 final save, and the ordinary `resolve` command cannot bypass that proof.
@@ -208,7 +212,7 @@ rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open play
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close an ordinary finding (structured findings require verification)
 rpgh verify-feedback <game-dir> <report-id> --session-prefix RUN --resolution TEXT # prove changed + clean + certified repair
 rpgh supersede <game-dir> <report-id> --reason TEXT            # retire unreplayable evidence without claiming a verified fix
-rpgh reproduce <game-dir> <report-id> --to NAME               # fork the issue's immutable save snapshot
+rpgh reproduce <game-dir> <report-id> --to NAME               # fork immutable incident/causal feedback state
 rpgh test     <game-dir>                                       # run fixtures
 rpgh sessions <game-dir>                                       # list save sessions
 rpgh compact-checkpoints <game-dir> [--apply]                 # deduplicate immutable state objects
@@ -238,8 +242,10 @@ the input. `test` is `step` with assertions on the resulting trace. An AI agent
 playing via the `rpg-harness-player` skill is just `step` with the LLM deciding the input.
 `report` turns an observation made during that loop into a structured coding issue,
 automatically pointing at the current script, save, log line, and latest input/output.
-`reproduce` turns that issue checkpoint into a named CLI/TUI/Web session (and
+`reproduce` turns that issue evidence into a named CLI/TUI/Web session (and
 prints its `/?session=...` path), making the coding issue directly executable.
+For accepted-input Web feedback it opens the input-before state and prints the
+captured `replayInput`; older/manual reports still open their incident state.
 Structured autoplay and audit findings close only through their retained
 verifiers; manual `resolve` remains available for ordinary human-authored
 findings.

@@ -71,6 +71,7 @@ export interface ReachChoiceSummary {
     historyFallback: boolean;
   };
   attemptedSources: number;
+  sourceErrors?: Array<{ session: string; logEntry: number; error: string }>;
   fork?: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
   output: Output | null;
   replayVerified: boolean;
@@ -162,18 +163,30 @@ export async function runReachChoice(
     source: ForkSource;
     search: Awaited<ReturnType<typeof searchForChoice>>;
   }> = [];
+  const sourceErrors: Array<{ session: string; logEntry: number; error: string }> = [];
+  let attemptedSources = 0;
   let remainingNodes = args.maxNodes;
 
   const runAttempt = async (session: string, source: ForkSource) => {
-    const search = await searchForChoice(game, source.state, targetCoordinates, {
-      maxNodes: remainingNodes,
-      maxSteps: args.maxSteps,
-      progressEvery: 100,
-      ...(args.onProgress ? { onProgress: args.onProgress } : {}),
-    });
-    attempts.push({ session, source, search });
-    remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
-    return search.found;
+    attemptedSources += 1;
+    try {
+      const search = await searchForChoice(game, source.state, targetCoordinates, {
+        maxNodes: remainingNodes,
+        maxSteps: args.maxSteps,
+        progressEvery: 100,
+        ...(args.onProgress ? { onProgress: args.onProgress } : {}),
+      });
+      attempts.push({ session, source, search });
+      remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
+      return search.found;
+    } catch (cause) {
+      sourceErrors.push({
+        session,
+        logEntry: source.selectedEntry,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      return false;
+    }
   };
 
   const sourceCandidates: ReachChoiceSourceCandidate[] = [];
@@ -218,7 +231,24 @@ export async function runReachChoice(
     deduplicateReachChoiceSources(sourceCandidates),
   )) {
     if (remainingNodes === 0) break;
+    if (candidate.preflightError) {
+      attemptedSources += 1;
+      sourceErrors.push({
+        session: candidate.session,
+        logEntry: candidate.source.selectedEntry,
+        error: candidate.preflightError,
+      });
+      continue;
+    }
     if (await runAttempt(candidate.session, candidate.source)) break;
+  }
+
+  if (attempts.length === 0) {
+    throw new Error(
+      `Every recoverable source failed before choice search: ${sourceErrors
+        .map(({ session, logEntry, error }) => `${session}@${logEntry}: ${error}`)
+        .join("; ")}`,
+    );
   }
 
   const foundAttempt = attempts.find((attempt) => attempt.search.found);
@@ -349,7 +379,8 @@ export async function runReachChoice(
       historyFallback: sourceSession !== args.fromSession ||
         source.selectedEntry !== primarySource.selectedEntry,
     },
-    attemptedSources: attempts.length,
+    attemptedSources,
+    ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
     ...(fork
       ? {
           session: args.session,
@@ -368,6 +399,7 @@ export async function runReachChoice(
 interface ReachChoiceSourceCandidate {
   session: string;
   source: ForkSource;
+  preflightError?: string;
 }
 
 function deduplicateReachChoiceSources(
@@ -397,48 +429,65 @@ async function rankReachChoiceSources(
     game.scripts.find((script) => script.id === target.scriptId)?.requires,
   );
   const scored = await Promise.all(candidates.map(async (candidate, order) => {
-    const current = await peek(game, cloneState(candidate.source.state));
-    const exactTarget = current.output?.type === "choice" &&
-      current.output.scriptId === target.scriptId &&
-      current.output.choiceId === target.choiceId;
-    const currentSatisfied = satisfiedConditions(conditions, current.state);
-    let projectedSatisfied = currentSatisfied;
-    if (current.output?.type === "choice") {
-      for (const [index, option] of current.output.options.entries()) {
-        if (!option.available) continue;
-        try {
-          const transitioned = await step(
-            game,
-            cloneState(current.state),
-            current.output.choiceId && option.id
-              ? {
-                  type: "choose",
-                  choiceId: current.output.choiceId,
-                  optionId: option.id,
-                }
-              : { type: "choose", index },
-          );
-          projectedSatisfied = Math.max(
-            projectedSatisfied,
-            satisfiedConditions(conditions, transitioned.state),
-          );
-        } catch {
-          // A module-rejected historical option is not useful as a rewind
-          // source, but it must not hide other recoverable checkpoints.
+    try {
+      const current = await peek(game, cloneState(candidate.source.state));
+      const exactTarget = current.output?.type === "choice" &&
+        current.output.scriptId === target.scriptId &&
+        current.output.choiceId === target.choiceId;
+      const currentSatisfied = satisfiedConditions(conditions, current.state);
+      let projectedSatisfied = currentSatisfied;
+      if (current.output?.type === "choice") {
+        for (const [index, option] of current.output.options.entries()) {
+          if (!option.available) continue;
+          try {
+            const transitioned = await step(
+              game,
+              cloneState(current.state),
+              current.output.choiceId && option.id
+                ? {
+                    type: "choose",
+                    choiceId: current.output.choiceId,
+                    optionId: option.id,
+                  }
+                : { type: "choose", index },
+            );
+            projectedSatisfied = Math.max(
+              projectedSatisfied,
+              satisfiedConditions(conditions, transitioned.state),
+            );
+          } catch {
+            // A module-rejected historical option is not useful as a rewind
+            // source, but it must not hide other recoverable checkpoints.
+          }
         }
       }
+      return {
+        candidate,
+        order,
+        preflightError: false,
+        exactTarget,
+        viable: !current.done && current.output !== null,
+        currentSatisfied,
+        projectedSatisfied,
+      };
+    } catch (cause) {
+      return {
+        candidate: {
+          ...candidate,
+          preflightError: cause instanceof Error ? cause.message : String(cause),
+        },
+        order,
+        preflightError: true,
+        exactTarget: false,
+        viable: false,
+        currentSatisfied: -1,
+        projectedSatisfied: -1,
+      };
     }
-    return {
-      candidate,
-      order,
-      exactTarget,
-      viable: !current.done && current.output !== null,
-      currentSatisfied,
-      projectedSatisfied,
-    };
   }));
   return scored
     .sort((left, right) =>
+      Number(right.preflightError) - Number(left.preflightError) ||
       Number(right.exactTarget) - Number(left.exactTarget) ||
       Number(right.viable) - Number(left.viable) ||
       right.projectedSatisfied - left.projectedSatisfied ||

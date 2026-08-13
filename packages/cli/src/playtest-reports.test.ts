@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState, type Game } from "@rpg-harness/engine";
-import { withSessionLock } from "@rpg-harness/session-store";
+import { storeCheckpointState, withSessionLock } from "@rpg-harness/session-store";
 import {
   capturePlaytestEvidenceSnapshot,
   formatPlaytestReports,
@@ -160,6 +160,66 @@ describe("playtest reports", () => {
       path.join(gameDir, ".rpg-harness/sessions/repro-bg/state.json"),
       "utf-8",
     ))).toEqual(state);
+  });
+
+  test("reproduces Web feedback before the input while preserving the incident snapshot", async () => {
+    const gameDir = await temporaryGame();
+    const session = "web-causal-feedback";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    const replayState = {
+      baseline: { currentScriptId: null, completionOrder: [] },
+      runtime: { pendingNarrations: [] },
+    };
+    const incidentState = {
+      baseline: { currentScriptId: null, completionOrder: [] },
+      runtime: { pendingNarrations: ["Old generated line."] },
+    };
+    const replayCheckpoint = await storeCheckpointState(gameDir, replayState);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "state.json"), JSON.stringify(incidentState));
+    await writeFile(
+      path.join(dir, "log.jsonl"),
+      JSON.stringify({
+        input: { type: "doActivity", id: "extract" },
+        output: { type: "narration", text: "Old generated line." },
+        replayCheckpoint,
+      }) + "\n",
+    );
+
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "narrative",
+      severity: "minor",
+      title: "Generated return line is awkward",
+      origin: { kind: "player-feedback", surface: "web" },
+    });
+    expect(report.evidence.replayCheckpoint).toMatchObject({
+      schemaVersion: 1,
+      file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
+    });
+    expect(report.evidence.replayCheckpoint?.revision)
+      .not.toBe(report.evidence.checkpoint?.revision);
+
+    const result = await reproducePlaytestReport({
+      gameDir,
+      id: report.id,
+      to: "repro-before-input",
+    });
+    expect(result).toMatchObject({
+      session: "repro-before-input",
+      sourceLogEntry: 0,
+      mode: "player-feedback-replay-checkpoint",
+      replayInput: { type: "doActivity", id: "extract" },
+    });
+    expect(JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness/sessions/repro-before-input/state.json"),
+      "utf-8",
+    ))).toEqual(replayState);
+    expect(JSON.parse(await readFile(
+      path.join(dir, report.evidence.checkpoint!.file),
+      "utf-8",
+    ))).toEqual(incidentState);
   });
 
   test("can report a broken session even when state and log JSON are invalid", async () => {

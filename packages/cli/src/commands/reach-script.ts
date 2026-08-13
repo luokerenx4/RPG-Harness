@@ -53,6 +53,7 @@ export interface ReachScriptSummary {
     visitedStates: number;
     deepestSteps: number;
     attemptedSources: number;
+    sourceErrors?: Array<{ session: string; logEntry: number; error: string }>;
   };
   requestedSession: string;
   source: {
@@ -138,17 +139,29 @@ export async function runReachScript(
     source: ForkSource;
     search: Awaited<ReturnType<typeof searchForScript>>;
   }> = [];
+  const sourceErrors: Array<{ session: string; logEntry: number; error: string }> = [];
+  let attemptedSources = 0;
   let remainingNodes = args.maxNodes;
   const runAttempt = async (session: string, source: ForkSource) => {
-    const search = await searchForScript(game, source.state, { scriptId: args.scriptId }, {
-      maxNodes: remainingNodes,
-      maxSteps: args.maxSteps,
-      progressEvery: 100,
-      ...(args.onProgress ? { onProgress: args.onProgress } : {}),
-    });
-    attempts.push({ session, source, search });
-    remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
-    return search.found;
+    attemptedSources += 1;
+    try {
+      const search = await searchForScript(game, source.state, { scriptId: args.scriptId }, {
+        maxNodes: remainingNodes,
+        maxSteps: args.maxSteps,
+        progressEvery: 100,
+        ...(args.onProgress ? { onProgress: args.onProgress } : {}),
+      });
+      attempts.push({ session, source, search });
+      remainingNodes = Math.max(0, remainingNodes - search.exploredNodes);
+      return search.found;
+    } catch (cause) {
+      sourceErrors.push({
+        session,
+        logEntry: source.selectedEntry,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      return false;
+    }
   };
 
   const activeCheckpoint = row.status === "stale"
@@ -186,6 +199,14 @@ export async function runReachScript(
       );
       if (await runAttempt(coordinate.session, source) || remainingNodes === 0) break;
     }
+  }
+
+  if (attempts.length === 0) {
+    throw new Error(
+      `Every recoverable source failed before script search: ${sourceErrors
+        .map(({ session, logEntry, error }) => `${session}@${logEntry}: ${error}`)
+        .join("; ")}`,
+    );
   }
 
   const foundAttempt = attempts.find((attempt) => attempt.search.found);
@@ -271,7 +292,13 @@ export async function runReachScript(
     },
     inputs,
     path: summarizeReachPath(inputs),
-    search: { exploredNodes, visitedStates, deepestSteps, attemptedSources: attempts.length },
+    search: {
+      exploredNodes,
+      visitedStates,
+      deepestSteps,
+      attemptedSources,
+      ...(sourceErrors.length > 0 ? { sourceErrors } : {}),
+    },
     requestedSession: args.session,
     source: {
       session: sourceSession,

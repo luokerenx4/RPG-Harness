@@ -11,7 +11,7 @@ requires:
 
 :cg assets/cgs/letter-02-rival
 
-四度目の出帰り。蔵を出ると、大名府の中庭に若い妖刀使いが一人、片膝をついている。
+四度目の遠征。蔵を出ると、大名府の中庭に若い妖刀使いが一人、片膝をついている。
 
 深い藍の打掛。腰には家伝の脇差。
 
@@ -33,7 +33,7 @@ requires:
 
 言葉に重さはあるが、声に怒りはない。仕事として言っている。
 
-@mio 結論を出すまで、お主の出帰りに同行する。隅田河の方面に出ると聞いた。
+@mio 結論を出すまで、お主の遠征に同行する。隅田河の方面に出ると聞いた。
 
 @mio 私の家伝の業は「水鏡」——水面に映る妖気を読む。隠れている鬼の位置を、おそらく見立てられる。
 
@@ -60,7 +60,7 @@ requires:
 
 # silent_inspection
 
-@mio その頷きで足りる。次の出帰りから、私が右を歩く。
+@mio その頷きで足りる。次の遠征から、私が右を歩く。
 
 # inspection_order
 
@@ -70,7 +70,7 @@ requires:
 type: effects
 effects:
   variables:
-    last_directive: "澪と共に出帰り、見立てを受けよ。"
+    last_directive: "澪と共に遠征し、見立てを受けよ。"
   switches:
     mio_met: true
     mio_inspection_duty: true

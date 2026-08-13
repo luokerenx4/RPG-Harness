@@ -297,6 +297,66 @@ describe("reach-choice", () => {
       index: 1,
     });
   });
+
+  test("skips an unmigratable historical checkpoint and tries the current source", async () => {
+    const gameDir = await temporaryGame(false);
+    const firstGame = await loadGame(gameDir);
+    const initial = await peek(firstGame, createInitialState(firstGame));
+    const stale = await step(firstGame, initial.state, {
+      type: "select",
+      scriptId: "target",
+    });
+    await saveSession(gameDir, "edited-player", stale.state);
+    await appendLog(gameDir, "edited-player", {
+      source: "web",
+      input: { type: "select", scriptId: "target" },
+      output: stale.output,
+    }, stale.state);
+
+    const targetFile = path.join(gameDir, "scripts", "target.md");
+    await writeFile(
+      targetFile,
+      (await readFile(targetFile, "utf-8"))
+        .replace("Approach.", "@alice A changed approach.")
+        .replace("characters: []", "characters: [alice]"),
+      "utf-8",
+    );
+    await writeFile(
+      path.join(gameDir, "characters", "alice.md"),
+      "---\nid: alice\nname: Alice\n---\n",
+      "utf-8",
+    );
+    const currentGame = await loadGame(gameDir);
+    const currentState = createInitialState(currentGame);
+    await saveSession(gameDir, "edited-player", currentState);
+    await appendLog(gameDir, "edited-player", {
+      source: "web",
+      output: { type: "scriptComplete", availableScripts: ["target"] },
+    }, currentState);
+
+    const result = await runReachChoice({
+      gameDir,
+      fromSession: "edited-player",
+      session: "ai-current-source",
+      key: "target/crossroads",
+      maxNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "reached",
+      found: true,
+      replayVerified: true,
+      attemptedSources: 2,
+      source: { session: "edited-player", logEntry: 2 },
+      sourceErrors: [{
+        session: "edited-player",
+        logEntry: 1,
+        error: expect.stringContaining("script migration required"),
+      }],
+    });
+  });
 });
 
 async function temporaryHistoryFallbackGame(): Promise<string> {
@@ -413,6 +473,7 @@ async function temporaryGame(impossible: boolean): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-reach-choice-"));
   temporaryDirectories.push(dir);
   await mkdir(path.join(dir, "scripts"), { recursive: true });
+  await mkdir(path.join(dir, "characters"), { recursive: true });
   await writeFile(
     path.join(dir, "game.yaml"),
     impossible

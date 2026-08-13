@@ -22,6 +22,8 @@ export interface WebStepEvent {
   inputResult?: InputResult;
   decision?: ChoiceDecisionContext;
   activityDecision?: ActivityDecisionContext;
+  /** State immediately before an accepted input, persisted as a replay checkpoint by the bridge. */
+  replayState?: ComposedState;
 }
 
 export interface WebSessionInfo {

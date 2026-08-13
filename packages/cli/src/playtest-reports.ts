@@ -18,6 +18,8 @@ import type {
 import {
   appendCheckpointedSessionEvent,
   assertSessionName,
+  isSessionCheckpointRef,
+  loadSessionCheckpoint,
   withSessionLock,
 } from "@rpg-harness/session-store";
 import { saveSession, sessionDir } from "./session";
@@ -66,6 +68,8 @@ export interface PlaytestEvidence {
     cg: string | null;
   };
   checkpoint?: PlaytestCheckpointRef;
+  /** Frozen state immediately before the Web input that produced the incident. */
+  replayCheckpoint?: PlaytestCheckpointRef;
   stall?: StallDiagnostic;
   behaviorCycle?: BehaviorCycleDiagnostic;
   autoplay?: PlaytestAutoplayEvidence;
@@ -412,7 +416,7 @@ export interface ReproducePlaytestReportArgs {
   id: string;
   to: string;
   session?: string;
-  checkpoint?: "issue" | "autoplay-replay";
+  checkpoint?: "issue" | "autoplay-replay" | "player-replay";
 }
 
 export async function recordPlaytestReport(
@@ -1000,7 +1004,12 @@ export async function reproducePlaytestReport(
 ) {
   assertSessionName(args.to);
   const report = await getPlaytestReport(args.gameDir, args.id, args.session);
-  const checkpointKind = args.checkpoint ?? "issue";
+  const checkpointKind = args.checkpoint ?? (
+    report.origin?.kind === "player-feedback" &&
+      isPlaytestCheckpointRef(report.evidence.replayCheckpoint)
+      ? "player-replay"
+      : "issue"
+  );
   const prepared = await loadPlaytestReportCheckpointSource(
     args.gameDir,
     report,
@@ -1017,7 +1026,12 @@ export async function reproducePlaytestReport(
       sourceLogEntry: prepared.sourceLogEntry,
       mode: checkpointKind === "autoplay-replay"
         ? "playtest-replay-checkpoint" as const
+        : checkpointKind === "player-replay"
+        ? "player-feedback-replay-checkpoint" as const
         : "playtest-checkpoint" as const,
+      ...(checkpointKind === "player-replay" && report.evidence.lastEvent
+        ? { replayInput: structuredClone(report.evidence.lastEvent.input) }
+        : {}),
       createdAt: new Date().toISOString(),
     };
     await writeFile(
@@ -1043,15 +1057,19 @@ export async function reproducePlaytestReport(
 export async function loadPlaytestReportCheckpointSource(
   gameDir: string,
   report: PlaytestReport,
-  checkpointKind: "issue" | "autoplay-replay" = "issue",
+  checkpointKind: "issue" | "autoplay-replay" | "player-replay" = "issue",
 ): Promise<{ state: ComposedState; sourceLogEntry: number }> {
   const checkpoint = checkpointKind === "autoplay-replay"
     ? report.evidence.autoplay?.replayCheckpoint
+    : checkpointKind === "player-replay"
+    ? report.evidence.replayCheckpoint
     : report.evidence.checkpoint;
   if (!isPlaytestCheckpointRef(checkpoint)) {
     throw new Error(
       checkpointKind === "autoplay-replay"
         ? `Playtest report ${report.id} has no causal autoplay replay checkpoint; record a fresh autoplay finding`
+        : checkpointKind === "player-replay"
+        ? `Playtest report ${report.id} has no causal player-input replay checkpoint; record fresh Web feedback after an accepted input`
         : `Playtest report ${report.id} has no recoverable checkpoint; record a new report at the issue site`,
     );
   }
@@ -1062,6 +1080,8 @@ export async function loadPlaytestReportCheckpointSource(
   ) as ComposedState;
   const sourceLogEntry = checkpointKind === "autoplay-replay"
     ? report.evidence.autoplay?.replayLogEntry
+    : checkpointKind === "player-replay"
+    ? Math.max(0, (report.evidence.logEntry ?? 1) - 1)
     : report.evidence.logEntry ?? 0;
   if (!Number.isInteger(sourceLogEntry) || sourceLogEntry! < 0) {
     throw new Error(
@@ -1146,6 +1166,7 @@ export async function capturePlaytestEvidenceSnapshot(
   let lastEvent: PlaytestEvidence["lastEvent"] = null;
   let visualState: PlaytestEvidence["visualState"];
   let checkpoint: PlaytestCheckpointRef | undefined;
+  let replayCheckpoint: PlaytestCheckpointRef | undefined;
 
   try {
     const serialized = await readFile(stateFile, "utf-8");
@@ -1183,6 +1204,7 @@ export async function capturePlaytestEvidenceSnapshot(
         output?: unknown;
         inputResult?: unknown;
         activityDecision?: unknown;
+        replayCheckpoint?: unknown;
       } | null;
       if (entry) {
         lastEvent = {
@@ -1193,6 +1215,18 @@ export async function capturePlaytestEvidenceSnapshot(
             ? { activityDecision: compactActivityDecision(entry.activityDecision) }
             : {}),
         };
+        if (isSessionCheckpointRef(entry.replayCheckpoint)) {
+          const replayState = await loadSessionCheckpoint(
+            gameDir,
+            session,
+            entry.replayCheckpoint,
+          );
+          replayCheckpoint = await persistPlaytestCheckpoint(
+            gameDir,
+            session,
+            JSON.stringify(replayState, null, 2),
+          );
+        }
       }
     }
   } catch (error) {
@@ -1210,6 +1244,7 @@ export async function capturePlaytestEvidenceSnapshot(
     lastEvent,
     ...(visualState !== undefined ? { visualState } : {}),
     ...(checkpoint !== undefined ? { checkpoint } : {}),
+    ...(replayCheckpoint !== undefined ? { replayCheckpoint } : {}),
     ...(captureErrors.length > 0 ? { captureErrors } : {}),
   };
 }

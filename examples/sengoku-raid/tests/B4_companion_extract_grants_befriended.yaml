@@ -50,6 +50,10 @@ inputs:
   - type: next
   - type: next
 assertions:
+  - kind: output
+    type: narration
+    present: true
+    textIncludes: 一度共に戦場から生還した仲
   - kind: state
     path: baseline.switches.befriended_kasumi
     eq: true

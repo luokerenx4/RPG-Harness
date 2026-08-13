@@ -258,8 +258,9 @@ COMMANDS
       exists. This remains distinct from a verified fix and requires a reason.
 
   reproduce <game-dir> <report-id> --to NAME [--session NAME] [--pretty]
-      Fork the immutable save snapshot captured with a playtest issue. Prints
-      the named session and its Web query path for GUI or headless replay.
+      Fork immutable playtest evidence. Accepted-input Web feedback defaults
+      to its input-before state and returns replayInput; other reports use the
+      incident snapshot. Prints the named session and Web path for replay.
 
   init     <dir> [--preset vn|training] [--eject] [--force]
       Scaffold a minimal RPG-Harness game in <dir>. Creates game.yaml,

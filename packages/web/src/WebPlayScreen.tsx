@@ -181,6 +181,7 @@ export function WebPlayScreen({
       res: IteratorResult<Output, void>,
       input?: Input,
       inputResult?: InputResult,
+      replayState?: ComposedState,
     ) => {
       const output: Output = res.done ? { type: "gameEnd" } : res.value;
       const decision = input
@@ -202,6 +203,7 @@ export function WebPlayScreen({
                 ...(inputResult ? { inputResult } : {}),
                 ...(decision ? { decision } : {}),
                 ...(activityDecision ? { activityDecision } : {}),
+                ...(replayState ? { replayState } : {}),
               } satisfies WebStepEvent]
             : []),
         );
@@ -243,6 +245,7 @@ export function WebPlayScreen({
       try {
         const currentOutput = outputRef.current;
         if (!currentOutput) return;
+        const replayState = engineRef.current?.getState();
         const submitted = await submitWebInput(currentOutput, input, runner);
         if (!submitted.inputResult.accepted) {
           setInputNotice(submitted.inputResult);
@@ -258,7 +261,12 @@ export function WebPlayScreen({
         }
         setInputNotice(null);
         dispatch({ kind: "choose", input, selectedBy: "player" });
-        await commit(submitted.result!, input, submitted.inputResult);
+        await commit(
+          submitted.result!,
+          input,
+          submitted.inputResult,
+          replayState,
+        );
       } catch (err) {
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
       } finally {

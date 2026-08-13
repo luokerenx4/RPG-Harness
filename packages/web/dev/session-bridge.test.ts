@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { loadSessionCheckpoint } from "@rpg-harness/session-store";
 import {
   clearBridgeSession,
   createBridgeExploration,
@@ -30,6 +31,7 @@ afterEach(async () => {
 describe("Web development session bridge", () => {
   test("writes the same state.json and log.jsonl shape used by the CLI", async () => {
     const gameDir = await temporaryGame();
+    const replayState = { baseline: { currentScriptId: "000_intro", beatIndex: 1 } };
     await saveBridgeSession({
       gameDir,
       session: "web",
@@ -51,6 +53,7 @@ describe("Web development session bridge", () => {
           category: "combat",
           aiTags: ["nonlethal", "mercy"],
         },
+        replayState,
       },
       now: () => 1234,
     });
@@ -62,7 +65,8 @@ describe("Web development session bridge", () => {
       path.join(gameDir, ".rpg-harness", "sessions", "web", "log.jsonl"),
       "utf-8",
     );
-    expect(log.trim().split("\n").map((line) => JSON.parse(line))).toEqual([
+    const entries = log.trim().split("\n").map((line) => JSON.parse(line));
+    expect(entries).toEqual([
       {
         t: 1234,
         source: "web",
@@ -77,6 +81,11 @@ describe("Web development session bridge", () => {
           category: "combat",
           aiTags: ["nonlethal", "mercy"],
         },
+        replayCheckpoint: expect.objectContaining({
+          schemaVersion: 1,
+          file: expect.stringMatching(/^checkpoints\/[a-f0-9]{64}\.json$/),
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
         checkpoint: expect.objectContaining({
           schemaVersion: 1,
           file: expect.stringMatching(/^checkpoints\/[a-f0-9]{64}\.json$/),
@@ -84,6 +93,8 @@ describe("Web development session bridge", () => {
         }),
       },
     ]);
+    expect(await loadSessionCheckpoint(gameDir, "web", entries[0].replayCheckpoint))
+      .toEqual(replayState);
   });
 
   test("fresh start clears replay data but preserves captured issues", async () => {
@@ -149,6 +160,14 @@ describe("Web development session bridge", () => {
 
   test("turns player feedback into a reproducible coding issue at the live GUI checkpoint", async () => {
     const gameDir = await temporaryGame();
+    const replayState = {
+      baseline: {
+        currentScriptId: "bond_mio_03",
+        beatIndex: 7,
+        completionOrder: ["bond_mio_02"],
+        visuals: { bg: "bg/river", portraits: {}, cg: null },
+      },
+    };
     await saveBridgeSession({
       gameDir,
       session: "player-branch",
@@ -174,6 +193,7 @@ describe("Web development session bridge", () => {
       event: {
         input: { type: "next" },
         output: { type: "dialogue", speakerId: "mio", text: "The current line." },
+        replayState,
       },
       now: () => 1234,
     });
@@ -210,8 +230,15 @@ describe("Web development session bridge", () => {
           file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
           revision: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
+        replayCheckpoint: {
+          schemaVersion: 1,
+          file: expect.stringMatching(/^issue-checkpoints\/[a-f0-9]{64}\.json$/),
+          revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+        },
       },
     });
+    expect(report.evidence.replayCheckpoint?.revision)
+      .not.toBe(report.evidence.checkpoint?.revision);
     const stored = JSON.parse(
       (await readFile(
         path.join(gameDir, ".rpg-harness", "sessions", "player-branch", "issues.jsonl"),

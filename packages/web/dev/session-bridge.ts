@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import type { Plugin } from "vite";
 import {
   appendCheckpointedSessionEvent,
+  storeCheckpointState,
   withSessionLock,
 } from "@rpg-harness/session-store";
 
@@ -35,6 +36,8 @@ export interface BridgeStepEvent {
   output: unknown;
   inputResult?: unknown;
   decision?: unknown;
+  activityDecision?: unknown;
+  replayState?: unknown;
 }
 
 export interface SaveBridgeSessionArgs {
@@ -571,6 +574,16 @@ export async function saveBridgeSession(
   if (!args.state || typeof args.state !== "object" || Array.isArray(args.state)) {
     throw new Error("state must be a JSON object");
   }
+  if (
+    args.event?.replayState !== undefined &&
+    (
+      !args.event.replayState ||
+      typeof args.event.replayState !== "object" ||
+      Array.isArray(args.event.replayState)
+    )
+  ) {
+    throw new Error("event replayState must be a JSON object");
+  }
   return withSessionLock(args.gameDir, args.session, async () => {
     const dir = sessionDirectory(args.gameDir, args.session);
     await mkdir(dir, { recursive: true });
@@ -584,6 +597,12 @@ export async function saveBridgeSession(
         );
       }
     }
+
+    // Freeze the causal input boundary before publishing the resulting save.
+    // The full replay state never enters log.jsonl; only its immutable ref does.
+    const replayCheckpoint = args.event?.replayState !== undefined
+      ? await storeCheckpointState(args.gameDir, args.event.replayState)
+      : undefined;
 
     // Replace the save atomically so readers see either complete version.
     const stateFile = path.join(dir, "state.json");
@@ -609,6 +628,7 @@ export async function saveBridgeSession(
           ...(args.event.activityDecision !== undefined
             ? { activityDecision: args.event.activityDecision }
             : {}),
+          ...(replayCheckpoint !== undefined ? { replayCheckpoint } : {}),
         },
         args.state,
       );

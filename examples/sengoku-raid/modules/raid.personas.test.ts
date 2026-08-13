@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
 import type { ComposedState, Output } from "@rpg-harness/engine";
 import { raidAiPersonas } from "./raid";
 
@@ -327,6 +329,28 @@ describe("sengoku-raid project personas", () => {
         raid: { visited: { mt_houkyou_lava_vent: { visited: true } } },
       },
     })).resolves.toEqual({ type: "doActivity", id: "extract" });
+  });
+});
+
+describe("sengoku-raid authored language", () => {
+  test("does not reintroduce the unnatural 出帰り coinage", async () => {
+    const root = path.resolve(import.meta.dir, "..");
+    const scriptFiles = (await readdir(path.join(root, "scripts")))
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => path.join(root, "scripts", file));
+    const authoredFiles = [
+      path.join(root, "game.yaml"),
+      path.join(root, "modules", "raid.ts"),
+      ...scriptFiles,
+    ];
+    const offenders = (
+      await Promise.all(authoredFiles.map(async (file) => ({
+        file: path.relative(root, file),
+        text: await readFile(file, "utf8"),
+      })))
+    ).filter(({ text }) => text.includes("出帰"));
+
+    expect(offenders.map(({ file }) => file)).toEqual([]);
   });
 });
 

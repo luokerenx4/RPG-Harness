@@ -538,7 +538,7 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     return [{
       id: "three_flowers_alliance",
       title: missing ? `三花の盟 — ${missing.name}と生還する` : "三花の盟を結ぶ",
-      description: "篝・霞・澪、それぞれと一度ずつ出帰りから生還する。",
+      description: "篝・霞・澪、それぞれと一度ずつ遠征から生還する。",
       scope: "mastery" as const,
       terminal: false,
       status: "active" as const,
@@ -1101,7 +1101,7 @@ function buildHubMenu(ctx: Ctx): Output {
     {
       id: "infoshop_basic",
       title: "情報屋：次回 raid のスポーン覚書（50 両）",
-      desc: "次の出帰り先の鬼の出方を知る",
+      desc: "次の遠征先の鬼の出方を知る",
       cost: 50,
       intellectMin: 0,
       requiresFrag: false,
@@ -1109,7 +1109,7 @@ function buildHubMenu(ctx: Ctx): Output {
     {
       id: "infoshop_loot",
       title: "情報屋：稀少な収穫地（100 両、学識 30+）",
-      desc: "次の出帰り先の最良 loot zone を知る",
+      desc: "次の遠征先の最良 loot zone を知る",
       cost: 100,
       intellectMin: 30,
       requiresFrag: false,
@@ -1241,11 +1241,11 @@ function buildHubMenu(ctx: Ctx): Output {
       payload: { characterId: charId },
       title: alreadyInvited
         ? `${char.name}を同行から外す`
-        : `${char.name}を次の出帰りに誘う`,
+        : `${char.name}を次の遠征に誘う`,
       description: alreadyInvited
         ? inspectionLock ?? "同行を解く（次の出立では一人）"
         : officialDuty
-          ? "公儀の見立てが済むまで、次の出帰りにも同行を頼める"
+          ? "公儀の見立てが済むまで、次の遠征にも同行を頼める"
           : inspectionLock ?? "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
       // A fresh invitation can advance a relationship objective. Replacing
@@ -1291,7 +1291,7 @@ function buildHubMenu(ctx: Ctx): Output {
       cost: 0,
       available: !retiredFromRaids && hpFull,
       lockedReason: retiredFromRaids
-        ? "刀を祠へ納めると決めた。もう出帰りには戻らない。"
+        ? "刀を祠へ納めると決めた。もう遠征には出ない。"
         : hpFull
           ? undefined
           : "体力が満たぬ。先に休め。",
@@ -2272,13 +2272,13 @@ function endRaidExtract(ctx: Ctx): void {
     const charName =
       ctx.game.characters.find((x) => x.id === companionId)?.name ?? companionId;
     ctx.state.runtime.pendingNarrations.push(
-      `${charName}は無事に大名府まで歩いた。一度共に出帰った仲——刀を握る手の重さが、確かに変わる。親密度 +2。`,
+      `${charName}は無事に大名府まで歩いた。一度共に戦場から生還した仲——刀を握る手の重さが、確かに変わる。親密度 +2。`,
     );
     if (
       companionId === "mio" &&
       ctx.state.baseline.switches.mio_inspection_duty === true &&
       ctx.state.baseline.variables.last_directive ===
-        "澪と共に出帰り、見立てを受けよ。"
+        "澪と共に遠征し、見立てを受けよ。"
     ) {
       ctx.state.baseline.variables.last_directive =
         "澪の見立ては続いている。同行を重ね、最終の報告を待て。";
@@ -3255,7 +3255,7 @@ const inviteHandler: ActionHandler = (ctx) => {
   return {
     deltas: { switches },
     narrations: [
-      `${charName}は頷いた。「次の出帰り、隣で歩く。」`,
+      `${charName}は頷いた。「次の遠征、隣で歩く。」`,
     ],
   };
 };
@@ -3889,7 +3889,7 @@ const raidModule: Module = {
       if (
         ctx.state.baseline.variables.shogun_chapter === 2 &&
         [
-          "澪と共に出帰り、見立てを受けよ。",
+          "澪と共に遠征し、見立てを受けよ。",
           "澪の見立ては続いている。同行を重ね、最終の報告を待て。",
         ].includes(String(ctx.state.baseline.variables.last_directive ?? ""))
       ) {
@@ -3938,7 +3938,7 @@ const raidModule: Module = {
       ctx.state.baseline.switches.mio_inspection_duty === true &&
       ctx.state.baseline.switches.befriended_mio === true &&
       ctx.state.baseline.variables.last_directive ===
-        "澪と共に出帰り、見立てを受けよ。"
+        "澪と共に遠征し、見立てを受けよ。"
     ) {
       ctx.state.baseline.variables.last_directive =
         "澪の見立ては続いている。同行を重ね、最終の報告を待て。";
@@ -4073,7 +4073,7 @@ const raidModule: Module = {
       scriptId === "bond_mio_04" &&
       ctx.state.baseline.variables.shogun_chapter === 2 &&
       [
-        "澪と共に出帰り、見立てを受けよ。",
+        "澪と共に遠征し、見立てを受けよ。",
         "澪の見立ては続いている。同行を重ね、最終の報告を待て。",
       ].includes(String(ctx.state.baseline.variables.last_directive ?? ""))
     ) {
