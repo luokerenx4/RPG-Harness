@@ -520,9 +520,12 @@ describe("autoplay audit matrix", () => {
           persona: "objective",
           activityKind: "search",
           count: 3,
+          objectiveIds: ["search-loop"],
         },
       },
-      violations: ["activity repetition objective/search = 3 > allowed 2"],
+      violations: [
+        "activity repetition objective/search = 3 > allowed 2; linked objectives [search-loop]",
+      ],
       report: { severity: "major" },
     });
     const [report] = await listPlaytestReports(gameDir);
@@ -533,9 +536,14 @@ describe("autoplay audit matrix", () => {
           persona: "objective",
           activityKind: "search",
           count: 3,
+          objectiveIds: ["search-loop"],
         },
       },
-      lanes: [{ persona: "objective", semanticActivityCounts: { search: 3 } }],
+      lanes: [{
+        persona: "objective",
+        semanticActivityCounts: { search: 3 },
+        semanticActivityObjectives: { search: ["search-loop"] },
+      }],
     });
   });
 

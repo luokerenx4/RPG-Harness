@@ -276,6 +276,14 @@ describe("autoplay semantic decision paths", () => {
             slotsPerDay: 0,
             stats: [],
             affections: [],
+            objectives: [{
+              id: "find-clue",
+              title: "Find the clue",
+              scope: "main",
+              terminal: false,
+              status: "active",
+              relatedActivityIds: ["search"],
+            }],
             activities: [{
               id: "search",
               kind: "action",
@@ -308,6 +316,14 @@ describe("autoplay semantic decision paths", () => {
             slotsPerDay: 0,
             stats: [],
             affections: [],
+            objectives: [{
+              id: "find-clue",
+              title: "Find the clue",
+              scope: "main",
+              terminal: false,
+              status: "active",
+              relatedActivityIds: ["search"],
+            }],
             activities: [{
               id: "search",
               kind: "action",
@@ -333,6 +349,7 @@ describe("autoplay semantic decision paths", () => {
         id: "search",
         actionKind: "search",
         aiTags: ["exploration", "reward"],
+        linkedObjectiveIds: ["find-clue"],
       },
       { type: "choose", scriptId: "intro", choiceId: "route", optionId: "third" },
     ]);

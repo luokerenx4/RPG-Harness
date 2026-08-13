@@ -3327,7 +3327,10 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           acts.find(predicate);
         const m = (state as Record<string, unknown>)[MODULE_ID] as
           | {
-              raid?: { visited?: Record<string, { visited?: boolean }> } | null;
+              raid?: {
+                chain?: string;
+                visited?: Record<string, { visited?: boolean }>;
+              } | null;
               metCharacters?: string[];
               companion?: string | null;
               achievementLog?: string[];
@@ -3349,6 +3352,14 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
             // than fully looting every zone before every relationship raid.
             const extract = find(({ id }) => id === "extract");
             if (extract) return { type: "doActivity", id: extract.id };
+            // Relationship road scenes require a quiet newly-entered zone.
+            // On the short Kuro route, the ruined shrine is the authored safe
+            // extract; taking the guaranteed-combat grove would make bond
+            // progression depend on the crossroads' random no-encounter roll.
+            if (m.raid.chain === "kuro_swamp") {
+              const quietExtract = find(({ id }) => id === "move:kuro_swamp_shrine");
+              if (quietExtract) return { type: "doActivity", id: quietExtract.id };
+            }
           }
           const attack = find(({ id }) => id === "attack");
           if (attack) return { type: "doActivity", id: attack.id };
@@ -3358,6 +3369,24 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           if (search) return { type: "doActivity", id: search.id };
           const moves = acts.filter(({ id }) => id.startsWith("move:"));
           const zones = m?.raid?.visited;
+          // A completion run that still needs weapon pulses must not keep
+          // taking the nearest quiet extract and hope that a random encounter
+          // appears next time. Prefer each route's authored guaranteed-combat
+          // depth; companion runs deliberately bypass this branch above.
+          const guaranteedCombatZones = new Set([
+            "kuro_swamp_deep_grove",
+            "sumida_river_drift_pier",
+            "mt_houkyou_lava_vent",
+            "mt_houkyou_caldera",
+            "hell_gate_mirror_pool",
+          ]);
+          const guaranteedCombat = moves.find(({ id }) => {
+            const target = id.slice("move:".length);
+            return guaranteedCombatZones.has(target) && zones?.[target]?.visited !== true;
+          });
+          if (guaranteedCombat) {
+            return { type: "doActivity", id: guaranteedCombat.id };
+          }
           const unvisited = zones && moves.find(({ id }) => {
             const target = id.slice("move:".length);
             return zones[target]?.visited !== true;

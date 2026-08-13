@@ -154,6 +154,7 @@ export interface PlaytestAuditMatrixEvidence {
       persona: string;
       activityKind: string;
       count: number;
+      objectiveIds?: string[];
     };
   };
   classification:
@@ -174,6 +175,7 @@ export interface PlaytestAuditMatrixEvidence {
     activityTags?: string[];
     completedScripts?: string[];
     semanticActivityCounts?: Record<string, number>;
+    semanticActivityObjectives?: Record<string, string[]>;
   }>;
   choiceDivergences: Array<{
     scriptId: string;
@@ -273,6 +275,7 @@ export interface PlaytestAuditVerification {
       persona: string;
       activityKind: string;
       count: number;
+      objectiveIds?: string[];
     };
   };
   classification:
@@ -288,6 +291,7 @@ export interface PlaytestAuditVerification {
     activityTags?: string[];
     completedScripts?: string[];
     semanticActivityCounts?: Record<string, number>;
+    semanticActivityObjectives?: Record<string, string[]>;
   }>;
 }
 
@@ -820,10 +824,26 @@ function isSemanticActivityCountRecord(value: unknown): value is Record<string, 
 }
 
 function maximumActivityRepetition(
-  lanes: Array<{ persona: string; semanticActivityCounts?: Record<string, number> }>,
-): { persona: string; activityKind: string; count: number } | undefined {
+  lanes: Array<{
+    persona: string;
+    semanticActivityCounts?: Record<string, number>;
+    semanticActivityObjectives?: Record<string, string[]>;
+  }>,
+): {
+  persona: string;
+  activityKind: string;
+  count: number;
+  objectiveIds?: string[];
+} | undefined {
   return lanes.flatMap((lane) => Object.entries(lane.semanticActivityCounts ?? {}).map(
-    ([activityKind, count]) => ({ persona: lane.persona, activityKind, count }),
+    ([activityKind, count]) => ({
+      persona: lane.persona,
+      activityKind,
+      count,
+      ...(lane.semanticActivityObjectives?.[activityKind]?.length
+        ? { objectiveIds: [...lane.semanticActivityObjectives[activityKind]!].sort() }
+        : {}),
+    }),
   )).sort((left, right) =>
     right.count - left.count ||
     left.persona.localeCompare(right.persona) ||

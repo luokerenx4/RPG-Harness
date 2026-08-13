@@ -535,7 +535,9 @@ describe("bounded development sweep", () => {
           seed: 13,
           qualityGate: {
             status: "failed",
-            violations: ["activity repetition objective/search = 2 > allowed 1"],
+            violations: [
+              "activity repetition objective/search = 2 > allowed 1; linked objectives [finish]",
+            ],
             report: { severity: "major" },
           },
         }],

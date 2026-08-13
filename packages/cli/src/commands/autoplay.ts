@@ -173,7 +173,14 @@ export interface AutoplayContinuation {
 export type AutoplaySemanticDecision =
   | { type: "choose"; scriptId: string; choiceId: string; optionId: string }
   | { type: "select"; scriptId: string }
-  | { type: "doActivity"; id: string; actionKind?: string; aiTags?: string[] };
+  | {
+      type: "doActivity";
+      id: string;
+      actionKind?: string;
+      aiTags?: string[];
+      /** Active public objectives that explicitly offered this activity. */
+      linkedObjectiveIds?: string[];
+    };
 
 export interface AutoplayDecisionPath {
   revision: string;
@@ -848,11 +855,19 @@ export function summarizeDecisionPath(
         const activity = activitySource?.snapshot.activities.find(
           ({ id }) => id === activityId,
         );
+        const linkedObjectiveIds = activitySource?.snapshot.objectives
+          ?.filter((objective) =>
+            objective.status === "active" &&
+            objective.relatedActivityIds?.includes(activityId)
+          )
+          .map((objective) => objective.id)
+          .sort();
         decisions.push({
           type: "doActivity",
           id: activityId,
           ...(activity?.actionKind ? { actionKind: activity.actionKind } : {}),
           ...(activity?.aiTags?.length ? { aiTags: [...activity.aiTags] } : {}),
+          ...(linkedObjectiveIds?.length ? { linkedObjectiveIds } : {}),
         });
       }
     }

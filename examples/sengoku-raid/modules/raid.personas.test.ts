@@ -276,6 +276,58 @@ describe("sengoku-raid project personas", () => {
       },
     })).resolves.toEqual({ type: "doActivity", id: "extract" });
   });
+
+  test("completionist escorts a companion through the quiet Kuro extract", async () => {
+    const output = hub([
+      activity("move:kuro_swamp_deep_grove"),
+      activity("move:kuro_swamp_shrine"),
+    ]);
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": {
+        achievementLog: [],
+        companion: "mio",
+        raid: { chain: "kuro_swamp", visited: {} },
+      },
+    })).resolves.toEqual({
+      type: "doActivity",
+      id: "move:kuro_swamp_shrine",
+    });
+  });
+
+  test("completionist takes a guaranteed-combat depth instead of a quiet extract", async () => {
+    const output = hub([
+      activity("move:kuro_swamp_shrine"),
+      activity("move:kuro_swamp_deep_grove"),
+      activity("move:kuro_swamp_ruined_hut"),
+    ]);
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": {
+        achievementLog: [],
+        companion: null,
+        raid: { visited: {} },
+      },
+    })).resolves.toEqual({
+      type: "doActivity",
+      id: "move:kuro_swamp_deep_grove",
+    });
+  });
+
+  test("completionist does not oscillate between visited guaranteed-combat zones", async () => {
+    const output = hub([
+      activity("extract"),
+      activity("move:mt_houkyou_lava_vent"),
+    ]);
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": {
+        achievementLog: [],
+        companion: null,
+        raid: { visited: { mt_houkyou_lava_vent: { visited: true } } },
+      },
+    })).resolves.toEqual({ type: "doActivity", id: "extract" });
+  });
 });
 
 function decide(
