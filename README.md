@@ -586,10 +586,11 @@ legitimate grinding observable while exposing counters that mask an otherwise
 stuck policy.
 Every autoplay summary also contains a `progress` delta derived from newly
 completed scripts, public objective requirement changes, and in-flight script
-movement. With `--report-on-stop`, a clean `max-steps` stop that made measurable
-progress becomes a note-level budget checkpoint instead of a major failure;
-errors, exact stalls, masked behavior cycles, and zero-progress stops retain
-their stronger severity.
+movement. A clean `max-steps` stop is scheduler state rather than a coding
+issue: persisted runs return a machine-executable `continuation` with the same
+session and the next persona RNG state. Errors, exact stalls, silent generator
+returns, and masked behavior cycles still freeze causal evidence and enter the
+worklist.
 Persisted autoplay summaries also include `choiceCoverage.pendingBranches`, so
 the next AI pass receives exact unexplored branch checkpoints automatically.
 `audit` productizes the multi-persona development lane. It preflights the source
@@ -597,7 +598,7 @@ and every target name before writing anything, captures the protected player
 checkpoint once, then forks that frozen snapshot into `${prefix}-${persona}`
 sessions and runs each through the same
 autoplay/report contract. Its compact matrix summarizes endings, strict stalls,
-masked behavior cycles, progressing budget checkpoints, rejected inputs,
+masked behavior cycles, resumable budget continuations, rejected inputs,
 reports, and GUI-ready Web paths without embedding five full save states.
 The player can keep advancing the source session while the sequential matrix
 runs: every lane reports the same audit-time `source.stateRevision` and cannot

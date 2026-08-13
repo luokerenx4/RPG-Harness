@@ -98,11 +98,28 @@ export interface AutoplaySummary {
   webPath?: string;
   fork?: Awaited<ReturnType<typeof createForkFromSource>>;
   report?: PlaytestReport;
+  continuation?: AutoplayContinuation;
   choiceCoverage?: {
     summary: ChoiceCoverageReport["summary"];
     pendingBranches: ChoiceCoverageWorkItem[];
   };
   targetChoice?: TargetChoiceResult;
+}
+
+export interface AutoplayContinuation {
+  kind: "budget-exhausted";
+  session: string;
+  webPath: string;
+  next: {
+    command: "autoplay";
+    args: {
+      persona: string;
+      maxSteps: number;
+      seed?: number;
+      session: string;
+      reportOnStop: boolean;
+    };
+  };
 }
 
 export type AutoplaySemanticDecision =
@@ -258,7 +275,9 @@ export async function runAutoplay(
     state: Parameters<typeof persona>[1],
     step: number,
   ) => {
-    if (!awaitingTarget) return persona(output, state, step, { rng: personaRng });
+    if (!awaitingTarget) {
+      return persona(output, state, step, { rng: personaRng.next });
+    }
     if (output.type !== "choice") {
       throw new Error(
         `Choice coverage checkpoint mismatch: expected ${args.targetChoice!.scriptId}/${args.targetChoice!.choiceId}, got ${output.type}`,
@@ -373,7 +392,7 @@ export async function runAutoplay(
     // actual stop site rather than the previous log entry's state.
     if (args.session) {
       await saveSession(args.gameDir, args.session, result.finalState);
-      if (args.reportOnStop && detectTerminalScriptId(result) === null) {
+      if (args.reportOnStop && isReportableAutoplayStop(result)) {
         // Freeze the incident before releasing the transaction. A GUI step can
         // legitimately win the next lock before issues.jsonl is appended; the
         // report must still describe this autoplay terminal state and log.
@@ -405,9 +424,31 @@ export async function runAutoplay(
     result.trace,
   );
   const decisionPath = summarizeDecisionPath(result.trace);
+  const continuation: AutoplayContinuation | undefined =
+    args.session && result.reason === "max-steps" && !result.behaviorCycle
+      ? {
+          kind: "budget-exhausted",
+          session: args.session,
+          webPath: `/?session=${encodeURIComponent(args.session)}`,
+          next: {
+            command: "autoplay",
+            args: {
+              persona: args.persona,
+              // A zero-budget inspection still returns a continuation that can
+              // actually advance when an orchestrator executes it verbatim.
+              maxSteps: Math.max(1, args.maxSteps),
+              ...(effectiveSeed !== undefined
+                ? { seed: personaRng.state() }
+                : {}),
+              session: args.session,
+              reportOnStop: args.reportOnStop ?? false,
+            },
+          },
+        }
+      : undefined;
 
   let report: PlaytestReport | undefined;
-  if (args.reportOnStop && args.session && ending === null) {
+  if (args.reportOnStop && args.session && isReportableAutoplayStop(result)) {
     if (
       !autoplayInitialState ||
       autoplayReplayLogEntry === undefined ||
@@ -432,14 +473,8 @@ export async function runAutoplay(
       gameDir: args.gameDir,
       session: args.session,
       area: "tooling",
-      severity: result.reason === "error"
-        ? "blocker"
-        : result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
-          ? "note"
-          : "major",
-      title: result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
-        ? `Autoplay ${args.persona} reached a budget checkpoint with progress`
-        : result.reason === "completed"
+      severity: result.reason === "error" ? "blocker" : "major",
+      title: result.reason === "completed"
           ? `Autoplay ${args.persona} completed without a public gameEnd`
           : `Autoplay ${args.persona} stopped before game end (${result.reason})`,
       ...(primaryTarget ? { target: primaryTarget } : {}),
@@ -470,9 +505,7 @@ export async function runAutoplay(
               `AI branch \`${args.session}\` was forked from player session \`${fork.fromSession}\` at source log entry ${fork.sourceLogEntry}.`,
             ]
           : []),
-        result.reason === "max-steps" && progress.madeProgress && !result.behaviorCycle
-          ? "Continue from this checkpoint; file a higher-severity issue only if a later run proves a loop or loses objective progress."
-          : "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
+        "Reproduce from the attached immutable checkpoint, then convert the stop into a fixture or repair the persona/objective contract.",
       ].join(" "),
       ...(result.stall ? { stall: result.stall } : {}),
       ...(result.behaviorCycle ? { behaviorCycle: result.behaviorCycle } : {}),
@@ -523,6 +556,7 @@ export async function runAutoplay(
       : {}),
     ...(fork ? { fork } : {}),
     ...(report ? { report } : {}),
+    ...(continuation ? { continuation } : {}),
     ...(choiceCoverage
       ? {
           choiceCoverage: {
@@ -533,6 +567,16 @@ export async function runAutoplay(
       : {}),
     ...(targetChoiceResult ? { targetChoice: targetChoiceResult } : {}),
   };
+}
+
+function isReportableAutoplayStop(result: {
+  reason: LoopReason;
+  done: boolean;
+  trace: ReadonlyArray<{ output: Output }>;
+  behaviorCycle?: BehaviorCycleDiagnostic;
+}): boolean {
+  if (detectTerminalScriptId(result) !== null) return false;
+  return result.reason !== "max-steps" || result.behaviorCycle !== undefined;
 }
 
 export function collectAutoplaySourceTargets(
@@ -782,12 +826,20 @@ export function detectTerminalScriptId(result: {
   return typeof ending === "string" && ending.trim() ? ending : "game-end";
 }
 
-function createPersonaRng(seed: number | undefined): () => number {
-  if (seed === undefined) return Math.random;
+function createPersonaRng(seed: number | undefined): {
+  next: () => number;
+  state: () => number;
+} {
+  if (seed === undefined) {
+    return { next: Math.random, state: () => 0 };
+  }
   let state = seed;
-  return () => {
-    state = (state * 9301 + 49297) % 233280;
-    return state / 233280;
+  return {
+    next: () => {
+      state = (state * 9301 + 49297) % 233280;
+      return state / 233280;
+    },
+    state: () => state,
   };
 }
 

@@ -159,8 +159,9 @@ COMMANDS
       by GUI, Headless, and TUI. Without -v, only prints final JSON to stdout.
       --from-session atomically forks a player/GUI save into --session before
       the AI moves, so autonomous play never mutates the player's branch.
-      --report-on-stop freezes pre-run and incident checkpoints as a causally
-      verifiable coding issue.
+      --report-on-stop freezes pre-run and incident checkpoints only when a
+      stop proves a fault or cycle. Ordinary budget exhaustion returns a
+      resumable continuation, including the next persona RNG state.
       --max-steps is an exact AI-decision budget; visible outputs are counted separately.
       Persisted runs also return executable pending choice branches.
 
@@ -170,7 +171,7 @@ COMMANDS
       Fork one immutable player checkpoint into an isolated AI persona matrix.
       Preflights every target before running, then summarizes endings, stalls,
       masked behavior cycles, semantic path diversity, choice divergences,
-      budget checkpoints, reports, and Web paths.
+      budget continuations, reports, and Web paths.
       Defaults to game.yaml ai_audit.personas, or the built-in
       objective,greedy,charmer,rude,hunter fallback. Including random requires
       --seed so the audit can be reproduced exactly.

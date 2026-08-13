@@ -370,7 +370,7 @@ describe("autoplay autonomous development lane", () => {
       .not.toBe(issueCheckpoint.revision);
   });
 
-  test("forks a player save before moving and reports a checkpointed stop", async () => {
+  test("forks a player save and exposes a resumable zero-budget stop", async () => {
     const gameDir = await temporaryGame();
     const game = await loadGame(gameDir);
     await saveSession(gameDir, "player-main", createInitialState(game));
@@ -403,14 +403,23 @@ describe("autoplay autonomous development lane", () => {
       fromSession: "player-main",
       session: "ai-audit",
     });
-    expect(summary.report).toMatchObject({
-      status: "open",
+    expect(summary.report).toBeUndefined();
+    expect(summary.continuation).toEqual({
+      kind: "budget-exhausted",
       session: "ai-audit",
-      area: "tooling",
-      severity: "major",
+      webPath: "/?session=ai-audit",
+      next: {
+        command: "autoplay",
+        args: {
+          persona: "greedy",
+          maxSteps: 1,
+          seed: summary.seed,
+          session: "ai-audit",
+          reportOnStop: true,
+        },
+      },
     });
     expect(summary.progress.madeProgress).toBe(false);
-    expect(summary.report?.evidence.checkpoint).toBeDefined();
     expect(await readFile(
       path.join(sessionDir(gameDir, "player-main"), "state.json"),
       "utf-8",
@@ -422,22 +431,10 @@ describe("autoplay autonomous development lane", () => {
     ));
     expect(provenance.fromSession).toBe("player-main");
     expect(await listPlaytestReports(gameDir, "player-main")).toEqual([]);
-    expect(await listPlaytestReports(gameDir, "ai-audit")).toHaveLength(1);
-
-    const reproduced = await reproducePlaytestReport({
-      gameDir,
-      id: summary.report!.id,
-      session: "ai-audit",
-      to: "ai-audit-repro",
-    });
-    expect(reproduced.webPath).toBe("/?session=ai-audit-repro");
-    expect(JSON.parse(await readFile(
-      path.join(sessionDir(gameDir, "ai-audit-repro"), "state.json"),
-      "utf-8",
-    ))).toEqual(summary.finalState);
+    expect(await listPlaytestReports(gameDir, "ai-audit")).toEqual([]);
   });
 
-  test("classifies a progressing max-step stop as a note-level budget checkpoint", async () => {
+  test("returns progressing max-step stops as continuations instead of issues", async () => {
     const gameDir = await temporaryGame();
     const summary = await runAutoplay({
       gameDir,
@@ -453,11 +450,21 @@ describe("autoplay autonomous development lane", () => {
       madeProgress: true,
       scriptProgress: { from: null, to: "intro" },
     });
-    expect(summary.report).toMatchObject({
-      severity: "note",
-      title: "Autoplay greedy reached a budget checkpoint with progress",
+    expect(summary.report).toBeUndefined();
+    expect(summary.continuation).toMatchObject({
+      kind: "budget-exhausted",
+      session: "ai-budget-progress",
+      next: {
+        command: "autoplay",
+        args: {
+          persona: "greedy",
+          maxSteps: 1,
+          session: "ai-budget-progress",
+          reportOnStop: true,
+        },
+      },
     });
-    expect(summary.report?.details).toContain("Continue from this checkpoint");
+    expect(await listPlaytestReports(gameDir, "ai-budget-progress")).toEqual([]);
   });
 
   test("does not file an issue when the forked AI branch reaches gameEnd", async () => {
@@ -515,7 +522,7 @@ describe("autoplay autonomous development lane", () => {
       gameDir,
       persona: "random",
       verbose: false,
-      maxSteps: 1,
+      maxSteps: 100,
       seed: 1,
       session: "fresh-random",
       reportOnStop: true,
@@ -523,7 +530,8 @@ describe("autoplay autonomous development lane", () => {
     const report = original.report;
     if (!report) throw new Error("fixture did not create a causal autoplay report");
 
-    expect(original.decisionPath.decisions).toHaveLength(1);
+    expect(original.reason).toBe("stalled");
+    expect(original.decisionPath.decisions.length).toBeGreaterThan(1);
     expect(report.evidence.autoplay?.decisionPathRevision)
       .toBe(original.decisionPath.revision);
 
@@ -538,7 +546,7 @@ describe("autoplay autonomous development lane", () => {
       gameDir,
       persona: "random",
       verbose: false,
-      maxSteps: 1,
+      maxSteps: 100,
       seed: 1,
       fromSession: "fresh-random-replay-source",
       session: "fresh-random-replay-run",
@@ -562,6 +570,46 @@ describe("autoplay autonomous development lane", () => {
     expect(summary.reason).toBe("max-steps");
     expect(summary.error).toBeUndefined();
     expect(Math.random).toBe(originalRandom);
+  });
+
+  test("continues the random persona stream across bounded runs", async () => {
+    const gameDir = await temporaryRandomChoiceGame();
+    const uninterrupted = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 3,
+      seed: 23,
+      session: "random-uninterrupted",
+      reportOnStop: true,
+    });
+    const first = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: 23,
+      session: "random-segmented",
+      reportOnStop: true,
+    });
+    const nextSeed = first.continuation?.next.args.seed;
+    if (nextSeed === undefined) throw new Error("continuation did not retain RNG state");
+    const second = await runAutoplay({
+      gameDir,
+      persona: "random",
+      verbose: false,
+      maxSteps: 1,
+      seed: nextSeed,
+      session: "random-segmented",
+      reportOnStop: true,
+    });
+
+    expect([
+      ...first.decisionPath.decisions,
+      ...second.decisionPath.decisions,
+    ]).toEqual(uninterrupted.decisionPath.decisions);
+    expect(first.report).toBeUndefined();
+    expect(second.report).toBeUndefined();
   });
 
   test("validates the persona and source before leaving a target branch", async () => {

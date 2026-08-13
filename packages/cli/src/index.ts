@@ -37,6 +37,12 @@ export type {
   CreateCoverageCertificateArgs,
 } from "./commands/coverage-certificate";
 export type { WorkArgs, WorkResult } from "./commands/work";
+export { runAutoplay } from "./commands/autoplay";
+export type {
+  AutoplayArgs,
+  AutoplayContinuation,
+  AutoplaySummary,
+} from "./commands/autoplay";
 export {
   DEFAULT_CHOICE_PROBE_PERSONAS,
   runChoiceProbe,
