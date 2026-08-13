@@ -142,6 +142,7 @@ export interface PlaytestAuditMatrixEvidence {
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     maxActivityRepetitions?: number;
+    maxActivityRepetitionsByKind?: Record<string, number>;
     requiredActivityTags?: string[];
     requiredScripts?: string[];
   };
@@ -154,6 +155,7 @@ export interface PlaytestAuditMatrixEvidence {
       persona: string;
       activityKind: string;
       count: number;
+      limit: number;
       objectiveIds?: string[];
     };
   };
@@ -198,12 +200,13 @@ export function hasVerifiableAuditEvidence(
     !Array.isArray(evidence.lanes) || evidence.lanes.length === 0
   ) return false;
   const personas = evidence.lanes.map((lane) => lane.persona);
-  if (evidence.policy.maxActivityRepetitions !== undefined) {
-    if (!Number.isInteger(evidence.policy.maxActivityRepetitions) ||
-      evidence.policy.maxActivityRepetitions < 1 ||
+  if (evidence.policy.maxActivityRepetitions !== undefined ||
+    evidence.policy.maxActivityRepetitionsByKind !== undefined) {
+    if (!isOptionalPositiveInteger(evidence.policy.maxActivityRepetitions) ||
+      !isActivityRepetitionLimitRecord(evidence.policy.maxActivityRepetitionsByKind) ||
       evidence.lanes.some((lane) => !isSemanticActivityCountRecord(lane.semanticActivityCounts)) ||
       JSON.stringify(evidence.observed.maxActivityRepetition) !==
-        JSON.stringify(maximumActivityRepetition(evidence.lanes))) {
+        JSON.stringify(maximumActivityRepetition(evidence.policy, evidence.lanes))) {
       return false;
     }
   }
@@ -263,6 +266,7 @@ export interface PlaytestAuditVerification {
     minUniqueEndings?: number;
     minUniqueDecisionPaths?: number;
     maxActivityRepetitions?: number;
+    maxActivityRepetitionsByKind?: Record<string, number>;
     requiredActivityTags?: string[];
     requiredScripts?: string[];
   };
@@ -275,6 +279,7 @@ export interface PlaytestAuditVerification {
       persona: string;
       activityKind: string;
       count: number;
+      limit: number;
       objectiveIds?: string[];
     };
   };
@@ -802,14 +807,15 @@ function assertAuditVerificationMatches(
   ) {
     throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
   }
-  if (verification.policy.maxActivityRepetitions !== undefined) {
+  if (verification.policy.maxActivityRepetitions !== undefined ||
+    verification.policy.maxActivityRepetitionsByKind !== undefined) {
     if (verification.lanes.some((lane) => !isSemanticActivityCountRecord(lane.semanticActivityCounts))) {
       throw new Error(`AI audit verification lacks activity repetition evidence for report ${report.id}`);
     }
-    const maximum = maximumActivityRepetition(verification.lanes);
+    const maximum = maximumActivityRepetition(verification.policy, verification.lanes);
     if (
       JSON.stringify(verification.observed.maxActivityRepetition) !== JSON.stringify(maximum) ||
-      (maximum !== undefined && maximum.count > verification.policy.maxActivityRepetitions)
+      (maximum !== undefined && maximum.count > maximum.limit)
     ) {
       throw new Error(`AI audit verification does not satisfy the frozen policy for report ${report.id}`);
     }
@@ -823,7 +829,28 @@ function isSemanticActivityCountRecord(value: unknown): value is Record<string, 
     );
 }
 
+function isOptionalPositiveInteger(value: unknown): value is number | undefined {
+  return value === undefined || (Number.isInteger(value) && (value as number) > 0);
+}
+
+function isActivityRepetitionLimitRecord(
+  value: unknown,
+): value is Record<string, number> | undefined {
+  return value === undefined || (
+    value !== null && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).length > 0 &&
+    Object.entries(value).every(([kind, limit]) =>
+      /^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(kind) &&
+      Number.isInteger(limit) && (limit as number) > 0
+    )
+  );
+}
+
 function maximumActivityRepetition(
+  policy: {
+    maxActivityRepetitions?: number;
+    maxActivityRepetitionsByKind?: Record<string, number>;
+  },
   lanes: Array<{
     persona: string;
     semanticActivityCounts?: Record<string, number>;
@@ -833,18 +860,26 @@ function maximumActivityRepetition(
   persona: string;
   activityKind: string;
   count: number;
+  limit: number;
   objectiveIds?: string[];
 } | undefined {
-  return lanes.flatMap((lane) => Object.entries(lane.semanticActivityCounts ?? {}).map(
-    ([activityKind, count]) => ({
+  return lanes.flatMap((lane) => Object.entries(lane.semanticActivityCounts ?? {}).flatMap(
+    ([activityKind, count]) => {
+      const limit = policy.maxActivityRepetitionsByKind?.[activityKind] ??
+        policy.maxActivityRepetitions;
+      if (limit === undefined) return [];
+      return [{
       persona: lane.persona,
       activityKind,
       count,
+      limit,
       ...(lane.semanticActivityObjectives?.[activityKind]?.length
         ? { objectiveIds: [...lane.semanticActivityObjectives[activityKind]!].sort() }
         : {}),
-    }),
+      }];
+    },
   )).sort((left, right) =>
+    right.count * left.limit - left.count * right.limit ||
     right.count - left.count ||
     left.persona.localeCompare(right.persona) ||
     left.activityKind.localeCompare(right.activityKind)

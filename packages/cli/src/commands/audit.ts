@@ -143,6 +143,7 @@ export interface AuditSummary {
         persona: string;
         activityKind: string;
         count: number;
+        limit: number;
         objectiveIds?: string[];
       };
     };
@@ -343,22 +344,10 @@ export async function runAudit(
   const coveredActivityTags = [...new Set(
     lanes.flatMap((lane) => lane.path.activityTags),
   )].sort();
-  const maxActivityRepetition = lanes
-    .flatMap((lane) => Object.entries(lane.path.semanticActivityCounts).map(
-      ([activityKind, count]) => ({
-        persona: lane.persona,
-        activityKind,
-        count,
-        ...(lane.path.semanticActivityObjectives[activityKind]?.length
-          ? { objectiveIds: lane.path.semanticActivityObjectives[activityKind] }
-          : {}),
-      }),
-    ))
-    .sort((left, right) =>
-      right.count - left.count ||
-      left.persona.localeCompare(right.persona) ||
-      left.activityKind.localeCompare(right.activityKind)
-    )[0];
+  const maxActivityRepetition = maximumActivityBudgetUtilization(
+    lanes,
+    qualityPolicy,
+  );
   const completedScriptsByPersona = Object.fromEntries(
     lanes.map((lane) => [lane.persona, [...lane.progress.completedScripts].sort()]),
   );
@@ -672,6 +661,11 @@ function mergeQualityPolicies(
     matricesCompatible ? current?.maxActivityRepetitions : undefined,
     floor?.maxActivityRepetitions,
   );
+  const maxActivityRepetitionsByKind = mergeActivityRepetitionLimits(
+    matricesCompatible ? current : undefined,
+    floor,
+    maxActivityRepetitions,
+  );
   const requiredActivityTags = mergeRequiredTags(
     matricesCompatible ? current?.requiredActivityTags : undefined,
     floor?.requiredActivityTags,
@@ -694,6 +688,9 @@ function mergeQualityPolicies(
     ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
     ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
     ...(maxActivityRepetitions !== undefined ? { maxActivityRepetitions } : {}),
+    ...(maxActivityRepetitionsByKind !== undefined
+      ? { maxActivityRepetitionsByKind }
+      : {}),
     ...(requiredActivityTags !== undefined ? { requiredActivityTags } : {}),
     ...(requiredScripts !== undefined ? { requiredScripts } : {}),
   };
@@ -733,6 +730,7 @@ function evaluateQualityGate(
     persona: string;
     activityKind: string;
     count: number;
+    limit: number;
     objectiveIds?: string[];
   } | undefined,
 ): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
@@ -743,7 +741,8 @@ function evaluateQualityGate(
       ? { coveredActivityTags: [...coveredActivityTags] }
       : {}),
     ...(policy.requiredScripts ? { completedScripts: [...completedScripts] } : {}),
-    ...(policy.maxActivityRepetitions !== undefined && maxActivityRepetition
+    ...((policy.maxActivityRepetitions !== undefined ||
+      policy.maxActivityRepetitionsByKind !== undefined) && maxActivityRepetition
       ? { maxActivityRepetition }
       : {}),
   };
@@ -792,12 +791,11 @@ function evaluateQualityGate(
     }
   }
   if (
-    policy.maxActivityRepetitions !== undefined &&
     maxActivityRepetition &&
-    maxActivityRepetition.count > policy.maxActivityRepetitions
+    maxActivityRepetition.count > maxActivityRepetition.limit
   ) {
     violations.push(
-      `activity repetition ${maxActivityRepetition.persona}/${maxActivityRepetition.activityKind} = ${maxActivityRepetition.count} > allowed ${policy.maxActivityRepetitions}` +
+      `activity repetition ${maxActivityRepetition.persona}/${maxActivityRepetition.activityKind} = ${maxActivityRepetition.count} > allowed ${maxActivityRepetition.limit}` +
         (maxActivityRepetition.objectiveIds?.length
           ? `; linked objectives [${maxActivityRepetition.objectiveIds.join(", ")}]`
           : ""),
@@ -808,6 +806,54 @@ function evaluateQualityGate(
     observed,
     violations,
   };
+}
+
+function mergeActivityRepetitionLimits(
+  current: AiAuditConfig | undefined,
+  floor: AiAuditConfig | undefined,
+  mergedDefault: number | undefined,
+): Record<string, number> | undefined {
+  const keys = new Set([
+    ...Object.keys(current?.maxActivityRepetitionsByKind ?? {}),
+    ...Object.keys(floor?.maxActivityRepetitionsByKind ?? {}),
+  ]);
+  const merged: Record<string, number> = {};
+  for (const kind of [...keys].sort()) {
+    const limit = minDefined(
+      current?.maxActivityRepetitionsByKind?.[kind] ?? current?.maxActivityRepetitions,
+      floor?.maxActivityRepetitionsByKind?.[kind] ?? floor?.maxActivityRepetitions,
+    );
+    if (limit !== undefined && limit !== mergedDefault) merged[kind] = limit;
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function maximumActivityBudgetUtilization(
+  lanes: AuditLaneSummary[],
+  policy: AiAuditConfig | undefined,
+) {
+  if (!policy) return undefined;
+  return lanes.flatMap((lane) =>
+    Object.entries(lane.path.semanticActivityCounts).flatMap(([activityKind, count]) => {
+      const limit = policy.maxActivityRepetitionsByKind?.[activityKind] ??
+        policy.maxActivityRepetitions;
+      if (limit === undefined) return [];
+      return [{
+        persona: lane.persona,
+        activityKind,
+        count,
+        limit,
+        ...(lane.path.semanticActivityObjectives[activityKind]?.length
+          ? { objectiveIds: lane.path.semanticActivityObjectives[activityKind] }
+          : {}),
+      }];
+    })
+  ).sort((left, right) =>
+    right.count * left.limit - left.count * right.limit ||
+    right.count - left.count ||
+    left.persona.localeCompare(right.persona) ||
+    left.activityKind.localeCompare(right.activityKind)
+  )[0];
 }
 
 function formatEndingCounts(endings: Record<string, number>): string {

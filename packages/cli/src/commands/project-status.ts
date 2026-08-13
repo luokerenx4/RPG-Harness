@@ -21,11 +21,14 @@ export interface ProjectDevelopmentStatus {
     paths: number;
     seeds: number[];
     maxActivityRepetitions: number | null;
+    maxActivityRepetitionsByKind: Record<string, number> | null;
     maxActivityRepetition: {
       seed: number;
       persona: string;
       activityKind: string;
       count: number;
+      limit: number;
+      objectiveIds?: string[];
     } | null;
   };
 }
@@ -63,11 +66,20 @@ export async function collectProjectDevelopmentStatus(
           seeds: currentCertificate.certificate.audits.map((audit) => audit.seed),
           maxActivityRepetitions:
             currentCertificate.certificate.audits[0]?.qualityGate?.policy.maxActivityRepetitions ?? null,
+          maxActivityRepetitionsByKind:
+            currentCertificate.certificate.audits[0]?.qualityGate?.policy
+              .maxActivityRepetitionsByKind ?? null,
           maxActivityRepetition: currentCertificate.certificate.audits
             .flatMap((audit) => audit.qualityGate?.observed.maxActivityRepetition
               ? [{ seed: audit.seed, ...audit.qualityGate.observed.maxActivityRepetition }]
               : [])
-            .sort((left, right) => right.count - left.count)[0] ?? null,
+            .sort((left, right) =>
+              right.count * left.limit - left.count * right.limit ||
+              right.count - left.count ||
+              left.seed - right.seed ||
+              left.persona.localeCompare(right.persona) ||
+              left.activityKind.localeCompare(right.activityKind)
+            )[0] ?? null,
         }
       : {
           status: "uncertified" as const,
@@ -78,6 +90,7 @@ export async function collectProjectDevelopmentStatus(
           paths: 0,
           seeds: [],
           maxActivityRepetitions: null,
+          maxActivityRepetitionsByKind: null,
           maxActivityRepetition: null,
         },
   };

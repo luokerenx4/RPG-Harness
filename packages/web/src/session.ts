@@ -47,11 +47,14 @@ export interface WebDevelopmentStatus {
     paths: number;
     seeds: number[];
     maxActivityRepetitions: number | null;
+    maxActivityRepetitionsByKind: Record<string, number> | null;
     maxActivityRepetition: {
       seed: number;
       persona: string;
       activityKind: string;
       count: number;
+      limit: number;
+      objectiveIds?: string[];
     } | null;
   };
 }

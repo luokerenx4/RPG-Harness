@@ -97,6 +97,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     "min_unique_endings",
     "min_unique_decision_paths",
     "max_activity_repetitions",
+    "max_activity_repetitions_by_kind",
     "required_activity_tags",
     "required_scripts",
   ]);
@@ -177,6 +178,30 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     }
     config.requiredScripts = [...scripts];
   }
+  if (obj.max_activity_repetitions_by_kind !== undefined) {
+    const limits = obj.max_activity_repetitions_by_kind;
+    if (!limits || typeof limits !== "object" || Array.isArray(limits) ||
+      Object.keys(limits).length === 0) {
+      throw new ManifestParseError(
+        "ai_audit.max_activity_repetitions_by_kind must be a non-empty object map",
+      );
+    }
+    const parsed: Record<string, number> = {};
+    for (const [kind, value] of Object.entries(limits)) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(kind)) {
+        throw new ManifestParseError(
+          `ai_audit.max_activity_repetitions_by_kind has invalid activity kind: ${kind}`,
+        );
+      }
+      if (!Number.isInteger(value) || (value as number) < 1) {
+        throw new ManifestParseError(
+          `ai_audit.max_activity_repetitions_by_kind.${kind} must be a positive integer`,
+        );
+      }
+      parsed[kind] = value as number;
+    }
+    config.maxActivityRepetitionsByKind = parsed;
+  }
   for (const [source, target] of [
     ["min_unique_endings", "minUniqueEndings"],
     ["min_unique_decision_paths", "minUniqueDecisionPaths"],
@@ -206,6 +231,7 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     config.minUniqueEndings === undefined &&
     config.minUniqueDecisionPaths === undefined &&
     config.maxActivityRepetitions === undefined &&
+    config.maxActivityRepetitionsByKind === undefined &&
     config.requiredActivityTags === undefined &&
     config.requiredScripts === undefined
   ) {

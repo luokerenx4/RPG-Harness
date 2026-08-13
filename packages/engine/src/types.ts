@@ -31,6 +31,8 @@ export interface AiAuditConfig {
   minUniqueDecisionPaths?: number;
   /** Maximum times one semantic activity kind may repeat in any acceptance lane. */
   maxActivityRepetitions?: number;
+  /** Per-kind pacing budgets. These override the default above for exact action kinds. */
+  maxActivityRepetitionsByKind?: Record<string, number>;
   /** Semantic activity surfaces that at least one acceptance lane must execute. */
   requiredActivityTags?: string[];
   /** Deep authored events that at least one acceptance lane must complete. */

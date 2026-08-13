@@ -520,6 +520,7 @@ describe("autoplay audit matrix", () => {
           persona: "objective",
           activityKind: "search",
           count: 3,
+          limit: 2,
           objectiveIds: ["search-loop"],
         },
       },
@@ -536,6 +537,7 @@ describe("autoplay audit matrix", () => {
           persona: "objective",
           activityKind: "search",
           count: 3,
+          limit: 2,
           objectiveIds: ["search-loop"],
         },
       },
@@ -544,6 +546,78 @@ describe("autoplay audit matrix", () => {
         semanticActivityCounts: { search: 3 },
         semanticActivityObjectives: { search: ["search-loop"] },
       }],
+    });
+  });
+
+  test("applies an action-kind pacing override without weakening other activities", async () => {
+    const gameDir = await temporaryRepetitionGame();
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit repetition override test",
+      "preset: ./modules/run.ts",
+      "ai_audit:",
+      "  max_activity_repetitions: 2",
+      "  max_activity_repetitions_by_kind: { search: 3 }",
+      "",
+    ].join("\n"), "utf-8");
+
+    const summary = await runAudit({
+      gameDir,
+      sessionPrefix: "repetition-override-matrix",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: 23,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.qualityGate).toMatchObject({
+      status: "passed",
+      policy: {
+        maxActivityRepetitions: 2,
+        maxActivityRepetitionsByKind: { search: 3 },
+      },
+      observed: {
+        maxActivityRepetition: {
+          persona: "objective",
+          activityKind: "search",
+          count: 3,
+          limit: 3,
+        },
+      },
+      violations: [],
+    });
+    expect(await listPlaytestReports(gameDir)).toEqual([]);
+
+    const otherKindGameDir = await temporaryRepetitionGame("move");
+    await writeFile(path.join(otherKindGameDir, "game.yaml"), [
+      "title: Audit repetition override isolation test",
+      "preset: ./modules/run.ts",
+      "ai_audit:",
+      "  max_activity_repetitions: 2",
+      "  max_activity_repetitions_by_kind: { search: 3 }",
+      "",
+    ].join("\n"), "utf-8");
+    const otherKindSummary = await runAudit({
+      gameDir: otherKindGameDir,
+      sessionPrefix: "repetition-default-matrix",
+      personas: ["objective"],
+      maxSteps: 10,
+      seed: 23,
+      reportOnStop: true,
+      pretty: false,
+    });
+    expect(otherKindSummary.qualityGate).toMatchObject({
+      status: "failed",
+      observed: {
+        maxActivityRepetition: {
+          activityKind: "move",
+          count: 3,
+          limit: 2,
+        },
+      },
+      violations: [
+        "activity repetition objective/move = 3 > allowed 2; linked objectives [move-loop]",
+      ],
     });
   });
 
@@ -1126,7 +1200,7 @@ async function temporaryActivityGame(): Promise<string> {
   return dir;
 }
 
-async function temporaryRepetitionGame(): Promise<string> {
+async function temporaryRepetitionGame(activityKind = "search"): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-repetition-"));
   temporaryDirectories.push(dir);
   await mkdir(path.join(dir, "modules"), { recursive: true });
@@ -1141,9 +1215,9 @@ async function temporaryRepetitionGame(): Promise<string> {
     'import type { RunFunction } from "@rpg-harness/engine";',
     "const run: RunFunction = async function* (ctx) {",
     "  for (let index = 0; index < 3; index += 1) {",
-    '    const id = `search:zone-${index}`;',
-    '    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "search-loop", title: "Search again", scope: "main", terminal: false, status: "active", relatedActivityIds: [id] }], activities: [',
-    '      { id, kind: "action", actionKind: "search", title: "Search", cost: 0, available: true },',
+    `    const id = \`${activityKind}:zone-\${index}\`;`,
+    `    yield { type: "hubMenu", snapshot: { day: index, maxDay: 3, slot: 0, slotName: "", slotsPerDay: 1, stats: [], affections: [], objectives: [{ id: "${activityKind}-loop", title: "Repeat activity", scope: "main", terminal: false, status: "active", relatedActivityIds: [id] }], activities: [`,
+    `      { id, kind: "action", actionKind: "${activityKind}", title: "Act", cost: 0, available: true },`,
     "    ] } };",
     "  }",
     '  ctx.state.baseline.completionOrder.push("ending");',

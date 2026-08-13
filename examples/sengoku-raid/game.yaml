@@ -16,7 +16,11 @@ ai_audit:
   min_unique_decision_paths: 3
   # A route may revisit a semantic action, but no acceptance persona should
   # need to grind the same semantic activity kind more than this many times.
-  max_activity_repetitions: 28
+  max_activity_repetitions: 27
+  # Combat actions are rounds, while movement is a route-level decision.
+  # Budget them independently so a real navigation grind cannot hide behind
+  # the intentionally multi-round battle loop.
+  max_activity_repetitions_by_kind: { move: 22, attack: 30 }
   # These tags are observed on activities the lanes actually execute, not
   # inferred from persona names or merely available buttons. Together they
   # prove that the acceptance matrix reaches all three authored raid styles.

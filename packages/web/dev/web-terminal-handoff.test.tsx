@@ -72,7 +72,14 @@ describe("Web terminal handoff", () => {
           paths: 7,
           seeds: [1, 17, 38173],
           maxActivityRepetitions: 30,
-          maxActivityRepetition: { seed: 17, persona: "greedy", activityKind: "attack", count: 27 },
+          maxActivityRepetitionsByKind: null,
+          maxActivityRepetition: {
+            seed: 17,
+            persona: "greedy",
+            activityKind: "attack",
+            count: 27,
+            limit: 30,
+          },
         },
       }} />,
     );
@@ -103,7 +110,14 @@ describe("Web terminal handoff", () => {
           paths: 7,
           seeds: [1, 17, 38173],
           maxActivityRepetitions: 30,
-          maxActivityRepetition: { seed: 17, persona: "greedy", activityKind: "attack", count: 27 },
+          maxActivityRepetitionsByKind: null,
+          maxActivityRepetition: {
+            seed: 17,
+            persona: "greedy",
+            activityKind: "attack",
+            count: 27,
+            limit: 30,
+          },
         },
       }} />,
     );

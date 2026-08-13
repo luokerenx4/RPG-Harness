@@ -697,6 +697,8 @@ ai_audit:
   seeds: [1, 17, 2718, 65535]
   min_unique_endings: 2
   min_unique_decision_paths: 3
+  max_activity_repetitions: 27
+  max_activity_repetitions_by_kind: { move: 22, attack: 30 }
   required_activity_tags: [cautious, economic, aggressive]
   required_scripts: [deep_route_coda]
 ```
@@ -708,7 +710,12 @@ and creates its own replayable audit issue. With no
 `--personas` override, `audit` runs that project-owned matrix; an explicit
 diagnostic subset remains runnable but is `not-evaluated` against the project
 gate, so an impossible subset cannot create false quality debt. Thresholds may
-not exceed the declared matrix size. The gate is evaluated only when every lane
+not exceed the declared matrix size. `max_activity_repetitions` is the default
+semantic pacing budget for one activity kind in one lane; exact
+`max_activity_repetitions_by_kind` entries override it. This lets a game budget
+multi-round combat separately from route-level movement without weakening the
+default applied to search, travel, or future activity kinds. The gate is
+evaluated only when every lane
 reaches a terminal ending. Passing matrices stay silent. A completed matrix
 below either threshold, missing a required activity tag, or never completing a
 required script creates one
