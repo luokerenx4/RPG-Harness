@@ -41,6 +41,49 @@ describe("formatHubCalendar", () => {
 });
 
 describe("buildHubView", () => {
+  test("uses explicit main-objective guidance ahead of mastery and menu order", () => {
+    const view = buildHubView(
+      snapshot({
+        objectives: [
+          {
+            id: "deep-boss",
+            title: "Optional deep boss",
+            scope: "mastery",
+            terminal: false,
+            status: "active",
+            relatedActivityIds: ["deep"],
+          },
+          {
+            id: "campaign",
+            title: "Finish campaign",
+            scope: "main",
+            terminal: true,
+            status: "active",
+            relatedActivityIds: ["conclude"],
+          },
+        ],
+        activities: [
+          activity("deep", "raid", true),
+          activity("conclude", "story", true),
+        ],
+      }),
+    );
+
+    expect(view).toMatchObject({
+      candidateScope: "main_objective",
+      candidateActivityIds: ["conclude"],
+      primaryActivityId: "conclude",
+      primaryReason: "main_objective",
+      objectiveGuidance: {
+        objectiveId: "campaign",
+        scope: "main",
+        terminal: true,
+        decisionRequired: false,
+        primaryInput: { type: "doActivity", id: "conclude" },
+      },
+    });
+  });
+
   test("groups and prioritizes the primary loop without hiding locked rows", () => {
     const view = buildHubView(
       snapshot({

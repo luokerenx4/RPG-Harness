@@ -69,6 +69,29 @@ describe("objective persona choice preference", () => {
       personas.objective!(output, {} as ComposedState, 0),
     ).resolves.toEqual({ type: "choose", index: 1 });
   });
+
+  test("follows main scope even when a mastery objective is listed first", async () => {
+    const output = objectiveHub();
+    output.snapshot.activities.unshift({
+      id: "deep:boss",
+      kind: "action",
+      title: "Deep boss",
+      cost: 0,
+      available: true,
+    });
+    output.snapshot.objectives!.unshift({
+      id: "deep_mastery",
+      title: "Deep mastery",
+      scope: "mastery",
+      terminal: false,
+      status: "active",
+      relatedActivityIds: ["deep:boss"],
+    });
+
+    await expect(
+      personas.objective!(output, {} as ComposedState, 0),
+    ).resolves.toEqual({ type: "doActivity", id: "depart:kuro_swamp" });
+  });
 });
 
 describe("hunter persona progress fallback", () => {
@@ -90,6 +113,8 @@ describe("hunter persona progress fallback", () => {
         objectives: [{
           id: "raid",
           title: "Complete a raid",
+          scope: "main",
+          terminal: false,
           status: "active",
           relatedActivityIds: ["depart:kuro_swamp"],
         }],
@@ -159,19 +184,20 @@ describe("greedy persona progress tie-breaker", () => {
         aiTags: ["economic", "profit"],
       },
       {
-        id: "script:ending_pure_rite",
+        id: "conclude:rite",
         kind: "script",
         title: "Ending",
         cost: 0,
         available: true,
       },
     ];
-    output.snapshot.objectives![0]!.relatedActivityIds = [
-      "script:ending_pure_rite",
-    ];
+    Object.assign(output.snapshot.objectives![0]!, {
+      terminal: true,
+      relatedActivityIds: ["conclude:rite"],
+    });
     await expect(
       personas.greedy!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "doActivity", id: "script:ending_pure_rite" });
+    ).resolves.toEqual({ type: "doActivity", id: "conclude:rite" });
   });
 });
 
@@ -280,7 +306,7 @@ describe("charmer persona exploration", () => {
         aiTags: ["social", "story"],
       },
       {
-        id: "script:ending_pure_rite",
+        id: "conclude:rite",
         kind: "script",
         title: "Ending",
         cost: 0,
@@ -291,14 +317,16 @@ describe("charmer persona exploration", () => {
       "script:bond_mio_01",
     ];
     output.snapshot.objectives!.push({
-      id: "ending_pure_rite",
+      id: "court_resolution",
       title: "Pure ending",
+      scope: "main",
+      terminal: true,
       status: "active",
-      relatedActivityIds: ["script:ending_pure_rite"],
+      relatedActivityIds: ["conclude:rite"],
     });
     await expect(
       personas.charmer!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "doActivity", id: "script:ending_pure_rite" });
+    ).resolves.toEqual({ type: "doActivity", id: "conclude:rite" });
   });
 });
 
@@ -364,7 +392,7 @@ describe("rude persona progression", () => {
         aiTags: ["aggressive", "risky"],
       },
       {
-        id: "script:ending_oni_self",
+        id: "ascend:oni",
         kind: "script",
         title: "Ending",
         cost: 0,
@@ -375,14 +403,16 @@ describe("rude persona progression", () => {
       "depart:mt_houkyou",
     ];
     output.snapshot.objectives!.push({
-      id: "ending_oni_self",
+      id: "defiant_resolution",
       title: "Oni ending",
+      scope: "main",
+      terminal: true,
       status: "active",
-      relatedActivityIds: ["script:ending_oni_self"],
+      relatedActivityIds: ["ascend:oni"],
     });
     await expect(
       personas.rude!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "doActivity", id: "script:ending_oni_self" });
+    ).resolves.toEqual({ type: "doActivity", id: "ascend:oni" });
   });
 });
 
@@ -404,6 +434,8 @@ function objectiveHub(): Extract<Output, { type: "hubMenu" }> {
       objectives: [{
         id: "raid",
         title: "Complete a raid",
+        scope: "main",
+        terminal: false,
         status: "active",
         relatedActivityIds: ["depart:kuro_swamp"],
       }],

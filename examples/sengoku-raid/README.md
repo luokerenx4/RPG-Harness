@@ -23,6 +23,12 @@ rpgh transcript . --session NAME --tail 40            # fork 元を含む実プ�
 rpgh test .                                  # fixture 回帰
 ```
 
+Hub の公開目標は `scope`（`main` / `side` / `mastery`）と `terminal` を明示する。
+密書と結末は main、三花の盟と地獄門踏破は mastery、三結末だけが terminal。
+Web と Headless は同じ共有 view から main の候補を案内し、AI persona も目標の
+配列順や `ending_*` という名前には依存しない。`completionist` は terminal main
+を選ぶ前に side/mastery を消化するため、deep content の自律監査に使える。
+
 ## 世界観 + 三つの軸
 
 慶長十年。江戸城本丸。将軍家側用人がお主を呼ぶ — 諸国に鬼が湧いている、家伝の妖刀使である你，要遊国討伐並把妖物の遺骸帯回。

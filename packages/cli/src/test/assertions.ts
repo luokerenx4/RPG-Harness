@@ -62,6 +62,12 @@ function checkObjective(
   if (a.status !== undefined && objective.status !== a.status) {
     return `objective ${a.id}: expected status=${a.status}, got ${objective.status}`;
   }
+  if (a.scope !== undefined && objective.scope !== a.scope) {
+    return `objective ${a.id}: expected scope=${a.scope}, got ${objective.scope}`;
+  }
+  if (a.terminal !== undefined && objective.terminal !== a.terminal) {
+    return `objective ${a.id}: expected terminal=${a.terminal}, got ${objective.terminal}`;
+  }
   if (a.titleIncludes !== undefined && !objective.title.includes(a.titleIncludes)) {
     return `objective ${a.id}: expected title to include "${a.titleIncludes}", got "${objective.title}"`;
   }

@@ -92,6 +92,8 @@ export interface ObjectiveAssertion {
   id: string;
   present?: boolean;
   status?: "active" | "completed" | "blocked";
+  scope?: "main" | "side" | "mastery";
+  terminal?: boolean;
   titleIncludes?: string;
   descriptionIncludes?: string;
   relatedActivityIncludes?: string;

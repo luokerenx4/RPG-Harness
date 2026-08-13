@@ -14,6 +14,7 @@
 import { evaluateCondition } from "./condition";
 import { cloneState, createInitialState, resolveModules, resolveRunFn } from "./state";
 import { ensurePersistedRng, persistedRng } from "./rng";
+import { validateOutput } from "./output";
 import type {
   ActionHandler,
   ComposedState,
@@ -183,6 +184,16 @@ export class Engine {
   // for a specific game, eject the preset and edit its run.ts directly
   // (see rpgh init --eject).
   async *run(): AsyncGenerator<Output, void, Input> {
-    yield* this.runFn(this.ctx);
+    const runner = this.runFn(this.ctx);
+    try {
+      let result = await runner.next();
+      while (!result.done) {
+        validateOutput(result.value);
+        const input = yield result.value;
+        result = await runner.next(input);
+      }
+    } finally {
+      await runner.return();
+    }
   }
 }

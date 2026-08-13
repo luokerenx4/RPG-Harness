@@ -136,6 +136,16 @@ gameplay surfaces or unreachable deep authored events into replayable
 quality-gate work instead of trusting path hashes as an indirect proxy.
 This lets autonomous development distinguish intentional narrative convergence
 from a policy matrix that never made meaningfully different decisions.
+Hub objectives carry explicit author intent rather than naming conventions:
+`scope` is `main`, `side`, or `mastery`, and `terminal` says whether taking the
+linked activity may conclude the run. `Engine.run()` validates objective ids,
+requirements, enum values, and same-snapshot activity links before any renderer
+or agent sees the output. `frontend-core` then derives one shared guidance model
+for both Web and Headless clients: an executable active main objective takes
+precedence over authored recommendations, without collapsing multiple valid
+links into an arbitrary automatic choice. Built-in and module personas consume
+the same fields, so objective ordering and `ending_*`-style ids are not policy.
+
 Choice options may expose open `aiTags` alongside gates, consequences, and the
 numeric objective priority. The engine treats this vocabulary as data rather
 than policy: human renderers need not display it, generic personas can recognize

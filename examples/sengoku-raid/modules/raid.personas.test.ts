@@ -27,6 +27,8 @@ describe("sengoku-raid project personas", () => {
     output.snapshot.objectives = [{
       id: "ending_pure",
       title: "Pure ending",
+      scope: "main",
+      terminal: true,
       status: "active",
       relatedActivityIds: ["imbue:pure"],
     }];
@@ -39,25 +41,29 @@ describe("sengoku-raid project personas", () => {
   test("extractor finds an ending behind an optional deep objective", async () => {
     const output = hub([
       activity("depart:hell_gate"),
-      activity("script:ending_mundane_seal"),
+      activity("seal:blade"),
     ]);
     output.snapshot.objectives = [
       {
         id: "hell_gate_mastery",
         title: "Hell gate",
+        scope: "mastery",
+        terminal: false,
         status: "active",
         relatedActivityIds: ["depart:hell_gate"],
       },
       {
-        id: "ending_mundane_seal",
+        id: "silent_resolution",
         title: "Ending",
+        scope: "main",
+        terminal: true,
         status: "active",
-        relatedActivityIds: ["script:ending_mundane_seal"],
+        relatedActivityIds: ["seal:blade"],
       },
     ];
     await expect(decide("extractor", output, {})).resolves.toEqual({
       type: "doActivity",
-      id: "script:ending_mundane_seal",
+      id: "seal:blade",
     });
   });
 
@@ -106,25 +112,29 @@ describe("sengoku-raid project personas", () => {
   test("delver finds an ending behind an optional deep objective", async () => {
     const output = hub([
       activity("depart:hell_gate"),
-      activity("script:ending_oni_self"),
+      activity("ascend:oni"),
     ]);
     output.snapshot.objectives = [
       {
         id: "hell_gate_mastery",
         title: "Hell gate",
+        scope: "mastery",
+        terminal: false,
         status: "active",
         relatedActivityIds: ["depart:hell_gate"],
       },
       {
-        id: "ending_oni_self",
+        id: "defiant_resolution",
         title: "Ending",
+        scope: "main",
+        terminal: true,
         status: "active",
-        relatedActivityIds: ["script:ending_oni_self"],
+        relatedActivityIds: ["ascend:oni"],
       },
     ];
     await expect(decide("delver", output, {})).resolves.toEqual({
       type: "doActivity",
-      id: "script:ending_oni_self",
+      id: "ascend:oni",
     });
   });
 
@@ -137,12 +147,16 @@ describe("sengoku-raid project personas", () => {
       {
         id: "three_flowers_alliance",
         title: "Three flowers",
+        scope: "mastery",
+        terminal: false,
         status: "active",
         relatedActivityIds: ["invite:kagari"],
       },
       {
         id: "ending_oni_self",
         title: "Ending",
+        scope: "main",
+        terminal: true,
         status: "active",
         relatedActivityIds: ["script:ending_oni_self"],
       },
@@ -151,6 +165,72 @@ describe("sengoku-raid project personas", () => {
       baseline: { scripts: {} },
       "sengoku-raid": { achievementLog: [] },
     })).resolves.toEqual({ type: "doActivity", id: "invite:kagari" });
+  });
+
+  test("completionist also clears side objectives before a terminal main objective", async () => {
+    const output = hub([
+      activity("conclude"),
+      activity("side:memory"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "campaign",
+        title: "Campaign ending",
+        scope: "main",
+        terminal: true,
+        status: "active",
+        relatedActivityIds: ["conclude"],
+      },
+      {
+        id: "memory",
+        title: "Optional memory",
+        scope: "side",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: ["side:memory"],
+      },
+    ];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { achievementLog: [] },
+    })).resolves.toEqual({ type: "doActivity", id: "side:memory" });
+  });
+
+  test("completionist searches later mastery objectives for an executable link", async () => {
+    const output = hub([
+      activity("conclude"),
+      activity("mastery:second"),
+    ]);
+    output.snapshot.objectives = [
+      {
+        id: "mastery_blocked_here",
+        title: "Needs progress elsewhere",
+        scope: "mastery",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: [],
+      },
+      {
+        id: "mastery_ready",
+        title: "Ready mastery",
+        scope: "mastery",
+        terminal: false,
+        status: "active",
+        relatedActivityIds: ["mastery:second"],
+      },
+      {
+        id: "campaign",
+        title: "Campaign ending",
+        scope: "main",
+        terminal: true,
+        status: "active",
+        relatedActivityIds: ["conclude"],
+      },
+    ];
+    await expect(decide("completionist", output, {
+      baseline: { scripts: {} },
+      "sengoku-raid": { achievementLog: [] },
+    })).resolves.toEqual({ type: "doActivity", id: "mastery:second" });
   });
 
   test("completionist preserves a companion by fleeing before exploring", async () => {

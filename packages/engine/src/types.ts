@@ -1294,10 +1294,16 @@ export interface HubObjectiveRequirement {
   satisfied: boolean;
 }
 
+export type HubObjectiveScope = "main" | "side" | "mastery";
+
 export interface HubObjectiveSnapshot {
   id: string;
   title: string;
   description?: string;
+  /** Authored importance, consumed identically by GUI and AI clients. */
+  scope: HubObjectiveScope;
+  /** True when following this objective can end the current campaign/session. */
+  terminal: boolean;
   status: "active" | "completed" | "blocked";
   requirements?: HubObjectiveRequirement[];
   relatedActivityIds?: string[];

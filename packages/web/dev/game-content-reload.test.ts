@@ -26,6 +26,8 @@ describe("Web game content reload", () => {
     for (const file of [
       path.join(root, "sengoku/.rpg-harness/sessions/web/state.json"),
       path.join(root, "sengoku/assets/backgrounds/new/tui.ans"),
+      path.join(root, "sengoku/modules/raid.personas.test.ts"),
+      path.join(root, "sengoku/modules/raid.personas.spec.ts"),
       path.join(root, "sengoku/.DS_Store"),
       path.resolve("/repo/packages/web/src/App.tsx"),
     ]) {

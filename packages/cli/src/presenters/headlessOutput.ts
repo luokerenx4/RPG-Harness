@@ -16,10 +16,11 @@ interface HeadlessActivityCandidate {
 
 export interface HeadlessHubView {
   heuristic: true;
-  selectionRule: "authored_recommendation_or_only_candidate";
+  selectionRule: "main_objective_or_authored_recommendation_or_only_candidate";
   focusCategory: string | null;
   strategyDecisionRequired: boolean;
-  candidateScope: "authored_recommendations" | "focus_section";
+  objectiveGuidance: ReturnType<typeof buildHubView>["objectiveGuidance"];
+  candidateScope: "main_objective" | "authored_recommendations" | "focus_section";
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
@@ -39,6 +40,7 @@ export interface HeadlessHubView {
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
   primaryReason:
+    | "main_objective"
     | "authored_recommendation"
     | "only_available_in_focus_section"
     | null;
@@ -108,6 +110,7 @@ function summarizeHubView(output: Extract<Output, { type: "hubMenu" }>): Headles
       primaryInput: group.primaryInput,
       primaryReason: group.primaryReason,
     })),
+    objectiveGuidance: view.objectiveGuidance,
     primaryActivityId: view.primaryActivityId,
     primaryInput: view.primaryInput,
     primaryReason: view.primaryReason,

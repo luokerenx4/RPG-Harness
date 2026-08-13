@@ -398,6 +398,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       id: "three_flowers_alliance",
       title: missing ? `三花の盟 — ${missing.name}と生還する` : "三花の盟を結ぶ",
       description: "篝・霞・澪、それぞれと一度ずつ出帰りから生還する。",
+      scope: "mastery" as const,
+      terminal: false,
       status: "active" as const,
       requirements: companions.map(({ id, name }) => requirement(
         `befriended_${id}`,
@@ -448,6 +450,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       id: "hell_gate_mastery",
       title: completed ? "地獄門踏破 — 完遂" : "地獄門を開き、映し井戸から生還する",
       description: "鬼の脈、妖刀の威力、篝の鎮魂法、澪の水鏡を揃える。",
+      scope: "mastery" as const,
+      terminal: false,
       status: completed ? "completed" as const : "active" as const,
       requirements: [
         requirement("pulse_oni", "脈絡: 鬼", pulseOni, 8, pulseOni >= 8),
@@ -467,6 +471,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       id: "letter_01_dispatch",
       title: "最初の密書を待つ",
       description: `現在の御沙汰：${directive}`,
+      scope: "main" as const,
+      terminal: false,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 3, raids >= 3)],
       relatedActivityIds: executableProgressActivityIds,
@@ -478,6 +484,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       id: "letter_02_dispatch",
       title: "公儀の見立てを待つ",
       description: `現在の御沙汰：${directive}`,
+      scope: "main" as const,
+      terminal: false,
       status: "active" as const,
       requirements: [
         requirement("raidsCompleted", "成功撤退", raids, 7, raids >= 7),
@@ -491,6 +499,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       id: "letter_03_dispatch",
       title: "最後の御沙汰を待つ",
       description: `現在の御沙汰：${directive}`,
+      scope: "main" as const,
+      terminal: false,
       status: "active" as const,
       requirements: [requirement("raidsCompleted", "成功撤退", raids, 12, raids >= 12)],
       relatedActivityIds: executableProgressActivityIds,
@@ -519,6 +529,8 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
     id: route.id,
     title: completed ? `${route.title} — 完遂` : route.title,
     description: directive,
+    scope: "main" as const,
+    terminal: true,
     status: completed ? "completed" as const : "active" as const,
     requirements: [
       requirement(route.variable, route.label, current, route.target, current >= route.target),
@@ -3056,7 +3068,11 @@ function personaObjectiveActivity(
       .filter((activity) => activity.available)
       .map((activity) => activity.id),
   );
-  for (const objective of output.snapshot.objectives ?? []) {
+  const scopeRank = { main: 0, side: 1, mastery: 2 } as const;
+  const objectives = [...(output.snapshot.objectives ?? [])].sort(
+    (left, right) => scopeRank[left.scope] - scopeRank[right.scope],
+  );
+  for (const objective of objectives) {
     if (objective.status !== "active") continue;
     for (const id of objective.relatedActivityIds ?? []) {
       if (available.has(id)) return { type: "doActivity", id };
@@ -3065,25 +3081,26 @@ function personaObjectiveActivity(
   return null;
 }
 
-function personaNamedObjectiveActivity(
+function personaScopedObjectiveActivity(
   output: Extract<Output, { type: "hubMenu" }>,
-  objectiveId: string,
+  scope: "main" | "side" | "mastery",
 ): Input | null {
   const available = new Set(
     output.snapshot.activities
       .filter((activity) => activity.available)
       .map((activity) => activity.id),
   );
-  const objective = output.snapshot.objectives?.find(
-    ({ id, status }) => id === objectiveId && status === "active",
-  );
-  const id = objective?.relatedActivityIds?.find((candidate) =>
-    available.has(candidate)
-  );
-  return id ? { type: "doActivity", id } : null;
+  for (const objective of output.snapshot.objectives ?? []) {
+    if (objective.scope !== scope || objective.status !== "active") continue;
+    const id = objective.relatedActivityIds?.find((candidate) =>
+      available.has(candidate)
+    );
+    if (id) return { type: "doActivity", id };
+  }
+  return null;
 }
 
-function personaEndingObjectiveActivity(
+function personaTerminalObjectiveActivity(
   output: Extract<Output, { type: "hubMenu" }>,
 ): Input | null {
   const available = new Set(
@@ -3092,9 +3109,9 @@ function personaEndingObjectiveActivity(
       .map((activity) => activity.id),
   );
   for (const objective of output.snapshot.objectives ?? []) {
-    if (objective.status !== "active") continue;
+    if (objective.status !== "active" || !objective.terminal) continue;
     const id = (objective.relatedActivityIds ?? []).find(
-      (candidate) => candidate.startsWith("script:ending_") && available.has(candidate),
+      (candidate) => available.has(candidate),
     );
     if (id) return { type: "doActivity", id };
   }
@@ -3154,25 +3171,20 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         const soldLoot = find(({ id }) => id === "sell_all_loot");
         if (soldLoot) return { type: "doActivity", id: soldLoot.id };
 
-        const threeFlowersComplete =
-          state.baseline.scripts.three_flowers_alliance?.completed === true;
-        const hellGateComplete =
-          m?.achievementLog?.includes("地獄門踏破 — 映し井戸より生還") === true;
-        if (!threeFlowersComplete) {
-          const objective = personaNamedObjectiveActivity(
-            output,
-            "three_flowers_alliance",
-          );
-          if (objective) return objective;
-        }
-        if (!hellGateComplete) {
-          const objective = personaNamedObjectiveActivity(output, "hell_gate_mastery");
-          if (objective) return objective;
-        }
+        const completionPending = output.snapshot.objectives?.some(
+          (objective) => objective.scope !== "main" && objective.status === "active",
+        ) === true;
+        const completionObjective = personaScopedObjectiveActivity(output, "mastery") ??
+          personaScopedObjectiveActivity(output, "side");
+        if (completionObjective) return completionObjective;
 
-        if (!threeFlowersComplete || !hellGateComplete) {
+        if (completionPending) {
           const chapterObjective = output.snapshot.objectives
-            ?.filter(({ id, status }) => id.startsWith("letter_") && status === "active")
+            ?.filter((objective) =>
+              objective.scope === "main" &&
+              !objective.terminal &&
+              objective.status === "active"
+            )
             .flatMap(({ relatedActivityIds }) => relatedActivityIds ?? [])
             .find((id) => acts.some((activity) => activity.id === id));
           if (chapterObjective) {
@@ -3199,13 +3211,9 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           if (depart) return { type: "doActivity", id: depart.id };
         }
 
-        const ending = output.snapshot.objectives
-          ?.filter(({ id, status }) => id.startsWith("ending_") && status === "active")
-          .flatMap(({ relatedActivityIds }) => relatedActivityIds ?? [])
-          .find((id) => acts.some((activity) => activity.id === id));
-        if (ending) return { type: "doActivity", id: ending };
-        const objective = personaEndingObjectiveActivity(output) ??
-          personaObjectiveActivity(output);
+        const terminal = personaTerminalObjectiveActivity(output);
+        if (terminal) return terminal;
+        const objective = personaObjectiveActivity(output);
         if (objective) return objective;
         const first = acts[0];
         return first ? { type: "doActivity", id: first.id } : { type: "quit" };
@@ -3239,12 +3247,8 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         const acts = output.snapshot.activities.filter((activity) => activity.available);
         const find = (predicate: (id: string) => boolean) =>
           acts.find((activity) => predicate(activity.id));
-        const objective = personaEndingObjectiveActivity(output) ??
-          personaObjectiveActivity(output);
-        if (
-          objective?.type === "doActivity" &&
-          (objective.id.startsWith("imbue:") || objective.id.startsWith("script:ending_"))
-        ) return objective;
+        const terminal = personaTerminalObjectiveActivity(output);
+        if (terminal) return terminal;
         const imbue = find((id) => id.startsWith("imbue:"));
         if (imbue) return { type: "doActivity", id: imbue.id };
         const release = find((id) => id === "negotiate_release");
@@ -3292,11 +3296,8 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
         const acts = output.snapshot.activities.filter((activity) => activity.available);
         const find = (predicate: (id: string) => boolean) =>
           acts.find((activity) => predicate(activity.id));
-        const objective = personaEndingObjectiveActivity(output);
-        if (
-          objective?.type === "doActivity" &&
-          objective.id.startsWith("script:ending_")
-        ) return objective;
+        const terminal = personaTerminalObjectiveActivity(output);
+        if (terminal) return terminal;
         const oni = find((id) => id === "imbue:oni");
         if (oni) return { type: "doActivity", id: oni.id };
         const imbue = find((id) => id.startsWith("imbue:"));

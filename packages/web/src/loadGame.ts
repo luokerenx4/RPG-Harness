@@ -43,9 +43,11 @@ const RAW = import.meta.glob("../../../examples/**/*.{md,yaml,yml}", {
   eager: true,
 }) as Record<string, string>;
 
-const CODE = import.meta.glob("../../../examples/**/*.ts", {
-  eager: true,
-}) as Record<string, { default?: unknown }>;
+const CODE = import.meta.glob([
+  "../../../examples/**/*.ts",
+  "!../../../examples/**/*.test.ts",
+  "!../../../examples/**/*.spec.ts",
+], { eager: true }) as Record<string, { default?: unknown }>;
 
 const IMAGES = import.meta.glob(
   "../../../examples/**/assets/**/*.{webp,png,jpg,jpeg}",

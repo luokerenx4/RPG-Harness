@@ -316,6 +316,22 @@ body {
   font-size: 14px;
   font-weight: 700;
 }
+.objective-badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  vertical-align: 1px;
+}
+.objective-scope-side .objective-title {
+  color: #c7b7e8;
+}
+.objective-scope-mastery .objective-title {
+  color: #e5ca7a;
+}
 .objective-completed .objective-title,
 .objective-requirement.satisfied {
   color: #82cf91;

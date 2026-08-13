@@ -22,6 +22,8 @@ inputs: []
 assertions:
   - kind: objective
     id: hell_gate_mastery
+    scope: mastery
+    terminal: false
     status: completed
     requirementId: hell_gate_extract
     current: true

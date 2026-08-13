@@ -33,6 +33,8 @@ inputs: []
 assertions:
   - kind: objective
     id: ending_oni_self
+    scope: main
+    terminal: true
     relatedActivityIncludes: imbue:oni
     relatedActivityExcludes: imbue:pure
     requirementId: pulse_oni

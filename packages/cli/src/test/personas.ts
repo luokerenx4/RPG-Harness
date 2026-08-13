@@ -237,7 +237,11 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
       .filter((activity) => activity.available)
       .map((activity) => [activity.id, activity]),
   );
-  for (const objective of output.snapshot.objectives ?? []) {
+  const scopeRank = { main: 0, side: 1, mastery: 2 } as const;
+  const objectives = [...(output.snapshot.objectives ?? [])].sort(
+    (left, right) => scopeRank[left.scope] - scopeRank[right.scope],
+  );
+  for (const objective of objectives) {
     if (objective.status !== "active") continue;
     for (const id of objective.relatedActivityIds ?? []) {
       const activity = availableById.get(id);
@@ -247,7 +251,7 @@ function pickObjectiveActivity(output: Extract<Output, { type: "hubMenu" }>): In
   return null;
 }
 
-function pickEndingObjectiveActivity(
+function pickTerminalObjectiveActivity(
   output: Extract<Output, { type: "hubMenu" }>,
 ): Input | null {
   const available = new Set(
@@ -256,9 +260,9 @@ function pickEndingObjectiveActivity(
       .map((activity) => activity.id),
   );
   for (const objective of output.snapshot.objectives ?? []) {
-    if (objective.status !== "active") continue;
+    if (objective.status !== "active" || !objective.terminal) continue;
     const ending = (objective.relatedActivityIds ?? []).find(
-      (id) => id.startsWith("script:ending_") && available.has(id),
+      (id) => available.has(id),
     );
     if (ending) return { type: "doActivity", id: ending };
   }
@@ -310,7 +314,7 @@ export const personas: Record<string, Persona> = {
     }
     if (output.type === "hubMenu") {
       const objectiveInput = pickObjectiveActivity(output);
-      const ending = pickEndingObjectiveActivity(output);
+      const ending = pickTerminalObjectiveActivity(output);
       if (ending) return ending;
       const semantic = pickTaggedActivity(output, [
         "profit",
@@ -358,7 +362,7 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
-      const ending = pickEndingObjectiveActivity(output);
+      const ending = pickTerminalObjectiveActivity(output);
       if (ending) return ending;
       const available = output.snapshot.activities.filter((activity) => activity.available);
       const recommended = available.filter((activity) => activity.recommended);
@@ -401,7 +405,7 @@ export const personas: Record<string, Persona> = {
       return first ? { type: "select", scriptId: first.id } : null;
     }
     if (output.type === "hubMenu") {
-      const ending = pickEndingObjectiveActivity(output);
+      const ending = pickTerminalObjectiveActivity(output);
       if (ending) return ending;
       const semantic = pickTaggedActivity(output, [
         "defiant",

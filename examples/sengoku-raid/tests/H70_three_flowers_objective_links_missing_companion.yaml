@@ -29,6 +29,8 @@ inputs: []
 assertions:
   - kind: objective
     id: three_flowers_alliance
+    scope: mastery
+    terminal: false
     status: active
     titleIncludes: 霞と生還する
     relatedActivityIncludes: invite:kasumi
@@ -38,6 +40,8 @@ assertions:
     satisfied: false
   - kind: objective
     id: hell_gate_mastery
+    scope: mastery
+    terminal: false
     status: active
     titleIncludes: 地獄門
     relatedActivityIncludes: bond:kagari

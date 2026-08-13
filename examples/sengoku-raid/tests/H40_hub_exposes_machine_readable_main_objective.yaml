@@ -15,6 +15,8 @@ assertions:
     eq: 9
   - kind: objective
     id: letter_03_dispatch
+    scope: main
+    terminal: false
     status: active
     titleIncludes: 最後の御沙汰
     relatedActivityIncludes: depart:kuro_swamp

@@ -16,6 +16,8 @@ describe("presentHeadlessOutput", () => {
         {
           id: "main",
           title: "Reach the gate",
+          scope: "main",
+          terminal: false,
           status: "active",
           requirements: [
             { id: "raids", label: "Raids", current: 2, target: 3, satisfied: false },
@@ -57,15 +59,22 @@ describe("presentHeadlessOutput", () => {
     );
     expect(output?.hubView).toMatchObject({
       heuristic: true,
-      selectionRule: "authored_recommendation_or_only_candidate",
+      selectionRule: "main_objective_or_authored_recommendation_or_only_candidate",
       focusCategory: "raid",
       strategyDecisionRequired: false,
-      candidateScope: "focus_section",
+      candidateScope: "main_objective",
       decisionRequired: false,
       candidateActivityIds: ["depart"],
       primaryActivityId: "depart",
       primaryInput: { type: "doActivity", id: "depart" },
-      primaryReason: "only_available_in_focus_section",
+      primaryReason: "main_objective",
+      objectiveGuidance: {
+        objectiveId: "main",
+        scope: "main",
+        terminal: false,
+        candidateActivityIds: ["depart"],
+        primaryActivityId: "depart",
+      },
       resourceGroups: [
         {
           id: "carried-loot",
@@ -76,6 +85,8 @@ describe("presentHeadlessOutput", () => {
         {
           id: "main",
           title: "Reach the gate",
+          scope: "main",
+          terminal: false,
           relatedActivityIds: ["depart"],
           requirements: [
             { id: "raids", current: 2, target: 3, satisfied: false },

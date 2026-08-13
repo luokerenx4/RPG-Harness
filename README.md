@@ -534,7 +534,17 @@ rpgh cover ./examples/sengoku-raid --source-session player-main \
 ```
 
 `objective` follows only renderer-neutral `HubSnapshot.objectives` links and can
-persist every move into a GUI-compatible named session. Generic personas —
+persist every move into a GUI-compatible named session. Every objective declares
+its authored `scope` (`main`, `side`, or `mastery`) and whether it is `terminal`;
+clients never infer either meaning from array order or ids such as `ending_*`.
+An active main objective with executable links becomes the shared GUI/Headless
+guidance candidate before ordinary authored recommendations. One link is a safe
+primary action; several links remain an explicit decision for the player or
+agent. The engine validates this contract at the output boundary and rejects
+missing semantics, duplicate ids, or links to activities absent from the same
+hub snapshot.
+
+Generic personas —
 `greedy`, `charmer`, `rude`, `random`, `hunter` — also ship
 for any game (always-first / always-last / always-second / uniform-random /
 training-aware). They're useful for fuzz-testing path coverage. For LLM-driven

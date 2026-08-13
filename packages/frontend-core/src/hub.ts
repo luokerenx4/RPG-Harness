@@ -50,6 +50,17 @@ export interface HubOpportunityGroupView {
     | null;
 }
 
+export interface HubObjectiveGuidanceView {
+  objectiveId: string;
+  scope: "main";
+  terminal: boolean;
+  decisionRequired: boolean;
+  candidateActivityIds: string[];
+  candidateInputs: Array<{ type: "doActivity"; id: string }>;
+  primaryActivityId: string | null;
+  primaryInput: { type: "doActivity"; id: string } | null;
+}
+
 export interface HubView {
   sections: HubSectionView[];
   // Flattened presentation order. ScreenModel installs this order so keyboard
@@ -61,17 +72,19 @@ export interface HubView {
   // candidate set selected by candidateScope.
   strategyDecisionRequired: boolean;
   opportunityGroups: HubOpportunityGroupView[];
-  candidateScope: "authored_recommendations" | "focus_section";
+  objectiveGuidance: HubObjectiveGuidanceView | null;
+  candidateScope: "main_objective" | "authored_recommendations" | "focus_section";
   decisionRequired: boolean;
   candidateActivityIds: string[];
   candidateInputs: Array<{ type: "doActivity"; id: string }>;
   primaryActivityId: string | null;
   primaryInput: { type: "doActivity"; id: string } | null;
   primaryReason:
+    | "main_objective"
     | "authored_recommendation"
     | "only_available_in_focus_section"
     | null;
-  selectionRule: "authored_recommendation_or_only_candidate";
+  selectionRule: "main_objective_or_authored_recommendation_or_only_candidate";
 }
 
 // HubSnapshot is shared by calendar/training games and free-form map hubs.
@@ -178,24 +191,50 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
   const actionableSectionCount = sections.filter(
     (section) => section.availableCount > 0,
   ).length;
-  const candidates =
-    availableRecommended.length > 0 ? availableRecommended : focusCandidates;
-  const candidateScope =
-    availableRecommended.length > 0
-      ? "authored_recommendations"
-      : "focus_section";
+  const availableById = new Map(
+    activities
+      .filter((activity) => activity.available)
+      .map((activity) => [activity.id, activity]),
+  );
+  const guidedObjective = (snapshot.objectives ?? [])
+    .filter((objective) => objective.scope === "main" && objective.status === "active")
+    .map((objective) => ({
+      objective,
+      activities: (objective.relatedActivityIds ?? []).flatMap((id) => {
+        const activity = availableById.get(id);
+        return activity ? [activity] : [];
+      }),
+    }))
+    .find(({ activities: guided }) => guided.length > 0);
+  const guidedActivities = guidedObjective?.activities ?? [];
+  const candidates = guidedActivities.length > 0
+    ? guidedActivities
+    : availableRecommended.length > 0
+      ? availableRecommended
+      : focusCandidates;
+  const candidateScope = guidedActivities.length > 0
+    ? "main_objective" as const
+    : availableRecommended.length > 0
+      ? "authored_recommendations" as const
+      : "focus_section" as const;
   const primary =
-    availableRecommended.length === 1
-      ? availableRecommended[0]!
-      : availableRecommended.length === 0 &&
-          actionableSectionCount === 1 &&
-          focusCandidates.length === 1
-        ? focusCandidates[0]!
-        : null;
+    guidedActivities.length === 1
+      ? guidedActivities[0]!
+      : guidedActivities.length > 1
+        ? null
+        : availableRecommended.length === 1
+          ? availableRecommended[0]!
+          : availableRecommended.length === 0 &&
+              actionableSectionCount === 1 &&
+              focusCandidates.length === 1
+            ? focusCandidates[0]!
+            : null;
   const primaryReason = primary
-    ? primary.recommended === true
-      ? "authored_recommendation"
-      : "only_available_in_focus_section"
+    ? guidedActivities.includes(primary)
+      ? "main_objective" as const
+      : primary.recommended === true
+        ? "authored_recommendation"
+        : "only_available_in_focus_section"
     : null;
   const opportunityGroups = sections.flatMap((section) => {
     const available = section.activities.filter(
@@ -236,7 +275,9 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     ];
   });
   const strategicActivities =
-    availableRecommended.length > 0
+    guidedActivities.length > 0
+      ? guidedActivities
+      : availableRecommended.length > 0
       ? availableRecommended
       : opportunityGroups.flatMap((group) =>
           group.activities.map(({ activity }) => activity),
@@ -250,6 +291,25 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     focusCategory: focusSection?.category ?? null,
     strategyDecisionRequired: strategicCategories.size > 1,
     opportunityGroups,
+    objectiveGuidance: guidedObjective
+      ? {
+          objectiveId: guidedObjective.objective.id,
+          scope: "main",
+          terminal: guidedObjective.objective.terminal,
+          decisionRequired: guidedActivities.length > 1,
+          candidateActivityIds: guidedActivities.map((activity) => activity.id),
+          candidateInputs: guidedActivities.map((activity) => ({
+            type: "doActivity" as const,
+            id: activity.id,
+          })),
+          primaryActivityId: guidedActivities.length === 1
+            ? guidedActivities[0]!.id
+            : null,
+          primaryInput: guidedActivities.length === 1
+            ? { type: "doActivity" as const, id: guidedActivities[0]!.id }
+            : null,
+        }
+      : null,
     candidateScope,
     decisionRequired: primary === null && candidates.length > 1,
     candidateActivityIds: candidates.map((activity) => activity.id),
@@ -260,7 +320,7 @@ export function buildHubView(snapshot: HubSnapshot): HubView {
     primaryActivityId: primary?.id ?? null,
     primaryInput: primary ? { type: "doActivity", id: primary.id } : null,
     primaryReason,
-    selectionRule: "authored_recommendation_or_only_candidate",
+    selectionRule: "main_objective_or_authored_recommendation_or_only_candidate",
   };
 }
 

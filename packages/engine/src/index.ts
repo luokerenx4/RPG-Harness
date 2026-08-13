@@ -2,6 +2,7 @@ export { Engine, buildPresetContext } from "./engine";
 export { evaluateCondition } from "./condition";
 export { choiceDecisionContext, resolveChoiceInput } from "./decision";
 export { classifyInput, expectedInputs } from "./input";
+export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng } from "./rng";
 export type { ChoiceDecisionContext } from "./decision";
@@ -134,6 +135,9 @@ export type {
   FlagValue,
   Game,
   HubActivity,
+  HubObjectiveRequirement,
+  HubObjectiveScope,
+  HubObjectiveSnapshot,
   HubResourceGroup,
   HubResourceSnapshot,
   HubSnapshot,

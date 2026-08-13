@@ -617,6 +617,8 @@ function compactOutput(output: unknown): unknown {
             title?: unknown;
             description?: unknown;
             status?: unknown;
+            scope?: unknown;
+            terminal?: unknown;
             requirements?: unknown;
             relatedActivityIds?: unknown;
           }>;
@@ -664,6 +666,8 @@ function compactOutput(output: unknown): unknown {
               title: objective.title ?? null,
               description: objective.description ?? null,
               status: objective.status ?? null,
+              scope: objective.scope ?? null,
+              terminal: objective.terminal ?? null,
               requirements: objective.requirements ?? [],
               relatedActivityIds: objective.relatedActivityIds ?? [],
             })),

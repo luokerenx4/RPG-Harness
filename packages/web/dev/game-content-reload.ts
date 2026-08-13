@@ -38,11 +38,13 @@ export function installGameContentReload(
 
 export function isBakedGameFile(file: string, examplesRoot: string): boolean {
   const relative = path.relative(path.resolve(examplesRoot), path.resolve(file));
+  const normalized = relative.split(path.sep).join("/");
   return (
     relative !== "" &&
     !relative.startsWith(`..${path.sep}`) &&
     !path.isAbsolute(relative) &&
     !relative.split(path.sep).some((segment) => segment.startsWith(".")) &&
+    !/\.(?:test|spec)\.ts$/i.test(normalized) &&
     BAKED_GAME_FILE.test(relative)
   );
 }
