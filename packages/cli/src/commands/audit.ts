@@ -59,6 +59,7 @@ export interface AuditLaneSummary {
     revision: string;
     semanticDecisions: number;
     choices: number;
+    activityTags: string[];
   };
   stall?: AutoplaySummary["stall"];
   behaviorCycle?: AutoplaySummary["behaviorCycle"];
@@ -91,6 +92,10 @@ export interface AuditSummary {
     openReports: number;
   };
   endings: Record<string, number>;
+  activityCoverage: {
+    coveredTags: string[];
+    byPersona: Record<string, string[]>;
+  };
   diversity: {
     classification:
       | "identical-path"
@@ -112,6 +117,7 @@ export interface AuditSummary {
     observed: {
       uniqueEndings: number;
       uniqueDecisionPaths: number;
+      coveredActivityTags?: string[];
     };
     violations: string[];
     evidenceSession?: string;
@@ -226,6 +232,7 @@ export async function runAudit(
         choices: summary.decisionPath.decisions.filter(
           (decision) => decision.type === "choose",
         ).length,
+        activityTags: collectActivityTags(summary),
       },
       ...(summary.stall ? { stall: summary.stall } : {}),
       ...(summary.behaviorCycle ? { behaviorCycle: summary.behaviorCycle } : {}),
@@ -256,6 +263,12 @@ export async function runAudit(
   }
   const uniqueDecisionPaths = new Set(lanes.map((lane) => lane.path.revision)).size;
   const uniqueEndings = Object.keys(endings).length;
+  const activityTagsByPersona = Object.fromEntries(
+    lanes.map((lane) => [lane.persona, lane.path.activityTags]),
+  );
+  const coveredActivityTags = [...new Set(
+    lanes.flatMap((lane) => lane.path.activityTags),
+  )].sort();
   const choiceDivergences = summarizeChoiceDivergences(
     args.personas,
     choicesByPersona,
@@ -277,6 +290,7 @@ export async function runAudit(
         allTerminal,
         uniqueEndings,
         uniqueDecisionPaths,
+        coveredActivityTags,
       )
     : undefined;
   let qualityReport: PlaytestReport | undefined;
@@ -293,10 +307,11 @@ export async function runAudit(
       session: qualityEvidenceSession,
       area: "gameplay",
       severity: "major",
-      title: `AI audit diversity gate failed (${uniqueEndings} endings, ${uniqueDecisionPaths} paths)`,
+      title: `AI audit quality gate failed (${uniqueEndings} endings, ${uniqueDecisionPaths} paths)`,
       details: [
         `The deterministic persona matrix completed ${lanes.length} lanes from one frozen source revision (${stateRevision}).`,
         `Observed endings: ${formatEndingCounts(endings)}.`,
+        `Covered activity tags: ${coveredActivityTags.join(", ") || "none"}.`,
         `Quality violations: ${quality.violations.join("; ")}.`,
         `Classification: ${classification}.`,
         `Personas: ${args.personas.join(", ")}.`,
@@ -312,6 +327,9 @@ export async function runAudit(
         observed: {
           uniqueEndings,
           uniqueDecisionPaths,
+          ...(quality.observed.coveredActivityTags
+            ? { coveredActivityTags: quality.observed.coveredActivityTags }
+            : {}),
         },
         classification,
         violations: quality.violations,
@@ -322,6 +340,7 @@ export async function runAudit(
           ending: lane.ending,
           reason: lane.reason,
           pathRevision: lane.path.revision,
+          activityTags: lane.path.activityTags,
         })),
         choiceDivergences,
       },
@@ -352,6 +371,10 @@ export async function runAudit(
         (qualityReport ? 1 : 0),
     },
     endings,
+    activityCoverage: {
+      coveredTags: coveredActivityTags,
+      byPersona: activityTagsByPersona,
+    },
     diversity: {
       classification,
       uniqueEndings,
@@ -402,6 +425,10 @@ function mergeQualityPolicies(
     matricesCompatible ? current?.minUniqueDecisionPaths : undefined,
     floor?.minUniqueDecisionPaths,
   );
+  const requiredActivityTags = mergeRequiredTags(
+    matricesCompatible ? current?.requiredActivityTags : undefined,
+    floor?.requiredActivityTags,
+  );
   return {
     ...(floor?.personas !== undefined
       ? { personas: [...floor.personas] }
@@ -410,7 +437,16 @@ function mergeQualityPolicies(
         : {}),
     ...(minUniqueEndings !== undefined ? { minUniqueEndings } : {}),
     ...(minUniqueDecisionPaths !== undefined ? { minUniqueDecisionPaths } : {}),
+    ...(requiredActivityTags !== undefined ? { requiredActivityTags } : {}),
   };
+}
+
+function mergeRequiredTags(
+  current: string[] | undefined,
+  floor: string[] | undefined,
+): string[] | undefined {
+  if (current === undefined && floor === undefined) return undefined;
+  return [...new Set([...(current ?? []), ...(floor ?? [])])];
 }
 
 function maxDefined(left: number | undefined, right: number | undefined): number | undefined {
@@ -425,8 +461,15 @@ function evaluateQualityGate(
   allTerminal: boolean,
   uniqueEndings: number,
   uniqueDecisionPaths: number,
+  coveredActivityTags: string[],
 ): Omit<NonNullable<AuditSummary["qualityGate"]>, "policy" | "evidenceSession" | "report"> {
-  const observed = { uniqueEndings, uniqueDecisionPaths };
+  const observed = {
+    uniqueEndings,
+    uniqueDecisionPaths,
+    ...(policy.requiredActivityTags
+      ? { coveredActivityTags: [...coveredActivityTags] }
+      : {}),
+  };
   if (!acceptanceMatrixMatches) {
     return {
       status: "not-evaluated",
@@ -456,11 +499,24 @@ function evaluateQualityGate(
       `unique decision paths ${uniqueDecisionPaths} < required ${policy.minUniqueDecisionPaths}`,
     );
   }
+  if (policy.requiredActivityTags !== undefined) {
+    const covered = new Set(coveredActivityTags);
+    const missing = policy.requiredActivityTags.filter((tag) => !covered.has(tag));
+    if (missing.length > 0) {
+      violations.push(`required activity tags not covered: ${missing.join(", ")}`);
+    }
+  }
   return {
     status: violations.length > 0 ? "failed" : "passed",
     observed,
     violations,
   };
+}
+
+function collectActivityTags(summary: AutoplaySummary): string[] {
+  return [...new Set(summary.decisionPath.decisions.flatMap((decision) =>
+    decision.type === "doActivity" ? decision.aiTags ?? [] : []
+  ))].sort();
 }
 
 function formatEndingCounts(endings: Record<string, number>): string {

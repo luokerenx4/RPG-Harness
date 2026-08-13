@@ -8,6 +8,7 @@ import { listPlaytestReports } from "../playtest-reports";
 import { loadSession, saveSession, sessionDir } from "../session";
 import { runAudit } from "./audit";
 import { readSessionLog } from "./fork";
+import { runDevelopmentWorkItem } from "./work";
 import { collectDevelopmentWorklist } from "./worklist";
 
 const temporaryDirectories: string[] = [];
@@ -235,6 +236,86 @@ describe("autoplay audit matrix", () => {
     });
     expect(summary.totals.openReports).toBe(0);
     expect(await listPlaytestReports(gameDir)).toEqual([]);
+  });
+
+  test("turns an unplayed semantic activity surface into reproducible work", async () => {
+    const gameDir = await temporaryActivityGame();
+    const game = await loadGame(gameDir);
+    await saveSession(gameDir, "player", createInitialState(game));
+
+    const summary = await runAudit({
+      gameDir,
+      fromSession: "player",
+      sessionPrefix: "activity-matrix",
+      personas: ["objective", "greedy", "rude"],
+      maxSteps: 5,
+      reportOnStop: true,
+      pretty: false,
+    });
+
+    expect(summary.activityCoverage).toEqual({
+      coveredTags: ["aggressive", "cautious", "economic"],
+      byPersona: {
+        objective: ["cautious"],
+        greedy: ["economic"],
+        rude: ["aggressive"],
+      },
+    });
+    expect(summary.qualityGate).toMatchObject({
+      policy: {
+        personas: ["objective", "greedy", "rude"],
+        minUniqueEndings: 1,
+        requiredActivityTags: ["cautious", "economic", "aggressive", "social"],
+      },
+      status: "failed",
+      observed: {
+        uniqueEndings: 1,
+        uniqueDecisionPaths: 3,
+        coveredActivityTags: ["aggressive", "cautious", "economic"],
+      },
+      violations: ["required activity tags not covered: social"],
+      report: { severity: "major" },
+    });
+    const [report] = await listPlaytestReports(gameDir);
+    expect(report?.evidence.auditMatrix).toMatchObject({
+      observed: {
+        coveredActivityTags: ["aggressive", "cautious", "economic"],
+      },
+      violations: ["required activity tags not covered: social"],
+      lanes: expect.arrayContaining([
+        expect.objectContaining({ persona: "greedy", activityTags: ["economic"] }),
+      ]),
+    });
+
+    // Removing a live requirement must not erase the immutable failure floor.
+    await writeFile(path.join(gameDir, "game.yaml"), [
+      "title: Audit activity test",
+      "preset: ./modules/run.ts",
+      "ai_audit:",
+      "  personas: [objective, greedy, rude]",
+      "  min_unique_endings: 1",
+      "  required_activity_tags: [cautious, economic, aggressive]",
+      "",
+    ].join("\n"), "utf-8");
+    const verification = await runDevelopmentWorkItem({
+      gameDir,
+      key: `report/${report!.id}`,
+      newSession: "activity-verification",
+      pretty: false,
+    });
+    expect(verification).toMatchObject({
+      status: "failed",
+      result: {
+        qualityGate: {
+          policy: {
+            requiredActivityTags: ["cautious", "economic", "aggressive", "social"],
+          },
+          status: "failed",
+          violations: ["required activity tags not covered: social"],
+        },
+      },
+    });
+    expect((await listPlaytestReports(gameDir))[0]?.status).toBe("open");
   });
 
   test("turns a failed diversity gate into reproducible development work", async () => {
@@ -508,6 +589,36 @@ async function temporaryChoiceGame(): Promise<string> {
     "- Third {id: third}",
     "",
     "[end]",
+    "",
+  ].join("\n"), "utf-8");
+  return dir;
+}
+
+async function temporaryActivityGame(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "rpgh-audit-activity-"));
+  temporaryDirectories.push(dir);
+  await mkdir(path.join(dir, "modules"), { recursive: true });
+  await writeFile(path.join(dir, "game.yaml"), [
+    "title: Audit activity test",
+    "preset: ./modules/run.ts",
+    "ai_audit:",
+    "  personas: [objective, greedy, rude]",
+    "  min_unique_endings: 1",
+    "  required_activity_tags: [cautious, economic, aggressive, social]",
+    "",
+  ].join("\n"), "utf-8");
+  await writeFile(path.join(dir, "modules", "run.ts"), [
+    'import type { RunFunction } from "@rpg-harness/engine";',
+    "const run: RunFunction = async function* (ctx) {",
+    '  yield { type: "hubMenu", snapshot: { day: 0, maxDay: 0, slot: 0, slotName: "", slotsPerDay: 0, stats: [], affections: [], objectives: [{ id: "finish", title: "Finish", status: "active", relatedActivityIds: ["safe"] }], activities: [',
+    '    { id: "safe", kind: "action", title: "Safe", cost: 0, available: true, aiTags: ["cautious"] },',
+    '    { id: "profit", kind: "action", title: "Profit", cost: 0, available: true, aiTags: ["economic"] },',
+    '    { id: "danger", kind: "action", title: "Danger", cost: 0, available: true, aiTags: ["aggressive"] },',
+    "  ] } };",
+    '  ctx.state.baseline.completionOrder.push("ending");',
+    '  yield { type: "gameEnd", reason: "activity selected" };',
+    "};",
+    "export default run;",
     "",
   ].join("\n"), "utf-8");
   return dir;

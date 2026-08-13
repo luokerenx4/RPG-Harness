@@ -581,9 +581,10 @@ Games may turn that matrix into a project-owned acceptance gate in `game.yaml`:
 
 ```yaml
 ai_audit:
-  personas: [objective, charmer, rude, extractor, delver]
+  personas: [objective, greedy, charmer, rude, extractor, delver]
   min_unique_endings: 2
   min_unique_decision_paths: 3
+  required_activity_tags: [cautious, economic, aggressive]
 ```
 
 Projects may declare the acceptance `personas` beside their thresholds. With no
@@ -592,9 +593,10 @@ diagnostic subset remains runnable but is `not-evaluated` against the project
 gate, so an impossible subset cannot create false quality debt. Thresholds may
 not exceed the declared matrix size. The gate is evaluated only when every lane
 reaches a terminal ending. Passing matrices stay silent. A completed matrix
-below either threshold creates one
+below either threshold or missing a required activity tag creates one
 major gameplay report at a frozen copy of the audit source, including every
-lane's GUI path, ending, semantic path revision, and choice divergences. The
+lane's GUI path, ending, semantic path revision, executed activity tags, and
+choice divergences. The
 report immediately appears as executable `verify-audit` work in `rpgh worklist`,
 and `rpgh audit` exits non-zero, so route collapse becomes a coding issue and CI
 signal instead of disposable console output. Audit reports retain their persona
@@ -602,17 +604,24 @@ set, seed, decision budget, policy, frozen source revision, and original matrix.
 Running their `work` item with a fresh `--new-session` prefix reconstructs the
 immutable source, preflights and reruns every lane against the live game, and
 closes the issue only when both the current quality gate and the original
-finding's thresholds pass, so lowering or removing a threshold cannot erase
+finding's requirements pass, so lowering or removing a requirement cannot erase
 existing quality debt. A failed recheck stays open and leaves every new lane
 GUI-readable; a passing recheck records its
 policy, ending/path counts, lane sessions, and revisions as resolution evidence.
 If a project later replaces its acceptance persona set, an older issue continues
-to verify against its retained original lanes and thresholds; the replacement
+to verify against its retained original lanes and requirements; the replacement
 matrix is judged by a fresh project audit.
 Older reports without deterministic replay parameters keep the ordinary
 `reproduce` workflow.
+`required_activity_tags` closes a different class of false positive: a matrix
+whose dialogue choices and endings differ while every persona skips a critical
+gameplay surface. The audit counts a tag only when an accepted `doActivity`
+selects an activity carrying that author-owned `aiTags` value. Missing tags join
+the same replayable quality report and remain part of its verification floor,
+so deleting the requirement cannot silently close existing debt.
 Each lane also receives a content-addressed semantic decision-path revision
-derived from stable choice identities, selected scripts, and activity ids.
+derived from stable choice identities, selected scripts, and activity ids plus
+the selected activities' author-owned semantic tags.
 The matrix classifies identical paths, different paths converging on one ending,
 different endings, and incomplete sweeps separately; stable choice divergences
 name the exact option selected by each persona. Ending convergence therefore no

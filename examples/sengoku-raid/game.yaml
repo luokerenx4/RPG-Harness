@@ -3,13 +3,17 @@ preset: ./preset/run.ts
 modules:
   - ./modules/raid.ts
 
-# This project-owned five-persona headless matrix is an acceptance test, not
-# just telemetry. Falling below either threshold creates a reproducible coding
-# issue at the frozen audit source checkpoint.
+# This project-owned headless matrix is an acceptance test, not just telemetry.
+# Missing a numeric threshold or required activity surface creates a
+# reproducible coding issue at the frozen audit source checkpoint.
 ai_audit:
-  personas: [objective, charmer, rude, extractor, delver]
+  personas: [objective, greedy, charmer, rude, extractor, delver]
   min_unique_endings: 2
   min_unique_decision_paths: 3
+  # These tags are observed on activities the lanes actually execute, not
+  # inferred from persona names or merely available buttons. Together they
+  # prove that the acceptance matrix reaches all three authored raid styles.
+  required_activity_tags: [route/kuro_swamp, route/sumida_river, route/mt_houkyou]
 
 switches:
   learnedChinkonho: false

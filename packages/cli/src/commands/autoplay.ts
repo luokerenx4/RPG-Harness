@@ -95,7 +95,7 @@ export interface AutoplaySummary {
 export type AutoplaySemanticDecision =
   | { type: "choose"; scriptId: string; choiceId: string; optionId: string }
   | { type: "select"; scriptId: string }
-  | { type: "doActivity"; id: string };
+  | { type: "doActivity"; id: string; aiTags?: string[] };
 
 export interface AutoplayDecisionPath {
   revision: string;
@@ -424,20 +424,39 @@ export async function runAutoplay(args: AutoplayArgs): Promise<AutoplaySummary> 
 }
 
 export function summarizeDecisionPath(
-  trace: ReadonlyArray<Pick<TraceEntry, "input" | "decision" | "inputResult">>,
+  trace: ReadonlyArray<Pick<TraceEntry, "input" | "decision" | "inputResult"> &
+    Partial<Pick<TraceEntry, "output">>>,
 ): AutoplayDecisionPath {
   const decisions: AutoplaySemanticDecision[] = [];
+  let previousOutput: Output | undefined;
   for (const entry of trace) {
-    if (entry.inputResult?.accepted === false) continue;
-    if (entry.decision) {
-      decisions.push({ type: "choose", ...entry.decision });
-      continue;
+    if (entry.inputResult?.accepted !== false) {
+      if (entry.decision) {
+        decisions.push({ type: "choose", ...entry.decision });
+      } else if (entry.input?.type === "select") {
+        decisions.push({ type: "select", scriptId: entry.input.scriptId });
+      } else if (entry.input?.type === "doActivity") {
+        // Trace entries pair an input with the output produced *after* it.
+        // The selected activity contract therefore lives on the preceding
+        // hub output. The same-entry fallback keeps this utility convenient
+        // for callers that provide compact synthetic traces.
+        const activitySource = previousOutput?.type === "hubMenu"
+          ? previousOutput
+          : entry.output?.type === "hubMenu"
+            ? entry.output
+            : undefined;
+        const activityId = entry.input.id;
+        const activity = activitySource?.snapshot.activities.find(
+          ({ id }) => id === activityId,
+        );
+        decisions.push({
+          type: "doActivity",
+          id: activityId,
+          ...(activity?.aiTags?.length ? { aiTags: [...activity.aiTags] } : {}),
+        });
+      }
     }
-    if (entry.input?.type === "select") {
-      decisions.push({ type: "select", scriptId: entry.input.scriptId });
-    } else if (entry.input?.type === "doActivity") {
-      decisions.push({ type: "doActivity", id: entry.input.id });
-    }
+    if (entry.output) previousOutput = entry.output;
   }
   return {
     revision: createHash("sha256").update(JSON.stringify(decisions)).digest("hex"),

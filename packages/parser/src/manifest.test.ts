@@ -148,12 +148,14 @@ describe("parseManifest — AI audit quality gate", () => {
       "  personas: [objective, charmer, rude]",
       "  min_unique_endings: 2",
       "  min_unique_decision_paths: 3",
+      "  required_activity_tags: [cautious, economic, aggressive]",
     ].join("\n"));
 
     expect(manifest.aiAudit).toEqual({
       personas: ["objective", "charmer", "rude"],
       minUniqueEndings: 2,
       minUniqueDecisionPaths: 3,
+      requiredActivityTags: ["cautious", "economic", "aggressive"],
     });
   });
 
@@ -175,5 +177,11 @@ describe("parseManifest — AI audit quality gate", () => {
     expect(() => parseManifest(
       "title: t\nai_audit:\n  personas: [charmer, rude]\n  min_unique_decision_paths: 3\n",
     )).toThrow(/cannot exceed/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  required_activity_tags: ['not stable']\n",
+    )).toThrow(/stable tag strings/);
+    expect(() => parseManifest(
+      "title: t\nai_audit:\n  required_activity_tags: [economic, economic]\n",
+    )).toThrow(/duplicates/);
   });
 });

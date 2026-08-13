@@ -27,6 +27,8 @@ export interface AiAuditConfig {
   personas?: string[];
   minUniqueEndings?: number;
   minUniqueDecisionPaths?: number;
+  /** Semantic activity surfaces that at least one acceptance lane must execute. */
+  requiredActivityTags?: string[];
 }
 
 export interface CharacterState {

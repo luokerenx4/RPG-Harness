@@ -1031,12 +1031,12 @@ function buildHubMenu(ctx: Ctx): Output {
       description: entry.description,
       category: "raid",
       aiTags: chain === "sumida_river"
-        ? ["economic", "reward", "exploration"]
+        ? ["economic", "reward", "exploration", "route/sumida_river"]
         : chain === "mt_houkyou"
-          ? ["aggressive", "risky", "exploration"]
+          ? ["aggressive", "risky", "exploration", "route/mt_houkyou"]
           : chain === "hell_gate"
-            ? ["defiant", "story"]
-            : ["cautious", "familiar"],
+            ? ["defiant", "story", "route/hell_gate"]
+            : ["cautious", "familiar", "route/kuro_swamp"],
       cost: 0,
       available: !retiredFromRaids && hpFull,
       lockedReason: retiredFromRaids

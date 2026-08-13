@@ -91,7 +91,12 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
     throw new ManifestParseError("`ai_audit` must be an object");
   }
   const obj = raw as Record<string, unknown>;
-  const known = new Set(["personas", "min_unique_endings", "min_unique_decision_paths"]);
+  const known = new Set([
+    "personas",
+    "min_unique_endings",
+    "min_unique_decision_paths",
+    "required_activity_tags",
+  ]);
   const unknown = Object.keys(obj).filter((key) => !known.has(key));
   if (unknown.length > 0) {
     throw new ManifestParseError(
@@ -112,6 +117,26 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
       throw new ManifestParseError("ai_audit.personas must not contain duplicates");
     }
     config.personas = personas;
+  }
+  if (obj.required_activity_tags !== undefined) {
+    if (
+      !Array.isArray(obj.required_activity_tags) ||
+      obj.required_activity_tags.length === 0 ||
+      obj.required_activity_tags.some((tag) =>
+        typeof tag !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:/-]*$/.test(tag)
+      )
+    ) {
+      throw new ManifestParseError(
+        "ai_audit.required_activity_tags must be a non-empty array of stable tag strings",
+      );
+    }
+    const tags = obj.required_activity_tags as string[];
+    if (new Set(tags).size !== tags.length) {
+      throw new ManifestParseError(
+        "ai_audit.required_activity_tags must not contain duplicates",
+      );
+    }
+    config.requiredActivityTags = [...tags];
   }
   for (const [source, target] of [
     ["min_unique_endings", "minUniqueEndings"],
@@ -137,9 +162,13 @@ function parseAiAudit(raw: unknown): AiAuditConfig {
       }
     }
   }
-  if (config.minUniqueEndings === undefined && config.minUniqueDecisionPaths === undefined) {
+  if (
+    config.minUniqueEndings === undefined &&
+    config.minUniqueDecisionPaths === undefined &&
+    config.requiredActivityTags === undefined
+  ) {
     throw new ManifestParseError(
-      "`ai_audit` must declare min_unique_endings and/or min_unique_decision_paths",
+      "`ai_audit` must declare min_unique_endings, min_unique_decision_paths, and/or required_activity_tags",
     );
   }
   return config;

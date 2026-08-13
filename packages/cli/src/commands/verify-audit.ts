@@ -27,6 +27,7 @@ export interface VerifyAuditSummary {
     reason: string;
     ending: string | null;
     pathRevision: string;
+    activityTags: string[];
   }>;
   resolvedReport?: {
     id: string;
@@ -95,6 +96,7 @@ export async function verifyAuditReport(
     reason: lane.reason,
     ending: lane.ending,
     pathRevision: lane.path.revision,
+    activityTags: lane.path.activityTags,
   }));
   const passed = sourceRevisionMatches && audit.qualityGate?.status === "passed";
   if (!passed) {
@@ -128,13 +130,20 @@ export async function verifyAuditReport(
       webPath: lane.webPath,
       ending: lane.ending!,
       pathRevision: lane.pathRevision,
+      activityTags: lane.activityTags,
     })),
   };
   const resolved = await resolvePlaytestReport({
     gameDir: args.gameDir,
     id: report.id,
     session: report.session,
-    resolution: `AI audit quality gate passed with ${verification.observed.uniqueEndings} endings and ${verification.observed.uniqueDecisionPaths} semantic decision paths.`,
+    resolution: [
+      `AI audit quality gate passed with ${verification.observed.uniqueEndings} endings`,
+      `${verification.observed.uniqueDecisionPaths} semantic decision paths`,
+      ...(verification.observed.coveredActivityTags
+        ? [`activity tags [${verification.observed.coveredActivityTags.join(", ")}]`]
+        : []),
+    ].join(", ") + ".",
     verification,
   });
   return {

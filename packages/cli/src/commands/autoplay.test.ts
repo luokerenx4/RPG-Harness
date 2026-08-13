@@ -53,6 +53,26 @@ describe("autoplay semantic decision paths", () => {
       {
         input: { type: "doActivity", id: "search" },
         inputResult: { accepted: true, code: "accepted", message: "accepted", expected: [] },
+        output: {
+          type: "hubMenu",
+          snapshot: {
+            day: 0,
+            maxDay: 0,
+            slot: 0,
+            slotName: "",
+            slotsPerDay: 0,
+            stats: [],
+            affections: [],
+            activities: [{
+              id: "search",
+              kind: "action",
+              title: "Search",
+              cost: 0,
+              available: true,
+              aiTags: ["exploration", "reward"],
+            }],
+          },
+        },
       },
       {
         input: { type: "choose", index: 2 },
@@ -62,7 +82,29 @@ describe("autoplay semantic decision paths", () => {
       { input: { type: "next" } },
     ]);
     const second = summarizeDecisionPath([
-      { input: { type: "doActivity", id: "search" } },
+      {
+        input: { type: "doActivity", id: "search" },
+        output: {
+          type: "hubMenu",
+          snapshot: {
+            day: 0,
+            maxDay: 0,
+            slot: 0,
+            slotName: "",
+            slotsPerDay: 0,
+            stats: [],
+            affections: [],
+            activities: [{
+              id: "search",
+              kind: "action",
+              title: "Search",
+              cost: 0,
+              available: true,
+              aiTags: ["exploration", "reward"],
+            }],
+          },
+        },
+      },
       {
         input: { type: "choose", choiceId: "route", optionId: "third" },
         decision: { scriptId: "intro", choiceId: "route", optionId: "third" },
@@ -71,7 +113,7 @@ describe("autoplay semantic decision paths", () => {
 
     expect(first).toEqual(second);
     expect(first.decisions).toEqual([
-      { type: "doActivity", id: "search" },
+      { type: "doActivity", id: "search", aiTags: ["exploration", "reward"] },
       { type: "choose", scriptId: "intro", choiceId: "route", optionId: "third" },
     ]);
     expect(first.revision).toMatch(/^[a-f0-9]{64}$/);

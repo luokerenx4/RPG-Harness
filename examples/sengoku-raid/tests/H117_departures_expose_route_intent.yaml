@@ -18,9 +18,18 @@ assertions:
     id: depart:sumida_river
     aiTagsIncludes: exploration
   - kind: activity
+    id: depart:sumida_river
+    aiTagsIncludes: route/sumida_river
+  - kind: activity
     id: depart:mt_houkyou
     available: true
     aiTagsIncludes: aggressive
   - kind: activity
     id: depart:mt_houkyou
     aiTagsIncludes: risky
+  - kind: activity
+    id: depart:mt_houkyou
+    aiTagsIncludes: route/mt_houkyou
+  - kind: activity
+    id: depart:kuro_swamp
+    aiTagsIncludes: route/kuro_swamp
