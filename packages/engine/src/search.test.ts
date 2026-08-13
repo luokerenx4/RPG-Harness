@@ -638,6 +638,7 @@ describe("choice state-space search", () => {
         guidanceProgress: 2,
         guidanceTotal: 2,
         guidancePlateauSteps: 1,
+        guidanceBridgeProgress: 1,
         steps: 3,
       },
     });
@@ -722,10 +723,13 @@ describe("choice state-space search", () => {
     };
     const deep = { ...shallow, inputs: Array(5).fill({ type: "next" as const }), steps: 5 };
 
-    expect(compareChoiceSearchAssessment(deep, shallow)).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
-      { ...deep, inputs: Array(120).fill({ type: "next" as const }), steps: 120 },
-      { ...deep, inputs: Array(96).fill({ type: "next" as const }), steps: 96 },
+      { ...deep, searchBridgeProgress: 5 },
+      { ...shallow, searchBridgeProgress: 1 },
+    )).toBeGreaterThan(0);
+    expect(compareChoiceSearchAssessment(
+      { ...deep, inputs: Array(120).fill({ type: "next" as const }), steps: 120, searchBridgeProgress: 16 },
+      { ...deep, inputs: Array(96).fill({ type: "next" as const }), steps: 96, searchBridgeProgress: 16 },
     )).toBeLessThan(0);
     expect(compareChoiceSearchAssessment(
       { ...deep, satisfiedRequirements: 1 },
@@ -749,11 +753,13 @@ describe("choice state-space search", () => {
         ...deep,
         totalRequirements: 0,
         guidanceRequirement: blockedGuidanceRequirement,
+        searchBridgeProgress: 5,
       },
       {
         ...shallow,
         totalRequirements: 0,
         guidanceRequirement: blockedGuidanceRequirement,
+        searchBridgeProgress: 1,
       },
     )).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
@@ -778,14 +784,14 @@ describe("choice state-space search", () => {
         totalRequirements: 0,
         guidanceProgress: 2,
         guidanceTotal: 2,
-        guidancePlateauSteps: 3,
+        guidanceBridgeProgress: 2,
       },
       {
         ...shallow,
         totalRequirements: 0,
         guidanceProgress: 2,
         guidanceTotal: 2,
-        guidancePlateauSteps: 0,
+        guidanceBridgeProgress: 0,
       },
     )).toBeGreaterThan(0);
     expect(compareChoiceSearchAssessment(
@@ -802,6 +808,53 @@ describe("choice state-space search", () => {
       { ...deep, guidanceProgress: 1 },
       true,
     )).toBeGreaterThan(0);
+  });
+
+  test("caps repeated public decisions in a blocked search bridge", async () => {
+    const game = makeGame({
+      variables: [{ id: "ticks", type: "number", initial: 0 }],
+      scripts: [makeScript("target", {
+        requires: { switch: { name: "never" } },
+      })],
+      runFn: async function* (ctx) {
+        while (true) {
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: [{
+                id: "wait",
+                kind: "action" as const,
+                title: "Wait",
+                cost: 0,
+                available: true,
+              }],
+            },
+          };
+          if (input.type === "doActivity" && input.id === "wait") {
+            ctx.state.baseline.variables.ticks =
+              Number(ctx.state.baseline.variables.ticks ?? 0) + 1;
+          }
+        }
+      },
+    });
+
+    const result = await searchForScript(
+      game,
+      makeState(game),
+      { scriptId: "target" },
+      { maxNodes: 1, maxSteps: 6 },
+    );
+
+    expect(result.found).toBe(false);
+    expect(result.closest.steps).toBe(6);
+    expect(result.closest.searchBridgeProgress).toBe(3);
   });
 
   test("explains the closest state's satisfied and blocked requirements", async () => {

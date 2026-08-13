@@ -69,8 +69,12 @@ export interface ChoiceSearchClosest {
   guidanceProgress?: number;
   /** Number of authored activity breadcrumbs in the target route. */
   guidanceTotal?: number;
-  /** Steps taken after the last authored breadcrumb, bounded for tie-breaking. */
+  /** Raw diagnostic steps taken after the last authored breadcrumb. */
   guidancePlateauSteps?: number;
+  /** Bounded public-decision progress beyond the authored breadcrumb. */
+  guidanceBridgeProgress?: number;
+  /** Bounded public-decision progress across the full candidate path. */
+  searchBridgeProgress?: number;
   /** Low-risk cycle recovery taken while the next authored activity is closed. */
   guidancePreparation?: number;
   /** Progress toward the exact gate on the next authored hub activity. */
@@ -560,8 +564,15 @@ function assessNode(
     outputType: node.output?.type ?? null,
     guidanceProgress,
     guidanceTotal: target.relatedActivityIds.length,
+    searchBridgeProgress: boundedPublicDecisionProgress(node.inputs, 0),
     ...(guidanceCompletionStep !== null
-      ? { guidancePlateauSteps: node.inputs.length - guidanceCompletionStep }
+      ? {
+          guidancePlateauSteps: node.inputs.length - guidanceCompletionStep,
+          guidanceBridgeProgress: boundedPublicDecisionProgress(
+            node.inputs,
+            guidanceCompletionStep,
+          ),
+        }
       : {}),
     ...(guidanceRequirement && nextGuidanceActivityId
       ? {
@@ -686,14 +697,13 @@ export function compareChoiceSearchAssessment(
   if ((left.guidancePreparation ?? 0) !== (right.guidancePreparation ?? 0)) {
     return (left.guidancePreparation ?? 0) - (right.guidancePreparation ?? 0);
   }
-  // Give hook-driven routes a small, replayable bridge across combat/travel
-  // states that do not change the authored target score. Capping this signal
-  // prevents an impossible route from selecting a thousand-step churn path as
-  // its continuation checkpoint.
-  const plateauBridgeLimit = 32;
-  const leftPlateau = Math.min(left.guidancePlateauSteps ?? 0, plateauBridgeLimit);
-  const rightPlateau = Math.min(right.guidancePlateauSteps ?? 0, plateauBridgeLimit);
-  if (leftPlateau !== rightPlateau) return leftPlateau - rightPlateau;
+  // Give hook-driven routes a replayable bridge across combat/travel states
+  // that do not change the authored target score. The signal counts a small
+  // number of repeated public decisions rather than raw inputs: fifty moves
+  // between the same two maps must not outrank a concise fight-and-cross path.
+  const leftBridge = left.guidanceBridgeProgress ?? 0;
+  const rightBridge = right.guidanceBridgeProgress ?? 0;
+  if (leftBridge !== rightBridge) return leftBridge - rightBridge;
   const leftTerminal = left.outputType === "gameEnd";
   const rightTerminal = right.outputType === "gameEnd";
   if (leftTerminal !== rightTerminal) return leftTerminal ? -1 : 1;
@@ -723,13 +733,14 @@ export function compareChoiceSearchAssessment(
   }
   if (leftRequirementsStillBlocked) {
     // Closed gates often need a sizeable authored loop (bond scene, raid,
-    // return) before their score can move. Follow that plateau far enough to
-    // persist a useful continuation, but never prefer an arbitrarily long
-    // churn path once the bounded bridge has been crossed.
-    const blockedBridgeLimit = 96;
-    const leftBridge = Math.min(left.steps, blockedBridgeLimit);
-    const rightBridge = Math.min(right.steps, blockedBridgeLimit);
-    if (leftBridge !== rightBridge) return leftBridge - rightBridge;
+    // return) before their score can move. Prefer bounded public-decision
+    // progress, not raw depth: repeating the same map edge forty times is not
+    // a better continuation than trying the extract that ends the raid.
+    const leftSearchBridge = left.searchBridgeProgress ?? 0;
+    const rightSearchBridge = right.searchBridgeProgress ?? 0;
+    if (leftSearchBridge !== rightSearchBridge) {
+      return leftSearchBridge - rightSearchBridge;
+    }
   }
   return right.steps - left.steps;
 }
@@ -854,6 +865,35 @@ function orderedGuidanceCompletionStep(
     if (progress === relatedActivityIds.length) return index + 1;
   }
   return null;
+}
+
+function boundedPublicDecisionProgress(
+  inputs: Input[],
+  completionStep: number,
+): number {
+  const counts = new Map<string, number>();
+  let progress = 0;
+  for (const input of inputs.slice(completionStep)) {
+    const key = input.type === "doActivity"
+      ? `activity:${input.id}`
+      : input.type === "choose"
+        ? "index" in input
+          ? `choice-index:${input.index}`
+          : `choice:${input.choiceId}/${input.optionId}`
+        : input.type === "select"
+          ? `script:${input.scriptId}`
+          : input.type === "next"
+            ? "forced-advance"
+            : null;
+    if (!key) continue;
+    const limit = key === "forced-advance" ? 1 : 3;
+    const count = counts.get(key) ?? 0;
+    if (count >= limit) continue;
+    counts.set(key, count + 1);
+    progress += 1;
+    if (progress >= 16) return 16;
+  }
+  return progress;
 }
 
 function topLevelRequirements(condition: Condition | undefined): Condition[] {
