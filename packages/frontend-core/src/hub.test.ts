@@ -3,6 +3,7 @@ import type { HubSnapshot } from "@rpg-harness/engine";
 import {
   buildHubView,
   formatActivityForecast,
+  formatForecastMetricValue,
   formatHubCalendar,
   formatObjectiveRequirement,
   objectiveRequirementProgress,
@@ -294,6 +295,29 @@ describe("formatActivityForecast", () => {
         },
       }),
     ).toBe("Damage 4–6 HP · Critical 1.4%");
+  });
+
+  test("keeps machine units out of player prose", () => {
+    expect(formatForecastMetricValue({
+      id: "inventory:ryo",
+      label: "両",
+      value: 11,
+      unit: "item",
+      polarity: "benefit",
+    })).toBe("+11");
+    expect(formatForecastMetricValue({
+      id: "reputation",
+      label: "評判",
+      value: 2,
+      unit: "internal_points",
+      unitLabel: " 点",
+    })).toBe("2 点");
+    expect(formatForecastMetricValue({
+      id: "mystery",
+      label: "謎",
+      value: 3,
+      unit: "private_enum",
+    })).toBe("3");
   });
 });
 

@@ -1288,7 +1288,10 @@ export interface ActivityForecastMetric {
   value?: number | string | boolean;
   min?: number;
   max?: number;
+  /** Stable machine unit consumed by Headless clients. */
   unit?: string;
+  /** Optional player-facing suffix for custom units; unknown machine units stay hidden. */
+  unitLabel?: string;
   polarity?: "benefit" | "risk" | "neutral";
 }
 

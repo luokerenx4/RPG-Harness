@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 5;
+  schemaVersion: 6;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -312,7 +312,8 @@ export interface QualitySurfaceEvidence {
       | "player-feedback-proof"
       | "objective-requirement"
       | "locked-condition"
-      | "machine-effect-hidden";
+      | "machine-effect-hidden"
+      | "forecast-unit-hidden";
     text: string;
   }>;
 }
@@ -345,6 +346,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "machine-effect-hidden",
   text: "親密度 +1（50 両）",
+}, {
+  surface: "forecast-unit-hidden",
+  text: "両 +11",
 }] as const;
 
 const SOURCE_BINARY_EXTENSIONS = new Set([
@@ -663,7 +667,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 5 &&
+    value.schemaVersion === 6 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

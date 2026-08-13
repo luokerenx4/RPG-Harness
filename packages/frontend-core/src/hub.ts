@@ -1,4 +1,5 @@
 import type {
+  ActivityForecastMetric,
   HubActivity,
   HubObjectiveRequirement,
   HubSnapshot,
@@ -105,18 +106,32 @@ export function formatActivityForecast(activity: HubActivity): string | null {
   if (metrics.length === 0) return activity.forecast?.summary ?? null;
   return metrics
     .map((metric) => {
-      const suffix = formatMetricUnit(metric.unit);
-      if (metric.value !== undefined) {
-        return `${metric.label} ${String(metric.value)}${suffix}`;
-      }
-      if (metric.min !== undefined && metric.max !== undefined) {
-        return `${metric.label} ${metric.min}–${metric.max}${suffix}`;
-      }
-      if (metric.min !== undefined) return `${metric.label} ≥${metric.min}${suffix}`;
-      if (metric.max !== undefined) return `${metric.label} ≤${metric.max}${suffix}`;
-      return metric.label;
+      const value = formatForecastMetricValue(metric);
+      return value ? `${metric.label} ${value}` : metric.label;
     })
     .join(" · ");
+}
+
+/**
+ * Project a lossless machine forecast metric into player language. `unit` is
+ * an AI/runtime identifier, not display text: known semantic units receive a
+ * shared rendering, custom units require an explicit `unitLabel`, and unknown
+ * ids remain hidden instead of leaking implementation vocabulary.
+ */
+export function formatForecastMetricValue(
+  metric: ActivityForecastMetric,
+): string {
+  const suffix = formatMetricUnit(metric);
+  const prefix = metric.unit === "item" && metric.polarity === "benefit" ? "+" : "";
+  if (metric.value !== undefined) {
+    return `${typeof metric.value === "number" ? prefix : ""}${String(metric.value)}${suffix}`;
+  }
+  if (metric.min !== undefined && metric.max !== undefined) {
+    return `${prefix}${metric.min}–${metric.max}${suffix}`;
+  }
+  if (metric.min !== undefined) return `≥${prefix}${metric.min}${suffix}`;
+  if (metric.max !== undefined) return `≤${prefix}${metric.max}${suffix}`;
+  return "";
 }
 
 /**
@@ -366,8 +381,9 @@ function formatCategoryLabel(category: string): string {
     .join(" ");
 }
 
-function formatMetricUnit(unit: string | undefined): string {
-  if (!unit) return "";
-  if (unit === "percent") return "%";
-  return ` ${unit}`;
+function formatMetricUnit(metric: ActivityForecastMetric): string {
+  if (metric.unitLabel !== undefined) return metric.unitLabel;
+  if (metric.unit === "percent") return "%";
+  if (metric.unit === "HP") return " HP";
+  return "";
 }

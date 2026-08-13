@@ -23,6 +23,15 @@ describe("HubMenu player projection", () => {
         cost: 0,
         available: true,
         effectsHint: "affection.kagari+1 ryo-50",
+        forecast: {
+          metrics: [{
+            id: "inventory:ryo",
+            label: "両",
+            value: 11,
+            unit: "item",
+            polarity: "benefit",
+          }],
+        },
       }],
     };
 
@@ -31,5 +40,7 @@ describe("HubMenu player projection", () => {
     expect(screen.lastFrame()).toContain("親密度 +1（50 両）");
     expect(screen.lastFrame()).not.toContain("affection.kagari+1");
     expect(screen.lastFrame()).not.toContain("ryo-50");
+    expect(screen.lastFrame()).toContain("両 +11");
+    expect(screen.lastFrame()).not.toContain("item");
   });
 });

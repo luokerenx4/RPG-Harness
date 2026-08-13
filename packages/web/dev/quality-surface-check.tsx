@@ -5,7 +5,7 @@ import type { Game, Input } from "@rpg-harness/engine";
 import { FeedbackOverlay, StageView } from "../src/WebPlayScreen";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 5;
+  schemaVersion: 6;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -18,7 +18,8 @@ export interface WebQualitySurfaceEvidence {
       | "player-feedback-proof"
       | "objective-requirement"
       | "locked-condition"
-      | "machine-effect-hidden";
+      | "machine-effect-hidden"
+      | "forecast-unit-hidden";
     text: string;
   }>;
 }
@@ -146,19 +147,63 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   const projections = [{
     surface: "player-feedback-proof" as const,
     text: expectedProof,
-  }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection()];
+  }, objectiveRequirementProjection(), lockedConditionProjection(), machineEffectProjection(),
+  forecastUnitProjection()];
 
   const revision = createHash("sha256")
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function forecastUnitProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const tree = StageView({
+    stage: {
+      kind: "hubMenu",
+      cursor: 0,
+      snapshot: {
+        day: 0,
+        maxDay: 0,
+        slot: 0,
+        slotName: "",
+        slotsPerDay: 0,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "search:kuro-swamp",
+          kind: "action",
+          title: "辺りを捜索する",
+          description: "",
+          category: "explore",
+          cost: 0,
+          available: true,
+          forecast: {
+            metrics: [{
+              id: "inventory:ryo",
+              label: "両",
+              value: 11,
+              unit: "item",
+              polarity: "benefit",
+            }],
+          },
+        }],
+      },
+    },
+    game: { scripts: [] } as unknown as Game,
+    onInput: () => {},
+  });
+  const text = nodeText(tree);
+  if (!text.includes("両 +11") || text.includes("item")) {
+    throw new Error("Web quality surface renders machine forecast units as player prose");
+  }
+  return { surface: "forecast-unit-hidden", text: "両 +11" };
 }
 
 function machineEffectProjection(): WebQualitySurfaceEvidence["projections"][number] {

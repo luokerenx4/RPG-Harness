@@ -432,6 +432,11 @@ resource ids and is not player prose. Human shells render `description` plus
 structured `forecast` metrics instead. Authors who need an extra visible line
 should put it in `description`, never overload the AI hint.
 
+Forecast `unit` values are likewise stable machine identifiers retained by
+Headless clients. Player shells format shared semantic units centrally
+(`percent`, `HP`, and inventory `item` gains); unknown ids stay hidden unless
+the author supplies an explicit player-facing `unitLabel`.
+
 ## State model
 
 State is plain JSON. No class instances, no functions, no `Date`s, no `Map`s. Survives `JSON.stringify` round-trip without loss.
