@@ -1,0 +1,67 @@
+name: playing Mio's finale immediately concludes the live inspection directive
+description: |
+  The hub yielded by the same Web, TUI, or Headless run that completes Mio's
+  final report must already show the inspection as concluded. Requiring a
+  reload or a later onSessionStart migration leaves the player and AI with a
+  stale main objective even though the authored duty switch is false.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+      - letter_01_suspicion
+      - letter_02_rival
+      - bond_mio_03
+    switches:
+      befriended_mio: true
+      mio_inspection_duty: true
+      road_mio_2_seen: true
+    characters:
+      mio: { affection: 12 }
+    variables:
+      raidsCompleted: 9
+      shogun_chapter: 2
+      last_directive: "澪の見立ては続いている。同行を重ね、最終の報告を待て。"
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch]
+  sengoku-raid:
+    raid: null
+    metCharacters: [mio]
+    companion: null
+    companionHp: 0
+maxSteps: 40
+inputs:
+  - { type: doActivity, id: script:bond_mio_04 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 1 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: choose, index: 0 }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+  - { type: next }
+assertions:
+  - kind: state
+    path: baseline.scripts.bond_mio_04.completed
+    eq: true
+  - kind: state
+    path: baseline.switches.mio_inspection_duty
+    eq: false
+  - kind: state
+    path: baseline.variables.last_directive
+    eq: "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。"
+  - kind: objective
+    id: letter_03_dispatch
+    descriptionIncludes: 見立ては結審した

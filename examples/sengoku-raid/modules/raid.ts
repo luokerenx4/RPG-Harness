@@ -1091,7 +1091,7 @@ function buildHubMenu(ctx: Ctx): Output {
       description: alreadyInvited
         ? inspectionLock ?? "同行を解く（次の出立では一人）"
         : officialDuty
-          ? "公儀の見立てが済むまで同行可。他者を誘うと自動的に交代"
+          ? "公儀の見立てが済むまで、次の出帰りにも同行を頼める"
           : inspectionLock ?? "親密度 4 以上で同行可。他者を誘うと自動的に交代",
       category: "social",
       // A fresh invitation can advance a relationship objective. Replacing
@@ -3680,6 +3680,20 @@ const raidModule: Module = {
       if (!m.metCharacters.includes("mio")) {
         m.metCharacters.push("mio");
       }
+    }
+    // The finale's effects end Mio's duty, but the hub built immediately
+    // after script completion must also narrate that conclusion. Relying on
+    // onSessionStart alone leaves the live Web/TUI output one reload behind.
+    if (
+      scriptId === "bond_mio_04" &&
+      ctx.state.baseline.variables.shogun_chapter === 2 &&
+      [
+        "澪と共に出帰り、見立てを受けよ。",
+        "澪の見立ては続いている。同行を重ね、最終の報告を待て。",
+      ].includes(String(ctx.state.baseline.variables.last_directive ?? ""))
+    ) {
+      ctx.state.baseline.variables.last_directive =
+        "見立ては結審した。最後の御沙汰が下るまで、鬼を斬れ。";
     }
     // After any intel briefing variant runs to completion, clear
     // intel_active so the hub stops surfacing it and the next infoshop
