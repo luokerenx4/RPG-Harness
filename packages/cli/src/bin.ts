@@ -47,6 +47,7 @@ import {
   type PlaytestSeverity,
 } from "./playtest-reports";
 import { loadGame } from "./loader";
+import { projectStatusCommand } from "./commands/project-status";
 
 const HELP = `rpgh — RPG-Harness: the AI-native RPG Maker runtime and playtest CLI
 
@@ -104,6 +105,10 @@ COMMANDS
       queue. With --session, evidence includes that source and all fork
       descendants while new work still forks from the named source. Every item
       carries structured coordinates and its next operation.
+
+  project-status <game-dir> [--pretty]
+      Compact machine-readable AI development state: pending coding work and
+      whether current game/runtime inputs have a valid quality certificate.
 
   work <game-dir> [--key WORK-KEY] [--session SOURCE]
        [--new-session NAME] [--persona NAME] [--max-steps N]
@@ -328,6 +333,8 @@ async function main(): Promise<void> {
       return runChoiceCoverage(rest);
     case "worklist":
       return runWorklist(rest);
+    case "project-status":
+      return runProjectStatus(rest);
     case "work":
       return runWork(rest);
     case "sweep":
@@ -629,6 +636,19 @@ async function runWorklist(args: string[]): Promise<void> {
     ...(values.session !== undefined ? { session: values.session } : {}),
     format,
   });
+}
+
+async function runProjectStatus(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: { pretty: { type: "boolean", default: false } },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh project-status <game-dir> [--pretty]",
+  );
+  await projectStatusCommand(gameDir, Boolean(values.pretty));
 }
 
 async function runWork(args: string[]): Promise<void> {

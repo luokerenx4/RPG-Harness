@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   clearBridgeSession,
+  developmentStatusInvalidation,
+  installDevelopmentStatusInvalidation,
+  loadBridgeDevelopmentStatus,
   loadBridgeSession,
   loadBridgeSnapshot,
   saveBridgeSession,
@@ -123,6 +126,96 @@ describe("Web development session bridge", () => {
       state: { value: 2 },
       revision: nextRevision,
     });
+  });
+
+  test("projects the global AI development state without writing the player session", async () => {
+    const gameDir = await temporaryGame();
+    await writeFile(
+      path.join(gameDir, "game.yaml"),
+      "title: Development status test\n",
+      "utf-8",
+    );
+    await saveBridgeSession({
+      gameDir,
+      session: "web",
+      state: { baseline: { currentScriptId: null } },
+    });
+    const before = await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "web", "state.json"),
+      "utf-8",
+    );
+
+    const status = await loadBridgeDevelopmentStatus(gameDir);
+
+    expect(status).toEqual({
+      revision: expect.stringMatching(/^[a-f0-9]{16}$/),
+      worklist: {
+        total: 0,
+        executable: 0,
+        diagnostic: 0,
+        authoring: 0,
+        highestPriority: null,
+        next: null,
+      },
+      quality: {
+        status: "uncertified",
+        inputRevision: null,
+        certificateRevision: null,
+        createdAt: null,
+        endings: 0,
+        paths: 0,
+      },
+    });
+    expect(await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "web", "state.json"),
+      "utf-8",
+    )).toBe(before);
+  });
+
+  test("invalidates development status for project evidence, authored files, and evaluator code", () => {
+    const root = path.resolve("/repo/examples");
+    expect(developmentStatusInvalidation(
+      path.join(root, "sengoku/.rpg-harness/evidence/quality/inputs/a.json"),
+      root,
+    )).toEqual({
+      scope: "game",
+      gameDir: path.join(root, "sengoku"),
+      immediate: true,
+    });
+    expect(developmentStatusInvalidation(
+      path.join(root, "sengoku/scripts/ending.md"),
+      root,
+    )).toEqual({
+      scope: "game",
+      gameDir: path.join(root, "sengoku"),
+      immediate: true,
+    });
+    expect(developmentStatusInvalidation(
+      path.resolve("/repo/packages/engine/src/runLoop.ts"),
+      root,
+    )).toEqual({ scope: "all" });
+    expect(developmentStatusInvalidation(
+      path.resolve("/repo/README.md"),
+      root,
+    )).toBeNull();
+  });
+
+  test("registers cache invalidation for add, change, and unlink events", () => {
+    const events: string[] = [];
+    const watched: Array<string | string[]> = [];
+    installDevelopmentStatusInvalidation({
+      add: (files) => watched.push(files),
+      on: (event) => events.push(event),
+    }, "/repo/examples");
+    expect(events).toEqual(["add", "change", "unlink"]);
+    expect(watched.flat()).toEqual(expect.arrayContaining([
+      "/repo/examples",
+      "/repo/packages/cli/src",
+      "/repo/packages/engine/src",
+      "/repo/packages/frontend-core/src",
+      "/repo/packages/parser/src",
+      "/repo/packages/session-store/src",
+    ]));
   });
 });
 

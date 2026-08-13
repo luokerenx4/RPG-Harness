@@ -147,6 +147,12 @@ while either a game edit or evaluator edit invalidates the verdict instead of
 silently inheriting green status. The certificate is a local derived artifact;
 `--force-audit` provides an explicit full rerun when environmental validation is
 more important than reuse.
+`rpgh project-status` is the compact projection consumed by CI, agents, and the
+local Web HUD: global work counts, next priority, and the current certificate
+identity. The dev session bridge invokes that CLI boundary and invalidates its
+cache from authored/runtime/evidence file events, so GUI and Headless share the
+development loop without duplicating orchestration rules or polling the entire
+session archive continuously.
 Hub objectives carry explicit author intent rather than naming conventions:
 `scope` is `main`, `side`, or `mastery`, and `terminal` says whether taking the
 linked activity may conclude the run. `Engine.run()` validates objective ids,

@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { access, mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { Plugin } from "vite";
 import {
   appendCheckpointedSessionEvent,
@@ -10,6 +12,19 @@ import {
 
 const API_ROOT = "/__rpgh/session-bridge";
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
+const developmentStatusCache = new Map<string, {
+  gameDir: string;
+  value: BridgeDevelopmentStatus;
+  staleAfter: number;
+}>();
+const developmentStatusPending = new Map<string, {
+  generation: number;
+  promise: Promise<BridgeDevelopmentStatus>;
+}>();
+const developmentStatusGenerations = new Map<string, number>();
+let developmentStatusGlobalGeneration = 0;
+const SESSION_EVIDENCE_DEBOUNCE_MS = 15_000;
 
 export interface BridgeStepEvent {
   input: unknown;
@@ -32,17 +47,120 @@ export interface BridgeSessionSnapshot {
   revision: string | null;
 }
 
+export interface BridgeDevelopmentStatus {
+  revision: string;
+  worklist: {
+    total: number;
+    executable: number;
+    diagnostic: number;
+    authoring: number;
+    highestPriority: "P0" | "P1" | "P2" | "P3" | null;
+    next: { key: string; title: string } | null;
+  };
+  quality: {
+    status: "certified" | "uncertified";
+    inputRevision: string | null;
+    certificateRevision: string | null;
+    createdAt: string | null;
+    endings: number;
+    paths: number;
+  };
+}
+
 export function sessionBridgePlugin(examplesRoot: string): Plugin {
   return {
     name: "rpg-harness-session-bridge",
     apply: "serve",
     configureServer(server) {
+      installDevelopmentStatusInvalidation(server.watcher, examplesRoot);
       server.middlewares.use((req, res, next) => {
         void handleBridgeRequest(req, res, examplesRoot).then((handled) => {
           if (!handled) next();
         });
       });
     },
+  };
+}
+
+export function installDevelopmentStatusInvalidation(
+  watcher: {
+    add?(files: string | string[]): unknown;
+    on(event: string, callback: (file: string) => void): unknown;
+  },
+  examplesRoot: string,
+): void {
+  const repoRoot = path.dirname(path.resolve(examplesRoot));
+  watcher.add?.([
+    path.resolve(examplesRoot),
+    path.join(repoRoot, "packages", "cli", "src"),
+    path.join(repoRoot, "packages", "engine", "src"),
+    path.join(repoRoot, "packages", "frontend-core", "src"),
+    path.join(repoRoot, "packages", "parser", "src"),
+    path.join(repoRoot, "packages", "session-store", "src"),
+  ]);
+  const invalidate = (file: string) => {
+    const invalidation = developmentStatusInvalidation(file, examplesRoot);
+    if (invalidation?.scope === "all") {
+      developmentStatusGlobalGeneration += 1;
+      developmentStatusCache.clear();
+      developmentStatusPending.clear();
+      return;
+    }
+    if (!invalidation) return;
+    if (invalidation.immediate) {
+      bumpDevelopmentStatusGeneration(invalidation.gameDir);
+      developmentStatusCache.delete(invalidation.gameDir);
+      developmentStatusPending.delete(invalidation.gameDir);
+      return;
+    }
+    const cached = developmentStatusCache.get(invalidation.gameDir);
+    if (cached && !Number.isFinite(cached.staleAfter)) {
+      cached.staleAfter = Date.now() + SESSION_EVIDENCE_DEBOUNCE_MS;
+    }
+  };
+  watcher.on("add", invalidate);
+  watcher.on("change", invalidate);
+  watcher.on("unlink", invalidate);
+}
+
+export function developmentStatusInvalidation(
+  file: string,
+  examplesRoot: string,
+):
+  | { scope: "all" }
+  | { scope: "game"; gameDir: string; immediate: boolean }
+  | null {
+  const root = path.resolve(examplesRoot);
+  const resolvedFile = path.resolve(file);
+  const repoRoot = path.dirname(root);
+  const runtimeRelative = path.relative(path.join(repoRoot, "packages"), resolvedFile);
+  if (
+    runtimeRelative !== "" &&
+    !runtimeRelative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(runtimeRelative) &&
+    /^(?:cli|engine|frontend-core|parser|session-store)\/src\//.test(
+      runtimeRelative.split(path.sep).join("/"),
+    )
+  ) return { scope: "all" };
+  const relative = path.relative(root, resolvedFile);
+  if (
+    relative === "" ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) return null;
+  const [gameId, ...segments] = relative.split(path.sep);
+  if (!gameId || segments.length === 0) return null;
+  const normalized = segments.join("/");
+  const projectEvidence = normalized.startsWith(".rpg-harness/") &&
+    (normalized.includes("/issues.jsonl") ||
+      normalized.startsWith(".rpg-harness/evidence/quality/"));
+  const sessionEvidence = normalized.startsWith(".rpg-harness/sessions/");
+  const authoredOrRuntime = !segments.some((segment) => segment.startsWith("."));
+  if (!projectEvidence && !sessionEvidence && !authoredOrRuntime) return null;
+  return {
+    scope: "game",
+    gameDir: path.join(root, gameId),
+    immediate: projectEvidence || authoredOrRuntime,
   };
 }
 
@@ -140,6 +258,56 @@ export async function clearBridgeSession(
   });
 }
 
+export async function loadBridgeDevelopmentStatus(
+  gameDir: string,
+): Promise<BridgeDevelopmentStatus> {
+  const resolvedGameDir = path.resolve(gameDir);
+  const cached = developmentStatusCache.get(resolvedGameDir);
+  if (cached && cached.staleAfter > Date.now()) return cached.value;
+  const generation = developmentStatusGeneration(resolvedGameDir);
+  const pending = developmentStatusPending.get(resolvedGameDir);
+  if (pending?.generation === generation) return pending.promise;
+  const promise = computeBridgeDevelopmentStatus(resolvedGameDir).then((value) => {
+    if (developmentStatusGeneration(resolvedGameDir) === generation) {
+      developmentStatusCache.set(resolvedGameDir, {
+        gameDir: resolvedGameDir,
+        value,
+        staleAfter: Number.POSITIVE_INFINITY,
+      });
+    }
+    return value;
+  }).finally(() => {
+    const current = developmentStatusPending.get(resolvedGameDir);
+    if (current?.promise === promise) developmentStatusPending.delete(resolvedGameDir);
+  });
+  developmentStatusPending.set(resolvedGameDir, { generation, promise });
+  return promise;
+}
+
+async function computeBridgeDevelopmentStatus(
+  gameDir: string,
+): Promise<BridgeDevelopmentStatus> {
+  const cli = path.resolve(import.meta.dirname, "../../cli/src/bin.ts");
+  const { stdout } = await execFileAsync(
+    "bun",
+    [cli, "project-status", gameDir],
+    { maxBuffer: 1024 * 1024 },
+  );
+  return JSON.parse(stdout) as BridgeDevelopmentStatus;
+}
+
+function developmentStatusGeneration(gameDir: string): number {
+  return developmentStatusGlobalGeneration * 1_000_000_000 +
+    (developmentStatusGenerations.get(gameDir) ?? 0);
+}
+
+function bumpDevelopmentStatusGeneration(gameDir: string): void {
+  developmentStatusGenerations.set(
+    gameDir,
+    (developmentStatusGenerations.get(gameDir) ?? 0) + 1,
+  );
+}
+
 async function handleBridgeRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -156,6 +324,19 @@ async function handleBridgeRequest(
         storage: "filesystem",
         defaultSession: "web",
       });
+      return true;
+    }
+
+    const developmentMatch = url.pathname.match(
+      /^\/__rpgh\/session-bridge\/development\/([^/]+)$/,
+    );
+    if (developmentMatch) {
+      if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
+      const gameId = decodeURIComponent(developmentMatch[1] ?? "");
+      assertSegment(gameId, "game id");
+      const gameDir = path.join(examplesRoot, gameId);
+      await access(path.join(gameDir, "game.yaml"));
+      sendJson(res, 200, await loadBridgeDevelopmentStatus(gameDir));
       return true;
     }
 

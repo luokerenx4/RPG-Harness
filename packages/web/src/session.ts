@@ -28,6 +28,26 @@ export interface WebSessionInfo {
   label: string;
 }
 
+export interface WebDevelopmentStatus {
+  revision: string;
+  worklist: {
+    total: number;
+    executable: number;
+    diagnostic: number;
+    authoring: number;
+    highestPriority: "P0" | "P1" | "P2" | "P3" | null;
+    next: { key: string; title: string } | null;
+  };
+  quality: {
+    status: "certified" | "uncertified";
+    inputRevision: string | null;
+    certificateRevision: string | null;
+    createdAt: string | null;
+    endings: number;
+    paths: number;
+  };
+}
+
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
 
@@ -68,6 +88,18 @@ export async function pollExternalState(
   if (snapshot.revision === previous) return undefined;
   bridgeRevisions.set(gameId, snapshot.revision);
   return snapshot.state;
+}
+
+export async function loadDevelopmentStatus(
+  gameId: string,
+): Promise<WebDevelopmentStatus | null> {
+  const info = await getSessionInfo();
+  if (info.mode !== "shared") return null;
+  const response = await fetch(
+    `${BRIDGE_ROOT}/development/${encodeURIComponent(gameId)}`,
+  );
+  if (!response.ok) throw await bridgeError(response);
+  return await response.json() as WebDevelopmentStatus;
 }
 
 export async function saveState(

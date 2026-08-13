@@ -216,6 +216,7 @@ rpgh verify-certificate <game-dir> <certificate.json>         # validate evidenc
 rpgh coverage <game-dir> [--status pending|all]                # real-session story coverage / AI worklist
 rpgh choices  <game-dir> [--status pending|all]                # executable choice-branch worklist
 rpgh worklist <game-dir> [--session NAME]                      # unified prioritized AI development queue
+rpgh project-status <game-dir> [--pretty]                     # compact worklist + current AI quality verdict
 rpgh work     <game-dir> [--key KEY] [--new-session NAME]     # safely execute one structured work item
 rpgh sweep    <game-dir> --session NAME --session-prefix RUN  # bounded resumable lineage exploration batch
 rpgh sweep    <game-dir> --session NAME --session-prefix RUN --until-clean --limit 100 --max-generations 5 [--force-audit]
@@ -324,6 +325,11 @@ policy, personas, budgets, and seed. Repeating the same clean convergence
 reuses that certificate without creating another set of audit sessions; any
 bound source edit changes the input revision and reruns the matrix.
 `--force-audit` deliberately bypasses a matching certificate.
+During local Web development the same compact project status is bridged into a
+read-only HUD badge beside the shared-session label. Players can see pending
+coding work or the current certified ending/path matrix while Headless agents
+continue working; the badge polls a cached projection and never writes the
+player save.
 `inspect-script` executes the diagnostic operation emitted for uncovered scripts:
 it returns the source file, indexed authored beats, requirements, stable choice
 ids and AI intent. With `--session`, it also evaluates availability and reports

@@ -6,9 +6,11 @@ import {
   getSessionInfo,
   hasSave,
   loadState,
+  loadDevelopmentStatus,
   pollExternalState,
   saveState,
   type WebSessionInfo,
+  type WebDevelopmentStatus,
 } from "./session";
 import { WebPlayScreen } from "./WebPlayScreen";
 
@@ -19,6 +21,7 @@ interface Loaded {
   sessionInfo: WebSessionInfo;
   revision: number;
   initialState?: ComposedState;
+  developmentStatus?: WebDevelopmentStatus;
 }
 
 export function App() {
@@ -107,6 +110,37 @@ export function App() {
     };
   }, [loaded?.id, loaded?.sessionInfo.mode, refreshSessions]);
 
+  useEffect(() => {
+    if (!loaded || loaded.sessionInfo.mode !== "shared") return;
+    let cancelled = false;
+    let checking = false;
+    const poll = async () => {
+      if (checking || cancelled) return;
+      checking = true;
+      try {
+        const status = await loadDevelopmentStatus(loaded.id);
+        if (cancelled || !status) return;
+        setLoaded((current) =>
+          current && current.id === loaded.id &&
+              current.developmentStatus?.revision !== status.revision
+            ? { ...current, developmentStatus: status }
+            : current
+        );
+      } catch {
+        // Development status is advisory. Gameplay and session CAS remain live
+        // even when a code scan briefly races an editor write.
+      } finally {
+        checking = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loaded?.id, loaded?.sessionInfo.mode]);
+
   const exit = useCallback(() => {
     setLoaded(null);
     void refreshSessions();
@@ -125,6 +159,7 @@ export function App() {
         {...(loaded.initialState ? { initialState: loaded.initialState } : {})}
         onCommit={(state, event) => saveState(loaded.id, state, event)}
         sessionLabel={loaded.sessionInfo.label}
+        developmentStatus={loaded.developmentStatus}
         onExit={exit}
       />
     );

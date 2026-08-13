@@ -31,6 +31,13 @@ export type {
   SweepConvergenceResult,
   SweepResult,
 } from "./commands/sweep";
+export { findCurrentQualityAuditCertificate } from "./commands/quality-certificate";
+export type {
+  CurrentQualityAuditCertificate,
+  QualityAuditCertificate,
+} from "./commands/quality-certificate";
+export { collectProjectDevelopmentStatus } from "./commands/project-status";
+export type { ProjectDevelopmentStatus } from "./commands/project-status";
 export {
   compactCheckpointsCommand,
   formatCheckpointCompaction,

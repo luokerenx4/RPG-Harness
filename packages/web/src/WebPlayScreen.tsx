@@ -34,7 +34,7 @@ import {
 } from "@rpg-harness/frontend-core";
 import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
-import type { WebStepEvent } from "./session";
+import type { WebDevelopmentStatus, WebStepEvent } from "./session";
 
 // The browser twin of packages/cli/src/components/PlayScreen.tsx. Same
 // engine pump (new Engine → run() → next(input)), same screen-model
@@ -61,6 +61,7 @@ interface Props {
     event?: WebStepEvent,
   ) => void | Promise<void>;
   sessionLabel?: string;
+  developmentStatus?: WebDevelopmentStatus;
   onExit?: () => void;
 }
 
@@ -84,6 +85,7 @@ export function WebPlayScreen({
   initialState,
   onCommit,
   sessionLabel,
+  developmentStatus,
   onExit,
 }: Props) {
   const [model, dispatch] = useReducer(modelReducer, initialModel);
@@ -228,6 +230,7 @@ export function WebPlayScreen({
             ⛓ {sessionLabel}
           </span>
         )}
+        {developmentStatus && <DevelopmentBadge status={developmentStatus} />}
         {onExit && (
           <button className="hud-btn" onClick={onExit}>
             ← 主菜单
@@ -249,6 +252,35 @@ export function WebPlayScreen({
         <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
       )}
     </div>
+  );
+}
+
+export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
+  const clean = status.worklist.total === 0;
+  const certified = status.quality.status === "certified";
+  const label = !clean
+    ? `AI Dev · ${status.worklist.total} pending${status.worklist.highestPriority ? ` · ${status.worklist.highestPriority}` : ""}`
+    : certified
+      ? `AI Dev · certified · ${status.quality.endings} endings / ${status.quality.paths} paths`
+      : "AI Dev · clean · audit pending";
+  const detail = !clean
+    ? [
+        `${status.worklist.executable} executable · ${status.worklist.diagnostic} diagnostic · ${status.worklist.authoring} authoring`,
+        status.worklist.next
+          ? `Next: ${status.worklist.next.title} (${status.worklist.next.key})`
+          : undefined,
+      ].filter(Boolean).join("\n")
+    : certified
+      ? `Current game/runtime inputs passed AI audit.\nCertificate: ${status.quality.certificateRevision}`
+      : "No worklist items remain, but current game/runtime inputs have no matching AI audit certificate.";
+  return (
+    <span
+      className={`hud-development ${!clean ? "pending" : certified ? "certified" : "uncertified"}`}
+      title={detail}
+      role="status"
+    >
+      {label}
+    </span>
   );
 }
 

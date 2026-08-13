@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AiAuditConfig } from "@rpg-harness/engine";
+import { loadGame } from "../loader";
 import type { ProjectQualityAuditSummary } from "./sweep";
 
 export interface QualityAuditInputs {
@@ -19,6 +20,11 @@ export interface QualityAuditCertificate {
   createdAt: string;
   sessionPrefix: string;
   audit: ProjectQualityAuditSummary;
+}
+
+export interface CurrentQualityAuditCertificate {
+  certificate: QualityAuditCertificate;
+  file: string;
 }
 
 interface QualityAuditCertificatePayload {
@@ -168,6 +174,75 @@ export async function readQualityAuditCertificate(
     certificate.audit?.qualityGate?.status !== "passed"
   ) return null;
   return { certificate, file };
+}
+
+/** Find the newest intact certificate whose exact game/evaluator inputs still match. */
+export async function findCurrentQualityAuditCertificate(
+  gameDir: string,
+): Promise<CurrentQualityAuditCertificate | null> {
+  const objectsDir = path.join(
+    gameDir,
+    ".rpg-harness",
+    "evidence",
+    "quality",
+    "objects",
+  );
+  let entries: string[];
+  try {
+    entries = (await readdir(objectsDir))
+      .filter((entry) => /^[a-f0-9]{64}\.json$/.test(entry))
+      .sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const game = await loadGame(gameDir);
+  const currentByInputs = new Map<string, string>();
+  const candidates: CurrentQualityAuditCertificate[] = [];
+  for (const entry of entries) {
+    const file = path.join(objectsDir, entry);
+    let value: unknown;
+    try {
+      value = JSON.parse(await readFile(file, "utf-8"));
+    } catch {
+      continue;
+    }
+    if (!isRecord(value) || value.schemaVersion !== 1) continue;
+    const certificate = value as unknown as QualityAuditCertificate;
+    const filenameRevision = entry.slice(0, -".json".length);
+    if (
+      certificate.revision !== filenameRevision ||
+      certificateRevision(withoutRevision(certificate)) !== certificate.revision ||
+      certificate.audit?.qualityGate?.status !== "passed"
+    ) continue;
+    const policy = certificate.audit.qualityGate.policy;
+    const personas = certificate.audit.lanes.map((lane) => lane.persona);
+    if (
+      !game.aiAudit ||
+      canonicalJson(game.aiAudit) !== canonicalJson(policy) ||
+      personas.length === 0
+    ) continue;
+    const inputs: QualityAuditInputs = {
+      personas,
+      policy,
+      maxSteps: certificate.audit.maxSteps,
+      maxSegments: certificate.audit.maxSegments,
+      seed: certificate.audit.seed,
+    };
+    const inputsKey = canonicalJson(inputs);
+    let currentRevision = currentByInputs.get(inputsKey);
+    if (!currentRevision) {
+      currentRevision = await qualityAuditInputRevision(gameDir, inputs);
+      currentByInputs.set(inputsKey, currentRevision);
+    }
+    if (currentRevision === certificate.inputRevision) {
+      candidates.push({ certificate, file });
+    }
+  }
+  candidates.sort((left, right) =>
+    right.certificate.createdAt.localeCompare(left.certificate.createdAt)
+  );
+  return candidates[0] ?? null;
 }
 
 export async function writeQualityAuditCertificate(
