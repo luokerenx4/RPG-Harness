@@ -152,7 +152,7 @@ export function formatAiTurnReceipt(receipt: WebAiTurnReceipt): string {
     return `${explainedAction ? `${explainedAction}；` : ""}AI 落子后其他界面又推进了会话；已显示最新画面，下一手归玩家。`;
   }
   if (receipt.ending) {
-    return `${explainedAction ? `${explainedAction}；` : ""}到达结局 ${receipt.ending}。下一手归玩家。`;
+    return `${explainedAction ? `${explainedAction}；` : ""}到达结局 ${receipt.ending}。当前存档已封存；可从 checkpoint 探索其他分支。`;
   }
   if (receipt.rejectedInputs > 0) {
     return `输入被拒绝 ${receipt.rejectedInputs} 次，剧情未被覆盖。下一手归玩家。`;

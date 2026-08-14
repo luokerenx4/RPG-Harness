@@ -48,6 +48,30 @@ describe("Web terminal handoff", () => {
     })).toBe("选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。");
   });
 
+  test("seals a terminal AI turn instead of promising another player input", () => {
+    expect(formatAiTurnReceipt({
+      persona: "completionist",
+      seed: 17,
+      nextSeed: null,
+      reason: "completed",
+      decisions: 1,
+      rejectedInputs: 0,
+      steps: 2,
+      ending: "ending_oni_self",
+      lastAction: { type: "next" },
+      decisionBasis: null,
+      progress: {
+        madeProgress: true,
+        completedScripts: { count: 1, recent: ["ending_oni_self"] },
+        objectiveChanges: { count: 0, recent: [] },
+      },
+      advancedAfterTurn: false,
+      state: {} as never,
+    })).toBe(
+      "推进文本；到达结局 ending_oni_self。当前存档已封存；可从 checkpoint 探索其他分支。",
+    );
+  });
+
   test("shows an auditable public objective basis for an AI activity", () => {
     expect(formatAiTurnReceipt({
       persona: "completionist",
@@ -166,7 +190,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -206,6 +230,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "bounded-ai-coplay",
         text: "执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」；当前 7 项可选）。下一手归玩家。",
+      }, {
+        surface: "terminal-ai-coplay",
+        text: "推进文本；到达结局 ending_oni_self。当前存档已封存；可从 checkpoint 探索其他分支。",
       }, {
         surface: "choice-ai-coplay",
         text: "选择「鎮魂法で、毎晩二十押し返す」（公开证据：当步规则：公開方針に合う「loyal」の応答を選ぶ；回应意图：loyal / disciplined；同题 3 项可选）。下一手归玩家。",

@@ -7,7 +7,7 @@ import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceip
 import { isExternalSessionInputSource, requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 19;
+  schemaVersion: 20;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -27,6 +27,7 @@ export interface WebQualitySurfaceEvidence {
       | "ai-choice-backlog"
       | "branch-control-handoff"
       | "bounded-ai-coplay"
+      | "terminal-ai-coplay"
       | "choice-ai-coplay"
       | "persistent-ai-coplay"
       | "external-headless-sync"
@@ -166,6 +167,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(aiChoiceBacklogProjection());
   projections.push(branchControlHandoffProjection());
   projections.push(boundedAiCoplayProjection());
+  projections.push(terminalAiCoplayProjection());
   projections.push(choiceAiCoplayProjection());
   projections.push(persistentAiCoplayProjection());
   projections.push(externalHeadlessSyncProjection());
@@ -177,13 +179,39 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function terminalAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const text = formatAiTurnReceipt({
+    persona: "completionist",
+    seed: 17,
+    nextSeed: null,
+    reason: "completed",
+    decisions: 1,
+    rejectedInputs: 0,
+    steps: 2,
+    ending: "ending_oni_self",
+    lastAction: { type: "next" },
+    decisionBasis: null,
+    progress: {
+      madeProgress: true,
+      completedScripts: { count: 1, recent: ["ending_oni_self"] },
+      objectiveChanges: { count: 0, recent: [] },
+    },
+    advancedAfterTurn: false,
+    state: {} as never,
+  });
+  if (text.includes("下一手归玩家") || !text.includes("checkpoint 探索其他分支")) {
+    throw new Error("Terminal Web AI receipt promises an impossible player turn");
+  }
+  return { surface: "terminal-ai-coplay", text };
 }
 
 function externalHeadlessSyncProjection(): WebQualitySurfaceEvidence["projections"][number] {
