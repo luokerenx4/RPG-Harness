@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 16;
+  schemaVersion: 17;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -319,6 +319,7 @@ export interface QualitySurfaceEvidence {
       | "ai-choice-backlog"
       | "branch-control-handoff"
       | "bounded-ai-coplay"
+      | "choice-ai-coplay"
       | "persistent-ai-coplay"
       | "shareable-game-route"
       | "feedback-live-routing";
@@ -372,6 +373,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "bounded-ai-coplay",
   text: "执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」；当前 7 项可选）。下一手归玩家。",
+}, {
+  surface: "choice-ai-coplay",
+  text: "选择「鎮魂法で、毎晩二十押し返す」（公开证据：当步规则：公開方針に合う「loyal」の応答を選ぶ；回应意图：loyal / disciplined；同题 3 项可选）。下一手归玩家。",
 }, {
   surface: "persistent-ai-coplay",
   text: "random@2718 · web · state 56e32233d741",
@@ -699,7 +703,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 16 &&
+    value.schemaVersion === 17 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

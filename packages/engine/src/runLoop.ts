@@ -339,7 +339,7 @@ export async function runLoop(
         );
         if (isAiPersonaDecision(decision)) {
           nextInput = decision.input;
-          nextPublicIntent = validatePublicIntent(decision.publicIntent);
+          nextPublicIntent = validateAiPublicIntent(decision.publicIntent);
         } else {
           nextInput = decision;
         }
@@ -428,7 +428,10 @@ function isAiPersonaDecision(
   return value !== null && typeof value === "object" && "input" in value;
 }
 
-function validatePublicIntent(value: string | undefined): string | undefined {
+/** Normalize the author-owned rule exposed beside an AI decision. */
+export function validateAiPublicIntent(
+  value: string | undefined,
+): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error("AI persona publicIntent must be a non-empty string");

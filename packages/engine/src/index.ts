@@ -49,6 +49,7 @@ export {
   searchForChoice,
   searchForScript,
 } from "./search";
+export { validateAiPublicIntent } from "./runLoop";
 export type {
   ChoiceSearchOptions,
   ChoiceSearchProgress,

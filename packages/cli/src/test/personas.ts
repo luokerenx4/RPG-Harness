@@ -1,4 +1,5 @@
 import type {
+  AiPersonaDecision,
   AiPersonaDecider,
   AiPersonaDefinition,
   Game,
@@ -19,6 +20,8 @@ export interface PersonaChoiceDecision {
   input: Input;
   optionIndex: number | null;
   optionId: string | null;
+  /** Project-authored player-visible rule, never private reasoning. */
+  publicIntent?: string;
   reason:
     | {
         kind: "semantic-tags";
@@ -91,6 +94,7 @@ function choiceDecision(
     input: chooseOption(output, index),
     optionIndex: index,
     optionId: output.options[index]?.id ?? null,
+    publicIntent: publicChoiceIntent(reason),
     reason,
   };
 }
@@ -100,7 +104,38 @@ function noAvailableChoice(): PersonaChoiceDecision {
     input: { type: "quit" },
     optionIndex: null,
     optionId: null,
+    publicIntent: "没有可选回答，因此停止推进",
     reason: { kind: "no-available-option" },
+  };
+}
+
+function publicChoiceIntent(
+  reason: PersonaChoiceDecision["reason"],
+): string {
+  switch (reason.kind) {
+    case "semantic-tags":
+      return `选择符合公开偏好的「${reason.matchedTags.join(" / ")}」回答`;
+    case "ai-priority":
+      return reason.explicit
+        ? `选择作者优先级 ${reason.priority} 的回答`
+        : "未标注作者优先级，选择首个可用回答";
+    case "positional-fallback":
+      return `没有匹配的语义标签，选择${({ first: "首个", second: "第二个", last: "最后一个" } as const)[reason.position]}可用回答`;
+    case "registered-persona":
+      return reason.description;
+    case "no-available-option":
+      return "没有可选回答，因此停止推进";
+  }
+}
+
+function explainableChoice(
+  persona: DeterministicChoicePersona,
+  output: Extract<Output, { type: "choice" }>,
+): AiPersonaDecision {
+  const decision = explainPersonaChoice(persona, output);
+  return {
+    input: decision.input,
+    ...(decision.publicIntent ? { publicIntent: decision.publicIntent } : {}),
   };
 }
 
@@ -297,7 +332,7 @@ export const personas: Record<string, Persona> = {
   // Renderer-neutral AI: follow only the public objective contract. It does
   // not inspect module-specific state or hard-code story thresholds.
   objective: async (output) => {
-    if (output.type === "choice") return explainPersonaChoice("objective", output).input;
+    if (output.type === "choice") return explainableChoice("objective", output);
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -310,7 +345,7 @@ export const personas: Record<string, Persona> = {
   },
 
   greedy: async (output) => {
-    if (output.type === "choice") return explainPersonaChoice("greedy", output).input;
+    if (output.type === "choice") return explainableChoice("greedy", output);
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;
@@ -358,7 +393,7 @@ export const personas: Record<string, Persona> = {
 
   charmer: async (output) => {
     if (output.type === "choice") {
-      return explainPersonaChoice("charmer", output).input;
+      return explainableChoice("charmer", output);
     }
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
@@ -405,7 +440,7 @@ export const personas: Record<string, Persona> = {
 
   rude: async (output) => {
     if (output.type === "choice") {
-      return explainPersonaChoice("rude", output).input;
+      return explainableChoice("rude", output);
     }
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
@@ -441,7 +476,10 @@ export const personas: Record<string, Persona> = {
         .filter(({ o }) => o.available);
       if (available.length === 0) return { type: "quit" };
       const pick = available[Math.floor(rng() * available.length)]!;
-      return chooseOption(output, pick.i);
+      return {
+        input: chooseOption(output, pick.i),
+        publicIntent: `按会话种子在 ${available.length} 个可选回答中抽样`,
+      };
     }
     if (output.type === "scriptComplete") {
       if (output.nextAvailable.length === 0) return null;
@@ -490,7 +528,7 @@ export const personas: Record<string, Persona> = {
         return { type: "doActivity", id: activities[firstAvail]!.id };
       return { type: "quit" };
     }
-    if (output.type === "choice") return explainPersonaChoice("hunter", output).input;
+    if (output.type === "choice") return explainableChoice("hunter", output);
     if (output.type === "scriptComplete") {
       const first = output.nextAvailable[0];
       return first ? { type: "select", scriptId: first.id } : null;

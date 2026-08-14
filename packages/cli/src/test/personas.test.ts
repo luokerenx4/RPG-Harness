@@ -63,7 +63,10 @@ describe("objective persona choice preference", () => {
 
     await expect(
       personas.objective!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "choose", index: 2 });
+    ).resolves.toEqual({
+      input: { type: "choose", index: 2 },
+      publicIntent: "选择作者优先级 20 的回答",
+    });
   });
 
   test("keeps first-available behavior when priorities tie", async () => {
@@ -78,7 +81,10 @@ describe("objective persona choice preference", () => {
 
     await expect(
       personas.objective!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "choose", index: 1 });
+    ).resolves.toEqual({
+      input: { type: "choose", index: 1 },
+      publicIntent: "未标注作者优先级，选择首个可用回答",
+    });
   });
 
   test("follows main scope even when a mastery objective is listed first", async () => {
@@ -280,7 +286,10 @@ describe("charmer persona exploration", () => {
     };
     await expect(
       personas.charmer!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "choose", choiceId: "coda", optionId: "friend" });
+    ).resolves.toEqual({
+      input: { type: "choose", choiceId: "coda", optionId: "friend" },
+      publicIntent: "选择符合公开偏好的「social」回答",
+    });
   });
 
   test("takes a recommended public action before its usual last activity", async () => {
@@ -454,7 +463,10 @@ describe("rude persona progression", () => {
     };
     await expect(
       personas.rude!(output, {} as ComposedState, 0),
-    ).resolves.toEqual({ type: "choose", choiceId: "coda", optionId: "alone" });
+    ).resolves.toEqual({
+      input: { type: "choose", choiceId: "coda", optionId: "alone" },
+      publicIntent: "选择符合公开偏好的「independent」回答",
+    });
   });
 
   test("keeps second-choice dialogue behavior but follows the hub objective", async () => {

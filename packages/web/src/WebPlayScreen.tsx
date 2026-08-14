@@ -168,6 +168,20 @@ function formatAiPublicDecisionBasis(
   } else {
     facts.push(`策略：${basis.policyDescription}`);
   }
+  if (basis.kind === "choice-evidence") {
+    if (basis.aiTags.length > 0) {
+      facts.push(`回应意图：${basis.aiTags.join(" / ")}`);
+    }
+    if (basis.aiPriority !== undefined) {
+      facts.push(`作者优先级：${basis.aiPriority}`);
+    }
+    facts.push(
+      basis.availableOptions > 1
+        ? `同题 ${basis.availableOptions} 项可选`
+        : "当前唯一可选回应",
+    );
+    return `公开证据：${facts.join("；")}`;
+  }
   if (basis.objectives.length > 0) {
     const titles = basis.objectives.map(({ title }) => `「${title}」`).join("、");
     const omitted = basis.totalObjectives - basis.objectives.length;
@@ -196,14 +210,21 @@ function formatAiPublicAction(
     case "next":
       return "推进文本";
     case "choose":
-      return `选择「${action.text ?? action.optionId ?? "选项"}」`;
+      return `选择${quotePublicLabel(action.text ?? action.optionId ?? "选项")}`;
     case "select":
-      return `进入「${action.title ?? action.scriptId}」`;
+      return `进入${quotePublicLabel(action.title ?? action.scriptId)}`;
     case "doActivity":
-      return `执行「${action.title ?? action.id}」`;
+      return `执行${quotePublicLabel(action.title ?? action.id)}`;
     case "quit":
       return "选择退出";
   }
+}
+
+function quotePublicLabel(value: string): string {
+  const normalized = value.trim();
+  return normalized.startsWith("「") && normalized.endsWith("」")
+    ? normalized
+    : `「${normalized}」`;
 }
 
 export function WebPlayScreen({

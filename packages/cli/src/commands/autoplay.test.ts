@@ -70,12 +70,19 @@ describe("autoplay semantic decision paths", () => {
       { input: null, output: choice },
       {
         input: { type: "choose", choiceId: "opening", optionId: "beta" },
-        decision: { scriptId: "intro", choiceId: "opening", optionId: "beta" },
+        decision: {
+          scriptId: "intro",
+          choiceId: "opening",
+          optionId: "beta",
+          optionText: "Walk the moonlit road",
+          availableOptions: 2,
+        },
         inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
         output: { type: "narration", text: "Moonlight" },
       },
     ])).toEqual({
       type: "choose",
+      scriptId: "intro",
       choiceId: "opening",
       optionId: "beta",
       text: "Walk the moonlit road",
@@ -210,6 +217,51 @@ describe("autoplay semantic decision paths", () => {
       recommended: false,
       availableActivities: 1,
       sameCategoryActivities: 1,
+    });
+  });
+
+  test("binds public choice evidence to stable script, choice and option ids", () => {
+    const choice: Output = {
+      type: "choice",
+      scriptId: "bond_kagari_03",
+      choiceId: "answer-how-the-blade-sleeps",
+      options: [
+        { id: "avoid-dreams", text: "Avoid dreams", available: true, aiTags: ["restrained"] },
+        { id: "use-chinkonho-nightly", text: "Use the rite", available: true, aiTags: ["loyal", "disciplined"], aiPriority: 4 },
+        { id: "do-not-sleep", text: "Do not sleep", available: false, aiTags: ["defiant"] },
+      ],
+    };
+    expect(summarizeLastPublicDecisionBasis([
+      { input: null, output: choice },
+      {
+        input: {
+          type: "choose",
+          choiceId: "answer-how-the-blade-sleeps",
+          optionId: "use-chinkonho-nightly",
+        },
+        decision: {
+          scriptId: "bond_kagari_03",
+          choiceId: "answer-how-the-blade-sleeps",
+          optionId: "use-chinkonho-nightly",
+          optionText: "Use the rite",
+          aiTags: ["loyal", "disciplined"],
+          aiPriority: 4,
+          availableOptions: 2,
+        },
+        publicIntent: "Prefer the loyal and disciplined answer",
+        inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
+        output: { type: "dialogue", speakerId: "kagari", speakerName: "Kagari", text: "Good." },
+      },
+    ], "Complete every relationship route")).toEqual({
+      kind: "choice-evidence",
+      scriptId: "bond_kagari_03",
+      choiceId: "answer-how-the-blade-sleeps",
+      optionId: "use-chinkonho-nightly",
+      policyDescription: "Complete every relationship route",
+      publicIntent: "Prefer the loyal and disciplined answer",
+      aiTags: ["loyal", "disciplined"],
+      aiPriority: 4,
+      availableOptions: 2,
     });
   });
 
@@ -386,6 +438,8 @@ describe("autoplay semantic decision paths", () => {
           scriptId: "route",
           choiceId: "fork",
           optionId: "left",
+          optionText: "Left",
+          availableOptions: 1,
         },
       },
     ];
@@ -586,7 +640,13 @@ describe("autoplay semantic decision paths", () => {
       {
         input: { type: "choose", index: 2 },
         inputResult: { accepted: true, code: "accepted", message: "accepted", expected: [] },
-        decision: { scriptId: "intro", choiceId: "route", optionId: "third" },
+        decision: {
+          scriptId: "intro",
+          choiceId: "route",
+          optionId: "third",
+          optionText: "Third",
+          availableOptions: 3,
+        },
       },
       { input: { type: "next" } },
     ]);
@@ -625,7 +685,13 @@ describe("autoplay semantic decision paths", () => {
       },
       {
         input: { type: "choose", choiceId: "route", optionId: "third" },
-        decision: { scriptId: "intro", choiceId: "route", optionId: "third" },
+        decision: {
+          scriptId: "intro",
+          choiceId: "route",
+          optionId: "third",
+          optionText: "Third",
+          availableOptions: 3,
+        },
       },
     ]);
 

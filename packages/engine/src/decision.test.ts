@@ -18,6 +18,8 @@ describe("choice decision context", () => {
       scriptRevision: "rev-2",
       choiceId: "route",
       optionId: "friends",
+      optionText: "Friends",
+      availableOptions: 1,
     });
   });
 
@@ -45,7 +47,56 @@ describe("choice decision context", () => {
       scriptId: "ending",
       choiceId: "route",
       optionId: "friends",
+      optionText: "Friends",
+      availableOptions: 2,
     });
+  });
+
+  test("freezes public choice semantics for later transcripts and coding issues", () => {
+    const consequence = {
+      effects: { switches: { remembered: true } },
+      goto: "friends",
+    };
+    const output = {
+      type: "choice" as const,
+      scriptId: "ending",
+      scriptRevision: "rev-3",
+      choiceId: "route",
+      prompt: "Who remains?",
+      options: [
+        { id: "alone", text: "Alone", available: false },
+        {
+          id: "friends",
+          text: "Stay with friends",
+          available: true,
+          aiTags: ["loyal", "social"],
+          aiPriority: 20,
+          consequence,
+        },
+      ],
+    };
+    const decision = choiceDecisionContext(output, {
+      type: "choose",
+      choiceId: "route",
+      optionId: "friends",
+    });
+
+    expect(decision).toEqual({
+      scriptId: "ending",
+      scriptRevision: "rev-3",
+      choiceId: "route",
+      optionId: "friends",
+      prompt: "Who remains?",
+      optionText: "Stay with friends",
+      aiTags: ["loyal", "social"],
+      aiPriority: 20,
+      consequence,
+      availableOptions: 1,
+    });
+    output.options[1]!.aiTags![0] = "mutated";
+    consequence.goto = "mutated";
+    expect(decision?.aiTags).toEqual(["loyal", "social"]);
+    expect(decision?.consequence?.goto).toBe("friends");
   });
 
   test("rejects stale, locked, and ambiguous stable inputs", () => {

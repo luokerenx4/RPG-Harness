@@ -297,7 +297,66 @@ describe("session co-play lineage", () => {
         availableActivities: 1,
         sameCategoryActivities: 1,
       },
-    })).rejects.toThrow("must match its public activity");
+    })).rejects.toThrow("must match its public action");
+  });
+
+  test("binds choice evidence to the exact stable option", async () => {
+    const gameDir = await temporaryGame();
+    await expect(writeSessionCoPlayControl({
+      gameDir,
+      session: "web",
+      persona: "completionist",
+      nextSeed: 17,
+      state: { turn: 1 },
+      controller: "autoplay:completionist",
+      lastAction: {
+        type: "choose",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "leave",
+        text: "Leave",
+      },
+      decisionBasis: {
+        kind: "choice-evidence",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "stay",
+        policyDescription: "Finish the relationship route",
+        aiTags: ["loyal"],
+        availableOptions: 2,
+      },
+    })).rejects.toThrow("must match its public action");
+
+    const written = await writeSessionCoPlayControl({
+      gameDir,
+      session: "web",
+      persona: "completionist",
+      nextSeed: 17,
+      state: { turn: 1 },
+      controller: "autoplay:completionist",
+      lastAction: {
+        type: "choose",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "stay",
+        text: "Stay",
+      },
+      decisionBasis: {
+        kind: "choice-evidence",
+        scriptId: "scene",
+        choiceId: "reply",
+        optionId: "stay",
+        policyDescription: "Finish the relationship route",
+        publicIntent: "Choose the loyal reply",
+        aiTags: ["loyal"],
+        availableOptions: 2,
+      },
+    });
+    expect(written.decisionBasis).toMatchObject({
+      kind: "choice-evidence",
+      choiceId: "reply",
+      optionId: "stay",
+    });
   });
 });
 

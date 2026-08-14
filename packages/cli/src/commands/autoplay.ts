@@ -210,6 +210,7 @@ export type AutoplayPublicAction =
   | { type: "next" }
   | {
       type: "choose";
+      scriptId?: string;
       choiceId?: string;
       optionId?: string;
       text: string;
@@ -1182,7 +1183,12 @@ export function summarizeDecisionPath(
   for (const entry of trace) {
     if (entry.inputResult?.accepted !== false) {
       if (entry.decision) {
-        decisions.push({ type: "choose", ...entry.decision });
+        decisions.push({
+          type: "choose",
+          scriptId: entry.decision.scriptId,
+          choiceId: entry.decision.choiceId,
+          optionId: entry.decision.optionId,
+        });
       } else if (entry.input?.type === "select") {
         decisions.push({ type: "select", scriptId: entry.input.scriptId });
       } else if (entry.input?.type === "doActivity") {
@@ -1285,6 +1291,9 @@ export function summarizeLastPublicAction(
           );
           lastAction = {
             type: "choose",
+            ...(entry.decision?.scriptId
+              ? { scriptId: entry.decision.scriptId }
+              : {}),
             ...(entry.decision?.choiceId ?? choice?.choiceId
               ? { choiceId: entry.decision?.choiceId ?? choice?.choiceId }
               : {}),
@@ -1331,14 +1340,14 @@ export function summarizeLastPublicAction(
 /**
  * Summarize an auditable public reason without exposing persona internals.
  *
- * The basis is reconstructed only from the preceding authored Hub plus the
- * persona's explicit public intent. Labels are bounded for transport; the
- * persisted Hub output, activityDecision and publicIntent remain authority.
+ * The basis is reconstructed only from the preceding authored Hub/Choice plus
+ * the persona's explicit public intent. Labels are bounded for transport; the
+ * persisted public output, semantic decision and publicIntent remain authority.
  */
 export function summarizeLastPublicDecisionBasis(
   trace: ReadonlyArray<Pick<
     TraceEntry,
-    "input" | "inputResult" | "output" | "publicIntent"
+    "input" | "inputResult" | "output" | "decision" | "publicIntent"
   >>,
   policyDescription: string,
 ): AutoplayPublicDecisionBasis | undefined {
@@ -1406,6 +1415,40 @@ export function summarizeLastPublicDecisionBasis(
         ...(forecast ? { forecast: boundPublicText(forecast, 480) } : {}),
         availableActivities: available.length,
         sameCategoryActivities,
+      };
+    } else if (
+      entry.input?.type === "choose" &&
+      entry.inputResult?.accepted !== false &&
+      previousOutput?.type === "choice" &&
+      previousOutput.scriptId && previousOutput.choiceId &&
+      entry.decision?.scriptId === previousOutput.scriptId &&
+      entry.decision.choiceId === previousOutput.choiceId
+    ) {
+      const option = previousOutput.options.find(
+        ({ id }) => id === entry.decision!.optionId,
+      );
+      if (!option?.id || option.available !== true) {
+        previousOutput = entry.output;
+        continue;
+      }
+      lastBasis = {
+        kind: "choice-evidence",
+        scriptId: entry.decision.scriptId,
+        choiceId: entry.decision.choiceId,
+        optionId: entry.decision.optionId,
+        policyDescription: boundPublicText(policyDescription, 320),
+        ...(entry.publicIntent
+          ? { publicIntent: boundPublicText(entry.publicIntent, 320) }
+          : {}),
+        aiTags: (option.aiTags ?? [])
+          .slice(0, 8)
+          .map((tag) => boundPublicText(tag, 80)),
+        ...(option.aiPriority !== undefined
+          ? { aiPriority: option.aiPriority }
+          : {}),
+        availableOptions: previousOutput.options.filter(
+          ({ available }) => available,
+        ).length,
       };
     } else if (entry.input && entry.inputResult?.accepted !== false) {
       lastBasis = undefined;

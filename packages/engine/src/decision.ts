@@ -1,10 +1,23 @@
-import type { Input, Output } from "./types";
+import type { Input, Output, RenderedChoice } from "./types";
 
+/**
+ * Renderer-neutral meaning of an accepted authored choice.
+ *
+ * Stable ids make the input replayable. The remaining public fields freeze
+ * enough authored meaning for a transcript or coding issue to explain the
+ * decision even after the surrounding choice menu has been trimmed.
+ */
 export interface ChoiceDecisionContext {
   scriptId: string;
   scriptRevision?: string;
   choiceId: string;
   optionId: string;
+  prompt?: string;
+  optionText: string;
+  aiTags?: string[];
+  aiPriority?: number;
+  consequence?: RenderedChoice["consequence"];
+  availableOptions: number;
 }
 
 /**
@@ -66,8 +79,8 @@ export function choiceDecisionContext(
     output.choiceId === undefined
   ) return undefined;
   const index = resolveChoiceInput(output, input);
-  const optionId = index === undefined ? undefined : output.options[index]?.id;
-  return optionId === undefined
+  const option = index === undefined ? undefined : output.options[index];
+  return option?.id === undefined
     ? undefined
     : {
         scriptId: output.scriptId,
@@ -75,7 +88,17 @@ export function choiceDecisionContext(
           ? { scriptRevision: output.scriptRevision }
           : {}),
         choiceId: output.choiceId,
-        optionId,
+        optionId: option.id,
+        ...(output.prompt !== undefined ? { prompt: output.prompt } : {}),
+        optionText: option.text,
+        ...(option.aiTags !== undefined ? { aiTags: [...option.aiTags] } : {}),
+        ...(option.aiPriority !== undefined
+          ? { aiPriority: option.aiPriority }
+          : {}),
+        ...(option.consequence !== undefined
+          ? { consequence: structuredClone(option.consequence) }
+          : {}),
+        availableOptions: output.options.filter(({ available }) => available).length,
       };
 }
 

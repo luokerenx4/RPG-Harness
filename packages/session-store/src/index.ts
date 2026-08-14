@@ -31,12 +31,22 @@ export interface CheckpointedSessionEvent {
 
 export type SessionPublicAction =
   | { type: "next" }
-  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
+  | {
+      type: "choose";
+      scriptId?: string;
+      choiceId?: string;
+      optionId?: string;
+      text?: string;
+    }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
 
-export interface SessionPublicDecisionBasis {
+export type SessionPublicDecisionBasis =
+  | SessionPublicActivityDecisionBasis
+  | SessionPublicChoiceDecisionBasis;
+
+export interface SessionPublicActivityDecisionBasis {
   kind: "activity-evidence";
   /** Stable activity identity whose public Hub contract supplied this basis. */
   activityId: string;
@@ -61,6 +71,23 @@ export interface SessionPublicDecisionBasis {
   forecast?: string;
   availableActivities: number;
   sameCategoryActivities: number;
+}
+
+export interface SessionPublicChoiceDecisionBasis {
+  kind: "choice-evidence";
+  /** Stable replay coordinate; presentation indexes are never sufficient. */
+  scriptId: string;
+  choiceId: string;
+  optionId: string;
+  /** Public author-owned persona policy, not private model reasoning. */
+  policyDescription: string;
+  /** Exact public selection rule the persona attached to this decision. */
+  publicIntent?: string;
+  /** Author-owned semantic vocabulary attached to the selected option. */
+  aiTags: string[];
+  /** Explicit authored preference when the option declares one. */
+  aiPriority?: number;
+  availableOptions: number;
 }
 
 /**
@@ -141,9 +168,8 @@ export async function writeSessionCoPlayControl(args: {
   if (
     args.decisionBasis &&
     (!isSessionPublicDecisionBasis(args.decisionBasis) ||
-      args.lastAction?.type !== "doActivity" ||
-      args.lastAction.id !== args.decisionBasis.activityId)
-  ) throw new Error("Co-play decision basis must match its public activity");
+      !isMatchingSessionDecisionBasis(args.lastAction, args.decisionBasis))
+  ) throw new Error("Co-play decision basis must match its public action");
   const value: SessionCoPlayControl = {
     schemaVersion: 1,
     persona: args.persona,
@@ -224,8 +250,10 @@ function isSessionCoPlayControl(value: unknown): value is SessionCoPlayControl {
     (control.decisionBasis === undefined ||
       (isSessionPublicDecisionBasis(control.decisionBasis) &&
         control.lastAction !== undefined &&
-        control.lastAction.type === "doActivity" &&
-        control.lastAction.id === control.decisionBasis.activityId));
+        isMatchingSessionDecisionBasis(
+          control.lastAction,
+          control.decisionBasis,
+        )));
 }
 
 function isSessionPublicDecisionBasis(
@@ -233,6 +261,27 @@ function isSessionPublicDecisionBasis(
 ): value is SessionPublicDecisionBasis {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const basis = value as Record<string, unknown>;
+  if (basis.kind === "choice-evidence") {
+    return typeof basis.scriptId === "string" && !!basis.scriptId.trim() &&
+      basis.scriptId.length <= 160 &&
+      typeof basis.choiceId === "string" && !!basis.choiceId.trim() &&
+      basis.choiceId.length <= 160 &&
+      typeof basis.optionId === "string" && !!basis.optionId.trim() &&
+      basis.optionId.length <= 160 &&
+      typeof basis.policyDescription === "string" &&
+      !!basis.policyDescription.trim() && basis.policyDescription.length <= 320 &&
+      (basis.publicIntent === undefined ||
+        (typeof basis.publicIntent === "string" &&
+          !!basis.publicIntent.trim() && basis.publicIntent.length <= 320)) &&
+      Array.isArray(basis.aiTags) && basis.aiTags.length <= 8 &&
+      basis.aiTags.every((tag) =>
+        typeof tag === "string" && !!tag.trim() && tag.length <= 80
+      ) &&
+      (basis.aiPriority === undefined ||
+        typeof basis.aiPriority === "number" && Number.isFinite(basis.aiPriority)) &&
+      Number.isSafeInteger(basis.availableOptions) &&
+      (basis.availableOptions as number) >= 1;
+  }
   if (
     basis.kind !== "activity-evidence" ||
     typeof basis.activityId !== "string" || !basis.activityId.trim() ||
@@ -277,6 +326,19 @@ function isSessionPublicDecisionBasis(
   });
 }
 
+function isMatchingSessionDecisionBasis(
+  action: SessionPublicAction | undefined,
+  basis: SessionPublicDecisionBasis,
+): boolean {
+  if (!action) return false;
+  if (basis.kind === "activity-evidence") {
+    return action.type === "doActivity" && action.id === basis.activityId;
+  }
+  return action.type === "choose" &&
+    action.scriptId === basis.scriptId && action.choiceId === basis.choiceId &&
+    action.optionId === basis.optionId;
+}
+
 function isSessionPublicAction(value: unknown): value is SessionPublicAction {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const action = value as Record<string, unknown>;
@@ -285,7 +347,8 @@ function isSessionPublicAction(value: unknown): value is SessionPublicAction {
     case "quit":
       return true;
     case "choose":
-      return (action.choiceId === undefined || typeof action.choiceId === "string") &&
+      return (action.scriptId === undefined || typeof action.scriptId === "string") &&
+        (action.choiceId === undefined || typeof action.choiceId === "string") &&
         (action.optionId === undefined || typeof action.optionId === "string") &&
         (action.text === undefined || typeof action.text === "string");
     case "select":

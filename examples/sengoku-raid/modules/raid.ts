@@ -34,6 +34,7 @@ import {
   explainCondition,
 } from "@rpg-harness/engine";
 import type {
+  AiPersonaDecision,
   ActionContext,
   ActionHandler,
   ActionResult,
@@ -3446,7 +3447,7 @@ const triggers: Trigger[] = [
 function personaChoice(
   output: Extract<Output, { type: "choice" }>,
   preferredTags: readonly string[],
-): Input {
+): AiPersonaDecision {
   const weights = new Map(
     preferredTags.map((tag, index) => [tag, preferredTags.length - index]),
   );
@@ -3466,11 +3467,23 @@ function personaChoice(
   if (bestIndex < 0) {
     bestIndex = output.options.findIndex((option) => option.available);
   }
-  if (bestIndex < 0) return { type: "quit" };
+  if (bestIndex < 0) {
+    return {
+      input: { type: "quit" },
+      publicIntent: "選択可能な物語分岐がないため、進行を停止する",
+    };
+  }
   const option = output.options[bestIndex];
-  return output.choiceId !== undefined && option?.id !== undefined
-    ? { type: "choose", choiceId: output.choiceId, optionId: option.id }
-    : { type: "choose", index: bestIndex };
+  const input = output.choiceId !== undefined && option?.id !== undefined
+    ? { type: "choose" as const, choiceId: output.choiceId, optionId: option.id }
+    : { type: "choose" as const, index: bestIndex };
+  const matchedTags = (option?.aiTags ?? []).filter((tag) => weights.has(tag));
+  return {
+    input,
+    publicIntent: matchedTags.length > 0
+      ? `公開方針に合う「${matchedTags.join(" / ")}」の応答を選ぶ`
+      : "選択可能な最初の物語分岐を進める",
+  };
 }
 
 function personaObjectiveActivity(

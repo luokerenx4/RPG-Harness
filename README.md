@@ -717,8 +717,10 @@ personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/
 Project personas may return either an ordinary `Input` or an
 `AiPersonaDecision` carrying `publicIntent`. This is a short author-owned rule
 safe to show players and persist in Headless evidence—not model chain-of-thought.
-GUI co-play receipts bind that rule to the exact accepted activity and combine
-it with the Hub's objective links, forecast, tags, and number of alternatives.
+GUI co-play receipts bind that rule to the exact accepted activity or stable
+`scriptId/choiceId/optionId`. Activity receipts combine it with the Hub's
+objective links and forecast; choice receipts retain option tags, explicit AI
+priority, and the number of available replies.
 The same evidence survives in transcripts and playtest coding issues, so a
 choice remains explainable when an AI turn later fails or is replayed.
 

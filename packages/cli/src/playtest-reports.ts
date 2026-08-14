@@ -62,6 +62,7 @@ export interface PlaytestEvidence {
     input: unknown;
     output: unknown;
     inputResult?: unknown;
+    decision?: unknown;
     activityDecision?: unknown;
     publicIntent?: string;
   } | null;
@@ -1306,6 +1307,7 @@ export async function capturePlaytestEvidenceSnapshot(
         input?: unknown;
         output?: unknown;
         inputResult?: unknown;
+        decision?: unknown;
         activityDecision?: unknown;
         publicIntent?: unknown;
         replayCheckpoint?: unknown;
@@ -1315,6 +1317,9 @@ export async function capturePlaytestEvidenceSnapshot(
           input: entry.input ?? null,
           output: compactOutput(entry.output),
           ...(entry.inputResult !== undefined ? { inputResult: entry.inputResult } : {}),
+          ...(entry.decision !== undefined
+            ? { decision: compactChoiceDecision(entry.decision) }
+            : {}),
           ...(entry.activityDecision !== undefined
             ? { activityDecision: compactActivityDecision(entry.activityDecision) }
             : {}),
@@ -1354,6 +1359,22 @@ export async function capturePlaytestEvidenceSnapshot(
     ...(replayCheckpoint !== undefined ? { replayCheckpoint } : {}),
     ...(captureErrors.length > 0 ? { captureErrors } : {}),
   };
+}
+
+function compactChoiceDecision(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return pick(value as Record<string, unknown>, [
+    "scriptId",
+    "scriptRevision",
+    "choiceId",
+    "optionId",
+    "prompt",
+    "optionText",
+    "aiTags",
+    "aiPriority",
+    "consequence",
+    "availableOptions",
+  ]);
 }
 
 function compactActivityDecision(value: unknown): unknown {

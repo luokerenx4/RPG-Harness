@@ -16,7 +16,17 @@ export interface TranscriptEvent {
   logEntry: number;
   source?: string;
   input?: unknown;
-  decision?: { scriptId: string; choiceId: string; optionId: string };
+  decision?: {
+    scriptId: string;
+    scriptRevision?: string;
+    choiceId: string;
+    optionId: string;
+    prompt?: string;
+    optionText?: string;
+    aiTags?: string[];
+    aiPriority?: number;
+    availableOptions?: number;
+  };
   activityDecision?: {
     activityId: string;
     title: string;
@@ -261,11 +271,31 @@ function compactOutput(value: unknown): Record<string, unknown> | null {
 
 function stableDecision(value: unknown): TranscriptEvent["decision"] | null {
   if (!isRecord(value)) return null;
-  return typeof value.scriptId === "string" &&
+  if (!(typeof value.scriptId === "string" &&
     typeof value.choiceId === "string" &&
-    typeof value.optionId === "string"
-    ? { scriptId: value.scriptId, choiceId: value.choiceId, optionId: value.optionId }
-    : null;
+    typeof value.optionId === "string")) return null;
+  const aiTags = Array.isArray(value.aiTags) &&
+    value.aiTags.every((tag) => typeof tag === "string")
+    ? value.aiTags as string[]
+    : undefined;
+  return {
+    scriptId: value.scriptId,
+    ...(typeof value.scriptRevision === "string"
+      ? { scriptRevision: value.scriptRevision }
+      : {}),
+    choiceId: value.choiceId,
+    optionId: value.optionId,
+    ...(typeof value.prompt === "string" ? { prompt: value.prompt } : {}),
+    ...(typeof value.optionText === "string" ? { optionText: value.optionText } : {}),
+    ...(aiTags !== undefined ? { aiTags: [...aiTags] } : {}),
+    ...(typeof value.aiPriority === "number" && Number.isFinite(value.aiPriority)
+      ? { aiPriority: value.aiPriority }
+      : {}),
+    ...(typeof value.availableOptions === "number" &&
+      Number.isInteger(value.availableOptions) && value.availableOptions >= 0
+      ? { availableOptions: value.availableOptions }
+      : {}),
+  };
 }
 
 function stableActivityDecision(

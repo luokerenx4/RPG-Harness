@@ -116,11 +116,37 @@ describe("read-only choice policy probe", () => {
     expect(summary.decisions[0]).toMatchObject({
       persona: "project-scout",
       optionId: "help",
+      publicIntent: "Help matches the public scout policy",
       reason: {
         kind: "registered-persona",
         source: "module:probe-project",
       },
     });
+  });
+
+  test("rejects malformed project public intent instead of publishing bad evidence", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await registerProjectPersona(gameDir, " ");
+    const game = await loadGame(gameDir);
+    const waiting = await peek(game, createInitialState(game));
+    const presented = await step(game, waiting.state, {
+      type: "select",
+      scriptId: "intro",
+    });
+    await appendLog(
+      gameDir,
+      "player",
+      { input: { type: "select", scriptId: "intro" }, output: presented.output },
+      presented.state,
+    );
+
+    await expect(runChoiceProbe({
+      gameDir,
+      session: "player",
+      at: 1,
+      personas: ["project-scout"],
+      pretty: false,
+    })).rejects.toThrow("publicIntent must be a non-empty string");
   });
 
   test("rejects a checkpoint whose live output is not a choice", async () => {
@@ -178,7 +204,10 @@ async function writeChoiceScript(gameDir: string, tagged: boolean): Promise<void
   );
 }
 
-async function registerProjectPersona(gameDir: string): Promise<void> {
+async function registerProjectPersona(
+  gameDir: string,
+  publicIntent = "Help matches the public scout policy",
+): Promise<void> {
   await mkdir(path.join(gameDir, "modules"), { recursive: true });
   await writeFile(
     path.join(gameDir, "game.yaml"),
@@ -195,7 +224,10 @@ async function registerProjectPersona(gameDir: string): Promise<void> {
       "      description: 'Choose help',",
       "      decide: async (output) => {",
       "        if (output.type !== 'choice') return { type: 'next' };",
-      "        return { type: 'choose', choiceId: output.choiceId, optionId: 'help' };",
+      "        return {",
+      "          input: { type: 'choose', choiceId: output.choiceId, optionId: 'help' },",
+      `          publicIntent: ${JSON.stringify(publicIntent)},`,
+      "        };",
       "      },",
       "    },",
       "  },",

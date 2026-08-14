@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   createInitialState,
   peek,
+  validateAiPublicIntent,
   type ComposedState,
 } from "@rpg-harness/engine";
 import {
@@ -172,6 +173,9 @@ export async function runChoiceProbe(
       }
       const definition = personaRegistry[persona]!;
       const rawDecision = await definition.decide(output, result.state, args.at);
+      const publicIntent = rawDecision && "input" in rawDecision
+        ? validateAiPublicIntent(rawDecision.publicIntent)
+        : undefined;
       const input = rawDecision && "input" in rawDecision
         ? rawDecision.input
         : rawDecision;
@@ -185,6 +189,7 @@ export async function runChoiceProbe(
         input: input ?? { type: "quit" as const },
         optionIndex: optionIndex >= 0 ? optionIndex : null,
         optionId: optionIndex >= 0 ? output.options[optionIndex]?.id ?? null : null,
+        ...(publicIntent ? { publicIntent } : {}),
         reason: {
           kind: "registered-persona" as const,
           source: definition.source,

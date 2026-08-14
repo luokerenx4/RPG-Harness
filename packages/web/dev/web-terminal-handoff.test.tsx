@@ -106,6 +106,39 @@ describe("Web terminal handoff", () => {
     );
   });
 
+  test("explains a stable story choice with its authored semantics", () => {
+    expect(formatAiTurnReceipt({
+      persona: "completionist",
+      ending: null,
+      lastAction: {
+        type: "choose",
+        scriptId: "bond_kagari_03",
+        choiceId: "answer-how-the-blade-sleeps",
+        optionId: "use-chinkonho-nightly",
+        text: "「鎮魂法で、毎晩二十押し返す」",
+      },
+      decisionBasis: {
+        kind: "choice-evidence",
+        scriptId: "bond_kagari_03",
+        choiceId: "answer-how-the-blade-sleeps",
+        optionId: "use-chinkonho-nightly",
+        policyDescription: "任意目標を完遂してから終局へ進む",
+        publicIntent: "公開方針に合う「loyal / disciplined」の応答を選ぶ",
+        aiTags: ["loyal", "disciplined"],
+        availableOptions: 3,
+      },
+      progress: {
+        madeProgress: false,
+        completedScripts: [],
+        objectiveChanges: [],
+      },
+      advancedAfterTurn: false,
+      state: {} as never,
+    })).toBe(
+      "选择「鎮魂法で、毎晩二十押し返す」（公开证据：当步规则：公開方針に合う「loyal / disciplined」の応答を選ぶ；回应意图：loyal / disciplined；同题 3 项可选）。下一手归玩家。",
+    );
+  });
+
   test("renders player and AI stable selections as story context in backlog", () => {
     const html = renderToStaticMarkup(
       <BacklogOverlay
@@ -125,7 +158,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 16,
+      schemaVersion: 17,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -165,6 +198,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "bounded-ai-coplay",
         text: "执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」；当前 7 项可选）。下一手归玩家。",
+      }, {
+        surface: "choice-ai-coplay",
+        text: "选择「鎮魂法で、毎晩二十押し返す」（公开证据：当步规则：公開方針に合う「loyal」の応答を選ぶ；回应意图：loyal / disciplined；同题 3 项可选）。下一手归玩家。",
       }, {
         surface: "persistent-ai-coplay",
         text: "random@2718 · web · state 56e32233d741",

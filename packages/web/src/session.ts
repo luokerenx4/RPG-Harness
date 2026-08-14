@@ -224,12 +224,16 @@ export interface WebAiTurnReceipt {
 
 export type WebAiPublicAction =
   | { type: "next" }
-  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
+  | { type: "choose"; scriptId?: string; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
 
-export interface WebAiPublicDecisionBasis {
+export type WebAiPublicDecisionBasis =
+  | WebAiPublicActivityDecisionBasis
+  | WebAiPublicChoiceDecisionBasis;
+
+export interface WebAiPublicActivityDecisionBasis {
   kind: "activity-evidence";
   activityId: string;
   policyDescription: string;
@@ -248,6 +252,18 @@ export interface WebAiPublicDecisionBasis {
   forecast?: string;
   availableActivities: number;
   sameCategoryActivities: number;
+}
+
+export interface WebAiPublicChoiceDecisionBasis {
+  kind: "choice-evidence";
+  scriptId: string;
+  choiceId: string;
+  optionId: string;
+  policyDescription: string;
+  publicIntent?: string;
+  aiTags: string[];
+  aiPriority?: number;
+  availableOptions: number;
 }
 
 let infoPromise: Promise<WebSessionInfo> | null = null;
@@ -515,6 +531,7 @@ function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
       return true;
     case "choose":
       return (action.text === undefined || typeof action.text === "string") &&
+        (action.scriptId === undefined || typeof action.scriptId === "string") &&
         (action.choiceId === undefined || typeof action.choiceId === "string") &&
         (action.optionId === undefined || typeof action.optionId === "string");
     case "select":
@@ -533,6 +550,27 @@ function isWebAiPublicDecisionBasis(
 ): value is WebAiPublicDecisionBasis {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const basis = value as Record<string, unknown>;
+  if (basis.kind === "choice-evidence") {
+    return typeof basis.scriptId === "string" && !!basis.scriptId.trim() &&
+      basis.scriptId.length <= 160 &&
+      typeof basis.choiceId === "string" && !!basis.choiceId.trim() &&
+      basis.choiceId.length <= 160 &&
+      typeof basis.optionId === "string" && !!basis.optionId.trim() &&
+      basis.optionId.length <= 160 &&
+      typeof basis.policyDescription === "string" &&
+      !!basis.policyDescription.trim() && basis.policyDescription.length <= 320 &&
+      (basis.publicIntent === undefined ||
+        (typeof basis.publicIntent === "string" &&
+          !!basis.publicIntent.trim() && basis.publicIntent.length <= 320)) &&
+      Array.isArray(basis.aiTags) && basis.aiTags.length <= 8 &&
+      basis.aiTags.every((tag) =>
+        typeof tag === "string" && !!tag.trim() && tag.length <= 80
+      ) &&
+      (basis.aiPriority === undefined ||
+        typeof basis.aiPriority === "number" && Number.isFinite(basis.aiPriority)) &&
+      Number.isSafeInteger(basis.availableOptions) &&
+      (basis.availableOptions as number) >= 1;
+  }
   if (
     basis.kind !== "activity-evidence" ||
     typeof basis.activityId !== "string" || !basis.activityId.trim() ||
@@ -579,8 +617,11 @@ function isMatchingWebDecisionBasis(
   action: unknown,
   basis: WebAiPublicDecisionBasis,
 ): boolean {
-  return isWebAiPublicAction(action) && action.type === "doActivity" &&
-    action.id === basis.activityId;
+  if (!isWebAiPublicAction(action)) return false;
+  return basis.kind === "activity-evidence"
+    ? action.type === "doActivity" && action.id === basis.activityId
+    : action.type === "choose" && action.scriptId === basis.scriptId &&
+      action.choiceId === basis.choiceId && action.optionId === basis.optionId;
 }
 
 function isWebAiControl(value: unknown): value is WebAiControl {

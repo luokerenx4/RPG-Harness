@@ -190,12 +190,16 @@ export interface BridgeAiStatus {
 
 export type BridgeAiPublicAction =
   | { type: "next" }
-  | { type: "choose"; choiceId?: string; optionId?: string; text?: string }
+  | { type: "choose"; scriptId?: string; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
 
-export interface BridgeAiPublicDecisionBasis {
+export type BridgeAiPublicDecisionBasis =
+  | BridgeAiPublicActivityDecisionBasis
+  | BridgeAiPublicChoiceDecisionBasis;
+
+export interface BridgeAiPublicActivityDecisionBasis {
   kind: "activity-evidence";
   activityId: string;
   policyDescription: string;
@@ -214,6 +218,18 @@ export interface BridgeAiPublicDecisionBasis {
   forecast?: string;
   availableActivities: number;
   sameCategoryActivities: number;
+}
+
+export interface BridgeAiPublicChoiceDecisionBasis {
+  kind: "choice-evidence";
+  scriptId: string;
+  choiceId: string;
+  optionId: string;
+  policyDescription: string;
+  publicIntent?: string;
+  aiTags: string[];
+  aiPriority?: number;
+  availableOptions: number;
 }
 
 export async function loadBridgeAiPersonas(
@@ -1250,6 +1266,7 @@ function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
       return true;
     case "choose":
       return (action.text === undefined || typeof action.text === "string") &&
+        (action.scriptId === undefined || typeof action.scriptId === "string") &&
         (action.choiceId === undefined || typeof action.choiceId === "string") &&
         (action.optionId === undefined || typeof action.optionId === "string");
     case "select":
@@ -1268,6 +1285,27 @@ function isBridgeAiPublicDecisionBasis(
 ): value is BridgeAiPublicDecisionBasis {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const basis = value as Record<string, unknown>;
+  if (basis.kind === "choice-evidence") {
+    return typeof basis.scriptId === "string" && !!basis.scriptId.trim() &&
+      basis.scriptId.length <= 160 &&
+      typeof basis.choiceId === "string" && !!basis.choiceId.trim() &&
+      basis.choiceId.length <= 160 &&
+      typeof basis.optionId === "string" && !!basis.optionId.trim() &&
+      basis.optionId.length <= 160 &&
+      typeof basis.policyDescription === "string" &&
+      !!basis.policyDescription.trim() && basis.policyDescription.length <= 320 &&
+      (basis.publicIntent === undefined ||
+        (typeof basis.publicIntent === "string" &&
+          !!basis.publicIntent.trim() && basis.publicIntent.length <= 320)) &&
+      Array.isArray(basis.aiTags) && basis.aiTags.length <= 8 &&
+      basis.aiTags.every((tag) =>
+        typeof tag === "string" && !!tag.trim() && tag.length <= 80
+      ) &&
+      (basis.aiPriority === undefined ||
+        typeof basis.aiPriority === "number" && Number.isFinite(basis.aiPriority)) &&
+      Number.isSafeInteger(basis.availableOptions) &&
+      (basis.availableOptions as number) >= 1;
+  }
   if (
     basis.kind !== "activity-evidence" ||
     typeof basis.activityId !== "string" || !basis.activityId.trim() ||
@@ -1314,8 +1352,11 @@ function isMatchingBridgeDecisionBasis(
   action: unknown,
   basis: BridgeAiPublicDecisionBasis,
 ): boolean {
-  return isBridgeAiPublicAction(action) && action.type === "doActivity" &&
-    action.id === basis.activityId;
+  if (!isBridgeAiPublicAction(action)) return false;
+  return basis.kind === "activity-evidence"
+    ? action.type === "doActivity" && action.id === basis.activityId
+    : action.type === "choose" && action.scriptId === basis.scriptId &&
+      action.choiceId === basis.choiceId && action.optionId === basis.optionId;
 }
 
 function bridgePublicAction(event: BridgeStepEvent): BridgeAiPublicAction | undefined {
@@ -1340,6 +1381,9 @@ function bridgePublicAction(event: BridgeStepEvent): BridgeAiPublicAction | unde
     case "choose":
       return {
         type: "choose",
+        ...(typeof decision?.scriptId === "string"
+          ? { scriptId: decision.scriptId }
+          : {}),
         ...(typeof decision?.choiceId === "string"
           ? { choiceId: decision.choiceId }
           : typeof input.choiceId === "string"

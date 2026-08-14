@@ -7,7 +7,7 @@ import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceip
 import { requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 16;
+  schemaVersion: 17;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -27,6 +27,7 @@ export interface WebQualitySurfaceEvidence {
       | "ai-choice-backlog"
       | "branch-control-handoff"
       | "bounded-ai-coplay"
+      | "choice-ai-coplay"
       | "persistent-ai-coplay"
       | "shareable-game-route"
       | "feedback-live-routing";
@@ -163,6 +164,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(aiChoiceBacklogProjection());
   projections.push(branchControlHandoffProjection());
   projections.push(boundedAiCoplayProjection());
+  projections.push(choiceAiCoplayProjection());
   projections.push(persistentAiCoplayProjection());
   projections.push(shareableGameRouteProjection());
   projections.push(feedbackLiveRoutingProjection());
@@ -171,7 +173,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: "web-input-contract",
     status: "passed",
     revision,
@@ -249,6 +251,50 @@ function boundedAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][n
     throw new Error("Web AI co-play turn is not bounded or auditable");
   }
   return { surface: "bounded-ai-coplay", text };
+}
+
+function choiceAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const text = formatAiTurnReceipt({
+    persona: "completionist",
+    seed: 17,
+    nextSeed: 18,
+    reason: "max-steps",
+    decisions: 1,
+    rejectedInputs: 0,
+    steps: 2,
+    ending: null,
+    lastAction: {
+      type: "choose",
+      scriptId: "bond_kagari_03",
+      choiceId: "answer-how-the-blade-sleeps",
+      optionId: "use-chinkonho-nightly",
+      text: "鎮魂法で、毎晩二十押し返す",
+    },
+    decisionBasis: {
+      kind: "choice-evidence",
+      scriptId: "bond_kagari_03",
+      choiceId: "answer-how-the-blade-sleeps",
+      optionId: "use-chinkonho-nightly",
+      policyDescription: "任意目標を完遂してから終局へ進む",
+      publicIntent: "公開方針に合う「loyal」の応答を選ぶ",
+      aiTags: ["loyal", "disciplined"],
+      availableOptions: 3,
+    },
+    progress: {
+      madeProgress: false,
+      completedScripts: { count: 0, recent: [] },
+      objectiveChanges: { count: 0, recent: [] },
+    },
+    advancedAfterTurn: false,
+    state: {} as never,
+  });
+  if (
+    !text.includes("选择「鎮魂法で、毎晩二十押し返す」") ||
+    !text.includes("当步规则：公開方針に合う「loyal」の応答を選ぶ") ||
+    !text.includes("回应意图：loyal / disciplined") ||
+    !text.includes("同题 3 项可选")
+  ) throw new Error("Web AI co-play choice is not stably auditable");
+  return { surface: "choice-ai-coplay", text };
 }
 
 function feedbackLiveRoutingProjection(): WebQualitySurfaceEvidence["projections"][number] {

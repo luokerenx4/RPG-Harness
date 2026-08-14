@@ -350,6 +350,53 @@ describe("playtest reports", () => {
     });
   });
 
+  test("retains selected choice meaning after the surrounding menu is gone", async () => {
+    const gameDir = await temporaryGame();
+    const session = "choice-decision-contract";
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", session);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "log.jsonl"), JSON.stringify({
+      input: { type: "choose", choiceId: "answer", optionId: "loyal" },
+      decision: {
+        scriptId: "bond_kagari_04",
+        scriptRevision: "b".repeat(64),
+        choiceId: "answer",
+        optionId: "loyal",
+        prompt: "どう眠る？",
+        optionText: "鎮魂法で押し返す",
+        aiTags: ["loyal", "disciplined"],
+        aiPriority: 30,
+        consequence: { effects: { switches: { kagariLoyal: true } }, goto: "loyal" },
+        availableOptions: 3,
+        privateCursor: { beat: 99 },
+      },
+      publicIntent: "公開方針に合う loyal の応答を選ぶ",
+      output: { type: "narration", text: "篝は頷いた。" },
+    }) + "\n");
+
+    const report = await recordPlaytestReport({
+      gameDir,
+      session,
+      area: "narrative",
+      severity: "major",
+      title: "Later scene contradicts the loyal answer",
+    });
+
+    expect(report.evidence.lastEvent?.decision).toEqual({
+      scriptId: "bond_kagari_04",
+      scriptRevision: "b".repeat(64),
+      choiceId: "answer",
+      optionId: "loyal",
+      prompt: "どう眠る？",
+      optionText: "鎮魂法で押し返す",
+      aiTags: ["loyal", "disciplined"],
+      aiPriority: 30,
+      consequence: { effects: { switches: { kagariLoyal: true } }, goto: "loyal" },
+      availableOptions: 3,
+    });
+    expect(JSON.stringify(report.evidence.lastEvent)).not.toContain("privateCursor");
+  });
+
   test("retains selected Hub semantics in compact incident evidence", async () => {
     const gameDir = await temporaryGame();
     const session = "activity-contract";

@@ -462,6 +462,20 @@ describe("sengoku-raid public AI decision evidence", () => {
       publicIntent: "確定撃破で反撃を受けないため、この遭遇を終える",
     });
   });
+
+  test("completionist exposes the semantic rule behind a story reply", async () => {
+    await expect(raidAiPersonas.completionist!.decide(
+      routeChoice(),
+      {
+        baseline: { scripts: {} },
+        "sengoku-raid": { companion: null, achievementLog: [] },
+      } as unknown as ComposedState,
+      0,
+    )).resolves.toEqual({
+      input: { type: "choose", choiceId: "route", optionId: "defy" },
+      publicIntent: "公開方針に合う「defiant / aggressive」の応答を選ぶ",
+    });
+  });
 });
 
 async function decide(

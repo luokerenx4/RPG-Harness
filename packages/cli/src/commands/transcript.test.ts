@@ -50,7 +50,18 @@ describe("session transcript", () => {
           message: "The requested option is locked: bond too low",
           expected: [{ type: "choose", ids: ["alone"] }],
         },
-        decision: { scriptId: "ending", choiceId: "tether", optionId: "friend" },
+        decision: {
+          scriptId: "ending",
+          scriptRevision: "rev-ending",
+          choiceId: "tether",
+          optionId: "friend",
+          prompt: "Who remains?",
+          optionText: "Friend",
+          aiTags: ["social", "loyal"],
+          aiPriority: 20,
+          consequence: { goto: "friend" },
+          availableOptions: 1,
+        },
         output: { type: "narration", text: "friend branch", visualState: { cg: "large.png" } },
         checkpoint: checkpoint("b"),
       },
@@ -93,7 +104,17 @@ describe("session transcript", () => {
     expect(transcript.events[2]).toMatchObject({
       session: "branch",
       logEntry: 2,
-      decision: { scriptId: "ending", choiceId: "tether", optionId: "friend" },
+      decision: {
+        scriptId: "ending",
+        scriptRevision: "rev-ending",
+        choiceId: "tether",
+        optionId: "friend",
+        prompt: "Who remains?",
+        optionText: "Friend",
+        aiTags: ["social", "loyal"],
+        aiPriority: 20,
+        availableOptions: 1,
+      },
       inputResult: {
         accepted: false,
         code: "option-locked",
@@ -107,6 +128,7 @@ describe("session transcript", () => {
     });
     expect(JSON.stringify(transcript)).not.toContain("large.png");
     expect(JSON.stringify(transcript)).not.toContain("parent future");
+    expect(JSON.stringify(transcript)).not.toContain("consequence");
     expect(formatSessionTranscript(transcript)).toContain(
       "decision=ending/tether/friend",
     );
