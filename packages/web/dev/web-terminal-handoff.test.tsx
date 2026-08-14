@@ -23,6 +23,7 @@ describe("Web terminal handoff", () => {
       steps: 2,
       ending: null,
       lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "月影を追う" },
+      decisionBasis: null,
       progress: {
         madeProgress: true,
         completedScripts: { count: 0, recent: [] },
@@ -37,6 +38,36 @@ describe("Web terminal handoff", () => {
       advancedAfterTurn: false,
       state: {} as never,
     })).toBe("选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。");
+  });
+
+  test("shows an auditable public objective basis for an AI activity", () => {
+    expect(formatAiTurnReceipt({
+      persona: "completionist",
+      seed: 17,
+      nextSeed: 18,
+      reason: "max-steps",
+      decisions: 1,
+      rejectedInputs: 0,
+      steps: 2,
+      ending: null,
+      lastAction: { type: "doActivity", id: "rest", title: "宿で休む" },
+      decisionBasis: {
+        kind: "objective-link",
+        activityId: "rest",
+        objectives: [
+          { id: "ending", title: "地獄門の底へ", scope: "main", terminal: true, focused: false },
+          { id: "mastery", title: "地獄門を開く", scope: "mastery", terminal: false, focused: false },
+        ],
+        totalObjectives: 2,
+      },
+      progress: {
+        madeProgress: false,
+        completedScripts: { count: 0, recent: [] },
+        objectiveChanges: { count: 0, recent: [] },
+      },
+      advancedAfterTurn: false,
+      state: {} as never,
+    })).toBe("执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」、「地獄門を開く」明确关联此行动）。下一手归玩家。");
   });
 
   test("renders player and AI stable selections as story context in backlog", () => {
@@ -58,7 +89,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 14,
+      schemaVersion: 15,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -97,7 +128,7 @@ describe("Web terminal handoff", () => {
         text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
       }, {
         surface: "bounded-ai-coplay",
-        text: "选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。",
+        text: "执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」明确关联此行动）。下一手归玩家。",
       }, {
         surface: "persistent-ai-coplay",
         text: "random@2718 · web · state 56e32233d741",

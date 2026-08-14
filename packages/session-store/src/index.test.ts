@@ -43,7 +43,19 @@ describe("session co-play lineage", () => {
         nextSeed: 2718,
         state,
         controller: "autoplay:random",
-        lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "Moon" },
+        lastAction: { type: "doActivity", id: "rest", title: "Rest" },
+        decisionBasis: {
+          kind: "objective-link",
+          activityId: "rest",
+          objectives: [{
+            id: "recover",
+            title: "Recover",
+            scope: "main",
+            terminal: false,
+            focused: true,
+          }],
+          totalObjectives: 1,
+        },
         now: () => new Date("2026-08-14T00:00:00.000Z"),
       })
     );
@@ -54,7 +66,19 @@ describe("session co-play lineage", () => {
       nextSeed: 2718,
       stateRevision: sessionStateRevision(state),
       controller: "autoplay:random",
-      lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "Moon" },
+      lastAction: { type: "doActivity", id: "rest", title: "Rest" },
+      decisionBasis: {
+        kind: "objective-link",
+        activityId: "rest",
+        objectives: [{
+          id: "recover",
+          title: "Recover",
+          scope: "main",
+          terminal: false,
+          focused: true,
+        }],
+        totalObjectives: 1,
+      },
       updatedAt: "2026-08-14T00:00:00.000Z",
     });
     expect(await loadBoundSessionCoPlayControl(gameDir, "web", state)).toEqual(written);
@@ -101,7 +125,19 @@ describe("session co-play lineage", () => {
         nextSeed: 61,
         state: { turn: 1 },
         controller: "web",
-        lastAction: { type: "next" },
+        lastAction: { type: "doActivity", id: "rest", title: "Rest" },
+        decisionBasis: {
+          kind: "objective-link",
+          activityId: "rest",
+          objectives: [{
+            id: "recover",
+            title: "Recover",
+            scope: "main",
+            terminal: false,
+            focused: true,
+          }],
+          totalObjectives: 1,
+        },
       });
       await rebindSessionCoPlayControl({
         gameDir,
@@ -115,7 +151,8 @@ describe("session co-play lineage", () => {
       persona: "random",
       nextSeed: 61,
       controller: "web",
-      lastAction: { type: "next" },
+      lastAction: { type: "doActivity", id: "rest", title: "Rest" },
+      decisionBasis: expect.objectContaining({ activityId: "rest" }),
       stateRevision: sessionStateRevision({ turn: 1, normalized: true }),
     });
   });
@@ -130,7 +167,19 @@ describe("session co-play lineage", () => {
         nextSeed: 61,
         state: { turn: 1 },
         controller: "autoplay:random",
-        lastAction: { type: "next" },
+        lastAction: { type: "doActivity", id: "rest", title: "Rest" },
+        decisionBasis: {
+          kind: "objective-link",
+          activityId: "rest",
+          objectives: [{
+            id: "recover",
+            title: "Recover",
+            scope: "main",
+            terminal: false,
+            focused: false,
+          }],
+          totalObjectives: 1,
+        },
       });
       await rebindSessionCoPlayControl({
         gameDir,
@@ -146,6 +195,7 @@ describe("session co-play lineage", () => {
       stateRevision: sessionStateRevision({ turn: 2 }),
     });
     expect((await loadSessionCoPlayControl(gameDir, "web"))?.lastAction).toBeUndefined();
+    expect((await loadSessionCoPlayControl(gameDir, "web"))?.decisionBasis).toBeUndefined();
   });
 
   test("corrupt advisory control cannot block gameplay", async () => {
@@ -163,6 +213,61 @@ describe("session co-play lineage", () => {
       state: { turn: 2 },
       controller: "web",
     })).resolves.toBeNull();
+  });
+
+  test("rejects an advisory basis that explains a different public action", async () => {
+    const gameDir = await temporaryGame();
+    const dir = path.join(gameDir, ".rpg-harness", "sessions", "web");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, "co-play.json"), JSON.stringify({
+      schemaVersion: 1,
+      persona: "completionist",
+      nextSeed: 17,
+      stateRevision: sessionStateRevision({ turn: 1 }),
+      controller: "autoplay:completionist",
+      lastAction: { type: "doActivity", id: "depart" },
+      decisionBasis: {
+        kind: "objective-link",
+        activityId: "rest",
+        objectives: [{
+          id: "recover",
+          title: "Recover",
+          scope: "main",
+          terminal: false,
+          focused: false,
+        }],
+        totalObjectives: 1,
+      },
+      updatedAt: "2026-08-14T00:00:00.000Z",
+    }), "utf-8");
+
+    await expect(loadSessionCoPlayControl(gameDir, "web"))
+      .rejects.toThrow("Invalid co-play.json");
+  });
+
+  test("does not publish a decision basis for a different public activity", async () => {
+    const gameDir = await temporaryGame();
+    await expect(writeSessionCoPlayControl({
+      gameDir,
+      session: "web",
+      persona: "completionist",
+      nextSeed: 17,
+      state: { turn: 1 },
+      controller: "autoplay:completionist",
+      lastAction: { type: "doActivity", id: "depart" },
+      decisionBasis: {
+        kind: "objective-link",
+        activityId: "rest",
+        objectives: [{
+          id: "recover",
+          title: "Recover",
+          scope: "main",
+          terminal: false,
+          focused: false,
+        }],
+        totalObjectives: 1,
+      },
+    })).rejects.toThrow("must match its public activity");
   });
 });
 

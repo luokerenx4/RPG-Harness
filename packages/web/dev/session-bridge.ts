@@ -169,6 +169,7 @@ export interface BridgeAiTurnReceipt {
   steps: number;
   ending: string | null;
   lastAction: BridgeAiPublicAction | null;
+  decisionBasis: BridgeAiPublicDecisionBasis | null;
   progress: unknown;
   advancedAfterTurn: boolean;
   snapshot: BridgeSessionSnapshot;
@@ -181,6 +182,7 @@ export interface BridgeAiStatus {
     nextSeed: number;
     controller: string;
     lastAction?: BridgeAiPublicAction;
+    decisionBasis?: BridgeAiPublicDecisionBasis;
     updatedAt: string;
   } | null;
 }
@@ -191,6 +193,19 @@ export type BridgeAiPublicAction =
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
+
+export interface BridgeAiPublicDecisionBasis {
+  kind: "objective-link";
+  activityId: string;
+  objectives: Array<{
+    id: string;
+    title: string;
+    scope: "main" | "side" | "mastery";
+    terminal: boolean;
+    focused: boolean;
+  }>;
+  totalObjectives: number;
+}
 
 export async function loadBridgeAiPersonas(
   gameDir: string,
@@ -225,6 +240,9 @@ export async function loadBridgeAiStatus(
           controller: value.controller,
           ...(value.lastAction
             ? { lastAction: value.lastAction as BridgeAiPublicAction }
+            : {}),
+          ...(value.decisionBasis
+            ? { decisionBasis: value.decisionBasis as BridgeAiPublicDecisionBasis }
             : {}),
           updatedAt: value.updatedAt,
         }
@@ -301,7 +319,10 @@ export async function advanceBridgeAiTurn(args: {
     !Number.isInteger(summary.steps) ||
     typeof summary.finalStateRevision !== "string" ||
     (summary.ending !== null && typeof summary.ending !== "string") ||
-    (summary.lastAction !== undefined && !isBridgeAiPublicAction(summary.lastAction))
+    (summary.lastAction !== undefined && !isBridgeAiPublicAction(summary.lastAction)) ||
+    (summary.decisionBasis !== undefined &&
+      (!isBridgeAiPublicDecisionBasis(summary.decisionBasis) ||
+        !isMatchingBridgeDecisionBasis(summary.lastAction, summary.decisionBasis)))
   ) throw new Error("Invalid AI turn summary from CLI");
 
   await internalHooks.afterAutoplay?.();
@@ -322,6 +343,7 @@ export async function advanceBridgeAiTurn(args: {
     steps: summary.steps as number,
     ending: summary.ending as string | null,
     lastAction: summary.lastAction as BridgeAiPublicAction | undefined ?? null,
+    decisionBasis: summary.decisionBasis as BridgeAiPublicDecisionBasis | undefined ?? null,
     progress: summary.progress,
     advancedAfterTurn: liveFullRevision !== summary.finalStateRevision,
     snapshot,
@@ -1227,6 +1249,39 @@ function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
     default:
       return false;
   }
+}
+
+function isBridgeAiPublicDecisionBasis(
+  value: unknown,
+): value is BridgeAiPublicDecisionBasis {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const basis = value as Record<string, unknown>;
+  if (
+    basis.kind !== "objective-link" ||
+    typeof basis.activityId !== "string" || !basis.activityId.trim() ||
+    !Array.isArray(basis.objectives) || basis.objectives.length === 0 ||
+    basis.objectives.length > 3 ||
+    !Number.isSafeInteger(basis.totalObjectives) ||
+    (basis.totalObjectives as number) < basis.objectives.length
+  ) return false;
+  return basis.objectives.every((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const objective = value as Record<string, unknown>;
+    return typeof objective.id === "string" && objective.id.trim().length > 0 &&
+      typeof objective.title === "string" && objective.title.trim().length > 0 &&
+      (objective.scope === "main" || objective.scope === "side" ||
+        objective.scope === "mastery") &&
+      typeof objective.terminal === "boolean" &&
+      typeof objective.focused === "boolean";
+  });
+}
+
+function isMatchingBridgeDecisionBasis(
+  action: unknown,
+  basis: BridgeAiPublicDecisionBasis,
+): boolean {
+  return isBridgeAiPublicAction(action) && action.type === "doActivity" &&
+    action.id === basis.activityId;
 }
 
 function bridgePublicAction(event: BridgeStepEvent): BridgeAiPublicAction | undefined {

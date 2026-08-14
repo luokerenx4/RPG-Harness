@@ -33,6 +33,7 @@ import {
   loadBoundSessionCoPlayControl,
   withSessionLock,
   writeSessionCoPlayControl,
+  type SessionPublicDecisionBasis,
 } from "@rpg-harness/session-store";
 import {
   createForkFromSource,
@@ -111,6 +112,8 @@ export interface AutoplaySummary {
   decisionPath: AutoplayDecisionPath;
   /** Last accepted player-visible action, suitable for compact co-play receipts. */
   lastAction?: AutoplayPublicAction;
+  /** Author-owned public Hub facts that support the final activity selection. */
+  decisionBasis?: AutoplayPublicDecisionBasis;
   decisions: number;
   rejectedInputs: number;
   steps: number;
@@ -214,6 +217,8 @@ export type AutoplayPublicAction =
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
+
+export type AutoplayPublicDecisionBasis = SessionPublicDecisionBasis;
 
 export interface AutoplayProgress {
   madeProgress: boolean;
@@ -613,6 +618,7 @@ export async function runAutoplay(
       await saveSession(args.gameDir, args.session, result.finalState);
       if (countDecisions(result.trace) > 0) {
         const lastAction = summarizeLastPublicAction(result.trace);
+        const decisionBasis = summarizeLastPublicDecisionBasis(result.trace);
         await writeSessionCoPlayControl({
           gameDir: args.gameDir,
           session: args.session,
@@ -621,6 +627,7 @@ export async function runAutoplay(
           state: result.finalState,
           controller: `autoplay:${args.persona}`,
           ...(lastAction ? { lastAction } : {}),
+          ...(decisionBasis ? { decisionBasis } : {}),
         }).catch(() => undefined);
       }
       if (args.reportOnStop && isReportableAutoplayStop(result)) {
@@ -658,6 +665,7 @@ export async function runAutoplay(
   );
   const decisionPath = summarizeDecisionPath(result.trace);
   const lastAction = summarizeLastPublicAction(result.trace);
+  const decisionBasis = summarizeLastPublicDecisionBasis(result.trace);
   const continuation: AutoplayContinuation | undefined =
     args.session && result.reason === "max-steps" && !result.behaviorCycle
       ? {
@@ -814,6 +822,7 @@ export async function runAutoplay(
     progress,
     decisionPath,
     ...(lastAction ? { lastAction } : {}),
+    ...(decisionBasis ? { decisionBasis } : {}),
     decisions: countDecisions(result.trace),
     rejectedInputs: countRejectedInputs(result.trace),
     steps: result.trace.length,
@@ -1307,6 +1316,63 @@ export function summarizeLastPublicAction(
     previousOutput = entry.output;
   }
   return lastAction;
+}
+
+/**
+ * Summarize an auditable public reason without exposing persona internals.
+ *
+ * A basis exists only when the preceding authored Hub explicitly linked the
+ * accepted activity to active objectives. Labels are bounded for transport;
+ * the persisted Hub output and activityDecision remain the full authority.
+ */
+export function summarizeLastPublicDecisionBasis(
+  trace: ReadonlyArray<Pick<
+    TraceEntry,
+    "input" | "inputResult" | "output"
+  >>,
+): AutoplayPublicDecisionBasis | undefined {
+  let previousOutput: Output | undefined;
+  let lastBasis: AutoplayPublicDecisionBasis | undefined;
+  for (const entry of trace) {
+    if (
+      entry.input?.type === "doActivity" &&
+      entry.inputResult?.accepted !== false &&
+      previousOutput?.type === "hubMenu"
+    ) {
+      const activityId = entry.input.id;
+      const objectives = (previousOutput.snapshot.objectives ?? [])
+        .map((objective, authoredOrder) => ({ objective, authoredOrder }))
+        .filter(({ objective }) =>
+          objective.status === "active" &&
+          objective.relatedActivityIds?.includes(activityId)
+        )
+        .sort((left, right) =>
+          Number(right.objective.focus === true) -
+            Number(left.objective.focus === true) ||
+          ({ main: 0, side: 1, mastery: 2 } as const)[left.objective.scope] -
+            ({ main: 0, side: 1, mastery: 2 } as const)[right.objective.scope] ||
+          left.authoredOrder - right.authoredOrder
+        );
+      lastBasis = objectives.length > 0
+        ? {
+            kind: "objective-link",
+            activityId,
+            objectives: objectives.slice(0, 3).map(({ objective }) => ({
+              id: objective.id,
+              title: objective.title,
+              scope: objective.scope,
+              terminal: objective.terminal,
+              focused: objective.focus === true,
+            })),
+            totalObjectives: objectives.length,
+          }
+        : undefined;
+    } else if (entry.input && entry.inputResult?.accepted !== false) {
+      lastBasis = undefined;
+    }
+    previousOutput = entry.output;
+  }
+  return lastBasis;
 }
 
 export function summarizeAutoplayProgress(

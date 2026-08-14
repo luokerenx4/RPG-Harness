@@ -7,7 +7,7 @@ import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceip
 import { requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 14;
+  schemaVersion: 15;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -171,7 +171,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: "web-input-contract",
     status: "passed",
     revision,
@@ -213,24 +213,30 @@ function boundedAiCoplayProjection(): WebQualitySurfaceEvidence["projections"][n
     rejectedInputs: 0,
     steps: 2,
     ending: null,
-    lastAction: { type: "choose", choiceId: "route", optionId: "moon", text: "月影を追う" },
+    lastAction: { type: "doActivity", id: "rest", title: "宿で休む" },
+    decisionBasis: {
+      kind: "objective-link",
+      activityId: "rest",
+      objectives: [{
+        id: "ending",
+        title: "地獄門の底へ",
+        scope: "main",
+        terminal: true,
+        focused: false,
+      }],
+      totalObjectives: 1,
+    },
     progress: {
-      madeProgress: true,
+      madeProgress: false,
       completedScripts: { count: 0, recent: [] },
       objectiveChanges: { count: 0, recent: [] },
-      scriptProgress: {
-        from: "intro",
-        to: "intro",
-        beatIndexFrom: 2,
-        beatIndexTo: 3,
-      },
     },
     advancedAfterTurn: false,
     state: {} as never,
   });
   if (
-    !text.includes("选择「月影を追う」") ||
-    !text.includes("推进 intro：2 → 3") ||
+    !text.includes("执行「宿で休む」") ||
+    !text.includes("公开依据：当前目标 「地獄門の底へ」明确关联此行动") ||
     !text.includes("下一手归玩家")
   ) {
     throw new Error("Web AI co-play turn is not bounded or auditable");

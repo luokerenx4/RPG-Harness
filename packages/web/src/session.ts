@@ -186,6 +186,7 @@ export interface WebAiControl {
   nextSeed: number;
   controller: string;
   lastAction?: WebAiPublicAction;
+  decisionBasis?: WebAiPublicDecisionBasis;
   updatedAt: string;
 }
 
@@ -204,6 +205,7 @@ export interface WebAiTurnReceipt {
   steps: number;
   ending: string | null;
   lastAction: WebAiPublicAction | null;
+  decisionBasis: WebAiPublicDecisionBasis | null;
   progress: {
     madeProgress: boolean;
     completedScripts: { count: number; recent: string[] };
@@ -225,6 +227,19 @@ export type WebAiPublicAction =
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
+
+export interface WebAiPublicDecisionBasis {
+  kind: "objective-link";
+  activityId: string;
+  objectives: Array<{
+    id: string;
+    title: string;
+    scope: "main" | "side" | "mastery";
+    terminal: boolean;
+    focused: boolean;
+  }>;
+  totalObjectives: number;
+}
 
 let infoPromise: Promise<WebSessionInfo> | null = null;
 const bridgeRevisions = new Map<string, string | null>();
@@ -457,7 +472,10 @@ export async function advanceAiTurn(
     !Number.isInteger(payload.steps) ||
     (payload.ending !== null && typeof payload.ending !== "string") ||
     typeof payload.advancedAfterTurn !== "boolean" ||
-    (payload.lastAction !== null && !isWebAiPublicAction(payload.lastAction))
+    (payload.lastAction !== null && !isWebAiPublicAction(payload.lastAction)) ||
+    (payload.decisionBasis !== null &&
+      (!isWebAiPublicDecisionBasis(payload.decisionBasis) ||
+        !isMatchingWebDecisionBasis(payload.lastAction, payload.decisionBasis)))
   ) throw new Error("session bridge returned an invalid AI turn receipt");
   bridgeRevisions.set(gameId, snapshot.revision);
   bridgeLogCursors.set(gameId, snapshot.logCursor as number);
@@ -472,6 +490,7 @@ export async function advanceAiTurn(
     steps: payload.steps as number,
     ending: payload.ending as string | null,
     lastAction: payload.lastAction as WebAiPublicAction | null,
+    decisionBasis: payload.decisionBasis as WebAiPublicDecisionBasis | null,
     progress: payload.progress as WebAiTurnReceipt["progress"],
     advancedAfterTurn: payload.advancedAfterTurn as boolean,
     state: snapshot.state as ComposedState,
@@ -500,6 +519,39 @@ function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
   }
 }
 
+function isWebAiPublicDecisionBasis(
+  value: unknown,
+): value is WebAiPublicDecisionBasis {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const basis = value as Record<string, unknown>;
+  if (
+    basis.kind !== "objective-link" ||
+    typeof basis.activityId !== "string" || !basis.activityId.trim() ||
+    !Array.isArray(basis.objectives) || basis.objectives.length === 0 ||
+    basis.objectives.length > 3 ||
+    !Number.isSafeInteger(basis.totalObjectives) ||
+    (basis.totalObjectives as number) < basis.objectives.length
+  ) return false;
+  return basis.objectives.every((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const objective = value as Record<string, unknown>;
+    return typeof objective.id === "string" && objective.id.trim().length > 0 &&
+      typeof objective.title === "string" && objective.title.trim().length > 0 &&
+      (objective.scope === "main" || objective.scope === "side" ||
+        objective.scope === "mastery") &&
+      typeof objective.terminal === "boolean" &&
+      typeof objective.focused === "boolean";
+  });
+}
+
+function isMatchingWebDecisionBasis(
+  action: unknown,
+  basis: WebAiPublicDecisionBasis,
+): boolean {
+  return isWebAiPublicAction(action) && action.type === "doActivity" &&
+    action.id === basis.activityId;
+}
+
 function isWebAiControl(value: unknown): value is WebAiControl {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const control = value as Record<string, unknown>;
@@ -507,7 +559,10 @@ function isWebAiControl(value: unknown): value is WebAiControl {
     Number.isInteger(control.nextSeed) &&
     typeof control.controller === "string" &&
     typeof control.updatedAt === "string" &&
-    (control.lastAction === undefined || isWebAiPublicAction(control.lastAction));
+    (control.lastAction === undefined || isWebAiPublicAction(control.lastAction)) &&
+    (control.decisionBasis === undefined ||
+      (isWebAiPublicDecisionBasis(control.decisionBasis) &&
+        isMatchingWebDecisionBasis(control.lastAction, control.decisionBasis)));
 }
 
 export async function saveState(

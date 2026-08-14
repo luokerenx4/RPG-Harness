@@ -17,6 +17,7 @@ import {
   runAutoplay,
   summarizeDecisionPath,
   summarizeLastPublicAction,
+  summarizeLastPublicDecisionBasis,
   type AutoplaySummary,
 } from "./autoplay";
 import { loadForkSource } from "./fork";
@@ -159,6 +160,71 @@ describe("autoplay semantic decision paths", () => {
       linkedObjectiveIds: ["remember-the-oni"],
       focusedObjectiveId: "remember-the-oni",
     }]);
+  });
+
+  test("summarizes bounded author-owned objective links without persona reasoning", () => {
+    const hub: Output = {
+      type: "hubMenu",
+      snapshot: {
+        day: 3,
+        maxDay: 8,
+        slot: 1,
+        slotName: "day",
+        slotsPerDay: 2,
+        stats: [],
+        affections: [],
+        activities: [{
+          id: "rest",
+          kind: "action",
+          title: "Rest",
+          cost: 0,
+          available: true,
+        }],
+        objectives: [
+          { id: "mastery", title: "Open the gate", scope: "mastery", terminal: false, status: "active", relatedActivityIds: ["rest"] },
+          { id: "side", title: "Recover the memory", scope: "side", terminal: false, status: "active", focus: true, relatedActivityIds: ["rest"] },
+          { id: "main", title: "Reach the ending", scope: "main", terminal: true, status: "active", relatedActivityIds: ["rest"] },
+          { id: "extra", title: "Fourth goal", scope: "side", terminal: false, status: "active", relatedActivityIds: ["rest"] },
+          { id: "done", title: "Old goal", scope: "main", terminal: false, status: "completed", relatedActivityIds: ["rest"] },
+        ],
+      },
+    };
+    expect(summarizeLastPublicDecisionBasis([
+      { input: null, output: hub },
+      {
+        input: { type: "doActivity", id: "rest" },
+        inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
+        output: { type: "narration", text: "Recovered." },
+      },
+    ])).toEqual({
+      kind: "objective-link",
+      activityId: "rest",
+      objectives: [
+        { id: "side", title: "Recover the memory", scope: "side", terminal: false, focused: true },
+        { id: "main", title: "Reach the ending", scope: "main", terminal: true, focused: false },
+        { id: "extra", title: "Fourth goal", scope: "side", terminal: false, focused: false },
+      ],
+      totalObjectives: 4,
+    });
+  });
+
+  test("does not mistake an older activity basis for the final accepted action", () => {
+    expect(summarizeLastPublicDecisionBasis([
+      {
+        input: null,
+        output: {
+          type: "hubMenu",
+          snapshot: {
+            day: 0, maxDay: 1, slot: 0, slotName: "", slotsPerDay: 1,
+            stats: [], affections: [],
+            activities: [{ id: "rest", kind: "action", title: "Rest", cost: 0, available: true }],
+            objectives: [{ id: "recover", title: "Recover", scope: "main", terminal: false, status: "active", relatedActivityIds: ["rest"] }],
+          },
+        },
+      },
+      { input: { type: "doActivity", id: "rest" }, inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] }, output: { type: "narration", text: "Rested." } },
+      { input: { type: "next" }, inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] }, output: { type: "narration", text: "Later." } },
+    ])).toBeUndefined();
   });
 
   test("keeps default CLI output bounded while pointing at exact details", () => {

@@ -135,23 +135,36 @@ export function inputNoticeSourceLabel(source: string): string {
 
 export function formatAiTurnReceipt(receipt: WebAiTurnReceipt): string {
   const action = receipt.lastAction ? formatAiPublicAction(receipt.lastAction) : null;
+  const basis = formatAiPublicDecisionBasis(receipt.decisionBasis);
+  const explainedAction = action
+    ? `${action}${basis ? `（${basis}）` : ""}`
+    : null;
   if (receipt.advancedAfterTurn) {
-    return `${action ? `${action}；` : ""}AI 落子后其他界面又推进了会话；已显示最新画面，下一手归玩家。`;
+    return `${explainedAction ? `${explainedAction}；` : ""}AI 落子后其他界面又推进了会话；已显示最新画面，下一手归玩家。`;
   }
   if (receipt.ending) {
-    return `${action ? `${action}；` : ""}到达结局 ${receipt.ending}。下一手归玩家。`;
+    return `${explainedAction ? `${explainedAction}；` : ""}到达结局 ${receipt.ending}。下一手归玩家。`;
   }
   if (receipt.rejectedInputs > 0) {
     return `输入被拒绝 ${receipt.rejectedInputs} 次，剧情未被覆盖。下一手归玩家。`;
   }
   const progress = receipt.progress.scriptProgress;
   if (progress) {
-    return `${action ? `${action}；` : ""}推进 ${progress.from ?? "场景"}：${progress.beatIndexFrom} → ${progress.beatIndexTo}。下一手归玩家。`;
+    return `${explainedAction ? `${explainedAction}；` : ""}推进 ${progress.from ?? "场景"}：${progress.beatIndexFrom} → ${progress.beatIndexTo}。下一手归玩家。`;
   }
   if (receipt.progress.madeProgress) {
-    return `${action ? `${action}；` : ""}推进了当前目标。下一手归玩家。`;
+    return `${explainedAction ? `${explainedAction}；` : ""}推进了当前目标。下一手归玩家。`;
   }
-  return `${action ?? `完成 ${receipt.decisions} 个决策（${receipt.reason}）`}。下一手归玩家。`;
+  return `${explainedAction ?? `完成 ${receipt.decisions} 个决策（${receipt.reason}）`}。下一手归玩家。`;
+}
+
+function formatAiPublicDecisionBasis(
+  basis: WebAiTurnReceipt["decisionBasis"],
+): string | null {
+  if (!basis || basis.objectives.length === 0) return null;
+  const titles = basis.objectives.map(({ title }) => `「${title}」`).join("、");
+  const omitted = basis.totalObjectives - basis.objectives.length;
+  return `公开依据：当前目标 ${titles}${omitted > 0 ? ` 等 ${basis.totalObjectives} 项` : ""}明确关联此行动`;
 }
 
 function formatAiPublicAction(

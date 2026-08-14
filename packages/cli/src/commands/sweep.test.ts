@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 14,
+        schemaVersion: 15,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -530,7 +530,7 @@ describe("bounded development sweep", () => {
           text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
         }, {
           surface: "bounded-ai-coplay",
-          text: "选择「月影を追う」；推进 intro：2 → 3。下一手归玩家。",
+          text: "执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」明确关联此行动）。下一手归玩家。",
         }, {
           surface: "persistent-ai-coplay",
           text: "random@2718 · web · state 56e32233d741",

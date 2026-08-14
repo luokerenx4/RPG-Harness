@@ -36,6 +36,22 @@ export type SessionPublicAction =
   | { type: "doActivity"; id: string; title?: string }
   | { type: "quit" };
 
+export interface SessionPublicDecisionBasis {
+  kind: "objective-link";
+  /** Stable activity identity whose public Hub contract supplied this basis. */
+  activityId: string;
+  /** Bounded author-owned goal labels; the Hub snapshot/log remains authority. */
+  objectives: Array<{
+    id: string;
+    title: string;
+    scope: "main" | "side" | "mastery";
+    terminal: boolean;
+    focused: boolean;
+  }>;
+  /** May exceed objectives.length when more than three goals link the action. */
+  totalObjectives: number;
+}
+
 /**
  * Shared co-play lineage. This is session data, not GUI preference: every
  * surface reads the same persona cursor and rebinds it to the state it wrote.
@@ -47,6 +63,7 @@ export interface SessionCoPlayControl {
   stateRevision: string;
   controller: string;
   lastAction?: SessionPublicAction;
+  decisionBasis?: SessionPublicDecisionBasis;
   updatedAt: string;
 }
 
@@ -100,6 +117,7 @@ export async function writeSessionCoPlayControl(args: {
   state: unknown;
   controller: string;
   lastAction?: SessionPublicAction;
+  decisionBasis?: SessionPublicDecisionBasis;
   now?: () => Date;
 }): Promise<SessionCoPlayControl> {
   assertSessionName(args.session);
@@ -109,6 +127,12 @@ export async function writeSessionCoPlayControl(args: {
     !Number.isInteger(args.nextSeed) || args.nextSeed < 0 ||
     args.nextSeed > 0xffff_ffff
   ) throw new Error("Co-play nextSeed must be a uint32 integer");
+  if (
+    args.decisionBasis &&
+    (!isSessionPublicDecisionBasis(args.decisionBasis) ||
+      args.lastAction?.type !== "doActivity" ||
+      args.lastAction.id !== args.decisionBasis.activityId)
+  ) throw new Error("Co-play decision basis must match its public activity");
   const value: SessionCoPlayControl = {
     schemaVersion: 1,
     persona: args.persona,
@@ -116,6 +140,7 @@ export async function writeSessionCoPlayControl(args: {
     stateRevision: sessionStateRevision(args.state),
     controller: args.controller,
     ...(args.lastAction ? { lastAction: args.lastAction } : {}),
+    ...(args.decisionBasis ? { decisionBasis: args.decisionBasis } : {}),
     updatedAt: (args.now ?? (() => new Date()))().toISOString(),
   };
   const dir = path.join(args.gameDir, ".rpg-harness", "sessions", args.session);
@@ -136,6 +161,7 @@ export async function rebindSessionCoPlayControl(args: {
   /** Omit for state normalization that must preserve the current owner label. */
   controller?: string;
   lastAction?: SessionPublicAction;
+  decisionBasis?: SessionPublicDecisionBasis;
   now?: () => Date;
 }): Promise<SessionCoPlayControl | null> {
   const current = await loadBoundSessionCoPlayControl(
@@ -156,6 +182,11 @@ export async function rebindSessionCoPlayControl(args: {
         ? { lastAction: args.lastAction }
         : args.controller === undefined && current.lastAction
           ? { lastAction: current.lastAction }
+          : {}),
+      ...(args.decisionBasis
+        ? { decisionBasis: args.decisionBasis }
+        : args.controller === undefined && current.decisionBasis
+          ? { decisionBasis: current.decisionBasis }
           : {}),
       ...(args.now ? { now: args.now } : {}),
       persona: current.persona,
@@ -178,7 +209,37 @@ function isSessionCoPlayControl(value: unknown): value is SessionCoPlayControl {
     typeof control.stateRevision === "string" && /^[a-f0-9]{64}$/.test(control.stateRevision) &&
     typeof control.controller === "string" && control.controller.trim().length > 0 &&
     typeof control.updatedAt === "string" &&
-    (control.lastAction === undefined || isSessionPublicAction(control.lastAction));
+    (control.lastAction === undefined || isSessionPublicAction(control.lastAction)) &&
+    (control.decisionBasis === undefined ||
+      (isSessionPublicDecisionBasis(control.decisionBasis) &&
+        control.lastAction !== undefined &&
+        control.lastAction.type === "doActivity" &&
+        control.lastAction.id === control.decisionBasis.activityId));
+}
+
+function isSessionPublicDecisionBasis(
+  value: unknown,
+): value is SessionPublicDecisionBasis {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const basis = value as Record<string, unknown>;
+  if (
+    basis.kind !== "objective-link" ||
+    typeof basis.activityId !== "string" || !basis.activityId.trim() ||
+    !Array.isArray(basis.objectives) || basis.objectives.length === 0 ||
+    basis.objectives.length > 3 ||
+    !Number.isSafeInteger(basis.totalObjectives) ||
+    (basis.totalObjectives as number) < basis.objectives.length
+  ) return false;
+  return basis.objectives.every((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const objective = value as Record<string, unknown>;
+    return typeof objective.id === "string" && objective.id.trim().length > 0 &&
+      typeof objective.title === "string" && objective.title.trim().length > 0 &&
+      (objective.scope === "main" || objective.scope === "side" ||
+        objective.scope === "mastery") &&
+      typeof objective.terminal === "boolean" &&
+      typeof objective.focused === "boolean";
+  });
 }
 
 function isSessionPublicAction(value: unknown): value is SessionPublicAction {
