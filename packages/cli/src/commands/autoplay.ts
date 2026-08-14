@@ -61,6 +61,8 @@ export interface AutoplayArgs {
   verbose: boolean;
   maxSteps: number;
   seed?: number;
+  /** Persisted control provenance. Frontends should use a stable surface id. */
+  controller?: string;
   session?: string;
   fromSession?: string;
   fromLogEntry?: number;
@@ -180,6 +182,7 @@ export interface AutoplayContinuation {
       persona: string;
       maxSteps: number;
       seed: number;
+      controller?: string;
       session: string;
       reportOnStop: boolean;
     };
@@ -366,6 +369,15 @@ export async function runAutoplay(
   ) {
     throw new Error("--seed must be a uint32 integer");
   }
+  if (
+    args.controller !== undefined &&
+    (args.controller !== args.controller.trim() ||
+      args.controller.length === 0 ||
+      args.controller.length > 160 ||
+      /[\u0000-\u001f\u007f]/.test(args.controller))
+  ) {
+    throw new Error("--controller must be a trimmed 1-160 character source id");
+  }
   if (args.fromSession && !args.session) {
     throw new Error("--from-session requires --session for the AI branch");
   }
@@ -412,6 +424,7 @@ export async function runAutoplay(
     );
   }
   const persona = personaDefinition.decide;
+  const controller = args.controller ?? `autoplay:${args.persona}`;
   // Every run needs one public causal seed. On a fresh save it seeds both
   // world/module initialization and the independent persona stream; on a
   // resumed save the persisted world cursor wins and it seeds the persona.
@@ -573,7 +586,7 @@ export async function runAutoplay(
           await saveSession(args.gameDir, args.session, state);
           await appendLog(args.gameDir, args.session, {
             t: Date.now(),
-            source: `autoplay:${args.persona}`,
+            source: controller,
             input: entry.input,
             output: entry.output,
             ...(entry.inputResult ? { inputResult: entry.inputResult } : {}),
@@ -633,7 +646,7 @@ export async function runAutoplay(
           persona: args.persona,
           nextSeed: personaRng!.state(),
           state: result.finalState,
-          controller: `autoplay:${args.persona}`,
+          controller,
           ...(lastAction ? { lastAction } : {}),
           ...(decisionBasis ? { decisionBasis } : {}),
         }).catch(() => undefined);
@@ -691,6 +704,7 @@ export async function runAutoplay(
               // actually advance when an orchestrator executes it verbatim.
               maxSteps: Math.max(1, args.maxSteps),
               seed: personaRng!.state(),
+              ...(args.controller ? { controller: args.controller } : {}),
               session: args.session,
               reportOnStop: args.reportOnStop ?? false,
             },

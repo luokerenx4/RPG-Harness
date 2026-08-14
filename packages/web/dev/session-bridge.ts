@@ -318,6 +318,8 @@ export async function advanceBridgeAiTurn(args: {
       args.session,
       "--max-steps",
       "1",
+      "--controller",
+      `web-ai:${args.persona}`,
       "--expected-initial-state-revision",
       fullRevision,
       ...(args.seed !== undefined ? ["--seed", String(args.seed)] : []),

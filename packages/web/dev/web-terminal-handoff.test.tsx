@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
 import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
@@ -13,6 +14,10 @@ describe("Web terminal handoff", () => {
     expect(formatExternalAdvanceNotice("cli")).toBe(
       "HEADLESS 已推进共享会话；GUI 已同步到最新画面。",
     );
+    expect(isExternalSessionInputSource("web")).toBe(false);
+    expect(isExternalSessionInputSource("web-ai:completionist")).toBe(false);
+    expect(isExternalSessionInputSource("autoplay:completionist")).toBe(true);
+    expect(isExternalSessionInputSource("cli")).toBe(true);
   });
 
   test("explains a bounded AI turn and returns control to the player", () => {
@@ -161,7 +166,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 18,
+      schemaVersion: 19,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -210,6 +215,9 @@ describe("Web terminal handoff", () => {
       }, {
         surface: "external-headless-sync",
         text: "HEADLESS 已推进共享会话；GUI 已同步到最新画面。",
+      }, {
+        surface: "local-web-ai-provenance",
+        text: "web-ai:completionist · local / autoplay:completionist · external",
       }, {
         surface: "shareable-game-route",
         text: "/?session=ai-branch&game=sengoku-raid",

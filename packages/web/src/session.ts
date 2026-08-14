@@ -337,7 +337,9 @@ export async function pollExternalState(
   bridgeRevisions.set(gameId, snapshot.revision);
   bridgeLogCursors.set(gameId, snapshot.logCursor);
   bridgeLogIdentities.set(gameId, snapshot.logIdentity);
-  const latestAcceptedInput = snapshot.latestAcceptedEvent?.source !== "web" &&
+  const latestAcceptedInput = isExternalSessionInputSource(
+      snapshot.latestAcceptedEvent?.source,
+    ) &&
       isAcceptedInputResult(snapshot.latestAcceptedEvent?.inputResult)
     ? {
         logCursor: snapshot.logCursor,
@@ -346,7 +348,9 @@ export async function pollExternalState(
           : {}),
       }
     : undefined;
-  const latestRejectedInput = snapshot.latestRejectedEvent?.source !== "web" &&
+  const latestRejectedInput = isExternalSessionInputSource(
+      snapshot.latestRejectedEvent?.source,
+    ) &&
       isRejectedInputResult(snapshot.latestRejectedEvent?.inputResult)
     ? {
         result: snapshot.latestRejectedEvent.inputResult,
@@ -361,6 +365,11 @@ export async function pollExternalState(
     ...(latestAcceptedInput ? { latestAcceptedInput } : {}),
     ...(latestRejectedInput ? { latestRejectedInput } : {}),
   };
+}
+
+/** Web-owned player and AI turns are local even though the AI runs Headless. */
+export function isExternalSessionInputSource(source?: string): boolean {
+  return source !== "web" && !source?.startsWith("web-ai:");
 }
 
 export async function loadDevelopmentStatus(

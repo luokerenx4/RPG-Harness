@@ -4,10 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
 import { sessionStateRevision } from "@rpg-harness/session-store";
 import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
-import { requestedWebGame, webGameRoute } from "../src/session";
+import { isExternalSessionInputSource, requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 18;
+  schemaVersion: 19;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -30,6 +30,7 @@ export interface WebQualitySurfaceEvidence {
       | "choice-ai-coplay"
       | "persistent-ai-coplay"
       | "external-headless-sync"
+      | "local-web-ai-provenance"
       | "shareable-game-route"
       | "feedback-live-routing";
     text: string;
@@ -168,6 +169,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(choiceAiCoplayProjection());
   projections.push(persistentAiCoplayProjection());
   projections.push(externalHeadlessSyncProjection());
+  projections.push(localWebAiProvenanceProjection());
   projections.push(shareableGameRouteProjection());
   projections.push(feedbackLiveRoutingProjection());
 
@@ -175,7 +177,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: "web-input-contract",
     status: "passed",
     revision,
@@ -190,6 +192,19 @@ function externalHeadlessSyncProjection(): WebQualitySurfaceEvidence["projection
     throw new Error("Web shared session does not expose external control provenance");
   }
   return { surface: "external-headless-sync", text };
+}
+
+function localWebAiProvenanceProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const local = "web-ai:completionist";
+  const external = "autoplay:completionist";
+  if (
+    isExternalSessionInputSource(local) ||
+    !isExternalSessionInputSource(external)
+  ) throw new Error("Web AI and Headless autoplay provenance are conflated");
+  return {
+    surface: "local-web-ai-provenance",
+    text: `${local} · local / ${external} · external`,
+  };
 }
 
 function shareableGameRouteProjection(): WebQualitySurfaceEvidence["projections"][number] {

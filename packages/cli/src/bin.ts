@@ -182,6 +182,7 @@ COMMANDS
       Run all fixtures under <game-dir>/tests/*.yaml. Exits 1 on failure.
 
   autoplay <game-dir> --persona NAME [-v|--verbose] [--max-steps N] [--seed N]
+           [--controller SOURCE]
            [--session NAME] [--from-session PLAYER] [--from-at N]
            [--report-on-stop] [--full] [--pretty]
       Have a built-in or project-registered AI persona play through the game.
@@ -193,6 +194,8 @@ COMMANDS
       counts instead of embedding the entire save and decision history.
       Every run returns its persona and seed; a fresh run uses that seed for
       both world initialization and persona sampling so it can be reproduced.
+      --controller records which surface owns the run; omitted defaults to
+      autoplay:<persona>. Embedded GUI AI uses web-ai:<persona>.
       --full restores the complete trace, state, and branch evidence payload.
       --from-session atomically forks a player/GUI save into --session before
       the AI moves, so autonomous play never mutates the player's branch.
@@ -989,6 +992,7 @@ async function runAutoplay(args: string[]): Promise<void> {
       verbose: { type: "boolean", short: "v", default: false },
       "max-steps": { type: "string", default: "1000" },
       seed: { type: "string" },
+      controller: { type: "string" },
       session: { type: "string" },
       "from-session": { type: "string" },
       "from-at": { type: "string" },
@@ -1001,7 +1005,7 @@ async function runAutoplay(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--session NAME] [--from-session PLAYER] [--from-at N] [--report-on-stop] [--full] [--pretty]",
+    "rpgh autoplay <game-dir> [--persona NAME] [-v] [--max-steps N] [--seed N] [--controller SOURCE] [--session NAME] [--from-session PLAYER] [--from-at N] [--report-on-stop] [--full] [--pretty]",
   );
   await autoplayCommand({
     gameDir,
@@ -1009,6 +1013,9 @@ async function runAutoplay(args: string[]): Promise<void> {
     verbose: Boolean(values.verbose),
     maxSteps: Number(values["max-steps"] ?? "1000"),
     ...(values.seed !== undefined ? { seed: Number(values.seed) } : {}),
+    ...(values.controller !== undefined
+      ? { controller: values.controller }
+      : {}),
     ...(values.session !== undefined ? { session: values.session } : {}),
     ...(values["from-session"] !== undefined
       ? { fromSession: values["from-session"] }

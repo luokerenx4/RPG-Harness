@@ -378,12 +378,12 @@ describe("Web development session bridge", () => {
       "log.jsonl",
     ), "utf-8");
     expect(log.trim().split("\n")).toHaveLength(1);
-    expect(JSON.parse(log).source).toBe("autoplay:objective");
+    expect(JSON.parse(log).source).toBe("web-ai:objective");
     expect(await loadBridgeAiStatus(gameDir, "shared")).toMatchObject({
       control: {
         persona: "objective",
         nextSeed: turn.nextSeed,
-        controller: "autoplay:objective",
+        controller: "web-ai:objective",
         lastAction: { type: "select", scriptId: "intro", title: "Intro" },
       },
     });

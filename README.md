@@ -249,7 +249,7 @@ rpgh init     <dir> [--force]                                  # scaffold a new 
 rpgh play     <game-dir>                                       # interactive TUI (ink, hot-reloading)
 rpgh step     <game-dir> --input <json> [--session NAME] [--full] # headless persisted step
 rpgh peek     <game-dir> [--session NAME] [--full]             # compact current decision
-rpgh autoplay <game-dir> --persona NAME [-v]                   # built-in AI plays/forks/reports stops
+rpgh autoplay <game-dir> --persona NAME [-v] [--controller SOURCE] # AI plays/forks/reports with persisted control provenance
 rpgh report   <game-dir> --title TEXT [--session NAME]         # capture a playtest coding issue + evidence
 rpgh reports  <game-dir> [--session NAME] [--format json|table] # list open playtest findings
 rpgh resolve  <game-dir> <report-id> [--resolution TEXT]       # close an ordinary finding (structured findings require verification)
