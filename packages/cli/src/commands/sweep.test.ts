@@ -171,6 +171,45 @@ describe("bounded development sweep", () => {
     });
   });
 
+  test("a paused search does not starve later items in the frozen batch", async () => {
+    const gameDir = await temporarySweepGame();
+    const result = await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "rotated",
+      limit: 2,
+      maxNodes: 1,
+      maxTotalNodes: 20,
+      maxSteps: 20,
+      pretty: false,
+    });
+
+    expect(result).toMatchObject({
+      status: "paused",
+      reason: "search-budget-exhausted",
+      snapshot: {
+        selectedItems: 2,
+        completedItems: 0,
+        remainingItems: 2,
+        nextKey: "story/scene-a",
+      },
+      safety: {
+        nodeBudget: { limit: 20, used: 2, remaining: 18 },
+      },
+      resume: {
+        fromKey: "story/scene-a",
+        next: {
+          command: "reach-script",
+          args: { fromSession: "rotated-001" },
+        },
+      },
+      runs: [
+        { key: "story/scene-a", status: "paused", targetSession: "rotated-001" },
+        { key: "story/scene-b", status: "paused", targetSession: "rotated-002" },
+      ],
+    });
+  });
+
   test("resumes from an exact key only while the snapshot revision matches", async () => {
     const gameDir = await temporarySweepGame();
     const first = await runDevelopmentSweep({

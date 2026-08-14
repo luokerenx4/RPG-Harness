@@ -358,10 +358,11 @@ Within one product priority it closes inspection/verification and exact
 checkpoint work before spending the shared budget on state-space search, so a
 hard `reach-script` cannot starve dozens of one-step choice branches.
 It preflights every generated branch before its first write, shares one total
-search-node budget across the batch, and pauses normally when that budget is
-spent. A paused search also exposes `resume.next`, an executable continuation
-rooted at the materialized closest branch. The result carries the frozen
-SHA-256 revision and exact next work key. After finishing that continuation,
+search-node budget across the batch, and gives every later frozen item a turn
+when an earlier search exhausts only its own slice. The batch then pauses with
+the first unresolved item as `nextKey`; `resume.next` is its executable
+continuation rooted at the materialized closest branch. The result carries the
+frozen SHA-256 revision and exact next work key. After finishing that continuation,
 resume the batch with both `--from-key` and `--snapshot-revision`; the frozen
 revision prevents a changed queue from silently continuing at the wrong item.
 Diagnostics and

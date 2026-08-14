@@ -560,8 +560,15 @@ async function runDevelopmentSweepInternal(
     }
     if (result.status === "paused") {
       const next = workSearchContinuation(result);
-      const canContinue = autoContinueSearches &&
-        next !== null &&
+      // A regular frozen sweep does not auto-resume the same search slice, but
+      // it must still give every later selected item its turn. Keep this item
+      // unresolved (and its exact continuation in `runs`) while spending the
+      // shared node budget on the rest of the immutable queue.
+      if (!autoContinueSearches) {
+        searchBudgetBlocked = true;
+        continue;
+      }
+      const canContinue = next !== null &&
         consumedNodes > 0 &&
         firstTarget !== null;
       if (!canContinue) {

@@ -145,7 +145,9 @@ COMMANDS
       Preflights every isolated target before writing, stops on failures or
       authoring judgment, persists the immutable queue, and returns completed
       plus remaining work for resume even as new branch evidence shrinks the
-      live queue. A regular sweep is scoped to SOURCE's fork lineage.
+      live queue. A paused search keeps its continuation while later frozen
+      items still receive their own slice. A regular sweep is scoped to
+      SOURCE's fork lineage.
       --until-clean deliberately switches to the whole-project queue, using
       SOURCE only as a safe fork/search root; it also follows closest-state
       search continuations and freezes later generations under shared caps,
