@@ -65,6 +65,8 @@ export interface SweepResult {
     revision: string;
     file: string;
     sourceSession: string | null;
+    /** Queue authority: one lineage for regular sweep, whole project for convergence. */
+    scope: "session" | "project";
     totalItems: number;
     startIndex: number;
     selectedItems: number;
@@ -106,6 +108,8 @@ export interface SweepResult {
 export interface SweepConvergenceResult {
   schemaVersion: 1;
   mode: "until-clean";
+  /** Convergence certifies the project queue; sourceSession is a fork/search root. */
+  scope: "project";
   status: "clean" | "paused" | "stopped";
   reason:
     | "clean"
@@ -136,6 +140,7 @@ export interface SweepConvergenceResult {
     }>;
   };
   liveWorklist: {
+    scope: "project";
     totalItems: number;
     nextKey: string | null;
   };
@@ -325,6 +330,7 @@ export async function runDevelopmentConvergence(
   return {
     schemaVersion: 1,
     mode: "until-clean",
+    scope: "project",
     status: finalStatus,
     reason: finalReason,
     sourceSession: args.session,
@@ -352,6 +358,7 @@ export async function runDevelopmentConvergence(
       searchStalls,
     },
     liveWorklist: {
+      scope: "project",
       totalItems: live.items.length,
       nextKey: live.items[0]?.key ?? null,
     },
@@ -439,10 +446,19 @@ async function runDevelopmentSweepInternal(
   const selected = queuedItems.slice(0, args.limit);
 
   if (selected.length === 0) {
-    return resultEnvelope(args, snapshotRevision, allItems, startIndex, selected, [], [], {
-      status: "clean",
-      reason: "clean",
-    }, 0, queuedItems);
+    return resultEnvelope(
+      args,
+      snapshotRevision,
+      snapshot.scope,
+      allItems,
+      startIndex,
+      selected,
+      [],
+      [],
+      { status: "clean", reason: "clean" },
+      0,
+      queuedItems,
+    );
   }
 
   const targets = selected.map((item) =>
@@ -600,6 +616,7 @@ async function runDevelopmentSweepInternal(
     return resultEnvelope(
       args,
       snapshotRevision,
+      snapshot.scope,
       allItems,
       startIndex,
       selected,
@@ -618,6 +635,7 @@ async function runDevelopmentSweepInternal(
   return resultEnvelope(
     args,
     snapshotRevision,
+    snapshot.scope,
     allItems,
     startIndex,
     selected,
@@ -643,7 +661,7 @@ async function createSweepSnapshot(
     scopeSession === null ? undefined : scopeSession,
   );
   const source = sourceSession ?? null;
-  const scope = scopeSession === null ? "project" as const : "session" as const;
+  const scope = scopeSession == null ? "project" as const : "session" as const;
   const revision = createHash("sha256")
     .update(JSON.stringify({ sourceSession: source, scope, items: worklist.items }))
     .digest("hex");
@@ -726,6 +744,7 @@ async function readSweepSnapshot(
 function resultEnvelope(
   args: SweepArgs,
   revision: string,
+  scope: PersistedSweepSnapshot["scope"],
   allItems: DevelopmentWorkItem[],
   startIndex: number,
   selected: DevelopmentWorkItem[],
@@ -751,6 +770,7 @@ function resultEnvelope(
       revision,
       file: sweepSnapshotRelativePath(revision),
       sourceSession: args.session ?? null,
+      scope,
       totalItems: allItems.length,
       startIndex,
       selectedItems: selected.length,

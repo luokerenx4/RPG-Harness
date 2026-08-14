@@ -373,12 +373,18 @@ retaining the exact next key, revision, write boundary, causal result identity,
 and GUI-compatible branch session where complete evidence remains available.
 Use `inspect-session`, `transcript`, `choices`, or direct `reach` when those
 detailed artifacts are actually needed.
-With `--until-clean`, the item limit and total search-node limit become shared
-budgets across several immutable generations. A search that reaches its own
+With `--until-clean`, scope deliberately widens from the named player's lineage
+to the whole-project worklist. The named session remains the immutable fallback
+root for searches and forks; it does not force the project to duplicate branch
+evidence already proved by another lineage. Both the top-level convergence
+envelope and its live-worklist summary report `scope: "project"` so an agent does
+not mistake global coverage for an empty player-specific queue. The item limit
+and total search-node limit become shared budgets across several immutable
+generations. A search that reaches its own
 node slice automatically resumes from the replay-verified closest branch, and
 a completed generation freezes the newly exposed queue before continuing.
 Paused searches rotate behind the other frozen items before receiving another
-slice, so one difficult route cannot monopolize the lineage budget.
+slice, so one difficult route cannot monopolize the project budget.
 `--max-generations` (default 5) is a third hard bound. The convergence envelope
 reports every generation revision, continuation attempt, isolated target,
 aggregate budget, live remaining item, and (when paused inside a generation)

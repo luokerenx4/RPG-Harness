@@ -1,0 +1,59 @@
+name: 提案E：隠し zone の覚書も公開条件から正確に redirect される
+description: |
+  Dynamic onScriptSelect content must retain an authored reachability contract.
+  Start from the public shop prerequisites, buy the hidden tier, then choose
+  the one public briefing activity. Prove that the hidden variant completes
+  before the pending tier is cleared.
+state:
+  baseline:
+    completedScripts:
+      - 000_intro
+    inventory:
+      ryo: 301
+      cursed_blade_fragment: 2
+    characters:
+      player:
+        stats:
+          hp: 30
+          mental: 8
+          spectral: 10
+          intellect: 80
+    variables:
+      intel_active: ""
+      intel_count: 0
+  sengoku-raid:
+    metCharacters: []
+    raid: null
+    companion: null
+    companionHp: 0
+    pulsePending: null
+maxSteps: 30
+inputs:
+  - type: doActivity
+    id: infoshop_hidden
+  - type: next
+  - type: doActivity
+    id: script:intel_briefing
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+  - type: next
+assertions:
+  - kind: state
+    path: baseline.completedScripts
+    includes: intel_briefing_hidden
+  - kind: state
+    path: baseline.variables.intel_active
+    eq: ""
+  - kind: state
+    path: baseline.variables.intel_count
+    eq: 1
+  - kind: state
+    path: baseline.inventory.ryo
+    eq: 1
+  - kind: state
+    path: baseline.inventory.cursed_blade_fragment
+    eq: 1

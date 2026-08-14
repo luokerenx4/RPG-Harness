@@ -2,6 +2,8 @@
 id: intel_briefing_loot
 title: 情報屋の覚書（収穫）
 characters: []
+requires:
+  variable: { name: intel_active, eq: loot }
 ai:
   relatedActivityIds:
     - infoshop_loot

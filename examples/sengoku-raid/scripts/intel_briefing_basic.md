@@ -2,6 +2,8 @@
 id: intel_briefing_basic
 title: 情報屋の覚書（基本）
 characters: []
+requires:
+  variable: { name: intel_active, eq: basic }
 ai:
   relatedActivityIds:
     - infoshop_basic

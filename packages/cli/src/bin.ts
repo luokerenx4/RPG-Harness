@@ -145,8 +145,10 @@ COMMANDS
       Preflights every isolated target before writing, stops on failures or
       authoring judgment, persists the immutable queue, and returns completed
       plus remaining work for resume even as new branch evidence shrinks the
-      live queue. --until-clean also follows closest-state search continuations
-      and freezes later queue generations under shared item/node/generation caps,
+      live queue. A regular sweep is scoped to SOURCE's fork lineage.
+      --until-clean deliberately switches to the whole-project queue, using
+      SOURCE only as a safe fork/search root; it also follows closest-state
+      search continuations and freezes later generations under shared caps,
       then runs game.yaml ai_audit as the final project acceptance gate.
       Every author-declared ai_audit seed must pass both strategy and seeded
       fuzz-survival lanes. --audit-seed supplies the

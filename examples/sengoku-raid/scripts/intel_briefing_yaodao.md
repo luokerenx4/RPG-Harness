@@ -2,6 +2,8 @@
 id: intel_briefing_yaodao
 title: 情報屋の覚書（妖刀の声に耐える法）
 characters: []
+requires:
+  variable: { name: intel_active, eq: yaodao }
 ai:
   relatedActivityIds:
     - infoshop_yaodao

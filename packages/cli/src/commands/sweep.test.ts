@@ -35,6 +35,7 @@ describe("bounded development sweep", () => {
       reason: "budget-exhausted",
       snapshot: {
         sourceSession: "player",
+        scope: "session",
         file: expect.stringMatching(/^\.rpg-harness\/sweeps\/[a-f0-9]{64}\.json$/),
         totalItems: 2,
         selectedItems: 1,
@@ -322,6 +323,7 @@ describe("bounded development sweep", () => {
 
     expect(result).toMatchObject({
       mode: "until-clean",
+      scope: "project",
       status: "clean",
       reason: "clean",
       sourceSession: "player",
@@ -333,7 +335,7 @@ describe("bounded development sweep", () => {
         immutableGenerations: true,
         sourceWrites: false,
       },
-      liveWorklist: { totalItems: 0, nextKey: null },
+      liveWorklist: { scope: "project", totalItems: 0, nextKey: null },
       resume: null,
       generations: [{
         generation: 1,
@@ -414,6 +416,7 @@ describe("bounded development sweep", () => {
     const resumeFromKey = resume.fromKey;
     const resumeSnapshotRevision = resume.snapshotRevision;
     expect(first).toMatchObject({
+      scope: "project",
       status: "paused",
       reason: "item-budget-exhausted",
       resume: {
@@ -435,7 +438,7 @@ describe("bounded development sweep", () => {
     expect(resumed).toMatchObject({
       status: "completed",
       reason: "snapshot-completed",
-      snapshot: { remainingItems: 0 },
+      snapshot: { scope: "project", remainingItems: 0 },
       runs: [{ status: "executed" }],
     });
   });

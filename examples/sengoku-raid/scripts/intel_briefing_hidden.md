@@ -2,6 +2,8 @@
 id: intel_briefing_hidden
 title: 情報屋の覚書（隠し zone）
 characters: []
+requires:
+  variable: { name: intel_active, eq: hidden }
 ai:
   relatedActivityIds:
     - depart:mt_houkyou
