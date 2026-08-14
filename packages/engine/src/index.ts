@@ -133,6 +133,7 @@ export type {
   ActivityForecastMetric,
   AiAuditConfig,
   AiPersonaDecider,
+  AiPersonaDecision,
   AiPersonaContext,
   AiPersonaDefinition,
   AssetKind,

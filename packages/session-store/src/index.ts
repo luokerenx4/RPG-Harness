@@ -37,9 +37,13 @@ export type SessionPublicAction =
   | { type: "quit" };
 
 export interface SessionPublicDecisionBasis {
-  kind: "objective-link";
+  kind: "activity-evidence";
   /** Stable activity identity whose public Hub contract supplied this basis. */
   activityId: string;
+  /** Public author-owned persona policy, not private model reasoning. */
+  policyDescription: string;
+  /** Exact public rule the persona attached to this decision, when authored. */
+  publicIntent?: string;
   /** Bounded author-owned goal labels; the Hub snapshot/log remains authority. */
   objectives: Array<{
     id: string;
@@ -50,6 +54,13 @@ export interface SessionPublicDecisionBasis {
   }>;
   /** May exceed objectives.length when more than three goals link the action. */
   totalObjectives: number;
+  category?: string;
+  aiTags: string[];
+  recommended: boolean;
+  /** Player-visible pre-dispatch forecast compacted from the selected Hub row. */
+  forecast?: string;
+  availableActivities: number;
+  sameCategoryActivities: number;
 }
 
 /**
@@ -223,18 +234,42 @@ function isSessionPublicDecisionBasis(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const basis = value as Record<string, unknown>;
   if (
-    basis.kind !== "objective-link" ||
+    basis.kind !== "activity-evidence" ||
     typeof basis.activityId !== "string" || !basis.activityId.trim() ||
-    !Array.isArray(basis.objectives) || basis.objectives.length === 0 ||
+    typeof basis.policyDescription !== "string" ||
+    !basis.policyDescription.trim() || basis.policyDescription.length > 320 ||
+    (basis.publicIntent !== undefined &&
+      (typeof basis.publicIntent !== "string" ||
+        !basis.publicIntent.trim() || basis.publicIntent.length > 320)) ||
+    !Array.isArray(basis.objectives) ||
     basis.objectives.length > 3 ||
     !Number.isSafeInteger(basis.totalObjectives) ||
-    (basis.totalObjectives as number) < basis.objectives.length
+    (basis.totalObjectives as number) < basis.objectives.length ||
+    (basis.category !== undefined &&
+      (typeof basis.category !== "string" || !basis.category.trim() ||
+        basis.category.length > 80)) ||
+    !Array.isArray(basis.aiTags) || basis.aiTags.length > 8 ||
+    !basis.aiTags.every((tag) =>
+      typeof tag === "string" && tag.trim().length > 0 && tag.length <= 80
+    ) ||
+    typeof basis.recommended !== "boolean" ||
+    (basis.forecast !== undefined &&
+      (typeof basis.forecast !== "string" || !basis.forecast.trim() ||
+        basis.forecast.length > 480)) ||
+    !Number.isSafeInteger(basis.availableActivities) ||
+    (basis.availableActivities as number) < 1 ||
+    !Number.isSafeInteger(basis.sameCategoryActivities) ||
+    (basis.sameCategoryActivities as number) < 1 ||
+    (basis.sameCategoryActivities as number) >
+      (basis.availableActivities as number)
   ) return false;
   return basis.objectives.every((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const objective = value as Record<string, unknown>;
     return typeof objective.id === "string" && objective.id.trim().length > 0 &&
+      objective.id.length <= 160 &&
       typeof objective.title === "string" && objective.title.trim().length > 0 &&
+      objective.title.length <= 320 &&
       (objective.scope === "main" || objective.scope === "side" ||
         objective.scope === "mastery") &&
       typeof objective.terminal === "boolean" &&

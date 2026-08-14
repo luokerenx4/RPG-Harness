@@ -161,10 +161,32 @@ export function formatAiTurnReceipt(receipt: WebAiTurnReceipt): string {
 function formatAiPublicDecisionBasis(
   basis: WebAiTurnReceipt["decisionBasis"],
 ): string | null {
-  if (!basis || basis.objectives.length === 0) return null;
-  const titles = basis.objectives.map(({ title }) => `「${title}」`).join("、");
-  const omitted = basis.totalObjectives - basis.objectives.length;
-  return `公开依据：当前目标 ${titles}${omitted > 0 ? ` 等 ${basis.totalObjectives} 项` : ""}明确关联此行动`;
+  if (!basis) return null;
+  const facts: string[] = [];
+  if (basis.publicIntent) {
+    facts.push(`当步规则：${basis.publicIntent}`);
+  } else {
+    facts.push(`策略：${basis.policyDescription}`);
+  }
+  if (basis.objectives.length > 0) {
+    const titles = basis.objectives.map(({ title }) => `「${title}」`).join("、");
+    const omitted = basis.totalObjectives - basis.objectives.length;
+    facts.push(
+      `目标关联：${titles}${omitted > 0 ? ` 等 ${basis.totalObjectives} 项` : ""}`,
+    );
+  }
+  if (basis.forecast) facts.push(`行动预测：${basis.forecast}`);
+  if (basis.recommended) facts.push("作者推荐");
+  if (basis.aiTags.length > 0) {
+    facts.push(`行动意图：${basis.aiTags.join(" / ")}`);
+  }
+  const alternatives = basis.sameCategoryActivities > 1
+    ? `同类 ${basis.sameCategoryActivities} 项可选`
+    : basis.availableActivities > 1
+      ? `当前 ${basis.availableActivities} 项可选`
+      : "当前唯一可执行行动";
+  facts.push(alternatives);
+  return `公开证据：${facts.join("；")}`;
 }
 
 function formatAiPublicAction(

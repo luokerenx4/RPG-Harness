@@ -196,15 +196,20 @@ describe("autoplay semantic decision paths", () => {
         inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] },
         output: { type: "narration", text: "Recovered." },
       },
-    ])).toEqual({
-      kind: "objective-link",
+    ], "Complete every route")).toEqual({
+      kind: "activity-evidence",
       activityId: "rest",
+      policyDescription: "Complete every route",
       objectives: [
         { id: "side", title: "Recover the memory", scope: "side", terminal: false, focused: true },
         { id: "main", title: "Reach the ending", scope: "main", terminal: true, focused: false },
         { id: "extra", title: "Fourth goal", scope: "side", terminal: false, focused: false },
       ],
       totalObjectives: 4,
+      aiTags: [],
+      recommended: false,
+      availableActivities: 1,
+      sameCategoryActivities: 1,
     });
   });
 
@@ -224,7 +229,7 @@ describe("autoplay semantic decision paths", () => {
       },
       { input: { type: "doActivity", id: "rest" }, inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] }, output: { type: "narration", text: "Rested." } },
       { input: { type: "next" }, inputResult: { accepted: true, code: "accepted", message: "ok", expected: [] }, output: { type: "narration", text: "Later." } },
-    ])).toBeUndefined();
+    ], "Complete every route")).toBeUndefined();
   });
 
   test("keeps default CLI output bounded while pointing at exact details", () => {

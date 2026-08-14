@@ -39,6 +39,7 @@ export interface BridgeStepEvent {
   inputResult?: unknown;
   decision?: unknown;
   activityDecision?: unknown;
+  publicIntent?: unknown;
   replayState?: unknown;
 }
 
@@ -195,8 +196,10 @@ export type BridgeAiPublicAction =
   | { type: "quit" };
 
 export interface BridgeAiPublicDecisionBasis {
-  kind: "objective-link";
+  kind: "activity-evidence";
   activityId: string;
+  policyDescription: string;
+  publicIntent?: string;
   objectives: Array<{
     id: string;
     title: string;
@@ -205,6 +208,12 @@ export interface BridgeAiPublicDecisionBasis {
     focused: boolean;
   }>;
   totalObjectives: number;
+  category?: string;
+  aiTags: string[];
+  recommended: boolean;
+  forecast?: string;
+  availableActivities: number;
+  sameCategoryActivities: number;
 }
 
 export async function loadBridgeAiPersonas(
@@ -868,6 +877,9 @@ export async function saveBridgeSession(
           ...(args.event.activityDecision !== undefined
             ? { activityDecision: args.event.activityDecision }
             : {}),
+          ...(args.event.publicIntent !== undefined
+            ? { publicIntent: args.event.publicIntent }
+            : {}),
           ...(replayCheckpoint !== undefined ? { replayCheckpoint } : {}),
         },
         args.state,
@@ -1257,12 +1269,34 @@ function isBridgeAiPublicDecisionBasis(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const basis = value as Record<string, unknown>;
   if (
-    basis.kind !== "objective-link" ||
+    basis.kind !== "activity-evidence" ||
     typeof basis.activityId !== "string" || !basis.activityId.trim() ||
-    !Array.isArray(basis.objectives) || basis.objectives.length === 0 ||
+    typeof basis.policyDescription !== "string" ||
+    !basis.policyDescription.trim() || basis.policyDescription.length > 320 ||
+    (basis.publicIntent !== undefined &&
+      (typeof basis.publicIntent !== "string" ||
+        !basis.publicIntent.trim() || basis.publicIntent.length > 320)) ||
+    !Array.isArray(basis.objectives) ||
     basis.objectives.length > 3 ||
     !Number.isSafeInteger(basis.totalObjectives) ||
-    (basis.totalObjectives as number) < basis.objectives.length
+    (basis.totalObjectives as number) < basis.objectives.length ||
+    (basis.category !== undefined &&
+      (typeof basis.category !== "string" || !basis.category.trim() ||
+        basis.category.length > 80)) ||
+    !Array.isArray(basis.aiTags) || basis.aiTags.length > 8 ||
+    !basis.aiTags.every((tag) =>
+      typeof tag === "string" && tag.trim().length > 0 && tag.length <= 80
+    ) ||
+    typeof basis.recommended !== "boolean" ||
+    (basis.forecast !== undefined &&
+      (typeof basis.forecast !== "string" || !basis.forecast.trim() ||
+        basis.forecast.length > 480)) ||
+    !Number.isSafeInteger(basis.availableActivities) ||
+    (basis.availableActivities as number) < 1 ||
+    !Number.isSafeInteger(basis.sameCategoryActivities) ||
+    (basis.sameCategoryActivities as number) < 1 ||
+    (basis.sameCategoryActivities as number) >
+      (basis.availableActivities as number)
   ) return false;
   return basis.objectives.every((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;

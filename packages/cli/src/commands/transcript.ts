@@ -29,6 +29,7 @@ export interface TranscriptEvent {
     relatedObjectiveIds?: string[];
     focusedObjectiveId?: string;
   };
+  publicIntent?: string;
   inputResult?: { accepted: boolean; code: string; message: string };
   output?: Record<string, unknown>;
   fork?: Record<string, unknown>;
@@ -117,6 +118,8 @@ export function buildTranscriptEvents(lineage: SessionLineageSlice[]): Transcrip
       if (decision) event.decision = decision;
       const activityDecision = stableActivityDecision(entry.activityDecision);
       if (activityDecision) event.activityDecision = activityDecision;
+      const publicIntent = stablePublicIntent(entry.publicIntent);
+      if (publicIntent) event.publicIntent = publicIntent;
       const inputResult = compactInputResult(entry.inputResult);
       if (inputResult) event.inputResult = inputResult;
       const output = compactOutput(entry.output);
@@ -125,7 +128,7 @@ export function buildTranscriptEvents(lineage: SessionLineageSlice[]): Transcrip
       if (fork) event.fork = fork;
       if (isSessionCheckpointRef(entry.checkpoint)) event.checkpoint = entry.checkpoint;
       if (
-        input !== undefined || decision || activityDecision || inputResult || output || fork
+        input !== undefined || decision || activityDecision || publicIntent || inputResult || output || fork
       ) events.push(event);
     });
   }
@@ -343,9 +346,19 @@ export function formatSessionTranscript(transcript: SessionTranscript): string {
     const inputResult = event.inputResult?.accepted === false
       ? ` rejected=${event.inputResult.code}(${event.inputResult.message})`
       : "";
-    lines.push(`${prefix}${input ? ` ${input}${activityDecision} ->` : ""} ${formatOutput(event.output)}${decision}${inputResult}`);
+    const publicIntent = event.publicIntent
+      ? ` intent=${JSON.stringify(event.publicIntent)}`
+      : "";
+    lines.push(`${prefix}${input ? ` ${input}${activityDecision}${publicIntent} ->` : ""} ${formatOutput(event.output)}${decision}${inputResult}`);
   }
   return lines.join("\n") + "\n";
+}
+
+function stablePublicIntent(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 320);
 }
 
 function formatActivityDecision(

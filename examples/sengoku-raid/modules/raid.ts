@@ -3580,7 +3580,17 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
             }
           }
           const attack = find(({ id }) => id === "attack");
-          if (attack) return { type: "doActivity", id: attack.id };
+          if (attack) {
+            const killOutcome = attack.forecast?.metrics.find(
+              ({ id }) => id === "kill_outcome",
+            )?.value;
+            return {
+              input: { type: "doActivity", id: attack.id },
+              publicIntent: killOutcome === "確定"
+                ? "確定撃破で反撃を受けないため、この遭遇を終える"
+                : "任意目標を続けるため、通常攻撃で遭遇を前進させる",
+            };
+          }
           const sneak = find(({ id }) => id === "sneak_strike");
           if (sneak) return { type: "doActivity", id: sneak.id };
           const search = find(({ id }) => id.startsWith("search:"));

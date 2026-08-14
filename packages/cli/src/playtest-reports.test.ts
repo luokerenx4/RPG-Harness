@@ -369,6 +369,7 @@ describe("playtest reports", () => {
         focusedObjectiveId: "remember-the-oni",
         payload: { private: true },
       },
+      publicIntent: "Release the oni to preserve the memory route",
       output: { type: "narration", text: "The oni leaves alive." },
     }) + "\n");
 
@@ -391,6 +392,9 @@ describe("playtest reports", () => {
       relatedObjectiveIds: ["remember-the-oni"],
       focusedObjectiveId: "remember-the-oni",
     });
+    expect(report.evidence.lastEvent?.publicIntent).toBe(
+      "Release the oni to preserve the memory route",
+    );
   });
 
   test("lists reports across sessions and formats a compact human view", async () => {

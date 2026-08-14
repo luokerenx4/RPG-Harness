@@ -22,6 +22,77 @@ const terminalGame: Game = {
 };
 
 describe("runLoop terminal output", () => {
+  test("binds an authored public intent to the exact resulting input trace", async () => {
+    const game = makeGame({
+      runFn: async function* () {
+        const first = yield { type: "narration" as const, text: "Before" };
+        if (first.type !== "next") return;
+        yield { type: "narration" as const, text: "After" };
+      },
+    });
+    const result = await runLoop(
+      game,
+      createInitialState(game),
+      async (output) => output.type === "narration" && output.text === "Before"
+        ? {
+            input: { type: "next" },
+            publicIntent: "Advance the only visible story beat",
+          }
+        : null,
+    );
+
+    expect(result.trace).toHaveLength(2);
+    expect(result.trace[0]?.publicIntent).toBeUndefined();
+    expect(result.trace[1]).toMatchObject({
+      input: { type: "next" },
+      output: { type: "narration", text: "After" },
+      publicIntent: "Advance the only visible story beat",
+    });
+  });
+
+  test("turns an invalid public intent into a decision-phase failure", async () => {
+    const game = makeGame({
+      runFn: async function* () {
+        yield { type: "narration" as const, text: "Choose" };
+      },
+    });
+    const failed = await runLoop(game, createInitialState(game), async () => ({
+      input: { type: "next" },
+      publicIntent: " ",
+    }));
+
+    expect(failed).toMatchObject({
+      reason: "error",
+      failure: {
+        phase: "decision",
+        message: "AI persona publicIntent must be a non-empty string",
+        output: { type: "narration", text: "Choose" },
+      },
+    });
+  });
+
+  test("keeps public intent in an input-phase failure", async () => {
+    const game = makeGame({
+      runFn: async function* () {
+        yield { type: "narration" as const, text: "Before" };
+        throw new Error("transition exploded");
+      },
+    });
+    const failed = await runLoop(game, createInitialState(game), async () => ({
+      input: { type: "next" },
+      publicIntent: "Advance the authored beat",
+    }));
+
+    expect(failed).toMatchObject({
+      reason: "error",
+      failure: {
+        phase: "input",
+        input: { type: "next" },
+        publicIntent: "Advance the authored beat",
+      },
+    });
+  });
+
   test("returns module contract failures before the first public output", async () => {
     const game = makeGame({
       modules: [{

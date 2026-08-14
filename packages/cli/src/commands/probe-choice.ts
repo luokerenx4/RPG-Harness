@@ -171,7 +171,10 @@ export async function runChoiceProbe(
         };
       }
       const definition = personaRegistry[persona]!;
-      const input = await definition.decide(output, result.state, args.at);
+      const rawDecision = await definition.decide(output, result.state, args.at);
+      const input = rawDecision && "input" in rawDecision
+        ? rawDecision.input
+        : rawDecision;
       const optionIndex = input?.type === "choose"
         ? "index" in input
           ? input.index

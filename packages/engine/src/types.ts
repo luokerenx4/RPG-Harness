@@ -939,7 +939,19 @@ export type AiPersonaDecider = (
   state: ComposedState,
   step: number,
   context?: AiPersonaContext,
-) => Promise<Input | null>;
+) => Promise<Input | AiPersonaDecision | null>;
+
+/**
+ * Optional public decision record authored by a persona policy.
+ *
+ * `publicIntent` is a stable rule the project is willing to show players and
+ * persist in test evidence. It is not private chain-of-thought and must not
+ * contain hidden state or free-form model reasoning.
+ */
+export interface AiPersonaDecision {
+  input: Input;
+  publicIntent?: string;
+}
 
 /** Runner-owned services kept separate from the game's persisted RNG. */
 export interface AiPersonaContext {

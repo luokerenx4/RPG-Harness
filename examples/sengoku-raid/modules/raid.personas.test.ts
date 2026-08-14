@@ -430,12 +430,51 @@ describe("sengoku-raid authored language", () => {
   });
 });
 
-function decide(
+describe("sengoku-raid public AI decision evidence", () => {
+  test("completionist explains a guaranteed attack without exposing private reasoning", async () => {
+    const output = hub([{
+      ...activity("attack"),
+      category: "combat",
+      forecast: {
+        summary: "反撃なしで撃破",
+        metrics: [{
+          id: "kill_outcome",
+          label: "撃破見込み",
+          value: "確定",
+          tone: "positive" as const,
+        }],
+      },
+    }]);
+
+    await expect(raidAiPersonas.completionist!.decide(
+      output,
+      {
+        baseline: { scripts: {} },
+        "sengoku-raid": {
+          raid: { chain: "kuro_swamp", visited: {} },
+          companion: null,
+          achievementLog: [],
+        },
+      } as unknown as ComposedState,
+      0,
+    )).resolves.toEqual({
+      input: { type: "doActivity", id: "attack" },
+      publicIntent: "確定撃破で反撃を受けないため、この遭遇を終える",
+    });
+  });
+});
+
+async function decide(
   name: "extractor" | "delver" | "completionist",
   output: Output,
   state: unknown,
 ) {
-  return raidAiPersonas[name]!.decide(output, state as ComposedState, 0);
+  const decision = await raidAiPersonas[name]!.decide(
+    output,
+    state as ComposedState,
+    0,
+  );
+  return decision && "input" in decision ? decision.input : decision;
 }
 
 function activity(id: string) {

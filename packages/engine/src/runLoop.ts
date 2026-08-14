@@ -24,6 +24,7 @@ import type {
   ModuleHookName,
   ModuleHookContext,
   Output,
+  AiPersonaDecision,
   TriggerFailureStage,
 } from "./types";
 
@@ -33,6 +34,8 @@ export interface TraceEntry {
   output: Output;
   decision?: ChoiceDecisionContext;
   activityDecision?: ActivityDecisionContext;
+  /** Author-owned public policy rule attached to this attempted input. */
+  publicIntent?: string;
   inputResult?: InputResult;
 }
 
@@ -85,6 +88,8 @@ export interface LoopFailure {
   output: Output | null;
   decision?: ChoiceDecisionContext;
   activityDecision?: ActivityDecisionContext;
+  /** Author-owned public policy rule attached to the failed input. */
+  publicIntent?: string;
   stack?: string;
   /** Author-owned modules whose setup contract caused the failure. */
   moduleIds?: string[];
@@ -100,7 +105,11 @@ export interface LoopFailure {
 
 export type InputSource =
   | Input[]
-  | ((output: Output, state: ComposedState, stepIndex: number) => Promise<Input | null>);
+  | ((
+      output: Output,
+      state: ComposedState,
+      stepIndex: number,
+    ) => Promise<Input | AiPersonaDecision | null>);
 
 export interface RunLoopOptions {
   maxSteps?: number;
@@ -158,6 +167,7 @@ export async function runLoop(
   const inputsFn = !Array.isArray(inputs) ? inputs : null;
   let cursor = 0;
   let lastInput: Input | null = null;
+  let lastPublicIntent: string | undefined;
   let lastOutput: Output | null = null;
   let stepIndex = 0;
   let failurePhase: LoopFailure["phase"] = "setup";
@@ -213,6 +223,7 @@ export async function runLoop(
         ...(inputResult ? { inputResult } : {}),
         ...(decision ? { decision } : {}),
         ...(activityDecision ? { activityDecision } : {}),
+        ...(lastPublicIntent ? { publicIntent: lastPublicIntent } : {}),
       };
       lastOutput = result.value;
       trace.push(entry);
@@ -306,6 +317,7 @@ export async function runLoop(
       }
 
       let nextInput: Input | null;
+      let nextPublicIntent: string | undefined;
       if (inputsArray) {
         if (cursor >= inputsArray.length) {
           await runner.return();
@@ -320,7 +332,17 @@ export async function runLoop(
       } else {
         failurePhase = "decision";
         failureOutput = structuredClone(result.value);
-        nextInput = await inputsFn!(result.value, engine.getState(), stepIndex);
+        const decision = await inputsFn!(
+          result.value,
+          engine.getState(),
+          stepIndex,
+        );
+        if (isAiPersonaDecision(decision)) {
+          nextInput = decision.input;
+          nextPublicIntent = validatePublicIntent(decision.publicIntent);
+        } else {
+          nextInput = decision;
+        }
       }
       if (!nextInput) {
         await runner.return();
@@ -341,6 +363,7 @@ export async function runLoop(
         };
       }
       lastInput = nextInput;
+      lastPublicIntent = nextPublicIntent;
       stepIndex++;
     }
   } catch (err) {
@@ -369,6 +392,9 @@ export async function runLoop(
         input: attemptedInput,
         output: semanticOutput,
         ...failureDecisionContext(semanticOutput, attemptedInput),
+        ...(failurePhase === "input" && lastPublicIntent
+          ? { publicIntent: lastPublicIntent }
+          : {}),
         ...(error instanceof ModuleContractError
           ? { moduleIds: error.moduleIds }
           : hookError
@@ -394,6 +420,24 @@ export async function runLoop(
       },
     };
   }
+}
+
+function isAiPersonaDecision(
+  value: Input | AiPersonaDecision | null,
+): value is AiPersonaDecision {
+  return value !== null && typeof value === "object" && "input" in value;
+}
+
+function validatePublicIntent(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("AI persona publicIntent must be a non-empty string");
+  }
+  const normalized = value.trim();
+  if (normalized.length > 320) {
+    throw new Error("AI persona publicIntent must be at most 320 characters");
+  }
+  return normalized;
 }
 
 function failureDecisionContext(

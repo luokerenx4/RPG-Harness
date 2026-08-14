@@ -301,6 +301,9 @@ export function compactAutoplaySummary(
             ...(failure.activityDecision
               ? { activityDecision: failure.activityDecision }
               : {}),
+            ...(failure.publicIntent
+              ? { publicIntent: failure.publicIntent }
+              : {}),
             ...(failure.moduleIds ? { moduleIds: failure.moduleIds } : {}),
             ...(failure.hook ? { hook: failure.hook } : {}),
             ...(failure.trigger ? { trigger: failure.trigger } : {}),
@@ -577,6 +580,7 @@ export async function runAutoplay(
             ...(entry.activityDecision
               ? { activityDecision: entry.activityDecision }
               : {}),
+            ...(entry.publicIntent ? { publicIntent: entry.publicIntent } : {}),
           }, state);
         }
         if (!args.verbose) return;
@@ -618,7 +622,10 @@ export async function runAutoplay(
       await saveSession(args.gameDir, args.session, result.finalState);
       if (countDecisions(result.trace) > 0) {
         const lastAction = summarizeLastPublicAction(result.trace);
-        const decisionBasis = summarizeLastPublicDecisionBasis(result.trace);
+        const decisionBasis = summarizeLastPublicDecisionBasis(
+          result.trace,
+          personaDefinition.description,
+        );
         await writeSessionCoPlayControl({
           gameDir: args.gameDir,
           session: args.session,
@@ -665,7 +672,10 @@ export async function runAutoplay(
   );
   const decisionPath = summarizeDecisionPath(result.trace);
   const lastAction = summarizeLastPublicAction(result.trace);
-  const decisionBasis = summarizeLastPublicDecisionBasis(result.trace);
+  const decisionBasis = summarizeLastPublicDecisionBasis(
+    result.trace,
+    personaDefinition.description,
+  );
   const continuation: AutoplayContinuation | undefined =
     args.session && result.reason === "max-steps" && !result.behaviorCycle
       ? {
@@ -1321,15 +1331,16 @@ export function summarizeLastPublicAction(
 /**
  * Summarize an auditable public reason without exposing persona internals.
  *
- * A basis exists only when the preceding authored Hub explicitly linked the
- * accepted activity to active objectives. Labels are bounded for transport;
- * the persisted Hub output and activityDecision remain the full authority.
+ * The basis is reconstructed only from the preceding authored Hub plus the
+ * persona's explicit public intent. Labels are bounded for transport; the
+ * persisted Hub output, activityDecision and publicIntent remain authority.
  */
 export function summarizeLastPublicDecisionBasis(
   trace: ReadonlyArray<Pick<
     TraceEntry,
-    "input" | "inputResult" | "output"
+    "input" | "inputResult" | "output" | "publicIntent"
   >>,
+  policyDescription: string,
 ): AutoplayPublicDecisionBasis | undefined {
   let previousOutput: Output | undefined;
   let lastBasis: AutoplayPublicDecisionBasis | undefined;
@@ -1340,6 +1351,21 @@ export function summarizeLastPublicDecisionBasis(
       previousOutput?.type === "hubMenu"
     ) {
       const activityId = entry.input.id;
+      const activity = previousOutput.snapshot.activities.find(
+        ({ id }) => id === activityId,
+      );
+      if (!activity) {
+        previousOutput = entry.output;
+        continue;
+      }
+      const available = previousOutput.snapshot.activities.filter(
+        ({ available }) => available,
+      );
+      const sameCategoryActivities = available.filter((candidate) =>
+        activity.category === undefined
+          ? candidate.category === undefined
+          : candidate.category === activity.category
+      ).length;
       const objectives = (previousOutput.snapshot.objectives ?? [])
         .map((objective, authoredOrder) => ({ objective, authoredOrder }))
         .filter(({ objective }) =>
@@ -1353,26 +1379,47 @@ export function summarizeLastPublicDecisionBasis(
             ({ main: 0, side: 1, mastery: 2 } as const)[right.objective.scope] ||
           left.authoredOrder - right.authoredOrder
         );
-      lastBasis = objectives.length > 0
-        ? {
-            kind: "objective-link",
-            activityId,
-            objectives: objectives.slice(0, 3).map(({ objective }) => ({
-              id: objective.id,
-              title: objective.title,
-              scope: objective.scope,
-              terminal: objective.terminal,
-              focused: objective.focus === true,
-            })),
-            totalObjectives: objectives.length,
-          }
-        : undefined;
+      const forecast = formatActivityForecast(activity) ??
+        activity.forecast?.summary;
+      lastBasis = {
+        kind: "activity-evidence",
+        activityId,
+        policyDescription: boundPublicText(policyDescription, 320),
+        ...(entry.publicIntent
+          ? { publicIntent: boundPublicText(entry.publicIntent, 320) }
+          : {}),
+        objectives: objectives.slice(0, 3).map(({ objective }) => ({
+          id: objective.id,
+          title: boundPublicText(objective.title, 320),
+          scope: objective.scope,
+          terminal: objective.terminal,
+          focused: objective.focus === true,
+        })),
+        totalObjectives: objectives.length,
+        ...(activity.category
+          ? { category: boundPublicText(activity.category, 80) }
+          : {}),
+        aiTags: (activity.aiTags ?? [])
+          .slice(0, 8)
+          .map((tag) => boundPublicText(tag, 80)),
+        recommended: activity.recommended === true,
+        ...(forecast ? { forecast: boundPublicText(forecast, 480) } : {}),
+        availableActivities: available.length,
+        sameCategoryActivities,
+      };
     } else if (entry.input && entry.inputResult?.accepted !== false) {
       lastBasis = undefined;
     }
     previousOutput = entry.output;
   }
   return lastBasis;
+}
+
+function boundPublicText(value: string, limit: number): string {
+  const normalized = value.trim();
+  return normalized.length <= limit
+    ? normalized
+    : `${normalized.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
 export function summarizeAutoplayProgress(

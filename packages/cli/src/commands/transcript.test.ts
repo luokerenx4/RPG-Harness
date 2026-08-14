@@ -171,6 +171,7 @@ describe("session transcript", () => {
         relatedObjectiveIds: ["remember-the-oni"],
         focusedObjectiveId: "remember-the-oni",
       },
+      publicIntent: "Preserve the named encounter route",
       output: { type: "narration", text: "The oni leaves alive." },
     }]);
 
@@ -186,8 +187,11 @@ describe("session transcript", () => {
       relatedObjectiveIds: ["remember-the-oni"],
       focusedObjectiveId: "remember-the-oni",
     });
+    expect(transcript.events[0]?.publicIntent).toBe(
+      "Preserve the named encounter route",
+    );
     expect(formatSessionTranscript(transcript)).toContain(
-      'activity release-private-id "Release the oni" [category=combat; tags=nonlethal,mercy,memory; objectives=remember-the-oni; focus=remember-the-oni; recommended]',
+      'activity release-private-id "Release the oni" [category=combat; tags=nonlethal,mercy,memory; objectives=remember-the-oni; focus=remember-the-oni; recommended] intent="Preserve the named encounter route"',
     );
   });
 

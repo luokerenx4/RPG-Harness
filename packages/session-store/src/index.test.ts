@@ -45,7 +45,8 @@ describe("session co-play lineage", () => {
         controller: "autoplay:random",
         lastAction: { type: "doActivity", id: "rest", title: "Rest" },
         decisionBasis: {
-          kind: "objective-link",
+          kind: "activity-evidence",
+          policyDescription: "Test policy",
           activityId: "rest",
           objectives: [{
             id: "recover",
@@ -55,6 +56,10 @@ describe("session co-play lineage", () => {
             focused: true,
           }],
           totalObjectives: 1,
+          aiTags: [],
+          recommended: false,
+          availableActivities: 1,
+          sameCategoryActivities: 1,
         },
         now: () => new Date("2026-08-14T00:00:00.000Z"),
       })
@@ -68,7 +73,8 @@ describe("session co-play lineage", () => {
       controller: "autoplay:random",
       lastAction: { type: "doActivity", id: "rest", title: "Rest" },
       decisionBasis: {
-        kind: "objective-link",
+        kind: "activity-evidence",
+        policyDescription: "Test policy",
         activityId: "rest",
         objectives: [{
           id: "recover",
@@ -78,6 +84,10 @@ describe("session co-play lineage", () => {
           focused: true,
         }],
         totalObjectives: 1,
+        aiTags: [],
+        recommended: false,
+        availableActivities: 1,
+        sameCategoryActivities: 1,
       },
       updatedAt: "2026-08-14T00:00:00.000Z",
     });
@@ -127,7 +137,8 @@ describe("session co-play lineage", () => {
         controller: "web",
         lastAction: { type: "doActivity", id: "rest", title: "Rest" },
         decisionBasis: {
-          kind: "objective-link",
+          kind: "activity-evidence",
+          policyDescription: "Test policy",
           activityId: "rest",
           objectives: [{
             id: "recover",
@@ -137,6 +148,10 @@ describe("session co-play lineage", () => {
             focused: true,
           }],
           totalObjectives: 1,
+          aiTags: [],
+          recommended: false,
+          availableActivities: 1,
+          sameCategoryActivities: 1,
         },
       });
       await rebindSessionCoPlayControl({
@@ -169,7 +184,8 @@ describe("session co-play lineage", () => {
         controller: "autoplay:random",
         lastAction: { type: "doActivity", id: "rest", title: "Rest" },
         decisionBasis: {
-          kind: "objective-link",
+          kind: "activity-evidence",
+          policyDescription: "Test policy",
           activityId: "rest",
           objectives: [{
             id: "recover",
@@ -179,6 +195,10 @@ describe("session co-play lineage", () => {
             focused: false,
           }],
           totalObjectives: 1,
+          aiTags: [],
+          recommended: false,
+          availableActivities: 1,
+          sameCategoryActivities: 1,
         },
       });
       await rebindSessionCoPlayControl({
@@ -227,7 +247,8 @@ describe("session co-play lineage", () => {
       controller: "autoplay:completionist",
       lastAction: { type: "doActivity", id: "depart" },
       decisionBasis: {
-        kind: "objective-link",
+        kind: "activity-evidence",
+        policyDescription: "Test policy",
         activityId: "rest",
         objectives: [{
           id: "recover",
@@ -237,6 +258,10 @@ describe("session co-play lineage", () => {
           focused: false,
         }],
         totalObjectives: 1,
+        aiTags: [],
+        recommended: false,
+        availableActivities: 1,
+        sameCategoryActivities: 1,
       },
       updatedAt: "2026-08-14T00:00:00.000Z",
     }), "utf-8");
@@ -256,7 +281,8 @@ describe("session co-play lineage", () => {
       controller: "autoplay:completionist",
       lastAction: { type: "doActivity", id: "depart" },
       decisionBasis: {
-        kind: "objective-link",
+        kind: "activity-evidence",
+        policyDescription: "Test policy",
         activityId: "rest",
         objectives: [{
           id: "recover",
@@ -266,6 +292,10 @@ describe("session co-play lineage", () => {
           focused: false,
         }],
         totalObjectives: 1,
+        aiTags: [],
+        recommended: false,
+        availableActivities: 1,
+        sameCategoryActivities: 1,
       },
     })).rejects.toThrow("must match its public activity");
   });

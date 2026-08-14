@@ -52,13 +52,20 @@ describe("Web terminal handoff", () => {
       ending: null,
       lastAction: { type: "doActivity", id: "rest", title: "宿で休む" },
       decisionBasis: {
-        kind: "objective-link",
+        kind: "activity-evidence",
         activityId: "rest",
+        policyDescription: "深層検証：任意目標を完遂する",
+        publicIntent: "体力を全回復して次の遠征を可能にする",
         objectives: [
           { id: "ending", title: "地獄門の底へ", scope: "main", terminal: true, focused: false },
           { id: "mastery", title: "地獄門を開く", scope: "mastery", terminal: false, focused: false },
         ],
         totalObjectives: 2,
+        category: "rest",
+        aiTags: [],
+        recommended: false,
+        availableActivities: 7,
+        sameCategoryActivities: 1,
       },
       progress: {
         madeProgress: false,
@@ -67,7 +74,36 @@ describe("Web terminal handoff", () => {
       },
       advancedAfterTurn: false,
       state: {} as never,
-    })).toBe("执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」、「地獄門を開く」明确关联此行动）。下一手归玩家。");
+    })).toBe("执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」、「地獄門を開く」；当前 7 项可选）。下一手归玩家。");
+  });
+
+  test("falls back to the public persona policy when no exact rule is authored", () => {
+    expect(formatAiTurnReceipt({
+      persona: "completionist",
+      ending: null,
+      lastAction: { type: "doActivity", id: "depart", title: "黒沼地へ出立" },
+      decisionBasis: {
+        kind: "activity-evidence",
+        activityId: "depart",
+        policyDescription: "任意目標を完遂してから終局へ進む",
+        objectives: [],
+        totalObjectives: 0,
+        category: "raid",
+        aiTags: ["cautious"],
+        recommended: false,
+        availableActivities: 3,
+        sameCategoryActivities: 3,
+      },
+      progress: {
+        madeProgress: false,
+        completedScripts: [],
+        objectiveChanges: [],
+      },
+      advancedAfterTurn: false,
+      state: {} as never,
+    })).toBe(
+      "执行「黒沼地へ出立」（公开证据：策略：任意目標を完遂してから終局へ進む；行动意图：cautious；同类 3 项可选）。下一手归玩家。",
+    );
   });
 
   test("renders player and AI stable selections as story context in backlog", () => {
@@ -89,7 +125,7 @@ describe("Web terminal handoff", () => {
 
   test("dispatches stable engine inputs from every interactive GUI surface", () => {
     expect(runWebQualitySurfaceCheck()).toMatchObject({
-      schemaVersion: 15,
+      schemaVersion: 16,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -128,7 +164,7 @@ describe("Web terminal handoff", () => {
         text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
       }, {
         surface: "bounded-ai-coplay",
-        text: "执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」明确关联此行动）。下一手归玩家。",
+        text: "执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」；当前 7 项可选）。下一手归玩家。",
       }, {
         surface: "persistent-ai-coplay",
         text: "random@2718 · web · state 56e32233d741",

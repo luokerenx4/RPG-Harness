@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 15;
+  schemaVersion: 16;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -371,7 +371,7 @@ const REQUIRED_WEB_PROJECTIONS = [{
   text: "AI 首映 · Explore Stay玩家游玩 · AI 来源: Explore Stay",
 }, {
   surface: "bounded-ai-coplay",
-  text: "执行「宿で休む」（公开依据：当前目标 「地獄門の底へ」明确关联此行动）。下一手归玩家。",
+  text: "执行「宿で休む」（公开证据：当步规则：体力を全回復して次の遠征を可能にする；目标关联：「地獄門の底へ」；当前 7 项可选）。下一手归玩家。",
 }, {
   surface: "persistent-ai-coplay",
   text: "random@2718 · web · state 56e32233d741",
@@ -699,7 +699,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 15 &&
+    value.schemaVersion === 16 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

@@ -63,6 +63,7 @@ export interface PlaytestEvidence {
     output: unknown;
     inputResult?: unknown;
     activityDecision?: unknown;
+    publicIntent?: string;
   } | null;
   visualState?: {
     bg: string | null;
@@ -117,6 +118,7 @@ export interface PlaytestFailureEvidence {
   output: unknown;
   decision?: LoopFailure["decision"];
   activityDecision?: LoopFailure["activityDecision"];
+  publicIntent?: string;
   stack?: string;
   hook?: LoopFailure["hook"];
   trigger?: LoopFailure["trigger"];
@@ -557,6 +559,7 @@ function compactLoopFailure(failure: LoopFailure): PlaytestFailureEvidence {
     ...(failure.activityDecision
       ? { activityDecision: structuredClone(failure.activityDecision) }
       : {}),
+    ...(failure.publicIntent ? { publicIntent: failure.publicIntent } : {}),
     ...(failure.stack ? { stack: failure.stack } : {}),
     ...(failure.moduleIds?.length ? { moduleIds: [...failure.moduleIds] } : {}),
     ...(failure.hook ? { hook: structuredClone(failure.hook) } : {}),
@@ -1304,6 +1307,7 @@ export async function capturePlaytestEvidenceSnapshot(
         output?: unknown;
         inputResult?: unknown;
         activityDecision?: unknown;
+        publicIntent?: unknown;
         replayCheckpoint?: unknown;
       } | null;
       if (entry) {
@@ -1313,6 +1317,9 @@ export async function capturePlaytestEvidenceSnapshot(
           ...(entry.inputResult !== undefined ? { inputResult: entry.inputResult } : {}),
           ...(entry.activityDecision !== undefined
             ? { activityDecision: compactActivityDecision(entry.activityDecision) }
+            : {}),
+          ...(typeof entry.publicIntent === "string" && entry.publicIntent.trim()
+            ? { publicIntent: entry.publicIntent.trim().slice(0, 320) }
             : {}),
         };
         if (isSessionCheckpointRef(entry.replayCheckpoint)) {

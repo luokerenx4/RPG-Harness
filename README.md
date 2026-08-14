@@ -714,6 +714,14 @@ for any game (always-first / always-last / always-second / uniform-random /
 training-aware). They're useful for fuzz-testing path coverage. For LLM-driven
 personas use the [`rpg-harness-player` skill](.claude/skills/rpg-harness-player/SKILL.md).
 
+Project personas may return either an ordinary `Input` or an
+`AiPersonaDecision` carrying `publicIntent`. This is a short author-owned rule
+safe to show players and persist in Headless evidence—not model chain-of-thought.
+GUI co-play receipts bind that rule to the exact accepted activity and combine
+it with the Hub's objective links, forecast, tags, and number of alternatives.
+The same evidence survives in transcripts and playtest coding issues, so a
+choice remains explainable when an AI turn later fails or is replayed.
+
 Every standalone `autoplay` result identifies both the registered `persona` and
 its public uint32 `seed`. On a fresh session that one seed initializes the game
 world (including author module RNG) and the runner-owned persona stream, so
