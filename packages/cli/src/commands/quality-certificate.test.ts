@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project quality certificate input", () => {
   test("executes the current Web GUI contract before certification", async () => {
     expect(await runQualitySurfaceChecks()).toMatchObject([{
-      schemaVersion: 17,
+      schemaVersion: 18,
       id: "web-input-contract",
       status: "passed",
       revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -65,6 +65,9 @@ describe("project quality certificate input", () => {
       }, {
         surface: "persistent-ai-coplay",
         text: "random@2718 · web · state 56e32233d741",
+      }, {
+        surface: "external-headless-sync",
+        text: "HEADLESS 已推进共享会话；GUI 已同步到最新画面。",
       }, {
         surface: "shareable-game-route",
         text: "/?session=ai-branch&game=sengoku-raid",

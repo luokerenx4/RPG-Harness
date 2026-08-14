@@ -699,6 +699,14 @@ body {
   color: #ff9aa8;
   white-space: nowrap;
 }
+.input-notice.accepted {
+  color: #d9ecdf;
+  background: rgba(16, 39, 30, 0.94);
+  border-color: #47765f;
+}
+.input-notice.accepted strong {
+  color: #8bd3aa;
+}
 .input-notice span {
   flex: 1;
 }

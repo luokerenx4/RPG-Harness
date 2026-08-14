@@ -41,6 +41,10 @@ interface Loaded {
     result: InputResult;
     source?: string;
   };
+  externalAdvanceNotice?: {
+    source?: string;
+    logCursor: number;
+  };
   aiTurnReceipt?: WebAiTurnReceipt;
   aiPersona?: string;
 }
@@ -144,6 +148,12 @@ export function App() {
                 ...(update.latestRejectedInput
                   ? { externalInputNotice: update.latestRejectedInput }
                   : { externalInputNotice: undefined }),
+                ...(update.latestAcceptedInput
+                  ? {
+                      externalAdvanceNotice: update.latestAcceptedInput,
+                      aiTurnReceipt: undefined,
+                    }
+                  : { externalAdvanceNotice: undefined }),
               }
             : current,
         );
@@ -317,6 +327,7 @@ export function App() {
         onFeedback={(input) => submitFeedback(loaded.id, input)}
         feedbackFeed={loaded.feedbackFeed}
         externalInputNotice={loaded.externalInputNotice}
+        externalAdvanceNotice={loaded.externalAdvanceNotice}
         aiTurnReceipt={loaded.aiTurnReceipt}
         aiTurnPending={aiTurnPending}
         initialAiPersona={loaded.aiPersona}

@@ -302,7 +302,7 @@ interface QualityAuditCertificatePayload {
 }
 
 export interface QualitySurfaceEvidence {
-  schemaVersion: 17;
+  schemaVersion: 18;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -321,6 +321,7 @@ export interface QualitySurfaceEvidence {
       | "bounded-ai-coplay"
       | "choice-ai-coplay"
       | "persistent-ai-coplay"
+      | "external-headless-sync"
       | "shareable-game-route"
       | "feedback-live-routing";
     text: string;
@@ -379,6 +380,9 @@ const REQUIRED_WEB_PROJECTIONS = [{
 }, {
   surface: "persistent-ai-coplay",
   text: "random@2718 · web · state 56e32233d741",
+}, {
+  surface: "external-headless-sync",
+  text: "HEADLESS 已推进共享会话；GUI 已同步到最新画面。",
 }, {
   surface: "shareable-game-route",
   text: "/?session=ai-branch&game=sengoku-raid",
@@ -703,7 +707,7 @@ function hasRequiredQualitySurfaces(
 
 function isQualitySurfaceEvidence(value: unknown): value is QualitySurfaceEvidence {
   if (!(isRecord(value) &&
-    value.schemaVersion === 17 &&
+    value.schemaVersion === 18 &&
     value.id === "web-input-contract" &&
     value.status === "passed" &&
     isSha256(value.revision) &&

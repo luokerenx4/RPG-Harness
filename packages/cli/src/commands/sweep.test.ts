@@ -491,7 +491,7 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(certificateFile, "utf-8"))).toMatchObject({
       schemaVersion: 4,
       surfaces: [{
-        schemaVersion: 17,
+        schemaVersion: 18,
         id: "web-input-contract",
         status: "passed",
         revision: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -537,6 +537,9 @@ describe("bounded development sweep", () => {
         }, {
           surface: "persistent-ai-coplay",
           text: "random@2718 · web · state 56e32233d741",
+        }, {
+          surface: "external-headless-sync",
+          text: "HEADLESS 已推进共享会话；GUI 已同步到最新画面。",
         }, {
           surface: "shareable-game-route",
           text: "/?session=ai-branch&game=sengoku-raid",

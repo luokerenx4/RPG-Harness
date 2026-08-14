@@ -296,6 +296,10 @@ describe("Web development session bridge", () => {
       source: "cli",
       inputResult: { accepted: false, code: "unexpected-input" },
     });
+    expect(changed.latestAcceptedEvent).toMatchObject({
+      source: "cli",
+      inputResult: { accepted: true, code: "accepted" },
+    });
   });
 
   test("restarts at byte zero when the log file generation changed", async () => {

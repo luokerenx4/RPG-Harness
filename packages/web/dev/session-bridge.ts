@@ -59,6 +59,7 @@ export interface BridgeSessionSnapshot {
   logCursor: number;
   /** File generation bound to logCursor so a missed reset cannot splice logs. */
   logIdentity: string | null;
+  latestAcceptedEvent?: BridgeSessionEventSummary;
   latestRejectedEvent?: BridgeSessionEventSummary;
 }
 
@@ -765,6 +766,18 @@ export async function loadBridgeSnapshot(
     revision: state === null ? null : revisionOf(state),
     logCursor: log.cursor,
     logIdentity: log.identity,
+    ...(log.latestAccepted
+      ? {
+          latestAcceptedEvent: {
+            ...(typeof log.latestAccepted.source === "string"
+              ? { source: log.latestAccepted.source }
+              : {}),
+            ...(log.latestAccepted.inputResult !== undefined
+              ? { inputResult: log.latestAccepted.inputResult }
+              : {}),
+          },
+        }
+      : {}),
     ...(log.latestRejected
       ? {
           latestRejectedEvent: {
@@ -1600,6 +1613,7 @@ async function readBridgeLogSnapshot(
 ): Promise<{
   cursor: number;
   identity: string | null;
+  latestAccepted?: Record<string, unknown>;
   latestRejected?: Record<string, unknown>;
 }> {
   const file = path.join(sessionDirectory(gameDir, session), "log.jsonl");
@@ -1635,12 +1649,16 @@ async function readBridgeLogSnapshot(
       .split(/\r?\n/)
       .filter((line) => line.trim())
       .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const latestAccepted = entries.findLast((entry) =>
+      isAcceptedBridgeInputResult(entry.inputResult)
+    );
     const latestRejected = entries.findLast((entry) =>
       isRejectedBridgeInputResult(entry.inputResult)
     );
     return {
       cursor: size,
       identity,
+      ...(latestAccepted ? { latestAccepted } : {}),
       ...(latestRejected ? { latestRejected } : {}),
     };
   } finally {
@@ -1650,6 +1668,11 @@ async function readBridgeLogSnapshot(
 
 function bridgeLogIdentity(dev: number, ino: number): string {
   return `${dev}:${ino}`;
+}
+
+function isAcceptedBridgeInputResult(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>).accepted === true;
 }
 
 function isRejectedBridgeInputResult(value: unknown): boolean {

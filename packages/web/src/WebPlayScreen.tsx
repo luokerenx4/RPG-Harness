@@ -93,6 +93,10 @@ interface Props {
     result: InputResult;
     source?: string;
   };
+  externalAdvanceNotice?: {
+    source?: string;
+    logCursor: number;
+  };
   aiControlEnabled?: boolean;
   aiTurnReceipt?: WebAiTurnReceipt;
   aiTurnPending?: boolean;
@@ -131,6 +135,11 @@ export function inputNoticeSourceLabel(source: string): string {
   if (source === "cli" || source.startsWith("autoplay:")) return "HEADLESS";
   if (source === "tui") return "TUI";
   return source.toUpperCase();
+}
+
+export function formatExternalAdvanceNotice(source?: string): string {
+  const controller = inputNoticeSourceLabel(source ?? "external");
+  return `${controller} 已推进共享会话；GUI 已同步到最新画面。`;
 }
 
 export function formatAiTurnReceipt(receipt: WebAiTurnReceipt): string {
@@ -239,6 +248,7 @@ export function WebPlayScreen({
   onFeedback,
   feedbackFeed,
   externalInputNotice,
+  externalAdvanceNotice,
   aiControlEnabled = false,
   aiTurnReceipt,
   aiTurnPending = false,
@@ -269,6 +279,9 @@ export function WebPlayScreen({
   const [showFeedback, setShowFeedback] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
   const [inputNoticeSource, setInputNoticeSource] = useState<string | null>(null);
+  const [externalAdvance, setExternalAdvance] = useState(
+    externalAdvanceNotice ?? null,
+  );
   const [exploration, setExploration] = useState<WebExplorationStatus | null>(null);
   const [exploring, setExploring] = useState(false);
   const [explorationError, setExplorationError] = useState<string | null>(null);
@@ -300,6 +313,12 @@ export function WebPlayScreen({
   useEffect(() => {
     if (aiTurnReceipt) setAiReceipt(aiTurnReceipt);
   }, [aiTurnReceipt]);
+
+  useEffect(() => {
+    if (!externalAdvanceNotice) return;
+    setExternalAdvance(externalAdvanceNotice);
+    setAiReceipt(null);
+  }, [externalAdvanceNotice]);
 
   useEffect(() => {
     if (!aiControlEnabled || !onLoadAiStatus) return;
@@ -452,6 +471,7 @@ export function WebPlayScreen({
         }
         setInputNotice(null);
         setInputNoticeSource(null);
+        setExternalAdvance(null);
         setAiReceipt(null);
         dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(
@@ -519,6 +539,16 @@ export function WebPlayScreen({
               setInputNoticeSource(null);
             }}
             aria-label="入力通知を閉じる"
+          >×</button>
+        </div>
+      )}
+      {!inputNotice && externalAdvance && (
+        <div className="input-notice accepted" role="status">
+          <strong>{inputNoticeSourceLabel(externalAdvance.source ?? "external")} · SYNCED</strong>
+          <span>{formatExternalAdvanceNotice(externalAdvance.source)}</span>
+          <button
+            onClick={() => setExternalAdvance(null)}
+            aria-label="外部操作通知を閉じる"
           >×</button>
         </div>
       )}

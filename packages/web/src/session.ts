@@ -274,6 +274,10 @@ const bridgeLogIdentities = new Map<string, string | null>();
 export interface WebExternalSessionUpdate {
   state: ComposedState | null;
   stateChanged: boolean;
+  latestAcceptedInput?: {
+    source?: string;
+    logCursor: number;
+  };
   latestRejectedInput?: {
     result: InputResult;
     source?: string;
@@ -333,6 +337,15 @@ export async function pollExternalState(
   bridgeRevisions.set(gameId, snapshot.revision);
   bridgeLogCursors.set(gameId, snapshot.logCursor);
   bridgeLogIdentities.set(gameId, snapshot.logIdentity);
+  const latestAcceptedInput = snapshot.latestAcceptedEvent?.source !== "web" &&
+      isAcceptedInputResult(snapshot.latestAcceptedEvent?.inputResult)
+    ? {
+        logCursor: snapshot.logCursor,
+        ...(snapshot.latestAcceptedEvent.source
+          ? { source: snapshot.latestAcceptedEvent.source }
+          : {}),
+      }
+    : undefined;
   const latestRejectedInput = snapshot.latestRejectedEvent?.source !== "web" &&
       isRejectedInputResult(snapshot.latestRejectedEvent?.inputResult)
     ? {
@@ -345,6 +358,7 @@ export async function pollExternalState(
   return {
     state: snapshot.state,
     stateChanged,
+    ...(latestAcceptedInput ? { latestAcceptedInput } : {}),
     ...(latestRejectedInput ? { latestRejectedInput } : {}),
   };
 }
@@ -778,6 +792,7 @@ async function fetchBridgeSnapshot(
   revision: string | null;
   logCursor: number;
   logIdentity: string | null;
+  latestAcceptedEvent?: { source?: string; inputResult?: unknown };
   latestRejectedEvent?: { source?: string; inputResult?: unknown };
 }> {
   const endpoint = new URL(bridgeEndpoint(gameId, session), window.location.origin);
@@ -792,6 +807,7 @@ async function fetchBridgeSnapshot(
     revision?: unknown;
     logCursor?: unknown;
     logIdentity?: unknown;
+    latestAcceptedEvent?: unknown;
     latestRejectedEvent?: unknown;
   };
   if (payload.revision !== null && typeof payload.revision !== "string") {
@@ -804,6 +820,12 @@ async function fetchBridgeSnapshot(
     throw new Error("session bridge returned an invalid log identity");
   }
   if (
+    payload.latestAcceptedEvent !== undefined &&
+    (!payload.latestAcceptedEvent ||
+      typeof payload.latestAcceptedEvent !== "object" ||
+      Array.isArray(payload.latestAcceptedEvent))
+  ) throw new Error("session bridge returned an invalid accepted event");
+  if (
     payload.latestRejectedEvent !== undefined &&
     (!payload.latestRejectedEvent ||
       typeof payload.latestRejectedEvent !== "object" ||
@@ -814,6 +836,14 @@ async function fetchBridgeSnapshot(
     revision: payload.revision ?? null,
     logCursor: payload.logCursor as number,
     logIdentity: payload.logIdentity ?? null,
+    ...(payload.latestAcceptedEvent !== undefined
+      ? {
+          latestAcceptedEvent: payload.latestAcceptedEvent as {
+            source?: string;
+            inputResult?: unknown;
+          },
+        }
+      : {}),
     ...(payload.latestRejectedEvent !== undefined
       ? {
           latestRejectedEvent: payload.latestRejectedEvent as {
@@ -823,6 +853,11 @@ async function fetchBridgeSnapshot(
         }
       : {}),
   };
+}
+
+function isAcceptedInputResult(value: unknown): value is InputResult {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    (value as Record<string, unknown>).accepted === true;
 }
 
 function isRejectedInputResult(value: unknown): value is InputResult {

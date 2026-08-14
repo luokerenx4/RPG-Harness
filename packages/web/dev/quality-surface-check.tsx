@@ -3,11 +3,11 @@ import React, { type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game, Input } from "@rpg-harness/engine";
 import { sessionStateRevision } from "@rpg-harness/session-store";
-import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
 import { requestedWebGame, webGameRoute } from "../src/session";
 
 export interface WebQualitySurfaceEvidence {
-  schemaVersion: 17;
+  schemaVersion: 18;
   id: "web-input-contract";
   status: "passed";
   revision: string;
@@ -29,6 +29,7 @@ export interface WebQualitySurfaceEvidence {
       | "bounded-ai-coplay"
       | "choice-ai-coplay"
       | "persistent-ai-coplay"
+      | "external-headless-sync"
       | "shareable-game-route"
       | "feedback-live-routing";
     text: string;
@@ -166,6 +167,7 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
   projections.push(boundedAiCoplayProjection());
   projections.push(choiceAiCoplayProjection());
   projections.push(persistentAiCoplayProjection());
+  projections.push(externalHeadlessSyncProjection());
   projections.push(shareableGameRouteProjection());
   projections.push(feedbackLiveRoutingProjection());
 
@@ -173,13 +175,21 @@ export function runWebQualitySurfaceCheck(): WebQualitySurfaceEvidence {
     .update(JSON.stringify({ interactions: observed, projections }))
     .digest("hex");
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: "web-input-contract",
     status: "passed",
     revision,
     interactions: observed,
     projections,
   };
+}
+
+function externalHeadlessSyncProjection(): WebQualitySurfaceEvidence["projections"][number] {
+  const text = formatExternalAdvanceNotice("cli");
+  if (!text.includes("HEADLESS") || !text.includes("GUI 已同步到最新画面")) {
+    throw new Error("Web shared session does not expose external control provenance");
+  }
+  return { surface: "external-headless-sync", text };
 }
 
 function shareableGameRouteProjection(): WebQualitySurfaceEvidence["projections"][number] {
