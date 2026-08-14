@@ -4,8 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInitialState, peek, scriptRevision, step } from "@rpg-harness/engine";
 import { loadGame } from "../loader";
-import { appendLog, saveSession, sessionDir } from "../session";
+import { appendLog, loadSession, saveSession, sessionDir } from "../session";
+import {
+  attachDevelopmentBranchHandoff,
+  createForkFromSource,
+  loadForkSource,
+} from "./fork";
 import { runDevelopmentConvergence, runDevelopmentSweep } from "./sweep";
+import { collectDevelopmentWorklist } from "./worklist";
 
 const temporaryDirectories: string[] = [];
 
@@ -208,6 +214,120 @@ describe("bounded development sweep", () => {
         { key: "story/scene-b", status: "paused", targetSession: "rotated-002" },
       ],
     });
+  });
+
+  test("a later batch starts from the deepest changed closest handoff", async () => {
+    const gameDir = await temporarySweepGame();
+    const game = await loadGame(gameDir);
+
+    await createForkFromSource({
+      gameDir,
+      from: "player",
+      to: "closest-001",
+      pretty: false,
+    }, await loadForkSource(gameDir, "player"));
+    const firstClosest = await loadSession(gameDir, "closest-001", game);
+    firstClosest.baseline.variables.search_progress = 1;
+    await saveSession(gameDir, "closest-001", firstClosest);
+    await appendLog(gameDir, "closest-001", {
+      t: Date.now(),
+      source: "test",
+      output: { type: "search-progress" },
+    }, firstClosest);
+    await attachDevelopmentBranchHandoff(gameDir, "closest-001", {
+      schemaVersion: 1,
+      workKey: "story/scene-a",
+      priority: "P2",
+      kind: "story-coverage",
+      title: "Reach scene-a",
+      operation: "reach-script",
+      state: "closest",
+      preparedAt: "2026-08-14T01:00:00.000Z",
+      coordinates: { scriptId: "scene-a" },
+    });
+
+    await createForkFromSource({
+      gameDir,
+      from: "closest-001",
+      to: "closest-002",
+      pretty: false,
+    }, await loadForkSource(gameDir, "closest-001"));
+    const secondClosest = await loadSession(gameDir, "closest-002", game);
+    secondClosest.baseline.variables.search_progress = 2;
+    await saveSession(gameDir, "closest-002", secondClosest);
+    await appendLog(gameDir, "closest-002", {
+      t: Date.now(),
+      source: "test",
+      output: { type: "search-progress" },
+    }, secondClosest);
+    await attachDevelopmentBranchHandoff(gameDir, "closest-002", {
+      schemaVersion: 1,
+      workKey: "story/scene-a",
+      priority: "P2",
+      kind: "story-coverage",
+      title: "Reach scene-a",
+      operation: "reach-script",
+      state: "closest",
+      preparedAt: "2026-08-14T00:00:00.000Z",
+      coordinates: { scriptId: "scene-a" },
+    });
+
+    // A zero-progress handoff must not create an endless cross-batch chain.
+    await createForkFromSource({
+      gameDir,
+      from: "player",
+      to: "unchanged-closest",
+      pretty: false,
+    }, await loadForkSource(gameDir, "player"));
+    await attachDevelopmentBranchHandoff(gameDir, "unchanged-closest", {
+      schemaVersion: 1,
+      workKey: "story/scene-b",
+      priority: "P2",
+      kind: "story-coverage",
+      title: "Reach scene-b",
+      operation: "reach-script",
+      state: "closest",
+      preparedAt: "2026-08-14T02:00:00.000Z",
+      coordinates: { scriptId: "scene-b" },
+    });
+    // The GUI may keep playing after the AI fork. Progress must be compared to
+    // the fork's recorded checkpoint, not this newer live parent state.
+    const advancedPlayer = await loadSession(gameDir, "player", game);
+    advancedPlayer.baseline.variables.gui_progress_after_fork = 1;
+    await saveSession(gameDir, "player", advancedPlayer);
+    await appendLog(gameDir, "player", {
+      t: Date.now(),
+      source: "gui",
+      output: { type: "hub" },
+    }, advancedPlayer);
+
+    const worklist = await collectDevelopmentWorklist(gameDir, "player");
+    expect(worklist.items.find((item) => item.key === "story/scene-a")?.operation)
+      .toMatchObject({
+        command: "reach-script",
+        args: { fromSession: "closest-002" },
+      });
+    expect(worklist.items.find((item) => item.key === "story/scene-b")?.operation)
+      .toMatchObject({
+        command: "reach-script",
+        args: { fromSession: "player" },
+      });
+
+    const resumed = await runDevelopmentSweep({
+      gameDir,
+      session: "player",
+      sessionPrefix: "resumed",
+      limit: 1,
+      maxNodes: 1,
+      maxTotalNodes: 1,
+      maxSteps: 20,
+      pretty: false,
+    });
+    expect(resumed.runs[0]?.key).toBe("story/scene-a");
+    expect(JSON.parse(await readFile(
+      path.join(sessionDir(gameDir, "resumed-001"), "fork.json"),
+      "utf-8",
+    ))).toMatchObject({ fromSession: "closest-002" });
   });
 
   test("resumes from an exact key only while the snapshot revision matches", async () => {

@@ -1,3 +1,9 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import {
+  isSessionCheckpointRef,
+  loadSessionCheckpoint,
+} from "@rpg-harness/session-store";
 import type { PlaytestReport } from "../playtest-reports";
 import {
   hasCausallyVerifiableAutoplayReport,
@@ -14,7 +20,13 @@ import {
   type ChoiceAuthoringWorkItem,
   type ChoiceCoverageReport,
 } from "./choice-coverage";
-import { sessionFamily } from "../session-lineage";
+import { readForkProvenance, sessionFamily } from "../session-lineage";
+import { sessionDir } from "../session";
+import {
+  loadDevelopmentBranchHandoff,
+  readSessionLog,
+  type DevelopmentBranchHandoff,
+} from "./fork";
 import { currentQualityAuditInputRevision } from "./quality-certificate";
 
 export type DevelopmentWorkPriority = "P0" | "P1" | "P2" | "P3";
@@ -181,10 +193,15 @@ export async function collectDevelopmentWorklist(
     )
     ? await currentQualityAuditInputRevision(gameDir)
     : null;
+  const continuationSources = await collectSearchContinuationSources(
+    gameDir,
+    [...new Set([...story.sessions, ...choices.sessions])],
+  );
   return analyzeDevelopmentWorklist({
     story,
     choices,
     reports: openReports,
+    continuationSources,
     ...(projectInputRevision ? { projectInputRevision } : {}),
     ...(session !== undefined ? { session } : {}),
   });
@@ -196,6 +213,8 @@ export function analyzeDevelopmentWorklist(input: {
   reports: PlaytestReport[];
   session?: string;
   projectInputRevision?: string;
+  /** Replay-verified closest branches keyed by the exact frozen work item. */
+  continuationSources?: ReadonlyMap<string, string>;
 }): DevelopmentWorklist {
   const items: DevelopmentWorkItemDraft[] = [];
 
@@ -348,7 +367,12 @@ export function analyzeDevelopmentWorklist(input: {
     }
     const startedSession = script.startedSessions[0];
     const staleSession = script.staleSessions[0];
-    const sourceSession = startedSession ?? staleSession ?? input.session ?? "<source-session>";
+    const continuationSession = input.continuationSources?.get(`story/${script.id}`);
+    // A checkpoint already inside the target script is stronger than a broad
+    // closest-state hint. For an otherwise uncovered script, continue the
+    // exact bounded search branch instead of paying the same root slice again.
+    const sourceSession = startedSession ?? staleSession ?? continuationSession ??
+      input.session ?? "<source-session>";
     items.push({
       key: `story/${script.id}`,
       kind: "story-coverage",
@@ -435,6 +459,7 @@ export function analyzeDevelopmentWorklist(input: {
       input.session,
       input.story.scripts.find((script) => script.id === workItem.scriptId)
         ?.completedSessions[0],
+      input.continuationSources?.get(`choice-authoring/${workItem.key}`),
     ));
   }
 
@@ -533,6 +558,7 @@ function authoringItem(
   item: ChoiceAuthoringWorkItem,
   sourceSession?: string,
   completedEvidenceSession?: string,
+  continuationSession?: string,
 ): DevelopmentWorkItemDraft {
   const target = item.source ?? item.scriptId;
   const common = {
@@ -552,7 +578,10 @@ function authoringItem(
         command: "reach",
         args: {
           key: `${item.scriptId}/${item.choiceId}`,
-          fromSession: completedEvidenceSession ?? sourceSession ?? "<source-session>",
+          // A target-specific closest branch is stronger than generic proof
+          // that the containing script completed somewhere else.
+          fromSession: continuationSession ?? completedEvidenceSession ??
+            sourceSession ?? "<source-session>",
           session: "<new-session>",
         },
       },
@@ -575,6 +604,146 @@ function authoringItem(
       args: { target, key: item.key, beatIndex: item.beatIndex },
     },
   };
+}
+
+interface SearchContinuationCandidate {
+  session: string;
+  handoff: DevelopmentBranchHandoff;
+  depth: number;
+}
+
+/**
+ * Recover target-specific search progress from prior isolated work branches.
+ * Coverage already bounds `sessions` to the selected lineage (or the whole
+ * project). Exact work keys keep progress for different scripts/choices from
+ * bleeding together, and unchanged child saves are rejected because replaying
+ * them would deterministically spend the same search slice again.
+ */
+async function collectSearchContinuationSources(
+  gameDir: string,
+  sessions: string[],
+): Promise<ReadonlyMap<string, string>> {
+  const depthMemo = new Map<string, number>();
+  const candidates = (await Promise.all(sessions.map(async (session) => {
+    const handoff = await loadDevelopmentBranchHandoff(gameDir, session);
+    if (!isSearchContinuationHandoff(handoff)) return null;
+    const provenance = await readForkProvenance(gameDir, session);
+    if (!provenance) return null;
+    if (!await branchStateChanged(gameDir, session)) {
+      return null;
+    }
+    return {
+      session,
+      handoff,
+      depth: await sessionLineageDepth(gameDir, session, depthMemo, new Set()),
+    } satisfies SearchContinuationCandidate;
+  }))).filter((candidate): candidate is SearchContinuationCandidate =>
+    candidate !== null
+  );
+
+  const selected = new Map<string, SearchContinuationCandidate>();
+  for (const candidate of candidates) {
+    const current = selected.get(candidate.handoff.workKey);
+    if (!current || compareContinuationCandidates(candidate, current) > 0) {
+      selected.set(candidate.handoff.workKey, candidate);
+    }
+  }
+  return new Map(
+    [...selected].map(([workKey, candidate]) => [workKey, candidate.session]),
+  );
+}
+
+function isSearchContinuationHandoff(
+  handoff: DevelopmentBranchHandoff | null,
+): handoff is DevelopmentBranchHandoff {
+  if (
+    handoff === null ||
+    handoff.schemaVersion !== 1 ||
+    handoff.state !== "closest" ||
+    typeof handoff.workKey !== "string" ||
+    !handoff.workKey.trim() ||
+    typeof handoff.preparedAt !== "string" ||
+    !Number.isFinite(Date.parse(handoff.preparedAt))
+  ) return false;
+  if (handoff.operation === "reach-script") {
+    const scriptId = handoff.coordinates?.scriptId;
+    return typeof scriptId === "string" && handoff.workKey === `story/${scriptId}`;
+  }
+  if (handoff.operation === "reach") {
+    const scriptId = handoff.coordinates?.scriptId;
+    const choiceId = handoff.coordinates?.choiceId;
+    return typeof scriptId === "string" && typeof choiceId === "string" &&
+      handoff.workKey === `choice-authoring/${scriptId}/${choiceId}`;
+  }
+  return false;
+}
+
+async function branchStateChanged(
+  gameDir: string,
+  targetSession: string,
+): Promise<boolean> {
+  try {
+    // The first target log entry is written atomically with fork creation and
+    // checkpoints the exact source state. It remains authoritative even when
+    // the GUI advances the parent later, and also disambiguates a current save
+    // at log entry zero from a freshly regenerated initial state.
+    const entries = await readSessionLog(gameDir, targetSession);
+    const checkpoint = entries[0]?.checkpoint;
+    if (!isSessionCheckpointRef(checkpoint)) return false;
+    const [source, target] = await Promise.all([
+      loadSessionCheckpoint(gameDir, targetSession, checkpoint),
+      readFile(path.join(sessionDir(gameDir, targetSession), "state.json"), "utf-8"),
+    ]);
+    return canonicalJson(source) !== canonicalJson(JSON.parse(target));
+  } catch {
+    // A continuation is an optimization, never the only recovery route. If
+    // its causal state pair cannot be compared, keep the ordinary work source.
+    return false;
+  }
+}
+
+async function sessionLineageDepth(
+  gameDir: string,
+  session: string,
+  memo: Map<string, number>,
+  active: Set<string>,
+): Promise<number> {
+  const cached = memo.get(session);
+  if (cached !== undefined) return cached;
+  if (active.has(session)) throw new Error(`Fork lineage cycle detected at session: ${session}`);
+  active.add(session);
+  const provenance = await readForkProvenance(gameDir, session);
+  const depth = provenance === null
+    ? 0
+    : 1 + await sessionLineageDepth(
+        gameDir,
+        provenance.fromSession,
+        memo,
+        active,
+      );
+  active.delete(session);
+  memo.set(session, depth);
+  return depth;
+}
+
+function compareContinuationCandidates(
+  left: SearchContinuationCandidate,
+  right: SearchContinuationCandidate,
+): number {
+  return left.depth - right.depth ||
+    Date.parse(left.handoff.preparedAt) - Date.parse(right.handoff.preparedAt) ||
+    left.session.localeCompare(right.session);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) =>
+      `${JSON.stringify(key)}:${canonicalJson(record[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function reportPriority(

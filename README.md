@@ -350,6 +350,11 @@ the requested isolated branch for GUI/Headless diagnosis. If only the node
 budget is exhausted, it returns `status: "paused"` plus an executable
 continuation rooted at that closest session instead of repeating the same
 search from the original checkpoint.
+That handoff is durable across commands: when a later `worklist` or frozen
+`sweep` sees the same exact work key in the same evidence family, it selects the
+deepest changed `closest` branch as the next search root. Zero-state-progress
+branches and handoffs for another target are ignored, so repeated bounded
+batches accumulate exploration instead of rebuilding the same frontier.
 Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.

@@ -472,6 +472,40 @@ describe("AI development worklist", () => {
       },
     });
   });
+
+  test("continues exact closest branches without mixing work targets", () => {
+    const report = analyzeDevelopmentWorklist({
+      session: "player",
+      story: storyReport(),
+      choices: choiceReport(),
+      reports: [],
+      continuationSources: new Map([
+        ["story/unseen", "ai-story-closest"],
+        ["choice-authoring/ending/unseen-choice", "ai-choice-closest"],
+        ["story/not-this-item", "ai-wrong-target"],
+      ]),
+    });
+
+    expect(report.items.find((item) => item.key === "story/unseen")?.operation)
+      .toEqual({
+        command: "reach-script",
+        args: {
+          scriptId: "unseen",
+          fromSession: "ai-story-closest",
+          session: "<new-session>",
+        },
+      });
+    expect(report.items.find((item) =>
+      item.key === "choice-authoring/ending/unseen-choice"
+    )?.operation).toEqual({
+      command: "reach",
+      args: {
+        key: "ending/unseen-choice",
+        fromSession: "ai-choice-closest",
+        session: "<new-session>",
+      },
+    });
+  });
 });
 
 function playtestReport(
