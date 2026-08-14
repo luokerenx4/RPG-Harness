@@ -3597,10 +3597,28 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
             const killOutcome = attack.forecast?.metrics.find(
               ({ id }) => id === "kill_outcome",
             )?.value;
+            const victoryFollowup = attack.forecast?.metrics.find(
+              ({ id }) => id === "victory_followup",
+            )?.value;
+            const linkedOniPulse = output.snapshot.objectives
+              ?.filter((objective) =>
+                objective.status === "active" &&
+                objective.relatedActivityIds?.includes(attack.id)
+              )
+              .flatMap((objective) => objective.requirements ?? [])
+              .find((requirement) =>
+                requirement.id === "pulse_oni" &&
+                requirement.satisfied !== true &&
+                typeof requirement.current === "number" &&
+                typeof requirement.target === "number"
+              );
             return {
               input: { type: "doActivity", id: attack.id },
-              publicIntent: killOutcome === "確定"
-                ? "確定撃破で反撃を受けないため、この遭遇を終える"
+              publicIntent: killOutcome === "確定" &&
+                  victoryFollowup === "三脈選択" && linkedOniPulse
+                ? `反撃なしの確定撃破で三脈選択へ進み、未達の「${linkedOniPulse.label}」${linkedOniPulse.current}/${linkedOniPulse.target}を伸ばす`
+                : killOutcome === "確定"
+                  ? "確定撃破で反撃を受けないため、この遭遇を終える"
                 : "任意目標を続けるため、通常攻撃で遭遇を前進させる",
             };
           }

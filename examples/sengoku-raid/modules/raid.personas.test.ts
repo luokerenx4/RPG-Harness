@@ -463,6 +463,58 @@ describe("sengoku-raid public AI decision evidence", () => {
     });
   });
 
+  test("completionist links a guaranteed kill to the public oni-pulse objective", async () => {
+    const output = hub([{
+      ...activity("attack"),
+      category: "combat",
+      forecast: {
+        summary: "確定撃破。反撃を受けず、霊体化吸収後に三脈を選ぶ",
+        metrics: [{
+          id: "kill_outcome",
+          label: "撃破見込み",
+          value: "確定",
+          tone: "positive" as const,
+        }, {
+          id: "victory_followup",
+          label: "撃破後",
+          value: "三脈選択",
+          tone: "neutral" as const,
+        }],
+      },
+    }]);
+    output.snapshot.objectives = [{
+      id: "hell_gate_mastery",
+      title: "地獄門を開く",
+      scope: "mastery",
+      terminal: false,
+      status: "active",
+      requirements: [{
+        id: "pulse_oni",
+        label: "脈絡: 鬼",
+        current: 3,
+        target: 6,
+        satisfied: false,
+      }],
+      relatedActivityIds: ["attack"],
+    }];
+
+    await expect(raidAiPersonas.completionist!.decide(
+      output,
+      {
+        baseline: { scripts: {} },
+        "sengoku-raid": {
+          raid: { chain: "mt_houkyou", visited: {} },
+          companion: null,
+          achievementLog: [],
+        },
+      } as unknown as ComposedState,
+      0,
+    )).resolves.toEqual({
+      input: { type: "doActivity", id: "attack" },
+      publicIntent: "反撃なしの確定撃破で三脈選択へ進み、未達の「脈絡: 鬼」3/6を伸ばす",
+    });
+  });
+
   test("completionist exposes the semantic rule behind a story reply", async () => {
     await expect(raidAiPersonas.completionist!.decide(
       routeChoice(),
