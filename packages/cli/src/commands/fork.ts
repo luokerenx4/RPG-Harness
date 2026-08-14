@@ -52,7 +52,7 @@ export interface DevelopmentBranchHandoff {
   kind: string;
   title: string;
   operation: string;
-  state: "target-reached" | "closest" | "reproduced" | "covered";
+  state: "target-reached" | "frontier" | "closest" | "reproduced" | "covered";
   preparedAt: string;
   target?: string;
   coordinates?: {

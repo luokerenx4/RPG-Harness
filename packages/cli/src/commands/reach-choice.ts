@@ -84,11 +84,13 @@ export interface ReachChoiceContinuation {
   kind: "search-budget-exhausted";
   sourceSession: string;
   webPath: string;
+  frontier: ChoiceSearchClosest;
   next: {
     command: "reach";
     args: {
       key: string;
       fromSession: string;
+      fromLogEntry: number;
       session: "<new-session>";
       maxNodes: number;
       maxSteps: number;
@@ -189,26 +191,27 @@ export async function runReachChoice(
     }
   };
 
-  const sourceCandidates: ReachChoiceSourceCandidate[] = [];
-  const activeCheckpoint = await historicalActiveScriptCheckpoint(
-    args.gameDir,
-    args.fromSession,
-    primarySource.selectedEntry,
-    target.scriptId,
-    "earliest",
-  );
-  if (activeCheckpoint) {
-    sourceCandidates.push({
-      session: activeCheckpoint.session,
-      source: await loadForkSource(
-        args.gameDir,
-        activeCheckpoint.session,
-        activeCheckpoint.logEntry,
-      ),
-    });
-  }
-  sourceCandidates.push({ session: args.fromSession, source: primarySource });
+  const sourceCandidates: ReachChoiceSourceCandidate[] = [
+    { session: args.fromSession, source: primarySource },
+  ];
   if (args.fromLogEntry === undefined) {
+    const activeCheckpoint = await historicalActiveScriptCheckpoint(
+      args.gameDir,
+      args.fromSession,
+      primarySource.selectedEntry,
+      target.scriptId,
+      "earliest",
+    );
+    if (activeCheckpoint) {
+      sourceCandidates.unshift({
+        session: activeCheckpoint.session,
+        source: await loadForkSource(
+          args.gameDir,
+          activeCheckpoint.session,
+          activeCheckpoint.logEntry,
+        ),
+      });
+    }
     const historical = await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
@@ -252,11 +255,22 @@ export async function runReachChoice(
   }
 
   const foundAttempt = attempts.find((attempt) => attempt.search.found);
-  const selectedAttempt = foundAttempt ?? attempts.reduce((best, candidate) =>
+  const closestAttempt = attempts.reduce((best, candidate) =>
     compareChoiceSearchAssessment(candidate.search.closest, best.search.closest) > 0
       ? candidate
       : best
   );
+  const frontierAttempt = attempts
+    .filter((attempt) => attempt.search.frontier !== undefined)
+    .reduce<(typeof attempts)[number] | undefined>((best, candidate) =>
+      !best || compareChoiceSearchAssessment(
+          candidate.search.frontier!.closest,
+          best.search.frontier!.closest,
+        ) > 0
+        ? candidate
+        : best,
+    undefined);
+  const selectedAttempt = foundAttempt ?? frontierAttempt ?? closestAttempt;
   const source = selectedAttempt.source;
   const sourceSession = selectedAttempt.session;
   const selectedSearch = selectedAttempt.search;
@@ -268,15 +282,21 @@ export async function runReachChoice(
     found: foundAttempt !== undefined,
     reason: foundAttempt
       ? "found" as const
-      : remainingNodes === 0
+      : frontierAttempt && remainingNodes === 0
         ? "max-nodes" as const
         : "exhausted" as const,
     exploredNodes,
     visitedStates,
     deepestSteps,
+    closest: closestAttempt.search.closest,
+    state: foundAttempt?.search.state ??
+      frontierAttempt?.search.frontier?.state ??
+      closestAttempt.search.state,
   };
 
-  const replayInputs = search.found ? search.inputs : search.closest.inputs;
+  const replayInputs = foundAttempt?.search.inputs ??
+    frontierAttempt?.search.frontier?.inputs ??
+    closestAttempt.search.closest.inputs;
   const pathSummary = summarizeReachPath(replayInputs);
   const materialized = await materializeReachChoicePath(
     args,
@@ -311,7 +331,7 @@ export async function runReachChoice(
     }
     replayVerified = true;
   }
-  if (!search.found && args.reportOnMiss) {
+  if (!search.found && search.reason === "exhausted" && args.reportOnMiss) {
     report = await recordPlaytestReport({
       gameDir: args.gameDir,
       session: args.session,
@@ -348,11 +368,13 @@ export async function runReachChoice(
         kind: "search-budget-exhausted",
         sourceSession: args.session,
         webPath: `/?session=${encodeURIComponent(args.session)}`,
+        frontier: selectedSearch.frontier!.closest,
         next: {
           command: "reach",
           args: {
             key: target.key,
             fromSession: args.session,
+            fromLogEntry: materialized.logEntry,
             session: "<new-session>",
             maxNodes: args.maxNodes,
             maxSteps: args.maxSteps,
@@ -573,6 +595,7 @@ async function materializeReachChoicePath(
 ): Promise<{
   fork: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
   replay: { output: Output | null; state: ComposedState };
+  logEntry: number;
 }> {
   return withSessionLock(args.gameDir, args.session, async () => {
     const fork = await createForkFromSourceWithLockHeld({
@@ -609,7 +632,11 @@ async function materializeReachChoicePath(
         output: current.output,
       }, state);
     }
-    return { fork, replay: { output: current.output, state } };
+    return {
+      fork,
+      replay: { output: current.output, state },
+      logEntry: 1 + Math.max(1, inputs.length),
+    };
   });
 }
 

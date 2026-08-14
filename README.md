@@ -348,13 +348,24 @@ If search exhausts the declared state space without reaching its target, `work`
 returns `status: "failed"` but preserves the replay-verified closest state in
 the requested isolated branch for GUI/Headless diagnosis. If only the node
 budget is exhausted, it returns `status: "paused"` plus an executable
-continuation rooted at that closest session instead of repeating the same
-search from the original checkpoint.
-That handoff is durable across commands: when a later `worklist` or frozen
-`sweep` sees the same exact work key in the same evidence family, it selects the
-deepest changed `closest` branch as the next search root. Zero-state-progress
-branches and handoffs for another target are ignored, so repeated bounded
-batches accumulate exploration instead of rebuilding the same frontier.
+continuation rooted at a still-expandable frontier instead of repeating the
+same search from the original checkpoint.
+The search result keeps two distinct bounded artifacts: `closest` is the best
+diagnostic state even when it is a terminal dead end, while `frontier` is the
+best still-expandable node and is the only state advertised as executable
+continuation. That frontier handoff is durable across commands: when a later
+`worklist` or frozen `sweep` sees the same exact work key in the same evidence
+family, it selects the deepest changed frontier as the next search root.
+Zero-state-progress branches, diagnostic-only closest states, and handoffs for
+another target are ignored, so repeated bounded batches accumulate exploration
+instead of rebuilding the same frontier.
+When a child attempt consumes an exact frontier and proves it exhausted, that
+child handoff retires the parent coordinate; the worklist will not schedule the
+already-searched parent again.
+The generated operation pins that branch's current log entry. An exact
+continuation never spends its next node slice on an older lineage checkpoint;
+ordinary `reach` / `reach-script` calls without `--from-at` retain historical
+rewind for terminal player saves and alternate-route recovery.
 Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.
@@ -366,7 +377,7 @@ It preflights every generated branch before its first write, shares one total
 search-node budget across the batch, and gives every later frozen item a turn
 when an earlier search exhausts only its own slice. The batch then pauses with
 the first unresolved item as `nextKey`; `resume.next` is its executable
-continuation rooted at the materialized closest branch. The result carries the
+continuation rooted at the materialized frontier branch. The result carries the
 frozen SHA-256 revision and exact next work key. After finishing that continuation,
 resume the batch with both `--from-key` and `--snapshot-revision`; the frozen
 revision prevents a changed queue from silently continuing at the wrong item.
@@ -387,7 +398,7 @@ envelope and its live-worklist summary report `scope: "project"` so an agent doe
 not mistake global coverage for an empty player-specific queue. The item limit
 and total search-node limit become shared budgets across several immutable
 generations. A search that reaches its own
-node slice automatically resumes from the replay-verified closest branch, and
+node slice automatically resumes from the replay-verified frontier branch, and
 a completed generation freezes the newly exposed queue before continuing.
 Paused searches rotate behind the other frozen items before receiving another
 slice, so one difficult route cannot monopolize the project budget.
@@ -397,7 +408,7 @@ aggregate budget, live remaining item, and (when paused inside a generation)
 the exact frozen resume coordinate.
 It stops rather than spinning when a queue revision repeats, when authoring
 judgment is required, or when any declared budget is exhausted. A paused
-deterministic search whose closest branch applied zero inputs is reported in
+deterministic search whose frontier branch applied zero inputs is reported in
 `safety.searchStalls` as `no-state-progress` instead of rerunning the identical
 slice. The source player save is never written.
 Before `--until-clean` returns clean, it runs the exact `game.yaml ai_audit`
@@ -896,8 +907,9 @@ choice coordinates and source target as an AI handoff, so GUI and Headless agree
 on why that isolated save exists.
 `work` adds a development handoff to every playable isolated branch it materializes:
 the stable work key, priority, intent, operation, source fork, and whether the
-target was reached, only a closest state was found, the issue was reproduced,
-or the work was already covered are persisted beside
+target was reached, an executable frontier was prepared, only a diagnostic
+closest state was found, the issue was reproduced, or the work was already
+covered are persisted beside
 `fork.json`. The readiness value records the materialization result rather than
 pretending to track later player inputs. The local Web GUI projects that metadata into its HUD, so a player
 opening the returned `webPath` can see why the AI prepared this exact scene

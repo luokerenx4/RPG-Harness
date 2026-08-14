@@ -473,16 +473,19 @@ describe("AI development worklist", () => {
     });
   });
 
-  test("continues exact closest branches without mixing work targets", () => {
+  test("continues exact frontier branches without mixing work targets", () => {
     const report = analyzeDevelopmentWorklist({
       session: "player",
       story: storyReport(),
       choices: choiceReport(),
       reports: [],
       continuationSources: new Map([
-        ["story/unseen", "ai-story-closest"],
-        ["choice-authoring/ending/unseen-choice", "ai-choice-closest"],
-        ["story/not-this-item", "ai-wrong-target"],
+        ["story/unseen", { session: "ai-story-closest", logEntry: 17 }],
+        ["choice-authoring/ending/unseen-choice", {
+          session: "ai-choice-closest",
+          logEntry: 23,
+        }],
+        ["story/not-this-item", { session: "ai-wrong-target", logEntry: 99 }],
       ]),
     });
 
@@ -492,6 +495,7 @@ describe("AI development worklist", () => {
         args: {
           scriptId: "unseen",
           fromSession: "ai-story-closest",
+          fromLogEntry: 17,
           session: "<new-session>",
         },
       });
@@ -502,6 +506,7 @@ describe("AI development worklist", () => {
       args: {
         key: "ending/unseen-choice",
         fromSession: "ai-choice-closest",
+        fromLogEntry: 23,
         session: "<new-session>",
       },
     });

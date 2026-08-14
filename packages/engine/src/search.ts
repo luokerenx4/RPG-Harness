@@ -46,6 +46,15 @@ export interface ChoiceSearchResult {
   output: Output | null;
   state: ComposedState;
   closest: ChoiceSearchClosest;
+  /** Best still-expandable node at a bounded cutoff; safe to resume exactly. */
+  frontier?: ChoiceSearchFrontier;
+}
+
+export interface ChoiceSearchFrontier {
+  inputs: Input[];
+  output: Output | null;
+  state: ComposedState;
+  closest: ChoiceSearchClosest;
 }
 
 export interface ChoiceSearchRequirement {
@@ -239,9 +248,16 @@ async function searchForTarget(
       };
     }
     if (exploredNodes >= maxNodes) {
+      const frontier = selectSearchFrontier(
+        game,
+        target,
+        initialState,
+        [node, ...queue],
+        maxSteps,
+      );
       return {
         found: false,
-        reason: "max-nodes",
+        reason: frontier ? "max-nodes" : "exhausted",
         inputs: [],
         exploredNodes,
         visitedStates: visited.size,
@@ -249,6 +265,7 @@ async function searchForTarget(
         output: closestNode.output,
         state: closestNode.state,
         closest,
+        ...(frontier ? { frontier } : {}),
       };
     }
     if (node.done || node.output === null || node.inputs.length >= maxSteps) {
@@ -297,6 +314,40 @@ async function searchForTarget(
     output: closestNode.output,
     state: closestNode.state,
     closest,
+  };
+}
+
+function selectSearchFrontier(
+  game: Game,
+  target: SearchTarget,
+  initialState: ComposedState,
+  candidates: SearchNode[],
+  maxSteps: number,
+): ChoiceSearchFrontier | undefined {
+  const expandable = candidates.filter((node) =>
+    isTargetReached(node, target) ||
+    (
+      !node.done &&
+      node.output !== null &&
+      node.inputs.length < maxSteps &&
+      candidateInputs(node.output, target).length > 0
+    )
+  );
+  if (expandable.length === 0) return undefined;
+  const node = expandable.reduce((best, candidate) =>
+    compareChoiceSearchAssessment(
+        assessNode(game, target, candidate, initialState),
+        assessNode(game, target, best, initialState),
+        isScriptTarget(target),
+      ) > 0
+      ? candidate
+      : best
+  );
+  return {
+    inputs: node.inputs,
+    output: node.output,
+    state: node.state,
+    closest: assessNode(game, target, node, initialState),
   };
 }
 

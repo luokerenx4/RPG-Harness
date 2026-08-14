@@ -296,6 +296,28 @@ describe("reach-choice", () => {
       type: "choose",
       index: 1,
     });
+
+    const exact = await runReachChoice({
+      gameDir,
+      fromSession: "gui-player",
+      fromLogEntry: 4,
+      session: "ai-exact-terminal",
+      key: "target/other-ending",
+      maxNodes: 100,
+      maxSteps: 20,
+      pretty: false,
+    });
+    expect(exact).toMatchObject({
+      status: "not-reached",
+      found: false,
+      attemptedSources: 1,
+      source: {
+        session: "gui-player",
+        logEntry: 4,
+        historyFallback: false,
+      },
+      fork: { fromSession: "gui-player", sourceLogEntry: 4 },
+    });
   });
 
   test("skips an unmigratable historical checkpoint and tries the current source", async () => {

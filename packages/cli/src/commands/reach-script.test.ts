@@ -76,6 +76,28 @@ describe("reach-script", () => {
     expect(JSON.parse(await Bun.file(
       path.join(sessionDir(gameDir, "ai-target"), "fork.json"),
     ).text())).toMatchObject({ fromSession: "gui-player", sourceLogEntry: 2 });
+
+    const exact = await runReachScript({
+      gameDir,
+      fromSession: "finished-branch",
+      fromLogEntry: 1,
+      session: "ai-exact-terminal",
+      scriptId: "target",
+      maxNodes: 100,
+      maxSteps: 20,
+      pretty: false,
+    });
+    expect(exact).toMatchObject({
+      status: "not-reached",
+      found: false,
+      search: { attemptedSources: 1 },
+      source: {
+        session: "finished-branch",
+        logEntry: 1,
+        historyFallback: false,
+      },
+      fork: { fromSession: "finished-branch", sourceLogEntry: 1 },
+    });
   });
 
   test("CLI exhausted miss preserves its closest GUI branch and exits non-zero", async () => {

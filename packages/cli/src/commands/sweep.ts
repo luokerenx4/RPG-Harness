@@ -43,7 +43,7 @@ export interface SweepArgs {
   auditSeed?: number;
   /** Ignore a matching project-quality certificate and rerun every audit lane. */
   forceAudit?: boolean;
-  /** Continue materialized closest-state searches and freeze later worklist generations. */
+  /** Continue materialized search frontiers and freeze later worklist generations. */
   untilClean?: boolean;
   /** Hard cap for immutable worklist generations in `untilClean` mode. */
   maxGenerations?: number;
@@ -89,7 +89,7 @@ export interface SweepResult {
   resume: {
     fromKey: string;
     snapshotRevision: string;
-    /** Continue the paused search from its materialized closest branch first. */
+    /** Continue the paused search from its materialized frontier branch first. */
     next?: ReachChoiceContinuation["next"] | ReachScriptContinuation["next"];
   } | null;
   runs: Array<{
@@ -883,6 +883,7 @@ function continueSearchItem(
         args: {
           key: next.args.key,
           fromSession: next.args.fromSession,
+          fromLogEntry: next.args.fromLogEntry,
           session: "<new-session>",
         },
       },
@@ -898,6 +899,7 @@ function continueSearchItem(
       args: {
         scriptId: next.args.scriptId,
         fromSession: next.args.fromSession,
+        fromLogEntry: next.args.fromLogEntry,
         session: "<new-session>",
       },
     },

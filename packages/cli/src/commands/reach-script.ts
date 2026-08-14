@@ -75,11 +75,13 @@ export interface ReachScriptContinuation {
   kind: "search-budget-exhausted";
   sourceSession: string;
   webPath: string;
+  frontier: ChoiceSearchClosest;
   next: {
     command: "reach-script";
     args: {
       scriptId: string;
       fromSession: string;
+      fromLogEntry: number;
       session: "<new-session>";
       maxNodes: number;
       maxSteps: number;
@@ -164,7 +166,7 @@ export async function runReachScript(
     }
   };
 
-  const activeCheckpoint = row.status === "stale"
+  const activeCheckpoint = row.status === "stale" && args.fromLogEntry === undefined
     ? await historicalActiveScriptCheckpoint(
         args.gameDir,
         args.fromSession,
@@ -210,7 +212,7 @@ export async function runReachScript(
   }
 
   const foundAttempt = attempts.find((attempt) => attempt.search.found);
-  const selectedAttempt = foundAttempt ?? attempts.reduce((best, candidate) =>
+  const closestAttempt = attempts.reduce((best, candidate) =>
     compareChoiceSearchAssessment(
         candidate.search.closest,
         best.search.closest,
@@ -219,14 +221,28 @@ export async function runReachScript(
       ? candidate
       : best
   );
+  const frontierAttempt = attempts
+    .filter((attempt) => attempt.search.frontier !== undefined)
+    .reduce<(typeof attempts)[number] | undefined>((best, candidate) =>
+      !best || compareChoiceSearchAssessment(
+          candidate.search.frontier!.closest,
+          best.search.frontier!.closest,
+          true,
+        ) > 0
+        ? candidate
+        : best,
+    undefined);
+  const selectedAttempt = foundAttempt ?? frontierAttempt ?? closestAttempt;
   const source = selectedAttempt.source;
   const sourceSession = selectedAttempt.session;
   const selectedSearch = selectedAttempt.search;
-  const inputs = foundAttempt?.search.inputs ?? selectedSearch.closest.inputs;
+  const inputs = foundAttempt?.search.inputs ??
+    frontierAttempt?.search.frontier?.inputs ??
+    closestAttempt.search.closest.inputs;
   const found = foundAttempt !== undefined;
   const reason = found
     ? "found" as const
-    : remainingNodes === 0
+    : frontierAttempt && remainingNodes === 0
       ? "max-nodes" as const
       : "exhausted" as const;
   const exploredNodes = attempts.reduce((sum, attempt) => sum + attempt.search.exploredNodes, 0);
@@ -255,7 +271,9 @@ export async function runReachScript(
     }
     replayVerified = true;
   } else {
-    if (canonicalJson(replayState) !== canonicalJson(selectedSearch.state)) {
+    const expectedState = frontierAttempt?.search.frontier?.state ??
+      closestAttempt.search.state;
+    if (canonicalJson(replayState) !== canonicalJson(expectedState)) {
       throw new Error(`Reach closest replay diverged from search result for script ${args.scriptId}`);
     }
     replayVerified = true;
@@ -266,11 +284,13 @@ export async function runReachScript(
         kind: "search-budget-exhausted",
         sourceSession: args.session,
         webPath: `/?session=${encodeURIComponent(args.session)}`,
+        frontier: selectedSearch.frontier!.closest,
         next: {
           command: "reach-script",
           args: {
             scriptId: args.scriptId,
             fromSession: args.session,
+            fromLogEntry: materialized.logEntry,
             session: "<new-session>",
             maxNodes: args.maxNodes,
             maxSteps: args.maxSteps,
@@ -310,7 +330,7 @@ export async function runReachScript(
     ...(fork ? { session: args.session, webPath: `/?session=${encodeURIComponent(args.session)}`, fork } : {}),
     output,
     replayVerified,
-    closest: selectedSearch.closest,
+    closest: closestAttempt.search.closest,
     ...(continuation ? { continuation } : {}),
   };
 }
@@ -325,6 +345,7 @@ async function materializeReachScriptPath(
 ): Promise<{
   fork: Awaited<ReturnType<typeof createForkFromSourceWithLockHeld>>;
   replay: { output: Output | null; state: ComposedState };
+  logEntry: number;
 }> {
   return withSessionLock(args.gameDir, args.session, async () => {
     const fork = await createForkFromSourceWithLockHeld({
@@ -372,7 +393,11 @@ async function materializeReachScriptPath(
         output: current.output,
       }, state);
     }
-    return { fork, replay: { output: current.output, state } };
+    return {
+      fork,
+      replay: { output: current.output, state },
+      logEntry: 1 + Math.max(1, inputs.length),
+    };
   });
 }
 

@@ -378,7 +378,7 @@ describe("structured development work execution", () => {
       .toContain("state.json");
   });
 
-  test("pauses max-node work with an executable closest-state continuation", async () => {
+  test("pauses max-node work with an executable frontier continuation", async () => {
     const gameDir = await temporaryImpossibleReachGame();
     const game = await loadGame(gameDir);
     await saveSession(gameDir, "player", createInitialState(game));
@@ -408,10 +408,12 @@ describe("structured development work execution", () => {
         continuation: {
           kind: "search-budget-exhausted",
           sourceSession: "ai-paused",
+          frontier: { outputType: expect.any(String) },
           next: {
             command: "reach",
             args: {
               fromSession: "ai-paused",
+              fromLogEntry: 2,
               session: "<new-session>",
               maxNodes: 1,
               maxSteps: 10,
@@ -477,6 +479,20 @@ async function temporaryImpossibleReachGame(): Promise<string> {
     "- Leave {id: leave, ai: independent}",
     "",
   ].join("\n"), "utf-8");
+  for (const id of ["detour-a", "detour-b"]) {
+    await writeFile(path.join(dir, "scripts", `${id}.md`), [
+      "---",
+      `id: ${id}`,
+      `title: ${id}`,
+      "characters: []",
+      "---",
+      "",
+      "A harmless route that cannot unlock the target.",
+      "",
+      "[end]",
+      "",
+    ].join("\n"), "utf-8");
+  }
   return dir;
 }
 

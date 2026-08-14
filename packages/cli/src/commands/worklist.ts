@@ -83,6 +83,8 @@ export type DevelopmentOperation =
       args: {
         key: string;
         fromSession: string;
+        /** Pin an exact continuation checkpoint and disable lineage rewind. */
+        fromLogEntry?: number;
         session: "<new-session>";
       };
     }
@@ -91,6 +93,8 @@ export type DevelopmentOperation =
       args: {
         scriptId: string;
         fromSession: string;
+        /** Pin an exact continuation checkpoint and disable lineage rewind. */
+        fromLogEntry?: number;
         session: "<new-session>";
       };
     }
@@ -213,8 +217,8 @@ export function analyzeDevelopmentWorklist(input: {
   reports: PlaytestReport[];
   session?: string;
   projectInputRevision?: string;
-  /** Replay-verified closest branches keyed by the exact frozen work item. */
-  continuationSources?: ReadonlyMap<string, string>;
+  /** Replay-verified expandable frontiers keyed by the exact frozen work item. */
+  continuationSources?: ReadonlyMap<string, SearchContinuationSource>;
 }): DevelopmentWorklist {
   const items: DevelopmentWorkItemDraft[] = [];
 
@@ -367,11 +371,12 @@ export function analyzeDevelopmentWorklist(input: {
     }
     const startedSession = script.startedSessions[0];
     const staleSession = script.staleSessions[0];
-    const continuationSession = input.continuationSources?.get(`story/${script.id}`);
+    const continuation = input.continuationSources?.get(`story/${script.id}`);
     // A checkpoint already inside the target script is stronger than a broad
-    // closest-state hint. For an otherwise uncovered script, continue the
+    // frontier hint. For an otherwise uncovered script, continue the
     // exact bounded search branch instead of paying the same root slice again.
-    const sourceSession = startedSession ?? staleSession ?? continuationSession ??
+    const continuationSelected = !startedSession && !staleSession && continuation !== undefined;
+    const sourceSession = startedSession ?? staleSession ?? continuation?.session ??
       input.session ?? "<source-session>";
     items.push({
       key: `story/${script.id}`,
@@ -390,6 +395,9 @@ export function analyzeDevelopmentWorklist(input: {
         args: {
           scriptId: script.id,
           fromSession: sourceSession,
+          ...(continuationSelected
+            ? { fromLogEntry: continuation.logEntry }
+            : {}),
           session: "<new-session>",
         },
       },
@@ -558,7 +566,7 @@ function authoringItem(
   item: ChoiceAuthoringWorkItem,
   sourceSession?: string,
   completedEvidenceSession?: string,
-  continuationSession?: string,
+  continuation?: SearchContinuationSource,
 ): DevelopmentWorkItemDraft {
   const target = item.source ?? item.scriptId;
   const common = {
@@ -578,10 +586,11 @@ function authoringItem(
         command: "reach",
         args: {
           key: `${item.scriptId}/${item.choiceId}`,
-          // A target-specific closest branch is stronger than generic proof
+          // A target-specific search frontier is stronger than generic proof
           // that the containing script completed somewhere else.
-          fromSession: continuationSession ?? completedEvidenceSession ??
+          fromSession: continuation?.session ?? completedEvidenceSession ??
             sourceSession ?? "<source-session>",
+          ...(continuation ? { fromLogEntry: continuation.logEntry } : {}),
           session: "<new-session>",
         },
       },
@@ -610,32 +619,80 @@ interface SearchContinuationCandidate {
   session: string;
   handoff: DevelopmentBranchHandoff;
   depth: number;
+  logEntry: number;
+}
+
+interface SearchHandoffObservation {
+  session: string;
+  handoff: DevelopmentBranchHandoff;
+  provenance: NonNullable<Awaited<ReturnType<typeof readForkProvenance>>>;
+  logEntry: number | null;
+}
+
+interface SearchContinuationSource {
+  session: string;
+  logEntry: number;
 }
 
 /**
- * Recover target-specific search progress from prior isolated work branches.
+ * Recover target-specific search frontiers from prior isolated work branches.
  * Coverage already bounds `sessions` to the selected lineage (or the whole
  * project). Exact work keys keep progress for different scripts/choices from
- * bleeding together, and unchanged child saves are rejected because replaying
+ * bleeding together, and unchanged frontier saves are rejected because replaying
  * them would deterministically spend the same search slice again.
  */
 async function collectSearchContinuationSources(
   gameDir: string,
   sessions: string[],
-): Promise<ReadonlyMap<string, string>> {
+): Promise<ReadonlyMap<string, SearchContinuationSource>> {
   const depthMemo = new Map<string, number>();
-  const candidates = (await Promise.all(sessions.map(async (session) => {
+  const observations = (await Promise.all(sessions.map(async (session) => {
     const handoff = await loadDevelopmentBranchHandoff(gameDir, session);
-    if (!isSearchContinuationHandoff(handoff)) return null;
+    if (!isSearchWorkHandoff(handoff)) return null;
     const provenance = await readForkProvenance(gameDir, session);
     if (!provenance) return null;
-    if (!await branchStateChanged(gameDir, session)) {
-      return null;
-    }
     return {
       session,
       handoff,
-      depth: await sessionLineageDepth(gameDir, session, depthMemo, new Set()),
+      provenance,
+      logEntry: handoff.state === "frontier"
+        ? await changedBranchLogEntry(gameDir, session)
+        : null,
+    } satisfies SearchHandoffObservation;
+  }))).filter((observation): observation is SearchHandoffObservation =>
+    observation !== null
+  );
+
+  // A completed child attempt consumes the exact parent frontier coordinate,
+  // even when that child proves the branch exhausted. Without this tombstone
+  // relation the worklist would offer the already-searched parent forever.
+  const consumed = new Set(observations.map((observation) =>
+    continuationCoordinate(
+      observation.provenance!.fromSession,
+      observation.provenance!.sourceLogEntry,
+      observation.handoff.workKey,
+    )
+  ));
+  const candidates = (await Promise.all(observations.map(async (observation) => {
+    if (
+      observation.handoff.state !== "frontier" ||
+      observation.logEntry === null ||
+      consumed.has(continuationCoordinate(
+        observation.session,
+        observation.logEntry,
+        observation.handoff.workKey,
+      ))
+    ) return null;
+    return {
+      session: observation.session,
+      handoff: observation.handoff,
+      depth: await sessionLineageDepth(
+        gameDir,
+        observation.session,
+        depthMemo,
+        new Set(),
+      ),
+      logEntry: observation.logEntry,
     } satisfies SearchContinuationCandidate;
   }))).filter((candidate): candidate is SearchContinuationCandidate =>
     candidate !== null
@@ -649,17 +706,19 @@ async function collectSearchContinuationSources(
     }
   }
   return new Map(
-    [...selected].map(([workKey, candidate]) => [workKey, candidate.session]),
+    [...selected].map(([workKey, candidate]) => [workKey, {
+      session: candidate.session,
+      logEntry: candidate.logEntry,
+    }]),
   );
 }
 
-function isSearchContinuationHandoff(
+function isSearchWorkHandoff(
   handoff: DevelopmentBranchHandoff | null,
 ): handoff is DevelopmentBranchHandoff {
   if (
     handoff === null ||
     handoff.schemaVersion !== 1 ||
-    handoff.state !== "closest" ||
     typeof handoff.workKey !== "string" ||
     !handoff.workKey.trim() ||
     typeof handoff.preparedAt !== "string" ||
@@ -678,10 +737,18 @@ function isSearchContinuationHandoff(
   return false;
 }
 
-async function branchStateChanged(
+function continuationCoordinate(
+  session: string,
+  logEntry: number,
+  workKey: string,
+): string {
+  return `${session}\u0000${logEntry}\u0000${workKey}`;
+}
+
+async function changedBranchLogEntry(
   gameDir: string,
   targetSession: string,
-): Promise<boolean> {
+): Promise<number | null> {
   try {
     // The first target log entry is written atomically with fork creation and
     // checkpoints the exact source state. It remains authoritative even when
@@ -689,16 +756,18 @@ async function branchStateChanged(
     // at log entry zero from a freshly regenerated initial state.
     const entries = await readSessionLog(gameDir, targetSession);
     const checkpoint = entries[0]?.checkpoint;
-    if (!isSessionCheckpointRef(checkpoint)) return false;
+    if (!isSessionCheckpointRef(checkpoint)) return null;
     const [source, target] = await Promise.all([
       loadSessionCheckpoint(gameDir, targetSession, checkpoint),
       readFile(path.join(sessionDir(gameDir, targetSession), "state.json"), "utf-8"),
     ]);
-    return canonicalJson(source) !== canonicalJson(JSON.parse(target));
+    return canonicalJson(source) !== canonicalJson(JSON.parse(target))
+      ? entries.length
+      : null;
   } catch {
     // A continuation is an optimization, never the only recovery route. If
     // its causal state pair cannot be compared, keep the ordinary work source.
-    return false;
+    return null;
   }
 }
 

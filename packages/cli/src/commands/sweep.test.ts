@@ -150,6 +150,7 @@ describe("bounded development sweep", () => {
           args: {
             scriptId: "scene-a",
             fromSession: "per-item-budget-001",
+            fromLogEntry: 2,
             session: "<new-session>",
             maxNodes: 1,
             maxSteps: 20,
@@ -216,7 +217,7 @@ describe("bounded development sweep", () => {
     });
   });
 
-  test("a later batch starts from the deepest changed closest handoff", async () => {
+  test("a later batch starts from the deepest changed search frontier", async () => {
     const gameDir = await temporarySweepGame();
     const game = await loadGame(gameDir);
 
@@ -241,7 +242,7 @@ describe("bounded development sweep", () => {
       kind: "story-coverage",
       title: "Reach scene-a",
       operation: "reach-script",
-      state: "closest",
+      state: "frontier",
       preparedAt: "2026-08-14T01:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
     });
@@ -267,12 +268,12 @@ describe("bounded development sweep", () => {
       kind: "story-coverage",
       title: "Reach scene-a",
       operation: "reach-script",
-      state: "closest",
+      state: "frontier",
       preparedAt: "2026-08-14T00:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
     });
 
-    // A zero-progress handoff must not create an endless cross-batch chain.
+    // A zero-progress frontier must not create an endless cross-batch chain.
     await createForkFromSource({
       gameDir,
       from: "player",
@@ -286,7 +287,7 @@ describe("bounded development sweep", () => {
       kind: "story-coverage",
       title: "Reach scene-b",
       operation: "reach-script",
-      state: "closest",
+      state: "frontier",
       preparedAt: "2026-08-14T02:00:00.000Z",
       coordinates: { scriptId: "scene-b" },
     });
@@ -305,7 +306,7 @@ describe("bounded development sweep", () => {
     expect(worklist.items.find((item) => item.key === "story/scene-a")?.operation)
       .toMatchObject({
         command: "reach-script",
-        args: { fromSession: "closest-002" },
+        args: { fromSession: "closest-002", fromLogEntry: 2 },
       });
     expect(worklist.items.find((item) => item.key === "story/scene-b")?.operation)
       .toMatchObject({
@@ -327,7 +328,68 @@ describe("bounded development sweep", () => {
     expect(JSON.parse(await readFile(
       path.join(sessionDir(gameDir, "resumed-001"), "fork.json"),
       "utf-8",
-    ))).toMatchObject({ fromSession: "closest-002" });
+    ))).toMatchObject({ fromSession: "closest-002", sourceLogEntry: 2 });
+  });
+
+  test("an exhausted child consumes its exact parent frontier", async () => {
+    const gameDir = await temporarySweepGame();
+    const game = await loadGame(gameDir);
+
+    await createForkFromSource({
+      gameDir,
+      from: "player",
+      to: "frontier-parent",
+      pretty: false,
+    }, await loadForkSource(gameDir, "player"));
+    const frontierState = await loadSession(gameDir, "frontier-parent", game);
+    frontierState.baseline.variables.search_progress = 1;
+    await saveSession(gameDir, "frontier-parent", frontierState);
+    await appendLog(gameDir, "frontier-parent", {
+      t: Date.now(),
+      source: "test",
+      output: { type: "search-progress" },
+    }, frontierState);
+    await attachDevelopmentBranchHandoff(gameDir, "frontier-parent", {
+      schemaVersion: 1,
+      workKey: "story/scene-a",
+      priority: "P2",
+      kind: "story-coverage",
+      title: "Reach scene-a",
+      operation: "reach-script",
+      state: "frontier",
+      preparedAt: "2026-08-14T01:00:00.000Z",
+      coordinates: { scriptId: "scene-a" },
+    });
+
+    await createForkFromSource({
+      gameDir,
+      from: "frontier-parent",
+      to: "exhausted-child",
+      at: 2,
+      pretty: false,
+    }, await loadForkSource(gameDir, "frontier-parent", 2));
+    await attachDevelopmentBranchHandoff(gameDir, "exhausted-child", {
+      schemaVersion: 1,
+      workKey: "story/scene-a",
+      priority: "P2",
+      kind: "story-coverage",
+      title: "Reach scene-a",
+      operation: "reach-script",
+      state: "closest",
+      preparedAt: "2026-08-14T02:00:00.000Z",
+      coordinates: { scriptId: "scene-a" },
+    });
+
+    const worklist = await collectDevelopmentWorklist(gameDir, "player");
+    expect(worklist.items.find((item) => item.key === "story/scene-a")?.operation)
+      .toEqual({
+        command: "reach-script",
+        args: {
+          scriptId: "scene-a",
+          fromSession: "player",
+          session: "<new-session>",
+        },
+      });
   });
 
   test("resumes from an exact key only while the snapshot revision matches", async () => {

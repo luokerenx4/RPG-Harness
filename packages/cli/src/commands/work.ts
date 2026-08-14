@@ -209,6 +209,9 @@ export async function executeDevelopmentWorkItem(
       const result = await runReachChoice({
         gameDir: args.gameDir,
         fromSession,
+        ...(operation.args.fromLogEntry !== undefined
+          ? { fromLogEntry: operation.args.fromLogEntry }
+          : {}),
         session: target,
         key: operation.args.key,
         maxNodes: args.maxNodes ?? 5000,
@@ -223,7 +226,11 @@ export async function executeDevelopmentWorkItem(
             args,
             item,
             result.session!,
-            result.found ? "target-reached" : "closest",
+            result.found
+              ? "target-reached"
+              : result.status === "paused"
+                ? "frontier"
+                : "closest",
           )
         : undefined;
       const compact = {
@@ -266,6 +273,9 @@ export async function executeDevelopmentWorkItem(
       const result = await runReachScript({
         gameDir: args.gameDir,
         fromSession,
+        ...(operation.args.fromLogEntry !== undefined
+          ? { fromLogEntry: operation.args.fromLogEntry }
+          : {}),
         session: target,
         scriptId: operation.args.scriptId,
         maxNodes: args.maxNodes ?? 5000,
@@ -276,7 +286,11 @@ export async function executeDevelopmentWorkItem(
         args,
         item,
         result.session ?? target,
-        result.found ? "covered" : "closest",
+        result.found
+          ? "covered"
+          : result.status === "paused"
+            ? "frontier"
+            : "closest",
       );
       const compact = { ...compactReachScriptResult(result), handoff };
       return result.found
@@ -426,7 +440,14 @@ function compactReachResult(result: ReachChoiceSummary) {
     replayVerified: result.replayVerified,
     ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
     ...(result.report ? { report: result.report } : {}),
-    ...(result.continuation ? { continuation: result.continuation } : {}),
+    ...(result.continuation
+      ? {
+          continuation: {
+            ...result.continuation,
+            frontier: compactClosest(result.continuation.frontier),
+          },
+        }
+      : {}),
   };
 }
 
@@ -446,7 +467,14 @@ function compactReachScriptResult(result: ReachScriptSummary) {
     output: compactOutput(result.output),
     replayVerified: result.replayVerified,
     ...(!result.found ? { closest: compactClosest(result.closest) } : {}),
-    ...(result.continuation ? { continuation: result.continuation } : {}),
+    ...(result.continuation
+      ? {
+          continuation: {
+            ...result.continuation,
+            frontier: compactClosest(result.continuation.frontier),
+          },
+        }
+      : {}),
   };
 }
 

@@ -648,15 +648,106 @@ describe("choice state-space search", () => {
       { type: "doActivity", id: "strike" },
     ]);
     expect(first.state.baseline.variables.phase).toBe(3);
+    expect(first.frontier).toMatchObject({
+      closest: { outputType: "hubMenu" },
+      state: { baseline: { variables: { phase: 3 } } },
+    });
 
     const resumed = await searchForChoice(
       game,
-      first.state,
+      first.frontier!.state,
       { scriptId: "target", choiceId: "promise" },
       { maxNodes: 3, maxSteps: 20 },
     );
     expect(resumed.found).toBe(true);
     expect(resumed.inputs).toEqual([{ type: "doActivity", id: "cross" }]);
+  });
+
+  test("separates a terminal diagnostic closest state from an expandable frontier", async () => {
+    const game = makeGame({
+      variables: [
+        { id: "phase", type: "number", initial: 0 },
+        { id: "progress", type: "number", initial: 0 },
+      ],
+      scripts: [makeScript("target", {
+        requires: { variable: { name: "progress", min: 1 } },
+      })],
+      runFn: async function* (ctx) {
+        while (true) {
+          const phase = Number(ctx.state.baseline.variables.phase ?? 0);
+          if (phase === 99) {
+            yield { type: "gameEnd" as const, reason: "sealed" };
+            return;
+          }
+          if (phase >= 2) {
+            yield {
+              type: "choice" as const,
+              scriptId: "target",
+              choiceId: "answer",
+              prompt: "Answer?",
+              options: [{ id: "yes", text: "Yes", available: true }],
+            };
+            continue;
+          }
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: phase === 0
+                ? [
+                    { id: "seal", kind: "action" as const, title: "Seal", cost: 0, available: true },
+                    { id: "wait", kind: "action" as const, title: "Wait", cost: 0, available: true },
+                  ]
+                : [
+                    { id: "advance", kind: "action" as const, title: "Advance", cost: 0, available: true },
+                    { id: "idle", kind: "action" as const, title: "Idle", cost: 0, available: true },
+                  ],
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "seal") {
+            ctx.state.baseline.variables.progress = 1;
+            ctx.state.baseline.variables.phase = 99;
+          } else if (input.id === "wait") {
+            ctx.state.baseline.variables.phase = 1;
+          } else if (input.id === "advance") {
+            ctx.state.baseline.variables.progress = 1;
+            ctx.state.baseline.variables.phase = 2;
+          }
+        }
+      },
+    });
+
+    const first = await searchForChoice(
+      game,
+      makeState(game),
+      { scriptId: "target", choiceId: "answer" },
+      { maxNodes: 2, maxSteps: 20 },
+    );
+
+    expect(first).toMatchObject({
+      found: false,
+      reason: "max-nodes",
+      closest: { outputType: "gameEnd", satisfiedRequirements: 1 },
+      frontier: {
+        inputs: [{ type: "doActivity", id: "wait" }],
+        closest: { outputType: "hubMenu", satisfiedRequirements: 0 },
+      },
+    });
+    const resumed = await searchForChoice(
+      game,
+      first.frontier!.state,
+      { scriptId: "target", choiceId: "answer" },
+      { maxNodes: 4, maxSteps: 20 },
+    );
+    expect(resumed).toMatchObject({ found: true, reason: "found" });
+    expect(resumed.inputs).toEqual([{ type: "doActivity", id: "advance" }]);
   });
 
   test("reports a bounded miss without mutating the source state", async () => {

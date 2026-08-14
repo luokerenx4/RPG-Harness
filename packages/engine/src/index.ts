@@ -54,6 +54,7 @@ export type {
   ChoiceSearchOptions,
   ChoiceSearchProgress,
   ChoiceSearchClosest,
+  ChoiceSearchFrontier,
   ChoiceSearchRequirement,
   ChoiceSearchResult,
   ChoiceSearchTarget,
