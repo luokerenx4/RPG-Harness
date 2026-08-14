@@ -1,0 +1,58 @@
+name: 達成済み鬼脈は入口往復でなく映し井戸からの生還を示す
+description: |
+  Once the ending pulse is satisfied and every Hell Gate encounter is clear,
+  the causal next step is the actual extract at the mirror pool. The entry map
+  is only a special return point for a pending released memory; treating it as
+  a general exit creates a corridor-mouth navigation cycle.
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, letter_03_choice]
+    currentMapId: hell_gate_corridor
+    knownSkills: [chinkonho, mizukagami]
+    switches:
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 8
+    weapons:
+      ancestor_yaodao: { power: 41 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kagari, kasumi, mio]
+    achievementLog: []
+    raid:
+      chain: hell_gate
+      entryMapId: hell_gate_mouth
+      turnsTaken: 8
+      pendingLoot: { ryo: 5 }
+      visited:
+        hell_gate_mouth:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+        hell_gate_corridor:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: { ryo: 5 }
+        hell_gate_mirror_pool:
+          visited: true
+          searched: true
+          encounter: null
+          encounterCleared: true
+          pendingLoot: {}
+inputs: []
+assertions:
+  - kind: objective
+    id: hell_gate_mastery
+    relatedActivityFirst: move:hell_gate_mirror_pool
+    relatedActivityExcludes: move:hell_gate_mouth
+  - kind: objective
+    id: ending_oni_self
+    relatedActivityFirst: move:hell_gate_mirror_pool
+    relatedActivityExcludes: move:hell_gate_mouth

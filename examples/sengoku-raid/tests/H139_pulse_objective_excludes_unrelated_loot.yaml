@@ -1,0 +1,58 @@
+name: 鬼脈目標は無関係な戦利品でなく確定遭遇への次手を示す
+description: |
+  In a quiet raid zone, every raid activity used to be published as objective
+  progress. That made GUI receipts and generic AI planners claim that looting
+  money advanced the oni-pulse ending. The public contract must instead point
+  to the shortest reachable uncleared guaranteed encounter and explain its
+  victory transition.
+state:
+  baseline:
+    completedScripts: [000_intro, letter_01_suspicion, letter_02_rival, letter_03_choice]
+    currentMapId: mt_houkyou_stone_paths
+    knownSkills: [chinkonho, mizukagami]
+    switches:
+      chose_court_defy: true
+    variables:
+      shogun_chapter: 3
+      raidsCompleted: 12
+      pulse_oni: 4
+    weapons:
+      ancestor_yaodao: { power: 41 }
+  runtime:
+    firedTriggers: [letter_01_dispatch, letter_02_dispatch, letter_03_dispatch]
+  sengoku-raid:
+    metCharacters: [kasumi]
+    raid:
+      chain: mt_houkyou
+      entryMapId: mt_houkyou_foothills
+      turnsTaken: 3
+      pendingLoot: { ryo: 19 }
+      visited:
+        mt_houkyou_stone_paths:
+          visited: true
+          searched: false
+          encounter: null
+          encounterCleared: true
+          pendingLoot: { ryo: 18 }
+inputs: []
+assertions:
+  - kind: activity
+    id: search:mt_houkyou_stone_paths
+    present: true
+    available: true
+  - kind: activity
+    id: move:mt_houkyou_lava_vent
+    forecastMetric: encounter_outcome
+    metricValue: 戦闘確定
+  - kind: activity
+    id: move:mt_houkyou_lava_vent
+    forecastMetric: victory_followup
+    metricValue: 三脈選択
+  - kind: objective
+    id: ending_oni_self
+    relatedActivityFirst: move:mt_houkyou_lava_vent
+    relatedActivityExcludes: search:mt_houkyou_stone_paths
+  - kind: objective
+    id: hell_gate_mastery
+    relatedActivityFirst: move:mt_houkyou_lava_vent
+    relatedActivityExcludes: search:mt_houkyou_stone_paths

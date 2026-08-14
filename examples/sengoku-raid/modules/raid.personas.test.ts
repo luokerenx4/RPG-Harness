@@ -431,6 +431,101 @@ describe("sengoku-raid authored language", () => {
 });
 
 describe("sengoku-raid public AI decision evidence", () => {
+  test("completionist follows the public pulse route before unrelated loot", async () => {
+    const output = hub([
+      {
+        ...activity("search:mt_houkyou_stone_paths"),
+        actionKind: "search",
+        recommended: true,
+        forecast: {
+          summary: "loot",
+          metrics: [{ id: "inventory:ryo", label: "両", value: 18 }],
+        },
+      },
+      {
+        ...activity("move:mt_houkyou_lava_vent"),
+        actionKind: "move",
+        forecast: {
+          summary: "certain encounter",
+          metrics: [{
+            id: "encounter_outcome",
+            label: "次区域",
+            value: "戦闘確定",
+          }],
+        },
+      },
+    ]);
+    output.snapshot.objectives = [{
+      id: "ending_oni_self",
+      title: "地獄門の底へ",
+      scope: "main",
+      terminal: true,
+      status: "active",
+      requirements: [{
+        id: "pulse_oni",
+        label: "脈絡: 鬼",
+        current: 4,
+        target: 6,
+        satisfied: false,
+      }],
+      relatedActivityIds: ["move:mt_houkyou_lava_vent"],
+    }];
+
+    await expect(raidAiPersonas.completionist!.decide(
+      output,
+      {
+        baseline: { scripts: {} },
+        "sengoku-raid": {
+          raid: { chain: "mt_houkyou", visited: {} },
+          companion: null,
+          achievementLog: [],
+        },
+      } as unknown as ComposedState,
+      0,
+    )).resolves.toEqual({
+      input: { type: "doActivity", id: "move:mt_houkyou_lava_vent" },
+      publicIntent: "公開目標「地獄門の底へ」が示す因果的な次手を進める",
+    });
+  });
+
+  test("completionist follows mastery extraction instead of a stale terminal route", async () => {
+    const output = hub([
+      activity("move:hell_gate_mirror_pool"),
+      activity("move:hell_gate_mouth"),
+    ]);
+    output.snapshot.objectives = [{
+      id: "hell_gate_mastery",
+      title: "映し井戸から生還する",
+      scope: "mastery",
+      terminal: false,
+      status: "active",
+      relatedActivityIds: ["move:hell_gate_mirror_pool"],
+    }, {
+      id: "ending_oni_self",
+      title: "地獄門の底へ",
+      scope: "main",
+      terminal: true,
+      status: "active",
+      relatedActivityIds: ["move:hell_gate_mouth"],
+    }];
+
+    await expect(raidAiPersonas.completionist!.decide(
+      output,
+      {
+        baseline: { scripts: {} },
+        "sengoku-raid": {
+          raid: { chain: "hell_gate", visited: {} },
+          companion: null,
+          achievementLog: [],
+        },
+      } as unknown as ComposedState,
+      0,
+    )).resolves.toEqual({
+      input: { type: "doActivity", id: "move:hell_gate_mirror_pool" },
+      publicIntent: "公開目標「映し井戸から生還する」が示す因果的な次手を進める",
+    });
+  });
+
   test("completionist explains a guaranteed attack without exposing private reasoning", async () => {
     const output = hub([{
       ...activity("attack"),

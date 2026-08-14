@@ -361,9 +361,10 @@ function pendingHauntScripts(ctx: Ctx) {
   });
 }
 
-function nextMemoryReturnActivityId(
+function nextRaidReturnActivityId(
   ctx: Ctx,
   activities: HubActivity[],
+  includeEntry: boolean,
 ): string | null {
   const m = moduleState(ctx);
   if (!m.raid) return null;
@@ -378,7 +379,8 @@ function nextMemoryReturnActivityId(
     (ctx.game.maps ?? [])
       .filter((map) =>
         map.chain === m.raid!.chain &&
-        (map.isExtract === true || map.id === m.raid!.entryMapId)
+        (map.isExtract === true ||
+          (includeEntry && map.id === m.raid!.entryMapId))
       )
       .map(({ id }) => id),
   );
@@ -407,9 +409,104 @@ function nextMemoryReturnActivityId(
     }))
     .sort((left, right) =>
       left.distance - right.distance ||
-      Number(right.targetId === m.raid!.entryMapId) -
-        Number(left.targetId === m.raid!.entryMapId)
+      (includeEntry
+        ? Number(right.targetId === m.raid!.entryMapId) -
+          Number(left.targetId === m.raid!.entryMapId)
+        : 0)
     )[0]?.id ?? null;
+}
+
+function nextMemoryReturnActivityId(
+  ctx: Ctx,
+  activities: HubActivity[],
+): string | null {
+  return nextRaidReturnActivityId(ctx, activities, true);
+}
+
+function nextRaidExtractActivityId(
+  ctx: Ctx,
+  activities: HubActivity[],
+): string | null {
+  return nextRaidReturnActivityId(ctx, activities, false);
+}
+
+function hasGuaranteedUnclearedEncounter(ctx: Ctx, mapId: string): boolean {
+  const map = getMap(ctx, mapId);
+  const table = map?.encounterTable ?? [];
+  if (table.length === 0 || table.some(({ enemyId }) => enemyId === null)) {
+    return false;
+  }
+  return moduleState(ctx).raid?.visited[mapId]?.encounterCleared !== true;
+}
+
+/**
+ * Publish one causal next step toward another pulse choice. This deliberately
+ * does not expose every raid-category activity: looting a quiet zone is useful
+ * to a completionist, but it does not cause a pulse requirement to advance.
+ * The returned activity is consumed by GUI guidance, generic personas, the
+ * project completionist, and Headless evidence alike.
+ */
+function nextPulseProgressActivityId(
+  ctx: Ctx,
+  activities: HubActivity[],
+  pulse: "pure" | "oni" | "mundane",
+): string | null {
+  const available = (id: string) => availableActivity(activities, id);
+  const imbue = `imbue:${pulse}`;
+  if (available(imbue)) return imbue;
+
+  const m = moduleState(ctx);
+  if (m.raid) {
+    const combat = ["attack", "sneak_strike", "yaodao_voice"].find(available);
+    if (combat) return combat;
+
+    const moves = activities.filter((activity) =>
+      activity.available && activity.id.startsWith("move:")
+    );
+    const encounterTargets = new Set(
+      (ctx.game.maps ?? [])
+        .filter((map) =>
+          map.chain === m.raid!.chain &&
+          hasGuaranteedUnclearedEncounter(ctx, map.id)
+        )
+        .map(({ id }) => id),
+    );
+    const distanceToEncounter = (start: string): number => {
+      const seen = new Set([start]);
+      let frontier = [start];
+      let steps = 0;
+      while (frontier.length > 0) {
+        if (frontier.some((id) => encounterTargets.has(id))) return steps;
+        frontier = frontier.flatMap((id) =>
+          getMap(ctx, id)?.connections?.flatMap(({ target }) => {
+            if (seen.has(target)) return [];
+            seen.add(target);
+            return [target];
+          }) ?? []
+        );
+        steps += 1;
+      }
+      return Number.POSITIVE_INFINITY;
+    };
+    const towardEncounter = moves
+      .map((activity) => ({
+        id: activity.id,
+        distance: distanceToEncounter(activity.id.slice("move:".length)),
+      }))
+      .filter(({ distance }) => Number.isFinite(distance))
+      .sort((left, right) => left.distance - right.distance)[0]?.id;
+    if (towardEncounter) return towardEncounter;
+
+    // Every certain encounter on this expedition has been consumed. Publish
+    // the shortest executable way home so a fresh raid can mint another one.
+    return nextRaidExtractActivityId(ctx, activities);
+  }
+
+  return available("depart:mt_houkyou")
+    ? "depart:mt_houkyou"
+    : activities.find((activity) =>
+      activity.available && activity.id.startsWith("depart:")
+    )?.id ?? null;
 }
 
 function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
@@ -603,8 +700,13 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
       ]);
       relatedActivityIds = next ? [next] : executableProgressActivityIds;
     } else if (!completed && (pulseOni < 6 || power < 12)) {
-      const next = firstAvailable(["imbue:oni", "upgrade_oni"]);
+      const next = power < 12 && availableActivity(activities, "upgrade_oni")
+        ? "upgrade_oni"
+        : nextPulseProgressActivityId(ctx, activities, "oni");
       relatedActivityIds = next ? [next] : executableProgressActivityIds;
+    } else if (!completed && m.raid?.chain === "hell_gate") {
+      const next = nextRaidExtractActivityId(ctx, activities);
+      relatedActivityIds = next ? [next] : [];
     }
     return [{
       id: "hell_gate_mastery",
@@ -686,6 +788,13 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
   const routeImbueAvailable = activities.some(
     (activity) => activity.id === routeImbueActivityId && activity.available,
   );
+  const routeProgressActivityId = current >= route.target && moduleState(ctx).raid
+    ? nextRaidExtractActivityId(ctx, activities)
+    : nextPulseProgressActivityId(
+        ctx,
+        activities,
+        route.variable.replace("pulse_", "") as "pure" | "oni" | "mundane",
+      );
   return withDeepGoals([{
     id: route.id,
     title: completed ? `${route.title} — 完遂` : route.title,
@@ -702,7 +811,9 @@ function buildObjectives(ctx: Ctx, activities: HubActivity[]) {
         ? [endingActivityId]
         : routeImbueAvailable
           ? [routeImbueActivityId]
-          : executableProgressActivityIds,
+          : routeProgressActivityId
+            ? [routeProgressActivityId]
+            : executableProgressActivityIds,
   }]);
 }
 
@@ -1855,6 +1966,10 @@ function buildRaidMenu(ctx: Ctx): Output {
     for (const conn of map.connections ?? []) {
       const targetMap = getMap(ctx, conn.target);
       const targetInst = m.raid.visited[conn.target];
+      const guaranteedEncounterAhead = hasGuaranteedUnclearedEncounter(
+        ctx,
+        conn.target,
+      );
       const visitedNote = targetInst?.visited ? "（既訪）" : "";
       const extractNote = targetMap?.isExtract ? "（撤退可）" : "";
       const direction = /[るうくぐすつぬぶむ]$/.test(conn.dir)
@@ -1869,6 +1984,24 @@ function buildRaidMenu(ctx: Ctx): Output {
         category: "raid",
         cost: 0,
         available: true,
+        ...(guaranteedEncounterAhead
+          ? {
+              forecast: {
+                summary: "未決着の確定遭遇へ進む。勝利後は三脈を選ぶ",
+                metrics: [{
+                  id: "encounter_outcome",
+                  label: "次区域",
+                  value: "戦闘確定",
+                  polarity: "risk" as const,
+                }, {
+                  id: "victory_followup",
+                  label: "勝利後",
+                  value: "三脈選択",
+                  polarity: "benefit" as const,
+                }],
+              },
+            }
+          : {}),
       });
     }
   }
@@ -3624,6 +3757,22 @@ export const raidAiPersonas: NonNullable<Module["aiPersonas"]> = {
           }
           const sneak = find(({ id }) => id === "sneak_strike");
           if (sneak) return { type: "doActivity", id: sneak.id };
+          const masteryProgress = personaScopedObjectiveActivity(output, "mastery");
+          const objectiveProgress = masteryProgress ??
+            personaTerminalObjectiveActivity(output);
+          if (objectiveProgress?.type === "doActivity") {
+            const objective = output.snapshot.objectives?.find(
+              (candidate) =>
+                candidate.status === "active" &&
+                candidate.relatedActivityIds?.includes(objectiveProgress.id),
+            );
+            return {
+              input: objectiveProgress,
+              publicIntent: objective
+                ? `公開目標「${objective.title}」が示す因果的な次手を進める`
+                : "公開目標が示す因果的な次手を進める",
+            };
+          }
           const search = find(({ id }) => id.startsWith("search:"));
           if (search) return { type: "doActivity", id: search.id };
           const moves = acts.filter(({ id }) => id.startsWith("move:"));
