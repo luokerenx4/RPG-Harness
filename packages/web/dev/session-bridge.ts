@@ -536,6 +536,7 @@ export async function createBridgeExploration(
     proofSession,
     "--source-session",
     sourceSession,
+    "--family",
     "--key",
     key,
     "--player-session",

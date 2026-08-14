@@ -310,6 +310,9 @@ the original autonomous session as complete proof that the target script still
 finishes, then derives a second immutable checkpoint branch at the first
 authored response after the selected option. Opening that session in Web starts
 on the new dialogue/narration instead of dropping the player into the later Hub.
+Add `--family` when the pending branch was discovered across a source session's
+fork descendants. Web terminal exploration always uses this same family scope,
+so every branch it offers is executable by the Headless proof run that follows.
 `worklist` is the project-level orchestration view: it merges open playtest
 reports, unreadable session state/logs, story coverage gaps, executable choice
 branches, and authored choice debt into one deterministic priority order. JSON
@@ -683,7 +686,7 @@ rpgh audit ./examples/sengoku-raid --from-session player-main \
 rpgh audit ./examples/sengoku-raid \
   --session-prefix ai-fresh-matrix --seed 17 --max-steps 500
 rpgh probe-choice ./examples/sengoku-raid --session player-main --at 42 --pretty
-rpgh cover ./examples/sengoku-raid --source-session player-main \
+rpgh cover ./examples/sengoku-raid --source-session player-main --family \
   --session ai-cover-branch --key SCRIPT/CHOICE/OPTION
 ```
 

@@ -19,6 +19,8 @@ export interface CoverChoiceArgs {
   gameDir: string;
   session: string;
   sourceSession?: string;
+  /** Include every descendant of sourceSession, matching family-scoped discovery. */
+  family?: boolean;
   /**
    * Optional player-facing premiere branch. The autonomous cover run remains
    * the proof branch; this session opens on the first authored response after
@@ -72,7 +74,11 @@ export async function runChoiceCoverageWorkItem(
     // The final fork still repeats this check under the player-session lock.
     await assertTargetEmpty(args.gameDir, args.playerSession);
   }
-  const coverage = await collectChoiceCoverage(args.gameDir, args.sourceSession);
+  const coverage = await collectChoiceCoverage(
+    args.gameDir,
+    args.sourceSession,
+    args.family ?? false,
+  );
   if (coverage.sessionErrors.length > 0) {
     throw new Error(
       `Cannot read choice coverage: ${coverage.sessionErrors

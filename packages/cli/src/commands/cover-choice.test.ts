@@ -150,6 +150,56 @@ describe("coverage-driven autoplay", () => {
     )).toBe(false);
   });
 
+  test("executes a family-scoped branch whose witness exists only in a descendant", async () => {
+    const gameDir = await temporaryChoiceGame();
+    await seedFirstBranch(gameDir);
+    const rootDir = path.join(gameDir, ".rpg-harness", "sessions", "family-root");
+    await mkdir(rootDir, { recursive: true });
+    await writeFile(path.join(rootDir, "log.jsonl"), "", "utf-8");
+    await writeFile(
+      path.join(gameDir, ".rpg-harness", "sessions", "seed-alpha", "fork.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        fromSession: "family-root",
+        sourceLogEntry: 0,
+        mode: "checkpoint",
+      }),
+      "utf-8",
+    );
+
+    await expect(runChoiceCoverageWorkItem({
+      gameDir,
+      session: "family-proof-without-scope",
+      sourceSession: "family-root",
+      key: "intro/opening/beta",
+      persona: "greedy",
+      maxSteps: 20,
+      verbose: false,
+      pretty: false,
+    })).rejects.toThrow("Pending choice branch not found");
+
+    const summary = await runChoiceCoverageWorkItem({
+      gameDir,
+      session: "family-proof",
+      playerSession: "family-premiere",
+      sourceSession: "family-root",
+      family: true,
+      key: "intro/opening/beta",
+      persona: "greedy",
+      maxSteps: 20,
+      verbose: false,
+      pretty: false,
+    });
+
+    expect(summary.workItem.evidence.session).toBe("seed-alpha");
+    expect(summary.fork).toMatchObject({
+      fromSession: "seed-alpha",
+      sourceLogEntry: 2,
+    });
+    expect(summary.targetChoice).toMatchObject({ optionId: "beta", status: "selected" });
+    expect(summary.playerHandoff?.session).toBe("family-premiere");
+  });
+
   test("preflights an occupied player premiere before publishing the proof branch", async () => {
     const gameDir = await temporaryChoiceGame();
     await seedFirstBranch(gameDir);

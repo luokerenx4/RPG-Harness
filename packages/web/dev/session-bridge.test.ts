@@ -751,6 +751,63 @@ describe("Web development session bridge", () => {
     expect((await loadBridgeExplorationStatus(gameDir, "finished-player")).pendingOptions).toBe(0);
   });
 
+  test("executes the same descendant evidence scope shown by terminal exploration", async () => {
+    const gameDir = await temporaryChoiceGame();
+    const rootDir = path.join(gameDir, ".rpg-harness", "sessions", "player-root");
+    await mkdir(rootDir, { recursive: true });
+    await writeFile(path.join(rootDir, "log.jsonl"), "", "utf-8");
+    await runCli(gameDir, [
+      "autoplay", gameDir,
+      "--persona", "greedy",
+      "--session", "player-descendant",
+      "--max-steps", "20",
+    ]);
+    await writeFile(
+      path.join(
+        gameDir,
+        ".rpg-harness",
+        "sessions",
+        "player-descendant",
+        "fork.json",
+      ),
+      JSON.stringify({
+        schemaVersion: 1,
+        fromSession: "player-root",
+        sourceLogEntry: 0,
+        mode: "checkpoint",
+      }),
+      "utf-8",
+    );
+
+    const status = await loadBridgeExplorationStatus(gameDir, "player-root");
+    expect(status.next).toMatchObject({ key: "intro/opening/beta" });
+
+    const branch = await createBridgeExploration(
+      gameDir,
+      "player-root",
+      status.next!.key,
+      () => 4321,
+    );
+
+    expect(JSON.parse(await readFile(
+      path.join(gameDir, ".rpg-harness", "sessions", branch.proofSession, "fork.json"),
+      "utf-8",
+    ))).toMatchObject({
+      fromSession: "player-descendant",
+      sourceLogEntry: 2,
+      handoff: {
+        workKey: "choice-branch/intro/opening/beta",
+        state: "covered",
+      },
+    });
+    expect(await loadBridgeBranchContext(gameDir, branch.session)).toMatchObject({
+      fromSession: branch.proofSession,
+      handoff: {
+        premiere: { optionText: "Beta" },
+      },
+    });
+  });
+
   test("rejects malformed player feedback before writing an issue", async () => {
     const gameDir = await temporaryGame();
     await expect(createBridgeFeedback({
