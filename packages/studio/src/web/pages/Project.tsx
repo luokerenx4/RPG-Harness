@@ -1259,14 +1259,21 @@ function MapOverview({
         {draft.layout && (draft.placements ?? []).length > 0 && (
           <div className="map-object-strip" aria-label="Map objects">
             <span>OBJECTS</span>
-            {(draft.placements ?? []).map((placement) => (
-              <button
-                type="button"
-                className={selectedPlacementId === placement.id ? "selected" : ""}
-                key={placement.id}
-                onClick={() => setSelectedPlacementId(placement.id)}
-              ><i className={`object-dot collision-${placement.collision}`} />{placement.id}<small>{placement.at.x},{placement.at.y}</small></button>
-            ))}
+            {(draft.placements ?? []).map((placement) => {
+              const label = mapPlacementResourceLabel(placement, resources);
+              return (
+                <button
+                  type="button"
+                  className={selectedPlacementId === placement.id ? "selected" : ""}
+                  key={placement.id}
+                  onClick={() => setSelectedPlacementId(placement.id)}
+                >
+                  <i className={`object-dot collision-${placement.collision}`} />
+                  <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
+                  <small>{placement.at.x},{placement.at.y}</small>
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="map-canvas-scroll">
@@ -1332,7 +1339,7 @@ function MapOverview({
                 width: `${region.width / width * 100}%`,
                 height: `${region.height / height * 100}%`,
               }}
-            />
+            ><span>{region.name ?? region.id}</span></div>
           ))}
           {draft.layout.playerStart && (
             <div
@@ -1346,8 +1353,10 @@ function MapOverview({
               }}
             >◆</div>
           )}
-          {(draft.placements ?? []).map((placement) => (
-            <div
+          {(draft.placements ?? []).map((placement) => {
+            const resourceLabel = mapPlacementResourceLabel(placement, resources);
+            return (
+              <div
               className={`map-placement collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}`}
               key={placement.id}
               draggable={editing}
@@ -1356,7 +1365,7 @@ function MapOverview({
                 event.dataTransfer.effectAllowed = "move";
               }}
               onClick={(event) => { event.stopPropagation(); setSelectedPlacementId(placement.id); }}
-              title={`${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
+              title={`${resourceLabel} · ${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
               style={{
                 left: `${(placement.at.x / width) * 100}%`,
                 top: `${(placement.at.y / height) * 100}%`,
@@ -1366,10 +1375,11 @@ function MapOverview({
                 opacity: placement.visible ? 1 : 0.45,
               }}
             >
-              <span>{placement.id}</span>
-              <small>{placement.resource?.kind ?? "event"}</small>
-            </div>
-          ))}
+              <span>{resourceLabel}</span>
+              <small>{placement.resource?.kind ?? "event"} · {placement.id}</small>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="node-map-preview">
@@ -2078,6 +2088,15 @@ export function resourceChoices(
   return resources
     .filter((resource) => resource.kind === kind)
     .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function mapPlacementResourceLabel(
+  placement: MapPlacementDef,
+  resources: ProjectResourceNode[],
+): string {
+  if (!placement.resource) return placement.id;
+  const key = `${placement.resource.kind}:${placement.resource.id}`;
+  return resources.find((resource) => resource.key === key)?.label ?? placement.resource.id;
 }
 
 function cloneMap(map: MapDef): MapDef {

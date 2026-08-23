@@ -4,12 +4,13 @@ import {
   createConditionDraft,
   eventTriggerMeta,
   hasMapDraftChanges,
+  mapPlacementResourceLabel,
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
   summarizeMapValidation,
 } from "./pages/Project";
-import type { MapDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
 
 describe("Studio database record fields", () => {
   const source = [
@@ -70,6 +71,24 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(resourceChoices(resources, "script").map((resource) => resource.id)).toEqual(["a", "z"]);
     expect(resourceChoices(resources, undefined)).toEqual([]);
+  });
+
+  test("uses database labels for placed map resources without replacing stable instance ids", () => {
+    const placement = {
+      id: "altar_shard",
+      at: { x: 5, y: 2 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "block",
+      visible: true,
+      resource: { kind: "item", id: "soul_shard" },
+      events: [],
+    } as MapPlacementDef;
+    const resources = [
+      { key: "item:soul_shard", kind: "item", id: "soul_shard", label: "魂石の欠片", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(mapPlacementResourceLabel(placement, resources)).toBe("魂石の欠片");
+    expect(placement.id).toBe("altar_shard");
   });
 
   test("tracks only authoritative spatial map draft changes", () => {

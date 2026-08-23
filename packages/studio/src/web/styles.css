@@ -2255,10 +2255,14 @@ summary:focus-visible {
   scrollbar-width: thin;
 }
 .map-object-strip > span { flex: 0 0 auto; margin-right: 4px; color: #4f5865; font-size: 7px; font-weight: 750; letter-spacing: .12em; }
-.map-object-strip button { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; height: 24px; padding: 0 7px; color: #7f8996; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 8px; }
+.map-object-strip button { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 31px; padding: 3px 7px; color: #7f8996; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; font-size: 8px; }
 .map-object-strip button:hover { color: #cdd2d9; background: #181d25; }
 .map-object-strip button.selected { color: var(--studio-accent); border-color: rgba(80,199,217,.3); background: var(--studio-accent-soft); }
 .map-object-strip button small { color: #525b68; font: 7px/1 ui-monospace, monospace; }
+.map-object-identity { display: flex; align-items: flex-start; min-width: 0; flex-direction: column; gap: 1px; text-align: left; }
+.map-object-identity strong { max-width: 125px; overflow: hidden; color: #aeb7c2; font-size: 8px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.map-object-identity code { max-width: 125px; overflow: hidden; color: #4f5966; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
+.map-object-strip button.selected .map-object-identity strong { color: #c8f2f6; }
 .object-dot { width: 6px; height: 6px; border: 1px solid var(--studio-accent); border-radius: 2px; background: rgba(80,199,217,.25); }
 .object-dot.collision-block { border-color: var(--studio-orange); background: rgba(231,168,106,.25); }
 .object-dot.collision-trigger { border-color: var(--studio-violet); background: rgba(172,133,245,.25); }
@@ -2293,9 +2297,12 @@ summary:focus-visible {
 .map-canvas.grid-hidden { background-image: none; }
 .map-canvas.editing { border-color: rgba(80,199,217,.65); box-shadow: 0 10px 30px rgba(0,0,0,.42), 0 0 0 1px rgba(80,199,217,.16); }
 .map-region { background: rgba(172,133,245,.08); border-color: rgba(172,133,245,.55); }
+.map-region > span { position: absolute; top: 5px; left: 6px; max-width: calc(100% - 12px); overflow: hidden; color: rgba(206,183,247,.68); font-size: 7px; font-weight: 650; letter-spacing: .06em; text-overflow: ellipsis; white-space: nowrap; }
 .map-player-start { border: 2px solid #dffaff; color: #fff; background: #23899a; box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 0 0 3px rgba(80,199,217,.16); }
 .map-placement { min-width: 42px; min-height: 30px; color: #d8f8fc; border-color: rgba(80,199,217,.62); border-radius: 4px; background: rgba(22,91,102,.78); box-shadow: 0 3px 10px rgba(0,0,0,.35); font-size: 8px; }
 .map-placement small { color: rgba(215,242,247,.55); font-size: 7px; }
+.map-placement > span,
+.map-placement > small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .map-placement.collision-block { border-color: var(--studio-orange); background: rgba(105,70,34,.78); }
 .map-placement.collision-trigger { border-color: var(--studio-violet); }
 .map-placement.selected { outline: 2px solid #f1fbff; outline-offset: 2px; box-shadow: 0 0 0 5px rgba(80,199,217,.15), 0 4px 14px rgba(0,0,0,.45); }
