@@ -54,9 +54,21 @@ describe("SpatialMapSurface", () => {
   });
 
   test("renders positions and omits automatic events from player controls", () => {
+    const mapWithHiddenPlacement: MapDef = {
+      ...map,
+      placements: [
+        ...map.placements!,
+        {
+          ...map.placements![0]!,
+          id: "authoring-anchor",
+          visible: false,
+          resource: { kind: "asset", id: "private_backdrop_anchor" },
+        },
+      ],
+    };
     const html = renderToStaticMarkup(
       <SpatialMapSurface
-        map={map}
+        map={mapWithHiddenPlacement}
         activities={[move]}
         playerPosition={{ x: 1, y: 2 }}
         onInput={() => {}}
@@ -67,6 +79,10 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("width:25%");
     expect(html).toContain("玩家位置 1,2");
     expect(html).toContain("向南移动");
+    expect(html).toContain("resource-map");
+    expect(html).toContain("出口");
+    expect(html).toContain("Town");
+    expect(html).not.toContain("Private Backdrop Anchor");
     expect(html).not.toContain(">Leave</button>");
     expect(html).not.toContain("arrival");
   });

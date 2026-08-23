@@ -48,6 +48,7 @@ export function SpatialMapSurface({
   const layout = map.layout;
   if (!layout) return null;
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
+  const visiblePlacements = (map.placements ?? []).filter((placement) => placement.visible);
 
   return (
     <section className="spatial-map-surface" aria-label={`${map.name} 二维地图`}>
@@ -56,7 +57,7 @@ export function SpatialMapSurface({
           <span className="spatial-map-kicker">MAP · {layout.width} × {layout.height}</span>
           <strong>{map.name}</strong>
         </div>
-        <span>{map.placements?.length ?? 0} PLACEMENTS</span>
+        <span>{visiblePlacements.length} LANDMARKS</span>
       </header>
       <div
         className="spatial-map-canvas"
@@ -85,7 +86,7 @@ export function SpatialMapSurface({
             title={region.name ?? region.id}
           />
         ))}
-        {(map.placements ?? []).map((placement) => (
+        {visiblePlacements.map((placement) => (
           <Placement
             key={placement.id}
             map={map}
@@ -135,7 +136,13 @@ function Placement({
 }) {
   const layout = map.layout!;
   const operations = resolveSpatialPlacementOperations(map, placement, activities);
-  const label = placement.resource?.id ?? placement.id;
+  const resourceKind = placement.resource?.kind ?? "event";
+  const resourceName = formatResourceName(placement.resource?.id ?? placement.id);
+  const manualOperations = operations.filter(
+    ({ event }) => event.trigger === "interact" || event.trigger === "manual",
+  );
+  const primaryOperation = manualOperations.find(({ activity }) => activity?.available)
+    ?? manualOperations[0];
   const position = {
     left: `${placement.at.x / layout.width * 100}%`,
     top: `${placement.at.y / layout.height * 100}%`,
@@ -146,12 +153,19 @@ function Placement({
 
   return (
     <div
-      className={`spatial-placement collision-${placement.collision}${placement.visible ? "" : " placement-hidden"}`}
+      className={`spatial-placement resource-${resourceKind} collision-${placement.collision}${primaryOperation?.activity?.available ? " placement-actionable" : ""}`}
       style={position}
-      title={`${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
+      title={`${resourceKindLabel(resourceKind)} · ${resourceName}`}
+      aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}`}
     >
-      <span className="spatial-placement-label">{label}</span>
-      {operations.filter(({ event }) => event.trigger === "interact" || event.trigger === "manual").map(({ event, activity }) => (
+      <span className="spatial-placement-marker" aria-hidden="true">
+        {resourceKindIcon(resourceKind)}
+      </span>
+      <span className="spatial-placement-label">
+        <strong>{primaryOperation?.activity?.title ?? primaryOperation?.event.label ?? resourceName}</strong>
+        <small>{resourceKindLabel(resourceKind)}</small>
+      </span>
+      {manualOperations.map(({ event, activity }) => (
         <button
           key={event.id}
           type="button"
@@ -164,4 +178,36 @@ function Placement({
       ))}
     </div>
   );
+}
+
+function formatResourceName(id: string): string {
+  return id
+    .split(/[\/_-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function resourceKindLabel(kind: string): string {
+  return ({
+    action: "行动",
+    asset: "场景",
+    character: "角色",
+    enemy: "敌人",
+    item: "道具",
+    map: "出口",
+    script: "事件",
+  } as Record<string, string>)[kind] ?? "事件";
+}
+
+function resourceKindIcon(kind: string): string {
+  return ({
+    action: "!",
+    asset: "◇",
+    character: "人",
+    enemy: "鬼",
+    item: "◆",
+    map: "↗",
+    script: "!",
+  } as Record<string, string>)[kind] ?? "·";
 }

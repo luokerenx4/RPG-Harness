@@ -356,42 +356,86 @@ body {
 }
 .spatial-placement {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  min-width: 84px;
-  min-height: 42px;
-  padding: 5px;
-  border: 1px solid rgba(124, 200, 216, 0.85);
-  border-radius: 4px;
-  background: rgba(18, 42, 52, 0.88);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.34);
-  transform: translate(-2px, -2px);
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  min-height: 30px;
+  color: #dff9ff;
+  transform: translate(-1px, -1px);
 }
 .spatial-placement.collision-block {
-  border-color: rgba(242, 193, 93, 0.9);
+  color: #f4cf79;
 }
-.spatial-placement.placement-hidden {
-  border-style: dashed;
-  opacity: 0.52;
+.spatial-placement-marker {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: rgba(10, 24, 31, .92);
+  box-shadow: 0 3px 12px rgba(0,0,0,.48), inset 0 0 0 3px rgba(255,255,255,.035);
+  font-family: ui-serif, Georgia, serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+.spatial-placement.resource-map .spatial-placement-marker {
+  border-radius: 4px;
+  color: #7cc8d8;
+}
+.spatial-placement.resource-item .spatial-placement-marker { color: #f4cf79; }
+.spatial-placement.resource-character .spatial-placement-marker { color: #f1b4a0; }
+.spatial-placement.resource-enemy .spatial-placement-marker { color: #e66e70; }
+.spatial-placement.placement-actionable .spatial-placement-marker {
+  animation: map-marker-pulse 1.8s ease-in-out infinite;
 }
 .spatial-placement-label {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: max-content;
+  max-width: 108px;
+  padding: 3px 6px;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.76);
-  font-family: ui-monospace, monospace;
-  font-size: 9px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(7, 11, 17, .86);
+  box-shadow: 0 2px 8px rgba(0,0,0,.36);
+  line-height: 1.15;
   text-overflow: ellipsis;
+  transform: translateX(-50%);
   white-space: nowrap;
 }
+.spatial-placement-label strong {
+  max-width: 96px;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+.spatial-placement-label small {
+  color: #66727c;
+  font-size: 7px;
+  letter-spacing: .12em;
+}
 .spatial-placement button {
-  padding: 4px 6px;
+  position: absolute;
+  top: calc(100% + 32px);
+  left: 50%;
+  z-index: 2;
+  min-width: max-content;
+  padding: 4px 8px;
   color: #f4fbfc;
   background: rgba(65, 142, 159, 0.62);
   border: 1px solid rgba(124, 200, 216, 0.72);
   border-radius: 3px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 9px;
+  transform: translateX(-50%);
 }
 .spatial-placement button:hover:not(:disabled) {
   background: rgba(65, 142, 159, 0.9);
@@ -449,6 +493,10 @@ body {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.48);
   font-size: 10px;
+}
+@keyframes map-marker-pulse {
+  0%, 100% { box-shadow: 0 3px 12px rgba(0,0,0,.48), 0 0 0 0 rgba(124,200,216,.22); }
+  50% { box-shadow: 0 3px 12px rgba(0,0,0,.48), 0 0 0 5px rgba(124,200,216,0); }
 }
 .choice-panel,
 .hub-panel {
