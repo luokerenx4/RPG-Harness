@@ -319,6 +319,7 @@ function ResourceDetail({
             node={node}
             icon={meta.icon}
             kindLabel={meta.label}
+            onProjectSaved={onProjectSaved}
             onEditSource={node.source && node.editable !== false
               ? () => setSourceEditKey(node.key)
               : undefined}
@@ -367,20 +368,27 @@ function ResourceRecordEditor({
   node,
   icon,
   kindLabel,
+  onProjectSaved,
   onEditSource,
 }: {
   node: ProjectResourceNode;
   icon: string;
   kindLabel: string;
+  onProjectSaved: (project: ProjectResponse) => void;
   onEditSource?: () => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string | boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
     setSource(null);
     setError(null);
+    setEditing(false);
+    setDraft({});
     if (!node.source) return () => { cancelled = true; };
     void fetchResourceSource(node.kind, node.id)
       .then((result) => {
@@ -390,17 +398,77 @@ function ResourceRecordEditor({
         if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
       });
     return () => { cancelled = true; };
-  }, [node.id, node.kind, node.source]);
+  }, [node]);
 
   const summary = useMemo(() => source ? summarizeResourceSource(source) : null, [source]);
+  const fields = useMemo(() => source ? parseResourceScalarFields(source) : [], [source]);
+  const editableFields = fields.filter((field) => field.editable);
+  const dirty = editableFields.some((field) => draft[field.key] !== field.value);
+  const invalid = editableFields.some((field) =>
+    field.kind === "number" && !Number.isFinite(Number(draft[field.key])),
+  );
+
+  const beginRecordEdit = () => {
+    setDraft(Object.fromEntries(editableFields.map((field) => [field.key, field.value])));
+    setError(null);
+    setEditing(true);
+  };
+
+  const saveRecord = async () => {
+    if (!source || !dirty || invalid) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const nextSource = patchResourceScalarFields(source, draft);
+      const result = await saveResourceSource(node.kind, node.id, nextSource);
+      setSource(result.source);
+      setEditing(false);
+      setDraft({});
+      onProjectSaved(result.project);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) {
+        event.preventDefault();
+        setEditing(false);
+        setError(null);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (!saving && dirty && !invalid) void saveRecord();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editing, saving, dirty, invalid, source, draft]);
 
   return (
     <section className="resource-record-editor">
       <header className="record-toolbar">
         <div><span>DATABASE RECORD</span><strong>{singularResourceLabel(kindLabel)}</strong></div>
-        <div>
+        <div className="record-toolbar-actions">
           <code>{node.source ?? "virtual resource"}</code>
-          {onEditSource && <button type="button" onClick={onEditSource}>Edit source</button>}
+          {editing ? (
+            <>
+              <span className="record-dirty-state">{dirty ? "UNSAVED" : "EDITING"}</span>
+              <button type="button" className="primary" disabled={!dirty || invalid || saving} onClick={() => void saveRecord()}>
+                {saving ? "Validating…" : "Save changes  ⌘S"}
+              </button>
+              <button type="button" disabled={saving} onClick={() => { setEditing(false); setError(null); }}>Cancel</button>
+            </>
+          ) : (
+            <>
+              {editableFields.length > 0 && <button type="button" className="primary" onClick={beginRecordEdit}>Edit record</button>}
+              {onEditSource && <button type="button" onClick={onEditSource}>Source</button>}
+            </>
+          )}
         </div>
       </header>
       <div className="record-hero">
@@ -416,14 +484,35 @@ function ResourceRecordEditor({
         <div className="record-loading"><i /><span>Reading source record…</span></div>
       ) : (
         <div className="record-body">
+          {error && <div className="record-save-error" role="alert"><strong>Changes rejected</strong><span>{error}</span></div>}
           <section className="record-section">
-            <header><span>FIELDS</span><small>{summary.properties.length}</small></header>
-            {summary.properties.length > 0 ? (
-              <dl className="record-properties">
-                {summary.properties.map((property) => (
-                  <div key={property.key}><dt>{property.key}</dt><dd>{property.value}</dd></div>
+            <header><span>FIELDS</span><small>{fields.length} · {editableFields.length} editable</small></header>
+            {fields.length > 0 ? (
+              <div className={`record-properties${editing ? " is-editing" : ""}`}>
+                {fields.map((field) => field.editable && editing ? (
+                  <label className="record-property-field" key={field.key}>
+                    <span>{field.key}</span>
+                    {field.kind === "boolean" ? (
+                      <select
+                        value={String(draft[field.key])}
+                        onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value === "true" }))}
+                      ><option value="true">true</option><option value="false">false</option></select>
+                    ) : (
+                      <input
+                        type={field.kind === "number" ? "number" : "text"}
+                        value={String(draft[field.key] ?? "")}
+                        aria-invalid={field.kind === "number" && !Number.isFinite(Number(draft[field.key]))}
+                        onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                      />
+                    )}
+                  </label>
+                ) : (
+                  <div className={!field.editable ? "record-property-locked" : ""} key={field.key}>
+                    <dt>{field.key}{!field.editable && <span title="Edit this structured value in source">◇</span>}</dt>
+                    <dd>{field.displayValue}</dd>
+                  </div>
                 ))}
-              </dl>
+              </div>
             ) : <p className="record-empty">No top-level fields detected.</p>}
           </section>
           {(summary.sections.length > 0 || summary.excerpt) && (
@@ -447,6 +536,108 @@ function ResourceRecordEditor({
       )}
     </section>
   );
+}
+
+type ResourceScalarField = {
+  key: string;
+  kind: "text" | "number" | "boolean" | "complex";
+  value: string | boolean;
+  displayValue: string;
+  editable: boolean;
+};
+
+export function parseResourceScalarFields(source: string): ResourceScalarField[] {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const { start, end } = sourceMetadataRange(lines);
+  const fields: ResourceScalarField[] = [];
+  for (const line of lines.slice(start, end)) {
+    const match = line.match(/^([A-Za-z0-9_.-]+):(?:\s*(.*))?$/);
+    if (!match?.[1]) continue;
+    const key = match[1];
+    const scalar = splitInlineYamlComment((match[2] ?? "").trim()).value;
+    const complex = scalar.length === 0 || /^[\[{|>]/.test(scalar);
+    if (complex) {
+      fields.push({ key, kind: "complex", value: scalar, displayValue: scalar || "{…}", editable: false });
+      continue;
+    }
+    if (scalar === "true" || scalar === "false") {
+      const value = scalar === "true";
+      fields.push({ key, kind: "boolean", value, displayValue: String(value), editable: key !== "id" });
+      continue;
+    }
+    if (/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(scalar)) {
+      fields.push({ key, kind: "number", value: scalar, displayValue: scalar, editable: key !== "id" });
+      continue;
+    }
+    const value = cleanSourceValue(scalar);
+    fields.push({ key, kind: "text", value, displayValue: value, editable: key !== "id" });
+  }
+  return fields.slice(0, 24);
+}
+
+export function patchResourceScalarFields(
+  source: string,
+  values: Record<string, string | boolean>,
+): string {
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const { start, end } = sourceMetadataRange(lines);
+  const fields = new Map(parseResourceScalarFields(source).map((field) => [field.key, field]));
+  const next = lines.map((line, index) => {
+    if (index < start || index >= end) return line;
+    const match = line.match(/^([A-Za-z0-9_.-]+):(\s*)(.*)$/);
+    const key = match?.[1];
+    if (!key || !Object.prototype.hasOwnProperty.call(values, key)) return line;
+    const field = fields.get(key);
+    if (!field?.editable) return line;
+    const suffix = splitInlineYamlComment(match[3] ?? "");
+    const serialized = serializeResourceScalar(values[key]!, field.kind, suffix.value.trim());
+    return `${key}:${match[2] || " "}${serialized}${suffix.comment ? ` ${suffix.comment}` : ""}`;
+  });
+  return next.join(newline);
+}
+
+function sourceMetadataRange(lines: string[]): { start: number; end: number } {
+  if (lines[0]?.trim() !== "---") return { start: 0, end: lines.length };
+  const closing = lines.slice(1).findIndex((line) => line.trim() === "---");
+  return { start: 1, end: closing >= 0 ? closing + 1 : lines.length };
+}
+
+function splitInlineYamlComment(raw: string): { value: string; comment: string } {
+  let quote: "\"" | "'" | null = null;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if ((char === "\"" || char === "'") && raw[index - 1] !== "\\") {
+      quote = quote === char ? null : quote ?? char;
+      continue;
+    }
+    if (char === "#" && quote === null && (index === 0 || /\s/.test(raw[index - 1] ?? ""))) {
+      return { value: raw.slice(0, index).trimEnd(), comment: raw.slice(index).trim() };
+    }
+  }
+  return { value: raw.trimEnd(), comment: "" };
+}
+
+function serializeResourceScalar(
+  value: string | boolean,
+  kind: ResourceScalarField["kind"],
+  original: string,
+): string {
+  if (kind === "boolean") return String(value === true || value === "true");
+  if (kind === "number") return String(Number(value));
+  const text = String(value);
+  if (original.startsWith("'") && original.endsWith("'")) return `'${text.replace(/'/g, "''")}'`;
+  if (original.startsWith('"') && original.endsWith('"')) return JSON.stringify(text);
+  if (isSafePlainYamlScalar(text)) return text;
+  return JSON.stringify(text);
+}
+
+function isSafePlainYamlScalar(value: string): boolean {
+  return value.length > 0 &&
+    value.trim() === value &&
+    !/^(?:true|false|null|~|[-+]?(?:\d+\.?\d*|\.\d+))$/i.test(value) &&
+    !/^[\-?:,\[\]{}#&*!|>'"%@`]/.test(value) &&
+    !/[:#]\s/.test(value);
 }
 
 function summarizeResourceSource(source: string): {
