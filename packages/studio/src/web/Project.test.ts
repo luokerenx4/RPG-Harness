@@ -5,6 +5,7 @@ import {
   createMapPlacementDraft,
   createConditionDraft,
   eventTriggerMeta,
+  filterPlacementPaletteResources,
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPlacementResourceLabel,
@@ -114,6 +115,21 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(resourceChoices(resources, "script").map((resource) => resource.id)).toEqual(["a", "z"]);
     expect(resourceChoices(resources, undefined)).toEqual([]);
+  });
+
+  test("searches the map object palette by label, stable id, and database kind", () => {
+    const resources = [
+      { key: "script:memory", kind: "script", id: "memory", label: "失われた記憶", refs: [] },
+      { key: "character:kagari", kind: "character", id: "kagari", label: "篝", refs: [] },
+      { key: "test:kagari", kind: "test", id: "kagari", label: "Kagari QA", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(filterPlacementPaletteResources(resources, "篝").map((row) => row.key)).toEqual(["character:kagari"]);
+    expect(filterPlacementPaletteResources(resources, "kagari").map((row) => row.key)).toEqual(["character:kagari"]);
+    expect(filterPlacementPaletteResources(resources, "scripts").map((row) => row.key)).toEqual(["script:memory"]);
+    expect(filterPlacementPaletteResources(resources, "").map((row) => row.key).sort()).toEqual([
+      "character:kagari",
+      "script:memory",
+    ]);
   });
 
   test("uses database labels for placed map resources without replacing stable instance ids", () => {

@@ -1214,6 +1214,7 @@ function MapOverview({
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
   const [paletteResourceKey, setPaletteResourceKey] = useState("");
+  const [paletteQuery, setPaletteQuery] = useState("");
   const mapIdRef = useRef(map.id);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
@@ -1228,6 +1229,7 @@ function MapOverview({
     setConfirmDiscard(false);
     setZoom(100);
     setPaletteResourceKey("");
+    setPaletteQuery("");
   }, [map]);
 
   const width = draft.layout?.width ?? 1;
@@ -1237,13 +1239,14 @@ function MapOverview({
   );
   const stacks = groupedStacks(draft.placements ?? []);
   const dirty = hasMapDraftChanges(map, draft);
-  const paletteGroups = useMemo(() => KIND_ORDER.flatMap((kind) => {
-    if (!PLACEABLE_KINDS.has(kind)) return [];
-    const rows = resources
-      .filter((resource) => resource.kind === kind)
-      .sort((left, right) => left.label.localeCompare(right.label));
-    return rows.length > 0 ? [{ kind, rows }] : [];
-  }), [resources]);
+  const paletteGroups = useMemo(() => {
+    const filtered = filterPlacementPaletteResources(resources, paletteQuery);
+    return KIND_ORDER.flatMap((kind) => {
+      if (!PLACEABLE_KINDS.has(kind)) return [];
+      const rows = filtered.filter((resource) => resource.kind === kind);
+      return rows.length > 0 ? [{ kind, rows }] : [];
+    });
+  }, [resources, paletteQuery]);
 
   const mutatePlacement = (
     id: string,
@@ -1476,23 +1479,41 @@ function MapOverview({
             <strong>Place a project resource</strong>
             <small>Creates an editable object at the first open map cell.</small>
           </div>
-          <select
-            aria-label="Project resource to place"
-            value={paletteResourceKey}
-            onChange={(event) => setPaletteResourceKey(event.target.value)}
-          >
-            <option value="">Choose a project record…</option>
-            <option value="event-only">◇ Event-only object · blank event pages</option>
-            {paletteGroups.map(({ kind, rows }) => (
-              <optgroup label={(KIND_META[kind] ?? { label: kind }).label} key={kind}>
-                {rows.map((resource) => (
-                  <option value={resource.key} key={resource.key}>
-                    {resource.label} · {resource.id}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <div className="map-object-palette-controls">
+            <label>
+              <span aria-hidden="true">⌕</span>
+              <input
+                aria-label="Filter map object resources"
+                value={paletteQuery}
+                placeholder="Filter by name, ID or kind"
+                onChange={(event) => {
+                  setPaletteQuery(event.target.value);
+                  setPaletteResourceKey("");
+                }}
+              />
+              {paletteQuery && <button type="button" aria-label="Clear object filter" onClick={() => setPaletteQuery("")}>×</button>}
+            </label>
+            <select
+              aria-label="Project resource to place"
+              value={paletteResourceKey}
+              onChange={(event) => setPaletteResourceKey(event.target.value)}
+            >
+              <option value="">Choose a project record…</option>
+              {(paletteQuery.length === 0 || "event-only blank event pages".includes(paletteQuery.toLowerCase())) && (
+                <option value="event-only">◇ Event-only object · blank event pages</option>
+              )}
+              {paletteGroups.map(({ kind, rows }) => (
+                <optgroup label={(KIND_META[kind] ?? { label: kind }).label} key={kind}>
+                  {rows.map((resource) => (
+                    <option value={resource.key} key={resource.key}>
+                      {resource.label} · {resource.id}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+              {paletteGroups.length === 0 && paletteQuery && <option disabled>No matching project records</option>}
+            </select>
+          </div>
           <button type="button" disabled={!paletteResourceKey} onClick={addPalettePlacement}>
             <span>＋</span><strong>Add to map</strong><small>select &amp; edit</small>
           </button>
@@ -2407,6 +2428,22 @@ export function resourceChoices(
   if (!kind) return [];
   return resources
     .filter((resource) => resource.kind === kind)
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function filterPlacementPaletteResources(
+  resources: ProjectResourceNode[],
+  query: string,
+): ProjectResourceNode[] {
+  const normalized = query.trim().toLowerCase();
+  return resources
+    .filter((resource) => {
+      if (!PLACEABLE_KINDS.has(resource.kind)) return false;
+      if (!normalized) return true;
+      const kindLabel = KIND_META[resource.kind]?.label ?? resource.kind;
+      return [resource.label, resource.id, resource.key, resource.kind, kindLabel]
+        .some((value) => value.toLowerCase().includes(normalized));
+    })
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 

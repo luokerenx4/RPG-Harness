@@ -2369,6 +2369,41 @@ summary:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.map-object-palette-controls { display: grid; min-width: 0; gap: 4px; }
+.map-object-palette-controls > label {
+  display: grid;
+  grid-template-columns: 18px minmax(0,1fr) 22px;
+  align-items: center;
+  height: 28px;
+  padding: 0 5px;
+  color: #586573;
+  border: 1px solid #29323e;
+  border-radius: 4px;
+  background: #0b0f15;
+}
+.map-object-palette-controls > label:focus-within { color: var(--studio-accent); border-color: rgba(80,199,217,.58); }
+.map-object-palette-controls input {
+  min-width: 0;
+  color: #c9d0d8;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 8px;
+}
+.map-object-palette-controls input::placeholder { color: #4d5865; }
+.map-object-palette-controls label button {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  color: #707b87;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.map-object-palette-controls label button:hover { color: #dce4e9; background: rgba(255,255,255,.05); }
 .map-object-palette select {
   width: 100%;
   min-width: 0;
