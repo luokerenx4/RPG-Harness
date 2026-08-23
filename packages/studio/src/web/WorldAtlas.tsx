@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
 import {
-  collectMapConnections,
+  collectMapRoutes,
+  type MapArrivalDef,
   type MapDef,
+  type MapEventTrigger,
+  type MapRouteSource,
   type ProjectResourceNode,
 } from "@rpg-harness/engine";
 import {
@@ -17,9 +20,17 @@ import {
 } from "./MapCatalog";
 
 export type WorldAtlasConnectionState = "resolved" | "missing" | "ambiguous";
+export type WorldAtlasRouteActivation = "menu" | "automatic" | "touch" | "interact" | "extension";
 
 export interface WorldAtlasConnection {
   key: string;
+  source: MapRouteSource;
+  placementId?: string;
+  eventId?: string;
+  trigger?: MapEventTrigger;
+  chance?: number;
+  arrival?: MapArrivalDef;
+  activation: WorldAtlasRouteActivation;
   label: string;
   targetId: string;
   targetName: string;
@@ -62,6 +73,34 @@ function atlasChainKey(map: Pick<MapDef, "chain">): string {
 
 function atlasChainLabel(key: string): string {
   return mapCatalogChainLabelFromKey(key);
+}
+
+function routeActivation(trigger?: MapEventTrigger): WorldAtlasRouteActivation {
+  if (trigger === "map_enter" || trigger === "autorun") return "automatic";
+  if (trigger === "player_touch") return "touch";
+  if (trigger === "interact" || trigger === "manual") return "interact";
+  if (trigger !== undefined) return "extension";
+  return "menu";
+}
+
+function routeActivationLabel(activation: WorldAtlasRouteActivation): string {
+  return {
+    menu: "MENU",
+    automatic: "AUTO",
+    touch: "TOUCH",
+    interact: "USE",
+    extension: "EXT",
+  }[activation];
+}
+
+function routeActivationDescription(activation: WorldAtlasRouteActivation): string {
+  return {
+    menu: "menu route",
+    automatic: "automatic trigger",
+    touch: "player-touch trigger",
+    interact: "nearby interaction",
+    extension: "module-scheduled trigger",
+  }[activation];
 }
 
 function orderAtlasChainMaps(
@@ -129,7 +168,7 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
   let missingTargetCount = 0;
   for (const map of uniqueMaps) {
     const sourceChain = atlasChainKey(map);
-    const connections = collectMapConnections(map).map((connection, ordinal) => {
+    const connections = collectMapRoutes(map).map((connection) => {
       const targetCount = idCounts.get(connection.target) ?? 0;
       const target = targetCount === 1 ? mapsById.get(connection.target) : undefined;
       const state: WorldAtlasConnectionState = targetCount === 0
@@ -139,7 +178,14 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
           : "resolved";
       if (state !== "resolved") missingTargetCount += 1;
       return {
-        key: `${map.id}:${connection.target}:${connection.dir}:${ordinal}`,
+        key: connection.key,
+        source: connection.source,
+        ...(connection.placementId ? { placementId: connection.placementId } : {}),
+        ...(connection.eventId ? { eventId: connection.eventId } : {}),
+        ...(connection.trigger ? { trigger: connection.trigger } : {}),
+        ...(connection.chance !== undefined ? { chance: connection.chance } : {}),
+        ...(connection.arrival ? { arrival: connection.arrival } : {}),
+        activation: routeActivation(connection.trigger),
         label: connection.dir,
         targetId: connection.target,
         targetName: target?.name ?? connection.target,
@@ -349,7 +395,7 @@ export function WorldAtlas({
           <span>AUTHORITATIVE WORLD CATALOG</span>
           <h1 id="world-atlas-title">World Atlas</h1>
           <p>Browse authored locations and routes. Two-dimensional fields and node maps share one catalog.</p>
-          <small className="world-atlas-static-note">STATIC TOPOLOGY ONLY · MODULE-DRIVEN TRAVEL IS NOT DRAWN</small>
+          <small className="world-atlas-static-note">AUTHORED ROUTE EVENTS · MODULE-ONLY TRAVEL IS NOT DRAWN</small>
         </div>
         <dl>
           <div><dt>Maps</dt><dd>{model.mapCount}</dd></div>
@@ -429,8 +475,11 @@ export function WorldAtlas({
                       {connections.map((connection) => {
                         const targetAvailable = connection.state === "resolved" && mapResourceIds.has(connection.targetId);
                         const routeQualifiers = [
+                          routeActivationDescription(connection.activation),
                           connection.crossChain ? "cross-chain" : "",
                           connection.conditional ? "conditional" : "",
+                          connection.chance !== undefined ? `${Math.round(connection.chance * 100)} percent chance` : "",
+                          connection.arrival ? "explicit arrival" : "",
                         ].filter(Boolean).join(", ");
                         const availability = connection.state === "resolved"
                           ? targetAvailable ? "" : "missing project resource"
@@ -439,7 +488,9 @@ export function WorldAtlas({
                         return <li key={connection.key}>
                           <button
                             type="button"
-                            className={`world-atlas-route route-${connection.state}${connection.crossChain ? " cross-chain" : ""}`}
+                            className={`world-atlas-route route-${connection.state} activation-${connection.activation}${connection.crossChain ? " cross-chain" : ""}`}
+                            data-route-key={connection.key}
+                            title={`Authored source: ${connection.key}`}
                             aria-label={targetAvailable
                               ? `Open ${connection.targetName} via ${connection.label}${accessibleStatus ? `, ${accessibleStatus}` : ""}`
                               : `${connection.label} route target ${connection.targetId}, ${accessibleStatus}`}
@@ -450,7 +501,10 @@ export function WorldAtlas({
                             <b>{connection.label}</b>
                             <em>{connection.targetName}</em>
                             <span className="world-atlas-route-flags">
+                              <small className={`activation activation-${connection.activation}`}>{routeActivationLabel(connection.activation)}</small>
                               {connection.conditional && <small>IF</small>}
+                              {connection.chance !== undefined && <small>RNG {Math.round(connection.chance * 100)}%</small>}
+                              {connection.arrival && <small>AT</small>}
                               {availability && <small className="issue">{availability.toUpperCase()}</small>}
                             </span>
                           </button>

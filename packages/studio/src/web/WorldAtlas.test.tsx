@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { MapDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapDef, MapPlacementEventDef, ProjectResourceNode } from "@rpg-harness/engine";
 import {
   WorldAtlas,
   buildWorldAtlasModel,
@@ -18,7 +18,12 @@ function map(id: string, extra: Partial<MapDef> = {}): MapDef {
   };
 }
 
-function placementExit(id: string, target: string, label: string) {
+function placementExit(
+  id: string,
+  target: string,
+  label: string,
+  extra: Partial<MapPlacementEventDef> = {},
+) {
   return {
     id,
     at: { x: 1, y: 1 },
@@ -27,7 +32,7 @@ function placementExit(id: string, target: string, label: string) {
     collision: "trigger" as const,
     visible: true,
     resource: { kind: "map" as const, id: target },
-    events: [{ id: "move", trigger: "player_touch" as const, label, order: 0 }],
+    events: [{ id: "move", trigger: "player_touch" as const, label, order: 0, ...extra }],
   };
 }
 
@@ -41,7 +46,10 @@ const maps: MapDef[] = [
       { dir: "Broken", target: "missing" },
       { dir: "Leap", target: "other" },
     ],
-    placements: [placementExit("north-door", "field", "North")],
+    placements: [placementExit("north-door", "field", "North", {
+      chance: 0.35,
+      arrival: { at: { x: 2, y: 3 } },
+    })],
   }),
   map("entry", {
     name: "Entry <img onerror=boom>",
@@ -104,6 +112,21 @@ describe("Studio World Atlas", () => {
       ["North", "field"],
     ]);
     expect(branch.connections[0]?.conditional).toBe(true);
+    expect(branch.connections[0]).toMatchObject({
+      key: "map:branch/legacy-connection:0",
+      source: "legacy-connection",
+      activation: "menu",
+    });
+    expect(branch.connections[3]).toMatchObject({
+      key: "map:branch/placement:north-door/event:move",
+      source: "placement-event",
+      placementId: "north-door",
+      eventId: "move",
+      trigger: "player_touch",
+      activation: "touch",
+      chance: 0.35,
+      arrival: { at: { x: 2, y: 3 } },
+    });
     expect(alpha.maps.find((node) => node.map.id === "loop")?.connections.some((connection) => connection.selfLoop)).toBe(true);
     expect(alpha.maps.find((node) => node.map.id === "field")?.connections[0]?.crossChain).toBe(true);
     expect(branch.incomingCount).toBe(2);
@@ -148,13 +171,19 @@ describe("Studio World Atlas", () => {
     expect(html).toContain("EXTRACT");
     expect(html).toContain("North");
     expect(html).toContain("field");
+    expect(html).toContain("MENU");
+    expect(html).toContain("TOUCH");
+    expect(html).toContain("RNG 35%");
+    expect(html).toContain("AT");
+    expect(html).toContain('data-route-key="map:branch/placement:north-door/event:move"');
+    expect(html).toContain('title="Authored source: map:branch/placement:north-door/event:move"');
     expect(html).toContain("Atlas integrity warning");
     expect(html).toContain("route-missing");
     expect(html).toContain('data-resource-key="map:entry"');
     expect(html).toContain('aria-label="Open Entry &lt;img onerror=boom&gt;, id entry');
-    expect(html).toContain('aria-label="Open Same name via Begin"');
-    expect(html).toContain('aria-label="Open other via Leap, cross-chain"');
-    expect(html).toContain('aria-label="North route target field, missing project resource"');
+    expect(html).toContain('aria-label="Open Same name via Begin, menu route"');
+    expect(html).toContain('aria-label="Open other via Leap, menu route, cross-chain"');
+    expect(html).toContain('aria-label="North route target field, player-touch trigger, 35 percent chance, explicit arrival, missing project resource"');
     expect(html).toContain('disabled="" data-resource-key="map:field"');
     expect(html.match(/tabindex="0"/g)?.length).toBe(1);
     expect(html).not.toContain("<img onerror=boom>");

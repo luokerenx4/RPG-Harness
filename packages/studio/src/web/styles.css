@@ -2596,6 +2596,11 @@ summary:focus-visible {
 .world-atlas-route > em { color: #65727e; font-style: normal; }
 .world-atlas-route-flags { display: flex; align-items: center; gap: 2px; }
 .world-atlas-route-flags > small { padding: 2px 3px; color: #d4a56f; border: 1px solid rgba(231,168,106,.24); border-radius: 2px; font: 700 6px/1 ui-monospace,monospace; white-space: nowrap; }
+.world-atlas-route-flags > small.activation-menu { color: #9aa7b0; border-color: rgba(154,167,176,.24); }
+.world-atlas-route-flags > small.activation-automatic { color: #d7a0e8; border-color: rgba(199,126,222,.3); background: rgba(142,71,166,.12); }
+.world-atlas-route-flags > small.activation-touch { color: #72d7c2; border-color: rgba(85,213,185,.3); background: rgba(45,150,129,.1); }
+.world-atlas-route-flags > small.activation-interact { color: #83c9ee; border-color: rgba(99,187,232,.3); background: rgba(53,133,175,.1); }
+.world-atlas-route-flags > small.activation-extension { color: #d8bd86; border-color: rgba(216,189,134,.3); background: rgba(162,127,65,.1); }
 .world-atlas-route-flags > small.issue { color: #d38a92; border-color: rgba(224,111,121,.28); }
 .world-atlas-route.cross-chain > i { color: #bb9adf; }
 .world-atlas-route.route-missing,
