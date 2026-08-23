@@ -3,6 +3,19 @@ name: 水没した社
 chain: sumida_river
 difficulty: 2
 bg: assets/backgrounds/sumida-drowned-shrine
+layout:
+  width: 14
+  height: 10
+  tile_width: 32
+  tile_height: 32
+  player_start: [6, 8]
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: waterways, kind: object, z: 10 }
+  regions:
+    - { id: shrine_eaves, name: 水没した拝殿, x: 4, y: 0, width: 5, height: 4 }
+    - { id: river_path, name: 川沿いの桟橋, x: 9, y: 3, width: 5, height: 4 }
+    - { id: reed_bank, name: 葦原への浅瀬, x: 4, y: 7, width: 5, height: 3 }
 encounter_table:
   - { enemy: oni_warrior, weight: 40 }
   - { enemy: oni_lesser, weight: 30 }
@@ -13,9 +26,9 @@ loot_table:
   - { item: ryo, min: 15, max: 25, weight: 20 }
 placements:
   - id: exit_sumida_river_under_eaves
-    at:
-      - 0
-      - 0
+    at: [6, 1]
+    layer: waterways
+    footprint: [2, 1]
     resource:
       kind: map
       id: sumida_river_under_eaves
@@ -26,9 +39,9 @@ placements:
         label: 奥
         order: 0
   - id: exit_sumida_river_drift_pier
-    at:
-      - 0
-      - 0
+    at: [11, 5]
+    layer: waterways
+    footprint: [1, 2]
     resource:
       kind: map
       id: sumida_river_drift_pier
@@ -39,9 +52,9 @@ placements:
         label: 川沿い
         order: 1
   - id: exit_sumida_river_reed_marsh
-    at:
-      - 0
-      - 0
+    at: [6, 9]
+    layer: waterways
+    footprint: [2, 1]
     resource:
       kind: map
       id: sumida_river_reed_marsh
