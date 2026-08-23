@@ -296,8 +296,7 @@ function routeArrivalPath(sourceMap: MapDef, route: MapRoute): string {
   if (route.placementId && route.eventId) {
     return `map ${sourceMap.id}.placements[${route.placementId}].events[${route.eventId}].arrival`;
   }
-  const legacyIndex = route.key.match(/\/legacy-connection:(\d+)$/)?.[1];
-  return `map ${sourceMap.id}.connections[${legacyIndex ?? route.target}].arrival`;
+  return `map ${sourceMap.id}.connections[${route.connectionIndex ?? route.target}].arrival`;
 }
 
 function placementFootprintPoints(

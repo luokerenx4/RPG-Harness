@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import { useNavigate } from "react-router-dom";
 import type {
   Condition,
+  MapArrivalBacklink,
   MapDef,
   MapEventTrigger,
   MapLayerDef,
@@ -13,7 +14,7 @@ import type {
   SwitchDef,
   VariableDef,
 } from "@rpg-harness/engine";
-import { collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
+import { collectMapArrivalBacklinks, collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
 import {
   fetchProject,
   fetchMapPreview,
@@ -25,8 +26,10 @@ import {
   planResourceRename,
   renameProjectResource,
   restoreStudioTrashEntry,
+  previewMapPlacementRename,
   previewMapTopology,
   previewReciprocalMapRoutes,
+  saveMapPlacementRename,
   saveMapTopology,
   saveReciprocalMapRoutes,
   trashProjectResource,
@@ -34,6 +37,8 @@ import {
   saveResourceSource,
   sourceImageUrl,
   MapPreviewRequestError,
+  type MapPlacementRenamePreviewResponse,
+  type MapPlacementRenameUpdateResponse,
   type ProjectAssetPreview,
   type ProjectResponse,
   type StudioTrashEntry,
@@ -1256,7 +1261,7 @@ function ResourceDetail({
           </div>
         </header>
         {map ? (
-          <MapOverview project={project} map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
+          <MapOverview project={project} map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} onSelectResource={onSelectResource} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -2303,6 +2308,52 @@ export function reconcileMapDraftAfterSave(
   };
 }
 
+export function projectMapDraftIntoCatalog(
+  maps: readonly MapDef[],
+  draft: MapDef,
+): MapDef[] {
+  return maps.some((candidate) => candidate.id === draft.id)
+    ? maps.map((candidate) => candidate.id === draft.id ? draft : candidate)
+    : [...maps, draft];
+}
+
+export function mapPlacementDeleteBlockers(
+  backlinks: readonly MapArrivalBacklink[],
+  targetMapId: string,
+  targetPlacementId: string,
+): MapArrivalBacklink[] {
+  return backlinks.filter((backlink) => !mapPlacementBacklinkRemovedWithObject(
+    backlink,
+    targetMapId,
+    targetPlacementId,
+  ));
+}
+
+export function mapPlacementBacklinkRemovedWithObject(
+  backlink: MapArrivalBacklink,
+  targetMapId: string,
+  targetPlacementId: string,
+): boolean {
+  return (
+    backlink.source === "placement-event" &&
+    backlink.sourceMapId === targetMapId &&
+    backlink.sourcePlacementId === targetPlacementId
+  );
+}
+
+export function mapArrivalBacklinkSourceDescription(backlink: MapArrivalBacklink): string {
+  if (backlink.source === "legacy-connection") {
+    return backlink.sourceConnectionIndex === undefined
+      ? "Legacy connection"
+      : `Legacy connection ${backlink.sourceConnectionIndex + 1}`;
+  }
+  return [
+    backlink.sourcePlacementId ? `object ${backlink.sourcePlacementId}` : undefined,
+    backlink.sourceEventId ? `event ${backlink.sourceEventId}` : undefined,
+    backlink.trigger,
+  ].filter(Boolean).join(" · ");
+}
+
 function MapOverview({
   project,
   map,
@@ -2313,6 +2364,7 @@ function MapOverview({
   variables,
   onProjectSaved,
   onDraftGuardChange,
+  onSelectResource,
 }: {
   project: ProjectResponse;
   map: MapDef;
@@ -2323,6 +2375,7 @@ function MapOverview({
   variables: VariableDef[];
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
+  onSelectResource: (key: string) => void;
 }) {
   const [draftHistory, dispatchDraft] = useReducer(mapDraftHistoryReducer, map, createMapDraftHistory);
   const draft = draftHistory.present;
@@ -2333,6 +2386,7 @@ function MapOverview({
   }, []);
   const [editing, setEditing] = useState(false);
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
+  const [placementRenameOpen, setPlacementRenameOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveReceipt, setSaveReceipt] = useState<{ mapName: string; summary: string; savedAt: string } | null>(null);
@@ -2369,11 +2423,13 @@ function MapOverview({
   const propertiesButtonRef = useRef<HTMLButtonElement>(null);
   const topologyButtonRef = useRef<HTMLButtonElement>(null);
   const reciprocalRouteButtonRef = useRef<HTMLButtonElement>(null);
+  const placementRenameButtonRef = useRef<HTMLButtonElement>(null);
   const topologyAppliedRef = useRef(false);
   const topologyAfterSaveRef = useRef(false);
   const reciprocalRouteAfterSaveRef = useRef(false);
   const reciprocalRouteSubmitLockRef = useRef(false);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const pendingPlacementSelectionRef = useRef<{ mapId: string; placementId: string } | null>(null);
 
   useEffect(() => {
     const pendingSave = preserveDraftAfterSaveRef.current;
@@ -2392,9 +2448,18 @@ function MapOverview({
       setConfirmDiscard(false);
       return;
     }
+    const pendingSelection = pendingPlacementSelectionRef.current;
+    const renamedPlacementId = pendingSelection?.mapId === map.id &&
+      (map.placements ?? []).some((placement) => placement.id === pendingSelection.placementId)
+      ? pendingSelection.placementId
+      : null;
+    if (pendingSelection?.mapId !== map.id || renamedPlacementId) {
+      pendingPlacementSelectionRef.current = null;
+    }
     dispatchDraft({ type: "reset", map });
-    setEditing(false);
-    setSelectedPlacementId(null);
+    setEditing(renamedPlacementId !== null);
+    setSelectedPlacementId(renamedPlacementId);
+    setPlacementRenameOpen(false);
     setSaveError(null);
     setConfirmDiscard(false);
     setPropertiesOpen(false);
@@ -2433,6 +2498,24 @@ function MapOverview({
   );
   const stacks = groupedStacks(draft.placements ?? []);
   const dirty = hasMapDraftChanges(map, draft);
+  const projectedMaps = useMemo(
+    () => projectMapDraftIntoCatalog(maps, draft),
+    [draft, maps],
+  );
+  const selectedPlacementBacklinks = useMemo(
+    () => selectedPlacement
+      ? collectMapArrivalBacklinks(projectedMaps, draft.id, selectedPlacement.id)
+      : [],
+    [draft.id, projectedMaps, selectedPlacement],
+  );
+  const selectedPlacementDeleteBlockers = selectedPlacement
+    ? mapPlacementDeleteBlockers(selectedPlacementBacklinks, draft.id, selectedPlacement.id)
+    : [];
+  const selectedPlacementPersisted = Boolean(selectedPlacement &&
+    (map.placements ?? []).some((placement) => placement.id === selectedPlacement.id));
+  const placementRenameDisabledReason = !selectedPlacementPersisted
+    ? "Save this new object before renaming its stable ID"
+    : dirty ? "Save or discard the current map draft before renaming an arrival anchor" : undefined;
   const tilesets = assets.filter((candidate) => candidate.kind === "tileset");
   const tilesetAsset = draft.layout?.tileset
     ? tilesets.find((candidate) => candidate.path === draft.layout?.tileset)
@@ -2478,6 +2561,43 @@ function MapOverview({
         placement.id === id ? update(placement) : placement
       ),
     }));
+  };
+
+  const openPlacementArrivalSource = (backlink: MapArrivalBacklink) => {
+    setPlacementRenameOpen(false);
+    if (backlink.sourceMapId === draft.id) {
+      setSelectedPlacementId(
+        backlink.sourcePlacementId &&
+          (draft.placements ?? []).some((placement) => placement.id === backlink.sourcePlacementId)
+          ? backlink.sourcePlacementId
+          : null,
+      );
+      return;
+    }
+    const source = resources.find((resource) =>
+      resource.kind === "map" && resource.id === backlink.sourceMapId
+    );
+    if (source) onSelectResource(source.key);
+  };
+
+  const acceptPlacementRename = (result: MapPlacementRenameUpdateResponse) => {
+    pendingPlacementSelectionRef.current = {
+      mapId: map.id,
+      placementId: result.newPlacementId,
+    };
+    setPlacementRenameOpen(false);
+    setSaveReceipt({
+      mapName: result.project.maps.find((candidate) => candidate.id === map.id)?.name ?? map.name,
+      summary: `${result.changedIds.length} map source${result.changedIds.length === 1 ? "" : "s"} committed in one arrival-anchor refactor`,
+      savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    });
+    onProjectSaved(result.project);
+    requestAnimationFrame(() => requestAnimationFrame(() => placementRenameButtonRef.current?.focus()));
+  };
+
+  const closePlacementRename = () => {
+    setPlacementRenameOpen(false);
+    requestAnimationFrame(() => placementRenameButtonRef.current?.focus());
   };
 
   const addPalettePlacement = () => {
@@ -3432,13 +3552,19 @@ function MapOverview({
       {editing && selectedPlacement && (
         <PlacementEditor
           map={draft}
-          maps={maps}
+          maps={projectedMaps}
           placement={selectedPlacement}
+          backlinks={selectedPlacementBacklinks}
+          deleteBlockers={selectedPlacementDeleteBlockers}
           layers={draft.layout?.layers ?? []}
           assets={assets}
           resources={resources}
           switches={switches}
           variables={variables}
+          renameDisabledReason={placementRenameDisabledReason}
+          renameButtonRef={placementRenameButtonRef}
+          onRename={() => setPlacementRenameOpen(true)}
+          onOpenSource={openPlacementArrivalSource}
           onChange={(update) => mutatePlacement(selectedPlacement.id, update)}
           onDuplicate={() => {
             const duplicate = duplicateMapPlacementDraft(
@@ -3460,6 +3586,15 @@ function MapOverview({
             setSelectedPlacementId(null);
           }}
           onClose={() => setSelectedPlacementId(null)}
+        />
+      )}
+      {placementRenameOpen && selectedPlacement && (
+        <MapPlacementRenameDialog
+          map={map}
+          maps={maps}
+          placement={selectedPlacement}
+          onClose={closePlacementRename}
+          onRenamed={acceptPlacementRename}
         />
       )}
       {stacks.length > 0 && (
@@ -3905,15 +4040,153 @@ export function MapSurfacePreviews({
   );
 }
 
+export function MapPlacementRenameDialog({
+  map,
+  maps,
+  placement,
+  onClose,
+  onRenamed,
+}: {
+  map: MapDef;
+  maps: MapDef[];
+  placement: MapPlacementDef;
+  onClose: () => void;
+  onRenamed: (result: MapPlacementRenameUpdateResponse) => void;
+}) {
+  const [newId, setNewId] = useState(placement.id);
+  const [planState, setPlanState] = useState<{
+    newId: string;
+    plan: MapPlacementRenamePreviewResponse;
+  } | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [planRefresh, setPlanRefresh] = useState(0);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idValid = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(newId);
+  const plan = planState?.newId === newId ? planState.plan : null;
+  const mapById = useMemo(() => new Map(maps.map((candidate) => [candidate.id, candidate])), [maps]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  useEffect(() => {
+    if (renaming) return;
+    setPlanState(null);
+    setError(null);
+    if (!idValid || newId === placement.id) {
+      setPlanning(false);
+      return;
+    }
+    const controller = new AbortController();
+    setPlanning(true);
+    const timer = window.setTimeout(() => {
+      void previewMapPlacementRename({
+        mapId: map.id,
+        placementId: placement.id,
+        newPlacementId: newId,
+      }, controller.signal)
+        .then((nextPlan) => setPlanState({ newId, plan: nextPlan }))
+        .catch((cause) => {
+          if (!isAbortError(cause)) setError(cause instanceof Error ? cause.message : String(cause));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPlanning(false);
+        });
+    }, 240);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [idValid, map.id, newId, placement.id, planRefresh]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!plan || renaming) return;
+    const submittedId = newId;
+    const submittedRevision = plan.revision;
+    setRenaming(true);
+    setError(null);
+    try {
+      onRenamed(await saveMapPlacementRename({
+        mapId: map.id,
+        placementId: placement.id,
+        newPlacementId: submittedId,
+        expectedRevision: submittedRevision,
+      }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setPlanState(null);
+      setRenaming(false);
+    }
+  };
+
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="rename-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-map-placement-title" onClick={renaming ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !renaming) onClose();
+    }}>
+      <form ref={dialogRef} className="rename-resource-dialog map-placement-rename-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header><div><span>MAP ARRIVAL REFACTOR</span><strong id="rename-map-placement-title">Rename stable placement ID</strong><small>Studio rewrites the target object and every engine-proven authored arrival as one journaled transaction, then reloads the complete game.</small></div><button type="button" aria-label="Close placement rename dialog" disabled={renaming} onClick={onClose}>×</button></header>
+        <div className="rename-resource-body">
+          <div className="rename-resource-identity"><i aria-hidden="true">⌖</i><div><span>{map.name}</span><strong>{placement.id}</strong><code>map:{map.id}/placement:{placement.id}</code></div><b aria-hidden="true">→</b><label><span>NEW LOCAL ID</span><input ref={inputRef} value={newId} maxLength={80} aria-invalid={!idValid} autoComplete="off" disabled={renaming} onChange={(event) => setNewId(event.target.value)} /></label></div>
+          {!idValid && <div className="rename-resource-hint invalid">Use 1–80 ASCII letters, numbers, dashes or underscores.</div>}
+          {idValid && newId === placement.id && <div className="rename-resource-hint">Enter a different placement ID to trace authored arrivals.</div>}
+          {planning && <div className="rename-resource-planning"><span>◌</span>Tracing arrival anchors across every map…</div>}
+          {plan && <div className="rename-resource-plan map-placement-rename-plan">
+            <header><div><span>ATOMIC REFACTOR PLAN</span><strong>{plan.changedIds.length} map source{plan.changedIds.length === 1 ? "" : "s"}</strong></div><b>{plan.backlinks.length + 1} semantic change{plan.backlinks.length === 0 ? "" : "s"}</b></header>
+            <div className="rename-resource-files">{plan.changedIds.map((mapId) => {
+              const changedMap = mapById.get(mapId);
+              const changes = plan.backlinks.filter((backlink) => backlink.sourceMapId === mapId).length + (mapId === map.id ? 1 : 0);
+              return <article key={mapId}><i aria-hidden="true">▦</i><div><strong>{changedMap?.name ?? mapId}</strong><code>{mapId === map.id ? "placement definition" : "arrival source"} · map:{mapId}</code></div><b>{changes}</b></article>;
+            })}</div>
+            <div className="map-placement-rename-routes">
+              <header><span>INCOMING ARRIVALS</span><strong>{plan.backlinks.length}</strong></header>
+              {plan.backlinks.length === 0 ? <p>No authored arrival references need rewriting.</p> : plan.backlinks.map((backlink) => <div key={backlink.sourceKey}><span><strong>{backlink.sourceMapName}</strong><small>{mapArrivalBacklinkSourceDescription(backlink)}</small></span><code>{backlink.label}</code><b>{placement.id} → {newId}</b></div>)}
+            </div>
+          </div>}
+          {error && <div className="rename-resource-error map-placement-rename-error" role="alert"><strong>Refactor failed</strong><span>{error}</span><button type="button" disabled={!idValid || newId === placement.id || renaming} onClick={() => setPlanRefresh((current) => current + 1)}>Refresh plan</button><small>No authoritative map source was partially renamed.</small></div>}
+        </div>
+        <footer><span>ENGINE-PROVEN REFERENCES · CAS REVISION · ATOMIC ROLLBACK</span><div><button type="button" disabled={renaming} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!plan || renaming}>{renaming ? "Validating complete game…" : plan ? `Rename & rewrite ${plan.backlinks.length + 1}` : "Build a valid plan"}</button></div></footer>
+      </form>
+    </div>
+  );
+}
+
 function PlacementEditor({
   map,
   maps,
   placement,
+  backlinks,
+  deleteBlockers,
   layers,
   assets,
   resources,
   switches,
   variables,
+  renameDisabledReason,
+  renameButtonRef,
+  onRename,
+  onOpenSource,
   onChange,
   onDuplicate,
   onDelete,
@@ -3922,11 +4195,17 @@ function PlacementEditor({
   map: MapDef;
   maps: MapDef[];
   placement: MapPlacementDef;
+  backlinks: MapArrivalBacklink[];
+  deleteBlockers: MapArrivalBacklink[];
   layers: MapLayerDef[];
   assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
+  renameDisabledReason?: string;
+  renameButtonRef: React.RefObject<HTMLButtonElement>;
+  onRename: () => void;
+  onOpenSource: (backlink: MapArrivalBacklink) => void;
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -3965,15 +4244,15 @@ function PlacementEditor({
   return (
     <section className="placement-editor">
       <header className="placement-editor-heading">
-        <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
+        <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"} · used by {backlinks.length}</code></div>
         <nav className="placement-editor-tabs" aria-label="Object editor sections" role="tablist">
           <button type="button" role="tab" aria-selected={editorSection === "object"} className={editorSection === "object" ? "selected" : ""} onClick={() => setEditorSection("object")}><span>◇</span> Object</button>
           <button type="button" role="tab" aria-selected={editorSection === "events"} className={editorSection === "events" ? "selected" : ""} onClick={() => setEditorSection("events")}><span>◆</span> Events <small>{placement.events.length}</small></button>
         </nav>
-        <div className="placement-heading-actions"><button type="button" onClick={onDuplicate}>Duplicate object</button><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
+        <div className="placement-heading-actions"><button ref={renameButtonRef} type="button" disabled={renameDisabledReason !== undefined} title={renameDisabledReason ?? "Rename this placement ID and every engine-proven arrival reference"} onClick={onRename}>Rename ID</button><button type="button" onClick={onDuplicate}>Duplicate</button><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       {confirmDelete && (
-        <section className="placement-delete-confirmation" role="alertdialog" aria-labelledby="delete-placement-title" aria-describedby="delete-placement-description" onKeyDown={(event) => {
+        <section className={`placement-delete-confirmation${deleteBlockers.length > 0 ? " blocked" : ""}`} role="alertdialog" aria-labelledby="delete-placement-title" aria-describedby="delete-placement-description" onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
@@ -3981,14 +4260,31 @@ function PlacementEditor({
         }}>
           <span aria-hidden="true">!</span>
           <div>
-            <strong id="delete-placement-title">Remove “{placementLabel}” from this map?</strong>
-            <small id="delete-placement-description">{placement.events.length} event {placement.events.length === 1 ? "page" : "pages"} will leave the map draft. The source file is unchanged until Save changes.</small>
+            <strong id="delete-placement-title">{deleteBlockers.length > 0 ? `This object anchors ${deleteBlockers.length} surviving arrival ${deleteBlockers.length === 1 ? "route" : "routes"}` : `Remove “${placementLabel}” from this map?`}</strong>
+            <small id="delete-placement-description">{deleteBlockers.length > 0 ? "Open each authored source and retarget its arrival before deleting this object." : `${placement.events.length} event ${placement.events.length === 1 ? "page" : "pages"} will leave the map draft. The source file is unchanged until Save changes.`}</small>
+            {deleteBlockers.length > 0 && <div className="placement-delete-blockers">{deleteBlockers.map((backlink) => (
+              <button type="button" key={backlink.sourceKey} onClick={() => onOpenSource(backlink)}><span><b>{backlink.sourceMapName}</b><small>{mapArrivalBacklinkSourceDescription(backlink)}</small></span><code>{backlink.label}</code><em>Open source →</em></button>
+            ))}</div>}
           </div>
           <button ref={cancelDeleteRef} type="button" onClick={cancelDelete}>Cancel <kbd>Esc</kbd></button>
-          <button type="button" className="danger" onClick={onDelete}>Remove object</button>
+          {deleteBlockers.length > 0
+            ? <button type="button" disabled>Resolve {deleteBlockers.length} first</button>
+            : <button type="button" className="danger" onClick={onDelete}>Remove object</button>}
         </section>
       )}
       {editorSection === "object" && <div className="placement-editor-grid" role="tabpanel" aria-label="Object properties">
+        <section className="placement-panel placement-anchor-panel">
+          <header><h3>Identity &amp; arrival anchor</h3><span>USED BY {backlinks.length}</span></header>
+          <div className="placement-anchor-identity"><div><span>STABLE LOCAL KEY</span><code>map:{map.id}/placement:{placement.id}</code><small>Placement IDs are scoped to this map. Engine-proven authored arrivals follow an atomic rename.</small></div><button type="button" disabled={renameDisabledReason !== undefined} title={renameDisabledReason} onClick={onRename}>Rename ID…</button></div>
+          {backlinks.length === 0 ? (
+            <div className="placement-anchor-empty"><span>◇</span><p>No authored route currently lands on this object.</p></div>
+          ) : (
+            <div className="placement-anchor-backlinks">{backlinks.map((backlink) => {
+              const removedWithObject = mapPlacementBacklinkRemovedWithObject(backlink, map.id, placement.id);
+              return <button type="button" key={backlink.sourceKey} onClick={() => onOpenSource(backlink)}><i aria-hidden="true">{backlink.source === "placement-event" ? "◆" : "⇢"}</i><span><strong>{backlink.sourceMapName}</strong><small>{mapArrivalBacklinkSourceDescription(backlink)}</small></span><code>{backlink.label}</code>{removedWithObject ? <em>removed with object</em> : <b>Open source →</b>}</button>;
+            })}</div>
+          )}
+        </section>
         <section className="placement-panel placement-resource-panel">
           <header><h3>Resource</h3><span>{placement.resource ? placement.resource.kind : "event-only"}</span></header>
           <div className="placement-resource-fields">

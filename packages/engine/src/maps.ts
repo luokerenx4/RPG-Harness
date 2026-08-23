@@ -1,5 +1,5 @@
 import type { Condition, MapConnection, MapDef, MapEventTrigger, MapLayerDef, MapPlacementDef, MapPoint } from "./types";
-import { mapPlacementEventKey } from "./resources";
+import { mapPlacementEventKey, mapPlacementKey } from "./resources";
 
 const MAP_LAYER_ORDER_STRIDE = 10_000;
 const MAP_ENTITY_ORDER_OFFSET = 1_000;
@@ -111,10 +111,27 @@ export type MapRouteSource = "legacy-connection" | "placement-event";
 export interface MapRoute extends MapConnection {
   key: string;
   source: MapRouteSource;
+  connectionIndex?: number;
   placementId?: string;
   eventId?: string;
   trigger?: MapEventTrigger;
   chance?: number;
+}
+
+/** One authored route whose destination is anchored to a stable placement. */
+export interface MapArrivalBacklink {
+  targetKey: string;
+  targetMapId: string;
+  targetPlacementId: string;
+  sourceKey: string;
+  sourceMapId: string;
+  sourceMapName: string;
+  source: MapRouteSource;
+  label: string;
+  sourceConnectionIndex?: number;
+  sourcePlacementId?: string;
+  sourceEventId?: string;
+  trigger?: MapEventTrigger;
 }
 
 export function mapLegacyConnectionKey(mapId: string, index: number): string {
@@ -127,6 +144,7 @@ export function collectMapRoutes(map: MapDef): MapRoute[] {
     ...connection,
     key: mapLegacyConnectionKey(map.id, index),
     source: "legacy-connection",
+    connectionIndex: index,
   }));
   for (const placement of map.placements ?? []) {
     for (const event of placement.events) {
@@ -152,6 +170,47 @@ export function collectMapRoutes(map: MapDef): MapRoute[] {
 }
 
 /**
+ * Trace every route that names one destination placement.
+ *
+ * Placement identity is scoped by its target map. Keeping this projection in
+ * the engine lets Studio refactors, diagnostics, and future renderers share the
+ * same legacy/placement-event route resolution instead of inspecting YAML
+ * shapes independently.
+ */
+export function collectMapArrivalBacklinks(
+  maps: readonly MapDef[],
+  targetMapId: string,
+  targetPlacementId: string,
+): MapArrivalBacklink[] {
+  const targetKey = mapPlacementKey(targetMapId, targetPlacementId);
+  return maps.flatMap((sourceMap) => collectMapRoutes(sourceMap).flatMap((route) => {
+    if (
+      route.target !== targetMapId ||
+      route.arrival?.placementId !== targetPlacementId
+    ) return [];
+    return [{
+      targetKey,
+      targetMapId,
+      targetPlacementId,
+      sourceKey: route.key,
+      sourceMapId: sourceMap.id,
+      sourceMapName: sourceMap.name,
+      source: route.source,
+      label: route.dir,
+      ...(route.connectionIndex !== undefined
+        ? { sourceConnectionIndex: route.connectionIndex }
+        : {}),
+      ...(route.placementId ? { sourcePlacementId: route.placementId } : {}),
+      ...(route.eventId ? { sourceEventId: route.eventId } : {}),
+      ...(route.trigger ? { trigger: route.trigger } : {}),
+    } satisfies MapArrivalBacklink];
+  })).sort((left, right) =>
+    left.sourceMapId.localeCompare(right.sourceMapId) ||
+    left.sourceKey.localeCompare(right.sourceKey)
+  );
+}
+
+/**
  * Compatibility projection for callers that only need graph edges. New
  * dispatch code must use `collectMapRoutes` so event-page identity survives.
  */
@@ -159,6 +218,7 @@ export function collectMapConnections(map: MapDef): MapConnection[] {
   return collectMapRoutes(map).map(({
     key: _key,
     source: _source,
+    connectionIndex: _connectionIndex,
     placementId: _placementId,
     eventId: _eventId,
     trigger: _trigger,

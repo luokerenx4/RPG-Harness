@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { MapDef, MapPlacementDef } from "./types";
 import {
+  collectMapArrivalBacklinks,
   collectMapConnections,
   collectMapImageLayers,
   collectMapRoutes,
@@ -167,4 +168,135 @@ test("map placement distance uses the nearest footprint cell", () => {
   expect(mapPlacementDistance({ x: 3, y: 5 }, placement)).toBe(1);
   expect(mapPlacementDistance({ x: 6, y: 6 }, placement)).toBe(0);
   expect(mapPlacementDistance({ x: 8, y: 7 }, placement)).toBe(3);
+});
+
+test("map arrival backlinks preserve every authored route source", () => {
+  const target: MapDef = {
+    id: "field",
+    name: "Field",
+    description: "",
+    placements: [{
+      id: "west-entry",
+      at: { x: 0, y: 0 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "none",
+      visible: true,
+      events: [],
+      resource: { kind: "custom", id: "marker" },
+    }],
+  };
+  const otherTarget: MapDef = {
+    ...target,
+    id: "other-field",
+    name: "Other field",
+  };
+  const source: MapDef = {
+    id: "gatehouse",
+    name: "Gatehouse",
+    description: "",
+    connections: [{
+      dir: "Legacy gate",
+      target: target.id,
+      arrival: { placementId: "west-entry" },
+    }],
+    placements: [{
+      id: "painted-door",
+      at: { x: 2, y: 1 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      resource: { kind: "map", id: target.id },
+      events: [{
+        id: "cross",
+        trigger: "player_touch",
+        label: "Painted door",
+        arrival: { placementId: "west-entry" },
+        order: 0,
+      }],
+    }, {
+      id: "override-door",
+      at: { x: 3, y: 1 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      resource: { kind: "map", id: otherTarget.id },
+      events: [{
+        id: "cross",
+        trigger: "interact",
+        label: "Override door",
+        run: { kind: "map", id: target.id },
+        arrival: { placementId: "west-entry" },
+        order: 0,
+      }],
+    }, {
+      id: "other-door",
+      at: { x: 4, y: 1 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      resource: { kind: "map", id: otherTarget.id },
+      events: [{
+        id: "cross",
+        trigger: "interact",
+        label: "Other field door",
+        arrival: { placementId: "west-entry" },
+        order: 0,
+      }],
+    }],
+  };
+
+  expect(collectMapArrivalBacklinks([target, otherTarget, source], "field", "west-entry"))
+    .toEqual([
+      {
+        targetKey: "map:field/placement:west-entry",
+        targetMapId: "field",
+        targetPlacementId: "west-entry",
+        sourceKey: "map:gatehouse/legacy-connection:0",
+        sourceMapId: "gatehouse",
+        sourceMapName: "Gatehouse",
+        source: "legacy-connection",
+        label: "Legacy gate",
+        sourceConnectionIndex: 0,
+      },
+      {
+        targetKey: "map:field/placement:west-entry",
+        targetMapId: "field",
+        targetPlacementId: "west-entry",
+        sourceKey: "map:gatehouse/placement:override-door/event:cross",
+        sourceMapId: "gatehouse",
+        sourceMapName: "Gatehouse",
+        source: "placement-event",
+        label: "Override door",
+        sourcePlacementId: "override-door",
+        sourceEventId: "cross",
+        trigger: "interact",
+      },
+      {
+        targetKey: "map:field/placement:west-entry",
+        targetMapId: "field",
+        targetPlacementId: "west-entry",
+        sourceKey: "map:gatehouse/placement:painted-door/event:cross",
+        sourceMapId: "gatehouse",
+        sourceMapName: "Gatehouse",
+        source: "placement-event",
+        label: "Painted door",
+        sourcePlacementId: "painted-door",
+        sourceEventId: "cross",
+        trigger: "player_touch",
+      },
+    ]);
+  expect(collectMapArrivalBacklinks([target, otherTarget, source], "other-field", "west-entry"))
+    .toEqual([
+      expect.objectContaining({
+        targetKey: "map:other-field/placement:west-entry",
+        sourceKey: "map:gatehouse/placement:other-door/event:cross",
+        sourcePlacementId: "other-door",
+      }),
+    ]);
+  expect(collectMapArrivalBacklinks([target, otherTarget, source], "field", "missing"))
+    .toEqual([]);
 });

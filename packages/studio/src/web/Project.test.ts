@@ -17,7 +17,10 @@ import {
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapEventArrivalSummary,
+  mapArrivalBacklinkSourceDescription,
   mapPaletteResourceGraphicPath,
+  mapPlacementBacklinkRemovedWithObject,
+  mapPlacementDeleteBlockers,
   mapPlacementEventSummary,
   mapPlacementGraphicPath,
   mapDraftHistoryReducer,
@@ -32,6 +35,7 @@ import {
   parseResourceScalarFields,
   patchResourceScalarFields,
   paintMapLayerTile,
+  projectMapDraftIntoCatalog,
   reconcileMapDraftAfterSave,
   replaceMapEventArrival,
   replaceMapEventRunTarget,
@@ -42,8 +46,10 @@ import {
   summarizeMapTreeResource,
   summarizeMapValidation,
   studioTileAtlasStyle,
+  MapPlacementRenameDialog,
 } from "./pages/Project";
-import type { MapDef, MapLayoutDef, MapPlacementDef, MapPlacementEventDef, ProjectResourceNode } from "@rpg-harness/engine";
+import { collectMapArrivalBacklinks } from "@rpg-harness/engine";
+import type { MapArrivalBacklink, MapDef, MapLayoutDef, MapPlacementDef, MapPlacementEventDef, ProjectResourceNode } from "@rpg-harness/engine";
 import type { ProjectAssetPreview } from "./api";
 
 describe("Studio database record fields", () => {
@@ -102,6 +108,136 @@ describe("Studio database record fields", () => {
     });
     expect(withSprite).toBe("---\nid: keeper\nname: Keeper\nmap_sprite: assets/sprites/keeper-field\n---\n\nBiography.\n");
     expect(patchResourceScalarFields(withSprite, { map_sprite: "" })).toBe(character);
+  });
+});
+
+describe("Studio map placement arrival lifecycle", () => {
+  const landing = {
+    id: "landing",
+    at: { x: 2, y: 2 },
+    z: 0,
+    footprint: { width: 1, height: 1 },
+    collision: "none",
+    visible: true,
+    events: [],
+  } satisfies MapPlacementDef;
+  const target = {
+    id: "target",
+    name: "Target Room",
+    description: "",
+    placements: [landing],
+  } satisfies MapDef;
+  const source = {
+    id: "source",
+    name: "Source Hall",
+    description: "",
+    placements: [{
+      id: "door",
+      at: { x: 0, y: 0 },
+      resource: { kind: "map", id: "target" },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      events: [{
+        id: "go",
+        trigger: "interact",
+        label: "Enter target",
+        arrival: { placementId: "landing" },
+        order: 0,
+      }],
+    }],
+  } satisfies MapDef;
+
+  test("projects the current draft into the map catalog before tracing backlinks", () => {
+    expect(collectMapArrivalBacklinks([target, source], "target", "landing")).toHaveLength(1);
+    const draft = {
+      ...source,
+      placements: source.placements?.map((placement) => ({
+        ...placement,
+        events: placement.events.map((event) => ({ ...event, arrival: undefined })),
+      })),
+    };
+    const projected = projectMapDraftIntoCatalog([target, source], draft);
+    expect(projected.find((map) => map.id === "source")).toBe(draft);
+    expect(collectMapArrivalBacklinks(projected, "target", "landing")).toEqual([]);
+  });
+
+  test("blocks only arrival routes that survive deletion of the selected object", () => {
+    const backlinks = [
+      {
+        targetKey: "map:target/placement:landing",
+        targetMapId: "target",
+        targetPlacementId: "landing",
+        sourceKey: "self",
+        sourceMapId: "target",
+        sourceMapName: "Target Room",
+        source: "placement-event",
+        sourcePlacementId: "landing",
+        sourceEventId: "loop",
+        trigger: "interact",
+        label: "Loop",
+      },
+      {
+        targetKey: "map:target/placement:landing",
+        targetMapId: "target",
+        targetPlacementId: "landing",
+        sourceKey: "neighbor",
+        sourceMapId: "target",
+        sourceMapName: "Target Room",
+        source: "placement-event",
+        sourcePlacementId: "other",
+        sourceEventId: "go",
+        trigger: "player_touch",
+        label: "Neighbor",
+      },
+      {
+        targetKey: "map:target/placement:landing",
+        targetMapId: "target",
+        targetPlacementId: "landing",
+        sourceKey: "legacy",
+        sourceMapId: "target",
+        sourceMapName: "Target Room",
+        source: "legacy-connection",
+        sourceConnectionIndex: 0,
+        label: "Legacy",
+      },
+      {
+        targetKey: "map:target/placement:landing",
+        targetMapId: "target",
+        targetPlacementId: "landing",
+        sourceKey: "cross-map",
+        sourceMapId: "source",
+        sourceMapName: "Source Hall",
+        source: "placement-event",
+        sourcePlacementId: "door",
+        sourceEventId: "go",
+        trigger: "interact",
+        label: "Enter target",
+      },
+    ] satisfies MapArrivalBacklink[];
+    expect(mapPlacementBacklinkRemovedWithObject(backlinks[0]!, "target", "landing")).toBe(true);
+    expect(mapPlacementDeleteBlockers(backlinks, "target", "landing").map((row) => row.sourceKey)).toEqual([
+      "neighbor",
+      "legacy",
+      "cross-map",
+    ]);
+    expect(mapArrivalBacklinkSourceDescription(backlinks[1]!)).toBe("object other · event go · player_touch");
+    expect(mapArrivalBacklinkSourceDescription(backlinks[2]!)).toBe("Legacy connection 1");
+  });
+
+  test("renders the dedicated arrival-anchor refactor boundary", () => {
+    const html = renderToStaticMarkup(React.createElement(MapPlacementRenameDialog, {
+      map: target,
+      maps: [target, source],
+      placement: landing,
+      onClose: () => undefined,
+      onRenamed: () => undefined,
+    }));
+    expect(html).toContain("MAP ARRIVAL REFACTOR");
+    expect(html).toContain("map:target/placement:landing");
+    expect(html).toContain("ENGINE-PROVEN REFERENCES");
+    expect(html).toContain("Build a valid plan");
   });
 });
 

@@ -30,6 +30,13 @@ export interface MapTopologyPatch {
   isEntry: boolean;
 }
 
+export interface MapPlacementRefactorPatch {
+  sourceMapId: string;
+  targetMapId: string;
+  placementId: string;
+  newPlacementId: string;
+}
+
 export interface MapAuthoringPatchPreview {
   content: string;
   game: Game;
@@ -134,6 +141,110 @@ export function serializeMapTopologyPatch(
     ["is_entry", patch.isEntry],
   ]);
   return { content, map: parseMap(content, source) };
+}
+
+/**
+ * Rewrite one stable placement definition and every contextual arrival that
+ * targets it without reserializing unrelated YAML or source comments.
+ */
+export function serializeMapPlacementRefactor(
+  original: string,
+  patch: MapPlacementRefactorPatch,
+  source?: string,
+): { content: string; map: MapDef } {
+  const doc = parseDocument(original, { keepSourceTokens: true });
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `${source ?? "map"}: existing YAML has parse errors — ${doc.errors[0]!.message}`,
+    );
+  }
+  if (!isMap(doc.contents)) throw new Error("map: existing YAML root must be an object");
+  const root = doc.toJS() as Record<string, unknown>;
+  const paths: Array<Array<string | number>> = [];
+  const placements = Array.isArray(root.placements) ? root.placements : [];
+
+  if (patch.sourceMapId === patch.targetMapId) {
+    for (let index = 0; index < placements.length; index += 1) {
+      const placement = objectRecord(placements[index]);
+      if (placement?.id === patch.placementId) paths.push(["placements", index, "id"]);
+    }
+  }
+
+  const connections = Array.isArray(root.connections) ? root.connections : [];
+  for (let index = 0; index < connections.length; index += 1) {
+    const connection = objectRecord(connections[index]);
+    const arrival = objectRecord(connection?.arrival);
+    if (
+      connection?.target === patch.targetMapId &&
+      arrival?.placement === patch.placementId
+    ) {
+      paths.push(["connections", index, "arrival", "placement"]);
+    }
+  }
+
+  for (let placementIndex = 0; placementIndex < placements.length; placementIndex += 1) {
+    const placement = objectRecord(placements[placementIndex]);
+    const placementTarget = mapResourceId(placement?.resource);
+    const events = Array.isArray(placement?.events) ? placement.events : [];
+    for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+      const event = objectRecord(events[eventIndex]);
+      const target = event?.run === undefined
+        ? placementTarget
+        : mapResourceId(event.run);
+      const arrival = objectRecord(event?.arrival);
+      if (target === patch.targetMapId && arrival?.placement === patch.placementId) {
+        paths.push([
+          "placements",
+          placementIndex,
+          "events",
+          eventIndex,
+          "arrival",
+          "placement",
+        ]);
+      }
+    }
+  }
+
+  if (paths.length === 0) {
+    throw new Error(
+      `map ${patch.sourceMapId}: no placement definition or arrival reference matched ${patch.targetMapId}/${patch.placementId}`,
+    );
+  }
+  const edits = paths.map((path) => {
+    const node = doc.getIn(path, true);
+    if (!isScalar(node) || node.value !== patch.placementId || !node.range) {
+      throw new Error(`map: cannot locate placement refactor source range: ${path.join(".")}`);
+    }
+    const raw = original.slice(node.range[0], node.range[1]);
+    if (raw.startsWith("|") || raw.startsWith(">")) {
+      throw new Error(
+        `map: placement refactor does not rewrite block scalar ids: ${path.join(".")}`,
+      );
+    }
+    const replacement = raw.startsWith('"')
+      ? JSON.stringify(patch.newPlacementId)
+      : raw.startsWith("'")
+        ? `'${patch.newPlacementId.replace(/'/g, "''")}'`
+        : encodeTopLevelScalar(patch.newPlacementId);
+    return { start: node.range[0], end: node.range[1], replacement };
+  }).sort((left, right) => right.start - left.start);
+
+  let content = original;
+  for (const edit of edits) {
+    content = content.slice(0, edit.start) + edit.replacement + content.slice(edit.end);
+  }
+  return { content, map: parseMap(content, source) };
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function mapResourceId(value: unknown): string | undefined {
+  const ref = objectRecord(value);
+  return ref?.kind === "map" && typeof ref.id === "string" ? ref.id : undefined;
 }
 
 type MapScalarFieldValue = string | number | boolean | null | undefined;

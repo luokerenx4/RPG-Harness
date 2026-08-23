@@ -4,6 +4,7 @@
 
 import type {
   HubActivity,
+  MapArrivalBacklink,
   MapArrivalDef,
   MapDef,
   MapEventTrigger,
@@ -475,6 +476,75 @@ export interface DirectedMapRouteDraft {
   label: string;
   trigger: MapEventTrigger;
   arrival?: MapArrivalDef;
+}
+
+export interface MapPlacementRenameIntent {
+  mapId: string;
+  placementId: string;
+  newPlacementId: string;
+  expectedRevision?: string;
+}
+
+export interface MapPlacementRenamePreviewResponse {
+  revision: string;
+  targetKey: string;
+  changedIds: string[];
+  backlinks: MapArrivalBacklink[];
+}
+
+export interface MapPlacementRenameUpdateResponse {
+  changedIds: string[];
+  newPlacementId: string;
+  project: ProjectResponse;
+}
+
+export class MapPlacementRefactorRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "MapPlacementRefactorRequestError";
+  }
+}
+
+export async function previewMapPlacementRename(
+  intent: MapPlacementRenameIntent,
+  signal?: AbortSignal,
+): Promise<MapPlacementRenamePreviewResponse> {
+  return readMapPlacementRefactorResponse(fetch("/api/map-placements/rename/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+    signal,
+  }));
+}
+
+export async function saveMapPlacementRename(
+  intent: MapPlacementRenameIntent,
+): Promise<MapPlacementRenameUpdateResponse> {
+  return readMapPlacementRefactorResponse(fetch("/api/map-placements/rename", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+  }));
+}
+
+async function readMapPlacementRefactorResponse<T>(request: Promise<Response>): Promise<T> {
+  const response = await request;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as {
+      error?: unknown;
+      code?: unknown;
+    };
+    throw new MapPlacementRefactorRequestError(
+      typeof body.error === "string" ? body.error : `HTTP ${response.status}`,
+      response.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
+  }
+  return response.json();
 }
 
 export interface ReciprocalMapRouteIntent {

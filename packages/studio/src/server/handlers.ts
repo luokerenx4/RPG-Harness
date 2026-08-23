@@ -35,6 +35,12 @@ import {
   type DirectedMapRouteDraft,
   type ReciprocalMapRouteIntent,
 } from "./map-routes";
+import {
+  planMapPlacementRename,
+  updateMapPlacementRename,
+  verifyMapPlacementRenameSources,
+  type MapPlacementRenameIntent,
+} from "./map-placement-refactor";
 import { readResourceSource, updateResourceSource } from "./resource-source";
 import {
   createProjectResource,
@@ -141,6 +147,9 @@ async function route(
   }
 
   if (method === "POST") {
+    if (pathname === "/api/map-placements/rename/preview") {
+      return postMapPlacementRenamePreview(ctx, req);
+    }
     if (pathname === "/api/map-routes/reciprocal/preview") {
       return postReciprocalMapRoutesPreview(ctx, req);
     }
@@ -168,6 +177,9 @@ async function route(
   }
 
   if (method === "PATCH") {
+    if (pathname === "/api/map-placements/rename") {
+      return patchMapPlacementRename(ctx, req);
+    }
     if (pathname === "/api/map-routes/reciprocal") {
       return patchReciprocalMapRoutes(ctx, req);
     }
@@ -808,6 +820,85 @@ async function patchMapAuthoring(
   return json(await projectGame(ctx, updated.game));
 }
 
+async function postMapPlacementRenamePreview(
+  ctx: Ctx,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readMapPlacementRenameIntent(req);
+  if (parsed instanceof Response) return parsed;
+  try {
+    await requireMapTopologySource(ctx.gameDir, parsed.mapId);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planMapPlacementRename(game, parsed);
+    const sources = new Map<string, string>();
+    for (const id of plan.changedIds) {
+      sources.set(id, await requireMapTopologySource(ctx.gameDir, id));
+    }
+    await verifyMapPlacementRenameSources(sources, plan, parsed);
+    return json({
+      revision: plan.revision,
+      targetKey: plan.targetKey,
+      backlinks: plan.backlinks,
+      changedIds: plan.changedIds,
+    });
+  } catch (error) {
+    return mapPlacementRefactorErrorResponse(error);
+  }
+}
+
+async function patchMapPlacementRename(
+  ctx: Ctx,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readMapPlacementRenameIntent(req);
+  if (parsed instanceof Response) return parsed;
+  if (parsed.expectedRevision === undefined) {
+    return json({
+      error: "expectedRevision is required; preview this placement refactor before applying it",
+      code: "map_placement_preview_required",
+    }, 409);
+  }
+  try {
+    await requireMapTopologySource(ctx.gameDir, parsed.mapId);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planMapPlacementRename(game, parsed);
+    const sources = new Map<string, string>();
+    for (const id of plan.changedIds) {
+      sources.set(id, await requireMapTopologySource(ctx.gameDir, id));
+    }
+    await verifyMapPlacementRenameSources(sources, plan, parsed);
+    // Prove that the projected Studio response is representable before writes.
+    await projectGame(ctx, plan.game);
+    let project: Awaited<ReturnType<typeof projectGame>> | undefined;
+    const updated = await updateMapPlacementRename(
+      sources,
+      parsed,
+      () => loadGame(ctx.gameDir),
+      async (updatedGame) => {
+        for (const [id, expectedSource] of sources) {
+          const authoritativeSource = await requireMapTopologySource(ctx.gameDir, id);
+          if (authoritativeSource !== expectedSource) {
+            throw new MapTopologyError(
+              `map source authority changed during placement refactor reload: ${id}`,
+              409,
+              "stale_map_source",
+            );
+          }
+        }
+        project = await projectGame(ctx, updatedGame);
+      },
+    );
+    if (!project) throw new Error("map placement response projection was not produced");
+    return json({
+      changedIds: updated.changedIds,
+      newPlacementId: parsed.newPlacementId,
+      project,
+    });
+  } catch (error) {
+    return mapPlacementRefactorErrorResponse(error);
+  }
+}
+
 async function postReciprocalMapRoutesPreview(
   ctx: Ctx,
   req: Request,
@@ -1026,6 +1117,62 @@ function mapRouteErrorResponse(error: unknown): Response {
         ? "invalid_map_routes"
         : "map_routes_unavailable",
   }, status);
+}
+
+function mapPlacementRefactorErrorResponse(error: unknown): Response {
+  const status = error instanceof MapTopologyError
+    ? error.status
+    : error instanceof GameValidationError
+      ? 422
+      : 500;
+  return json({
+    error: error instanceof Error ? error.message : String(error),
+    code: error instanceof MapTopologyError
+      ? (error.code === "invalid_map_topology" ? "invalid_map_placement_refactor" : error.code)
+      : status === 422
+        ? "invalid_map_placement_refactor"
+        : "map_placement_refactor_unavailable",
+  }, status);
+}
+
+async function readMapPlacementRenameIntent(
+  req: Request,
+): Promise<MapPlacementRenameIntent | Response> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return json({ error: "body must be an object" }, 400);
+  }
+  const body = raw as Record<string, unknown>;
+  const unexpected = Object.keys(body).find((key) =>
+    !["mapId", "placementId", "newPlacementId", "expectedRevision"].includes(key)
+  );
+  if (unexpected) {
+    return json({ error: `unknown map placement refactor field: ${unexpected}` }, 400);
+  }
+  for (const field of ["mapId", "placementId", "newPlacementId"] as const) {
+    if (typeof body[field] !== "string" || body[field].length === 0) {
+      return json({ error: `${field} must be a non-empty string` }, 400);
+    }
+  }
+  if (body.expectedRevision !== undefined && (
+    typeof body.expectedRevision !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(body.expectedRevision)
+  )) {
+    return json({ error: "expectedRevision must be a sha256 placement revision" }, 400);
+  }
+  return {
+    mapId: body.mapId as string,
+    placementId: body.placementId as string,
+    newPlacementId: body.newPlacementId as string,
+    ...(typeof body.expectedRevision === "string"
+      ? { expectedRevision: body.expectedRevision }
+      : {}),
+  };
 }
 
 async function readReciprocalMapRouteIntent(

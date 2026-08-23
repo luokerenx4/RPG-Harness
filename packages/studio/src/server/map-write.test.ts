@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import type { Game } from "@rpg-harness/engine";
 import { parseMap } from "@rpg-harness/parser";
-import { previewMapAuthoringPatch, serializeMapAuthoringPatch, updateMapAuthoring } from "./map-write";
+import {
+  previewMapAuthoringPatch,
+  serializeMapAuthoringPatch,
+  serializeMapPlacementRefactor,
+  updateMapAuthoring,
+} from "./map-write";
 
 describe("serializeMapAuthoringPatch", () => {
   test("round-trips spatial fields while retaining unrelated authored YAML", () => {
@@ -93,6 +98,53 @@ describe("serializeMapAuthoringPatch", () => {
     ]);
     expect(next.content).toContain("placement: west_entry");
     expect(next.content).toContain("at:");
+  });
+
+  test("refactors placement definitions and contextual arrivals without rewriting source trivia", () => {
+    const original = [
+      "# keep authored map trivia",
+      "id: field",
+      "name: Field",
+      "connections:",
+      "  - { dir: Loop, target: field, arrival: { placement: old-entry } } # legacy stays flow",
+      "placements:",
+      "  - { id: old-entry, at: [0, 0], resource: { kind: custom, id: marker } }",
+      "  - id: door",
+      "    at: [1, 0]",
+      "    resource: { kind: map, id: field }",
+      "    events:",
+      "      - { id: cross, trigger: interact, arrival: { placement: 'old-entry' } }",
+      "  - id: override-door",
+      "    at: [2, 0]",
+      "    resource: { kind: map, id: elsewhere }",
+      "    events:",
+      "      - { id: cross, trigger: interact, run: { kind: map, id: field }, arrival: { placement: old-entry } }",
+      "  - id: other-door",
+      "    at: [3, 0]",
+      "    resource: { kind: map, id: field }",
+      "    events:",
+      "      - { id: cross, trigger: interact, run: { kind: map, id: elsewhere }, arrival: { placement: old-entry } }",
+    ].join("\n") + "\n";
+    const next = serializeMapPlacementRefactor(original, {
+      sourceMapId: "field",
+      targetMapId: "field",
+      placementId: "old-entry",
+      newPlacementId: "true",
+    });
+
+    expect(next.content).toContain("# keep authored map trivia");
+    expect(next.content).toContain("# legacy stays flow");
+    expect(next.content).toContain("placement: 'true'");
+    expect(next.map.placements?.map((placement) => placement.id)).toEqual([
+      "true",
+      "door",
+      "override-door",
+      "other-door",
+    ]);
+    expect(next.map.connections?.[0]?.arrival).toEqual({ placementId: "true" });
+    expect(next.map.placements?.[1]?.events[0]?.arrival).toEqual({ placementId: "true" });
+    expect(next.map.placements?.[2]?.events[0]?.arrival).toEqual({ placementId: "true" });
+    expect(next.map.placements?.[3]?.events[0]?.arrival).toEqual({ placementId: "old-entry" });
   });
 
   test("overlays exactly one target without mutating the input game", () => {

@@ -14,6 +14,7 @@ export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export {
+  collectMapArrivalBacklinks,
   collectMapConnections,
   collectMapRoutes,
   collectMapImageLayers,
@@ -28,7 +29,7 @@ export {
   mapRouteActivityId,
   resolveMapRoute,
 } from "./maps";
-export type { MapRoute, MapRouteSource } from "./maps";
+export type { MapArrivalBacklink, MapRoute, MapRouteSource } from "./maps";
 export { analyzeMapPlayability } from "./mapPlayability";
 export type {
   MapPlayabilityDiagnostic,
