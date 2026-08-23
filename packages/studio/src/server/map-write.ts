@@ -1,6 +1,6 @@
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { isMap, isNode, isScalar, parseDocument, stringify } from "yaml";
+import { isMap, isNode, isScalar, isSeq, parseDocument, stringify } from "yaml";
 import type {
   Game,
   MapArrivalDef,
@@ -79,6 +79,39 @@ export function serializeMapAuthoringPatch(
   if (patch.placements !== undefined) {
     if (patch.placements.length === 0) doc.delete("placements");
     else doc.set("placements", patch.placements.map(encodePlacement));
+  }
+
+  const content = doc.toString();
+  return { content, map: parseMap(content, source) };
+}
+
+/**
+ * Append one placement without rebuilding the authored placements sequence.
+ *
+ * Reciprocal-route creation is additive: existing placement nodes, including
+ * their comments, anchors, and flow/block style, are not part of the
+ * requested edit. Mutating the existing YAML sequence keeps that source trivia
+ * intact while still running the result through the canonical map parser.
+ */
+export function serializeMapPlacementAppend(
+  original: string,
+  placement: MapPlacementDef,
+  source?: string,
+): { content: string; map: MapDef } {
+  const doc = parseDocument(original);
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `${source ?? "map"}: existing YAML has parse errors — ${doc.errors[0]!.message}`,
+    );
+  }
+  if (!isMap(doc.contents)) throw new Error("map: existing YAML root must be an object");
+
+  const placements = doc.get("placements", true);
+  if (placements === undefined) {
+    doc.set("placements", [encodePlacement(placement)]);
+  } else {
+    if (!isSeq(placements)) throw new Error("map: existing placements must be an array");
+    placements.add(encodePlacement(placement));
   }
 
   const content = doc.toString();
@@ -397,12 +430,12 @@ function encodePlacement(placement: MapPlacementDef): Record<string, unknown> {
       ...(event.custom ?? {}),
       id: event.id,
       trigger: event.trigger,
-      ...(event.label ? { label: event.label } : {}),
+      ...(event.label !== undefined ? { label: event.label } : {}),
       ...(event.run ? { run: event.run } : {}),
       ...(event.arrival ? { arrival: encodeMapArrival(event.arrival) } : {}),
       ...(event.chance !== undefined ? { chance: event.chance } : {}),
       ...(event.requires ? { requires: event.requires } : {}),
-      ...(event.lockedHint ? { locked_hint: event.lockedHint } : {}),
+      ...(event.lockedHint !== undefined ? { locked_hint: event.lockedHint } : {}),
       order: event.order,
     })),
   };

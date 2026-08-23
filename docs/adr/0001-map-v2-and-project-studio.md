@@ -93,6 +93,14 @@ ignoring its spatial coordinate. Human spatial renderers consume the persisted
 cursor. Runtime never synthesizes the reverse edge; an authored A → B route is
 independent from any B → A route.
 
+Studio can offer "create return route" as an authoring convenience, provided it
+materializes two ordinary directed placement events. Both sides remain explicit
+and may choose different IDs, coordinates, labels, triggers, and arrivals. The
+cross-map save is one preview-bound transaction: both authoritative sources are
+locked, checked, written, reloaded, and validated together, and any failed side
+rolls the whole operation back. No `bidirectional` field or implicit reverse
+edge is added to the engine schema.
+
 ### 4. Surfaces are projections, not alternate game databases
 
 The engine will expose one query for the current map's available semantic

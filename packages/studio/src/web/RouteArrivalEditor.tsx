@@ -8,6 +8,8 @@ export interface RouteArrivalEditorProps {
   targetMap: MapDef;
   value?: MapArrivalDef;
   onChange: (value: MapArrivalDef | undefined) => void;
+  /** Override when more than one editor can target the same map in one form. */
+  groupName?: string;
 }
 
 /** Resolve the visible editor mode without mutating an unsupported draft. */
@@ -72,6 +74,7 @@ export function RouteArrivalEditor({
   targetMap,
   value,
   onChange,
+  groupName: providedGroupName,
 }: RouteArrivalEditorProps) {
   const mode = routeArrivalMode(targetMap, value);
   const placements = targetMap.placements ?? [];
@@ -90,7 +93,7 @@ export function RouteArrivalEditor({
     value?.at && coordinate &&
     (value.at.x !== coordinate.x || value.at.y !== coordinate.y),
   );
-  const groupName = `route-arrival-${safeDomSegment(targetMap.id)}`;
+  const groupName = providedGroupName ?? `route-arrival-${safeDomSegment(targetMap.id)}`;
 
   const chooseMode = (next: RouteArrivalMode) => {
     onChange(routeArrivalValueForMode(targetMap, next, value));

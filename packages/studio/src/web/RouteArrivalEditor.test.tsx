@@ -182,6 +182,17 @@ describe("Studio route arrival editor", () => {
     expect(html).toContain("Choose an object that still belongs to map:snow-field");
   });
 
+  test("accepts an explicit radio group name for paired route editors", () => {
+    const html = renderToStaticMarkup(<RouteArrivalEditor
+      targetMap={spatialMap}
+      groupName="reciprocal-forward-arrival"
+      onChange={() => {}}
+    />);
+
+    expect(html).toContain('name="reciprocal-forward-arrival"');
+    expect(html).not.toContain('name="route-arrival-snow-field"');
+  });
+
   test("does not present an invalid stored coordinate as silently valid", () => {
     const html = renderToStaticMarkup(<RouteArrivalEditor
       targetMap={spatialMap}

@@ -26,7 +26,9 @@ import {
   renameProjectResource,
   restoreStudioTrashEntry,
   previewMapTopology,
+  previewReciprocalMapRoutes,
   saveMapTopology,
+  saveReciprocalMapRoutes,
   trashProjectResource,
   saveMapDraft,
   saveResourceSource,
@@ -47,6 +49,10 @@ import { MapAssetPicker } from "../MapAssetPicker";
 import { buildMapTopologyChains, MapTopologyDialog } from "../MapTopologyDialog";
 import { NodeMapResourceBoard } from "../NodeMapResourceBoard";
 import { RouteArrivalEditor } from "../RouteArrivalEditor";
+import {
+  ReciprocalRouteDialog,
+  type ReciprocalRouteSubmitPayload,
+} from "../ReciprocalRouteDialog";
 import { WorldAtlas } from "../WorldAtlas";
 import {
   compareMapCatalogChainKeys,
@@ -244,6 +250,7 @@ export function Project({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchRef.current?.focus();
@@ -1136,6 +1143,7 @@ function ResourceDetail({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (
         (event.metaKey || event.ctrlKey) &&
@@ -2334,6 +2342,12 @@ function MapOverview({
   const [topologyGuardOpen, setTopologyGuardOpen] = useState(false);
   const [topologyGuardSaving, setTopologyGuardSaving] = useState(false);
   const [topologyGuardError, setTopologyGuardError] = useState<string | null>(null);
+  const [reciprocalRouteOpen, setReciprocalRouteOpen] = useState(false);
+  const [reciprocalRouteGuardOpen, setReciprocalRouteGuardOpen] = useState(false);
+  const [reciprocalRouteGuardSaving, setReciprocalRouteGuardSaving] = useState(false);
+  const [reciprocalRouteGuardError, setReciprocalRouteGuardError] = useState<string | null>(null);
+  const [reciprocalRouteSubmitting, setReciprocalRouteSubmitting] = useState(false);
+  const [reciprocalRouteError, setReciprocalRouteError] = useState<string | null>(null);
   const [topologyReturnFocusPending, setTopologyReturnFocusPending] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
@@ -2354,14 +2368,19 @@ function MapOverview({
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const propertiesButtonRef = useRef<HTMLButtonElement>(null);
   const topologyButtonRef = useRef<HTMLButtonElement>(null);
+  const reciprocalRouteButtonRef = useRef<HTMLButtonElement>(null);
   const topologyAppliedRef = useRef(false);
   const topologyAfterSaveRef = useRef(false);
+  const reciprocalRouteAfterSaveRef = useRef(false);
+  const reciprocalRouteSubmitLockRef = useRef(false);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const pendingSave = preserveDraftAfterSaveRef.current;
     const continueToTopology = topologyAfterSaveRef.current && mapIdRef.current === map.id;
+    const continueToReciprocalRoute = reciprocalRouteAfterSaveRef.current && mapIdRef.current === map.id;
     topologyAfterSaveRef.current = false;
+    reciprocalRouteAfterSaveRef.current = false;
     const preserveDraft = pendingSave !== null &&
       pendingSave.map.id === map.id &&
       !hasMapDraftChanges(pendingSave.map, map);
@@ -2383,6 +2402,12 @@ function MapOverview({
     setTopologyGuardOpen(false);
     setTopologyGuardSaving(false);
     setTopologyGuardError(null);
+    setReciprocalRouteOpen(continueToReciprocalRoute);
+    setReciprocalRouteGuardOpen(false);
+    setReciprocalRouteGuardSaving(false);
+    setReciprocalRouteGuardError(null);
+    setReciprocalRouteSubmitting(false);
+    setReciprocalRouteError(null);
     setZoom(100);
     setPaletteResourceKey("");
     setPaletteQuery("");
@@ -2396,10 +2421,10 @@ function MapOverview({
   }, [map]);
 
   useEffect(() => {
-    if (!topologyReturnFocusPending || editing || topologyOpen) return;
+    if (!topologyReturnFocusPending || editing || topologyOpen || reciprocalRouteOpen) return;
     setTopologyReturnFocusPending(false);
     requestAnimationFrame(() => editButtonRef.current?.focus());
-  }, [editing, topologyOpen, topologyReturnFocusPending]);
+  }, [editing, topologyOpen, reciprocalRouteOpen, topologyReturnFocusPending]);
 
   const width = draft.layout?.width ?? 1;
   const height = draft.layout?.height ?? 1;
@@ -2639,6 +2664,59 @@ function MapOverview({
     requestAnimationFrame(() => requestAnimationFrame(() => topologyButtonRef.current?.focus()));
   };
 
+  const openReciprocalRoute = () => {
+    setReciprocalRouteGuardOpen(false);
+    setReciprocalRouteGuardError(null);
+    setReciprocalRouteError(null);
+    setPropertiesOpen(false);
+    setReciprocalRouteOpen(true);
+  };
+
+  const requestReciprocalRoute = () => {
+    if (dirty) {
+      setReciprocalRouteGuardError(null);
+      setPropertiesOpen(false);
+      setReciprocalRouteGuardOpen(true);
+      return;
+    }
+    openReciprocalRoute();
+  };
+
+  const closeReciprocalRoute = () => {
+    setReciprocalRouteOpen(false);
+    setReciprocalRouteError(null);
+    setEditing(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => reciprocalRouteButtonRef.current?.focus()));
+  };
+
+  const createReciprocalRoute = async (payload: ReciprocalRouteSubmitPayload) => {
+    if (reciprocalRouteSubmitLockRef.current) return;
+    reciprocalRouteSubmitLockRef.current = true;
+    setReciprocalRouteSubmitting(true);
+    setReciprocalRouteError(null);
+    try {
+      const preview = await previewReciprocalMapRoutes(payload);
+      const result = await saveReciprocalMapRoutes({
+        ...payload,
+        expectedRevision: preview.revision,
+      });
+      setReciprocalRouteOpen(false);
+      setEditing(false);
+      setTopologyReturnFocusPending(true);
+      onProjectSaved(result.project);
+      setSaveReceipt({
+        mapName: result.project.maps.find((candidate) => candidate.id === map.id)?.name ?? map.name,
+        summary: `${result.changedIds.length} map sources committed as 2 directed routes`,
+        savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
+    } catch (cause) {
+      setReciprocalRouteError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      reciprocalRouteSubmitLockRef.current = false;
+      setReciprocalRouteSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     onDraftGuardChange(editing && dirty ? {
       label: `Map · ${map.name}`,
@@ -2664,6 +2742,7 @@ function MapOverview({
       const target = event.target as HTMLElement | null;
       const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
       if (propertiesOpen || topologyOpen || topologyGuardOpen) return;
+      if (reciprocalRouteOpen || reciprocalRouteGuardOpen) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (dirty && !saving) void save();
@@ -2719,7 +2798,7 @@ function MapOverview({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen, topologyOpen, topologyGuardOpen]);
+  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen, topologyOpen, topologyGuardOpen, reciprocalRouteOpen, reciprocalRouteGuardOpen]);
 
   useEffect(() => {
     const stopPainting = () => {
@@ -2775,6 +2854,15 @@ function MapOverview({
             <button ref={editButtonRef} type="button" onClick={() => { setEditing(true); setPropertiesOpen(false); setConfirmDiscard(false); }}>Edit map</button>
           ) : (
             <>
+              <button
+                ref={reciprocalRouteButtonRef}
+                type="button"
+                aria-haspopup="dialog"
+                title={maps.some((candidate) => candidate.id !== map.id)
+                  ? "Create two linked route placements as one transaction"
+                  : "Open linked doors to see why a second map is required"}
+                onClick={requestReciprocalRoute}
+              >⇄ Linked doors…</button>
               <button ref={propertiesButtonRef} type="button" onClick={() => setPropertiesOpen(true)}>Map properties…</button>
               <button type="button" className="primary" disabled={!dirty || saving} onClick={save}>
                 {saving ? "Validating…" : "Save changes  ⌘S"}
@@ -2841,6 +2929,47 @@ function MapOverview({
           return result;
         }}
         onClose={closeTopology}
+      />}
+      {reciprocalRouteOpen && <ReciprocalRouteDialog
+        sourceMap={map}
+        maps={project.maps}
+        initialSourceAt={map.layout
+          ? selectedPlacement?.at ?? nextAvailableMapCell(map.layout, map.placements ?? [])
+          : { x: 0, y: 0 }}
+        submitting={reciprocalRouteSubmitting}
+        submitError={reciprocalRouteError}
+        onSubmit={(payload) => { void createReciprocalRoute(payload); }}
+        onClose={closeReciprocalRoute}
+      />}
+      {reciprocalRouteGuardOpen && <DraftNavigationDialog
+        guard={{ label: `Map · ${map.name}`, save, discard }}
+        destination="Linked Doors"
+        saving={reciprocalRouteGuardSaving}
+        error={reciprocalRouteGuardError}
+        onStay={() => {
+          setReciprocalRouteGuardOpen(false);
+          setReciprocalRouteGuardError(null);
+          requestAnimationFrame(() => reciprocalRouteButtonRef.current?.focus());
+        }}
+        onDiscard={() => {
+          discard();
+          openReciprocalRoute();
+        }}
+        onSave={() => {
+          void (async () => {
+            setReciprocalRouteGuardSaving(true);
+            setReciprocalRouteGuardError(null);
+            reciprocalRouteAfterSaveRef.current = true;
+            const saved = await save();
+            setReciprocalRouteGuardSaving(false);
+            if (!saved) {
+              reciprocalRouteAfterSaveRef.current = false;
+              setReciprocalRouteGuardError("Map draft could not be saved. Correct its validation error and try again.");
+              return;
+            }
+            openReciprocalRoute();
+          })();
+        }}
       />}
       {topologyGuardOpen && <DraftNavigationDialog
         guard={{ label: `Map · ${map.name}`, save, discard }}

@@ -90,8 +90,10 @@ describe("Studio Map Properties dialog shell", () => {
     expect(keyboard.indexOf("if (propertiesOpen || topologyOpen || topologyGuardOpen) return;")).toBeLessThan(
       keyboard.indexOf('event.key.toLowerCase() === "s"'),
     );
-    expect(overview.indexOf("topologyAfterSaveRef.current = true;")).toBeLessThan(
-      overview.indexOf("const saved = await save();"),
+    const topologySaveStart = overview.indexOf("topologyAfterSaveRef.current = true;");
+    expect(topologySaveStart).toBeGreaterThan(-1);
+    expect(topologySaveStart).toBeLessThan(
+      overview.indexOf("const saved = await save();", topologySaveStart),
     );
   });
 });

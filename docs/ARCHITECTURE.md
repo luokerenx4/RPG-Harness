@@ -351,6 +351,16 @@ Headless observes the same route identity, gate, accepted input, and resulting
 coordinate exists for persisted spatial state and human renderers. Routes are
 directed runtime edges: authoring A → B does not infer B → A.
 
+Studio may author a door and its return door as one reciprocal-route operation.
+That operation is an editor transaction, not a third runtime route kind: it
+creates one ordinary map placement event in A targeting B and one ordinary map
+placement event in B targeting A. Each direction owns its placement ID,
+coordinate, event ID, label, trigger, and arrival. Preview binds the operation
+to one revision covering both authoritative map sources; save locks and
+validates both sources and either commits both files or restores both. After
+commit, scripts and renderers still observe two independently editable directed
+routes.
+
 Legacy `connections` and `on_enter` still parse during migration. `rpgh
 migrate-maps <game-dir> --apply` converts edges and entry scripts to placements
 at `[0,0]` without inventing a layout. New content should author placements

@@ -4,8 +4,11 @@
 
 import type {
   HubActivity,
+  MapArrivalDef,
   MapDef,
+  MapEventTrigger,
   MapAvailableResource,
+  MapPoint,
   ProjectResourceKind,
   ProjectResourceNode,
   ProjectResourceGraph,
@@ -455,6 +458,83 @@ async function readMapTopologyResponse<T>(request: Promise<Response>): Promise<T
       code?: unknown;
     };
     throw new MapTopologyRequestError(
+      typeof body.error === "string" ? body.error : `HTTP ${response.status}`,
+      response.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
+  }
+  return response.json();
+}
+
+export interface DirectedMapRouteDraft {
+  sourceMapId: string;
+  targetMapId: string;
+  placementId: string;
+  at: MapPoint;
+  eventId: string;
+  label: string;
+  trigger: MapEventTrigger;
+  arrival?: MapArrivalDef;
+}
+
+export interface ReciprocalMapRouteIntent {
+  expectedRevision?: string;
+  forward: DirectedMapRouteDraft;
+  reverse: DirectedMapRouteDraft;
+}
+
+export interface ReciprocalMapRoutePreviewResponse {
+  revision: string;
+  changedIds: string[];
+  routes: [DirectedMapRouteDraft, DirectedMapRouteDraft];
+}
+
+export interface ReciprocalMapRouteUpdateResponse {
+  changedIds: string[];
+  project: ProjectResponse;
+}
+
+export class MapRouteRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "MapRouteRequestError";
+  }
+}
+
+export async function previewReciprocalMapRoutes(
+  intent: ReciprocalMapRouteIntent,
+  signal?: AbortSignal,
+): Promise<ReciprocalMapRoutePreviewResponse> {
+  return readMapRouteResponse(fetch("/api/map-routes/reciprocal/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+    signal,
+  }));
+}
+
+export async function saveReciprocalMapRoutes(
+  intent: ReciprocalMapRouteIntent,
+): Promise<ReciprocalMapRouteUpdateResponse> {
+  return readMapRouteResponse(fetch("/api/map-routes/reciprocal", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+  }));
+}
+
+async function readMapRouteResponse<T>(request: Promise<Response>): Promise<T> {
+  const response = await request;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as {
+      error?: unknown;
+      code?: unknown;
+    };
+    throw new MapRouteRequestError(
       typeof body.error === "string" ? body.error : `HTTP ${response.status}`,
       response.status,
       typeof body.code === "string" ? body.code : undefined,

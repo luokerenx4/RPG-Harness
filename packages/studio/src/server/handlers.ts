@@ -29,6 +29,12 @@ import {
   updateMapTopology,
   type MapTopologyIntent,
 } from "./map-topology";
+import {
+  planReciprocalMapRoutes,
+  updateReciprocalMapRoutes,
+  type DirectedMapRouteDraft,
+  type ReciprocalMapRouteIntent,
+} from "./map-routes";
 import { readResourceSource, updateResourceSource } from "./resource-source";
 import {
   createProjectResource,
@@ -135,6 +141,9 @@ async function route(
   }
 
   if (method === "POST") {
+    if (pathname === "/api/map-routes/reciprocal/preview") {
+      return postReciprocalMapRoutesPreview(ctx, req);
+    }
     const topologyPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/topology\/preview$/);
     if (topologyPreviewMatch?.[1]) {
       return postMapTopologyPreview(ctx, decodeURIComponent(topologyPreviewMatch[1]), req);
@@ -159,6 +168,9 @@ async function route(
   }
 
   if (method === "PATCH") {
+    if (pathname === "/api/map-routes/reciprocal") {
+      return patchReciprocalMapRoutes(ctx, req);
+    }
     if (pathname === "/api/resource-source") return patchResourceSource(ctx, url, req);
     if (pathname === "/api/resources/rename") return patchResourceRename(ctx, req);
     const topologyMatch = pathname.match(/^\/api\/maps\/([^/]+)\/topology$/);
@@ -796,6 +808,74 @@ async function patchMapAuthoring(
   return json(await projectGame(ctx, updated.game));
 }
 
+async function postReciprocalMapRoutesPreview(
+  ctx: Ctx,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readReciprocalMapRouteIntent(req);
+  if (parsed instanceof Response) return parsed;
+  try {
+    await requireReciprocalMapRouteSources(ctx.gameDir, parsed);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planReciprocalMapRoutes(game, parsed);
+    return json({
+      revision: plan.revision,
+      changedIds: plan.changedIds,
+      routes: plan.routes,
+    });
+  } catch (error) {
+    return mapRouteErrorResponse(error);
+  }
+}
+
+async function patchReciprocalMapRoutes(
+  ctx: Ctx,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readReciprocalMapRouteIntent(req);
+  if (parsed instanceof Response) return parsed;
+  if (parsed.expectedRevision === undefined) {
+    return json({
+      error: "expectedRevision is required; preview these reciprocal routes before applying them",
+      code: "map_route_preview_required",
+    }, 409);
+  }
+  try {
+    const sources = await requireReciprocalMapRouteSources(ctx.gameDir, parsed);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planReciprocalMapRoutes(game, parsed);
+    for (const id of plan.changedIds) {
+      if (!sources.has(id)) {
+        throw new MapTopologyError(`map source file not found: ${id}`, 404);
+      }
+    }
+    await projectGame(ctx, plan.game);
+    let project: Awaited<ReturnType<typeof projectGame>> | undefined;
+    const updated = await updateReciprocalMapRoutes(
+      sources,
+      parsed,
+      () => loadGame(ctx.gameDir),
+      async (updatedGame) => {
+        for (const [id, expectedSource] of sources) {
+          const authoritativeSource = await requireMapTopologySource(ctx.gameDir, id);
+          if (authoritativeSource !== expectedSource) {
+            throw new MapTopologyError(
+              `map source authority changed during reciprocal route reload: ${id}`,
+              409,
+              "stale_map_source",
+            );
+          }
+        }
+        project = await projectGame(ctx, updatedGame);
+      },
+    );
+    if (!project) throw new Error("map route response projection was not produced");
+    return json({ changedIds: updated.changedIds, project });
+  } catch (error) {
+    return mapRouteErrorResponse(error);
+  }
+}
+
 async function postMapTopologyPreview(
   ctx: Ctx,
   mapId: string,
@@ -900,6 +980,20 @@ async function requireMapTopologySource(gameDir: string, mapId: string): Promise
   throw new MapTopologyError(`map source file not found: ${mapId}`, 404);
 }
 
+async function requireReciprocalMapRouteSources(
+  gameDir: string,
+  intent: ReciprocalMapRouteIntent,
+): Promise<Map<string, string>> {
+  const sources = new Map<string, string>();
+  for (const id of new Set([
+    intent.forward.sourceMapId,
+    intent.reverse.sourceMapId,
+  ])) {
+    sources.set(id, await requireMapTopologySource(gameDir, id));
+  }
+  return sources;
+}
+
 function mapTopologyErrorResponse(error: unknown): Response {
   const status = error instanceof MapTopologyError
     ? error.status
@@ -916,6 +1010,149 @@ function mapTopologyErrorResponse(error: unknown): Response {
           ? "map_topology_unavailable"
           : "invalid_map_topology",
   }, status);
+}
+
+function mapRouteErrorResponse(error: unknown): Response {
+  const status = error instanceof MapTopologyError
+    ? error.status
+    : error instanceof GameValidationError
+      ? 422
+      : 500;
+  return json({
+    error: error instanceof Error ? error.message : String(error),
+    code: error instanceof MapTopologyError
+      ? (error.code === "invalid_map_topology" ? "invalid_map_routes" : error.code)
+      : status === 422
+        ? "invalid_map_routes"
+        : "map_routes_unavailable",
+  }, status);
+}
+
+async function readReciprocalMapRouteIntent(
+  req: Request,
+): Promise<ReciprocalMapRouteIntent | Response> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return json({ error: "body must be an object" }, 400);
+  }
+  const body = raw as Record<string, unknown>;
+  const unexpected = Object.keys(body).find((key) =>
+    !["expectedRevision", "forward", "reverse"].includes(key)
+  );
+  if (unexpected) return json({ error: `unknown reciprocal route field: ${unexpected}` }, 400);
+  if (body.expectedRevision !== undefined && (
+    typeof body.expectedRevision !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(body.expectedRevision)
+  )) {
+    return json({ error: "expectedRevision must be a sha256 route revision" }, 400);
+  }
+  const forward = parseDirectedMapRoute(body.forward, "forward");
+  if (typeof forward === "string") return json({ error: forward }, 400);
+  const reverse = parseDirectedMapRoute(body.reverse, "reverse");
+  if (typeof reverse === "string") return json({ error: reverse }, 400);
+  return {
+    ...(typeof body.expectedRevision === "string"
+      ? { expectedRevision: body.expectedRevision }
+      : {}),
+    forward,
+    reverse,
+  };
+}
+
+function parseDirectedMapRoute(
+  raw: unknown,
+  label: string,
+): DirectedMapRouteDraft | string {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return `${label} must be an object`;
+  }
+  const route = raw as Record<string, unknown>;
+  const allowed = [
+    "sourceMapId",
+    "targetMapId",
+    "placementId",
+    "at",
+    "eventId",
+    "label",
+    "trigger",
+    "arrival",
+  ];
+  const unexpected = Object.keys(route).find((key) => !allowed.includes(key));
+  if (unexpected) return `unknown ${label} route field: ${unexpected}`;
+  for (const field of [
+    "sourceMapId",
+    "targetMapId",
+    "placementId",
+    "eventId",
+    "label",
+    "trigger",
+  ] as const) {
+    if (typeof route[field] !== "string" || route[field].trim().length === 0) {
+      return `${label}.${field} must be a non-blank string`;
+    }
+  }
+  const at = parseMapRoutePoint(route.at, `${label}.at`);
+  if (typeof at === "string") return at;
+  const arrival = route.arrival === undefined
+    ? undefined
+    : parseMapRouteArrival(route.arrival, `${label}.arrival`);
+  if (typeof arrival === "string") return arrival;
+  return {
+    sourceMapId: route.sourceMapId as string,
+    targetMapId: route.targetMapId as string,
+    placementId: route.placementId as string,
+    at,
+    eventId: route.eventId as string,
+    label: route.label as string,
+    trigger: route.trigger as DirectedMapRouteDraft["trigger"],
+    ...(arrival ? { arrival } : {}),
+  };
+}
+
+function parseMapRouteArrival(
+  raw: unknown,
+  label: string,
+): NonNullable<DirectedMapRouteDraft["arrival"]> | string {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return `${label} must be an object`;
+  }
+  const arrival = raw as Record<string, unknown>;
+  const unexpected = Object.keys(arrival).find((key) => !["placementId", "at"].includes(key));
+  if (unexpected) return `unknown ${label} field: ${unexpected}`;
+  const hasPlacement = arrival.placementId !== undefined;
+  const hasPoint = arrival.at !== undefined;
+  if (hasPlacement === hasPoint) return `${label} must declare exactly one of placementId or at`;
+  if (hasPlacement) {
+    return typeof arrival.placementId === "string" && arrival.placementId.trim().length > 0
+      ? { placementId: arrival.placementId }
+      : `${label}.placementId must be a non-blank string`;
+  }
+  const at = parseMapRoutePoint(arrival.at, `${label}.at`);
+  return typeof at === "string" ? at : { at };
+}
+
+function parseMapRoutePoint(
+  raw: unknown,
+  label: string,
+): { x: number; y: number } | string {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return `${label} must be an object`;
+  }
+  const point = raw as Record<string, unknown>;
+  const unexpected = Object.keys(point).find((key) => !["x", "y"].includes(key));
+  if (unexpected) return `unknown ${label} field: ${unexpected}`;
+  if (
+    !Number.isInteger(point.x) || !Number.isInteger(point.y) ||
+    (point.x as number) < 0 || (point.y as number) < 0
+  ) {
+    return `${label} must contain non-negative integer x and y coordinates`;
+  }
+  return { x: point.x as number, y: point.y as number };
 }
 
 async function readMapTopologyIntent(
