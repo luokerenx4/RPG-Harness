@@ -3,6 +3,7 @@ import type {
   Condition,
   MapDef,
   MapEventTrigger,
+  MapLayerDef,
   MapPlacementEventDef,
   MapPlacementDef,
   MapLayoutDef,
@@ -11,6 +12,7 @@ import type {
   SwitchDef,
   VariableDef,
 } from "@rpg-harness/engine";
+import { mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
 import {
   fetchProject,
   fetchMapPreview,
@@ -2640,7 +2642,7 @@ function MapOverview({
                 top: `${tile.y / height * 100}%`,
                 width: `${100 / width}%`,
                 height: `${100 / height}%`,
-                zIndex: Math.round(tile.z + 1),
+                zIndex: mapLayerDisplayOrder(tile.z),
                 "--tile-id": tile.tile,
                 ...atlasStyle,
               } as React.CSSProperties}
@@ -2745,6 +2747,7 @@ function MapOverview({
                 top: `${draft.layout.playerStart.y / height * 100}%`,
                 width: `${100 / width}%`,
                 height: `${100 / height}%`,
+                zIndex: mapPlayerDisplayOrder(draft, draft.layout.playerStart),
               }}
             ><span className={playerGraphicPath ? "map-player-start-graphic" : ""} style={playerGraphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(playerGraphicPath))})` } : undefined}>{playerGraphicPath ? "" : "◆"}</span><small>START</small></div>
           )}
@@ -2767,7 +2770,7 @@ function MapOverview({
                 top: `${(placement.at.y / height) * 100}%`,
                 width: `${(placement.footprint.width / width) * 100}%`,
                 height: `${(placement.footprint.height / height) * 100}%`,
-                zIndex: Math.round(placement.z + 100),
+                zIndex: mapPlacementDisplayOrder(draft, placement),
                 opacity: placement.visible ? 1 : 0.45,
               }}
             >
@@ -2800,8 +2803,9 @@ function MapOverview({
       </div>
       {editing && selectedPlacement && (
         <PlacementEditor
+          map={draft}
           placement={selectedPlacement}
-          layers={draft.layout?.layers.map((layer) => layer.id) ?? []}
+          layers={draft.layout?.layers ?? []}
           assets={assets}
           resources={resources}
           switches={switches}
@@ -2996,6 +3000,7 @@ function MapSurfacePreviews({ map }: { map: MapDef }) {
 }
 
 function PlacementEditor({
+  map,
   placement,
   layers,
   assets,
@@ -3007,8 +3012,9 @@ function PlacementEditor({
   onDelete,
   onClose,
 }: {
+  map: MapDef;
   placement: MapPlacementDef;
-  layers: string[];
+  layers: MapLayerDef[];
   assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
@@ -3031,6 +3037,9 @@ function PlacementEditor({
   const placementLabel = mapPlacementResourceLabel(placement, resources);
   const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
   const inheritedGraphic = placement.asset ? undefined : graphicPath;
+  const placementLayer = layers.find((layer) => layer.id === placement.layer);
+  const feetY = placement.at.y + placement.footprint.height - 1;
+  const displayOrder = mapPlacementDisplayOrder(map, placement);
 
   useEffect(() => {
     setConfirmDelete(false);
@@ -3116,10 +3125,19 @@ function PlacementEditor({
         <section className="placement-panel">
           <header><h3>Behavior</h3><span>{placement.events.length} events</span></header>
           <div className="placement-fields behavior-fields">
-            <label>Layer<select value={placement.layer ?? ""} onChange={(event) => onChange((current) => ({ ...current, layer: event.target.value || undefined }))}><option value="">none</option>{layers.map((layer) => <option key={layer}>{layer}</option>)}</select></label>
+            <label>Layer<select value={placement.layer ?? ""} onChange={(event) => onChange((current) => ({ ...current, layer: event.target.value || undefined }))}><option value="">none · z 0</option>{layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name ?? layer.id} · z {layer.z}</option>)}</select></label>
             <label>Collision<select value={placement.collision} onChange={(event) => onChange((current) => ({ ...current, collision: event.target.value as MapPlacementDef["collision"] }))}><option>none</option><option>block</option><option>trigger</option></select></label>
             <label>Facing<select value={placement.facing ?? ""} onChange={(event) => onChange((current) => ({ ...current, facing: (event.target.value || undefined) as MapPlacementDef["facing"] }))}><option value="">none</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label>
             <label className="checkbox-field"><input type="checkbox" checked={placement.visible} onChange={(event) => onChange((current) => ({ ...current, visible: event.target.checked }))} />Visible</label>
+          </div>
+          <div className="placement-display-order" title="Authored layer and object Z sort first; footprint bottom Y sorts actors within that depth.">
+            <span>RENDER ORDER</span>
+            <code>{placementLayer?.name ?? placement.layer ?? "default"} z {placementLayer?.z ?? 0}</code>
+            <i>+</i>
+            <code>object z {placement.z}</code>
+            <i>+</i>
+            <code>feet y {feetY}</code>
+            <strong>{displayOrder}</strong>
           </div>
           <ConditionBuilder label="Placement condition" value={placement.requires} resources={resources} switches={switches} variables={variables} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
         </section>

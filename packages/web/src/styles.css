@@ -544,6 +544,26 @@ body {
   box-shadow: 0 3px 12px rgba(0,0,0,.48), 0 0 0 3px rgba(124,200,216,.12);
 }
 .spatial-placement.placement-distant { opacity: .76; }
+.spatial-placement-interact-cue {
+  position: absolute;
+  right: -8px;
+  top: -15px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: max-content;
+  padding: 3px 5px 3px 3px;
+  color: #e6fbff;
+  border: 1px solid rgba(124,200,216,.64);
+  border-radius: 3px;
+  background: rgba(14,48,57,.94);
+  box-shadow: 0 3px 10px rgba(0,0,0,.42);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  animation: map-cue-float 1.8s ease-in-out infinite;
+}
+.spatial-placement-interact-cue kbd { min-width: 14px; padding: 2px 3px; color: #10252a; border: 0; border-radius: 2px; background: #bceaf0; box-shadow: none; font: 800 7px/1 ui-monospace,monospace; text-align: center; }
 .spatial-placement-label {
   position: absolute;
   left: 50%;
@@ -565,6 +585,7 @@ body {
   transform: translateX(-50%);
   white-space: nowrap;
 }
+@keyframes map-cue-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 .spatial-placement-label strong {
   max-width: 96px;
   overflow: hidden;

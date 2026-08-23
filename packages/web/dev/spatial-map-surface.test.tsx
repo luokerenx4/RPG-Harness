@@ -185,6 +185,25 @@ describe("SpatialMapSurface", () => {
     expect(html).not.toContain("arrival");
   });
 
+  test("renders authored layers before stable foot-Y depth", () => {
+    const layeredMap: MapDef = {
+      ...map,
+      layout: {
+        ...map.layout!,
+        layers: [
+          { id: "ground", kind: "tile", z: 0, visible: true },
+          { id: "actors", kind: "object", z: 10, visible: true },
+        ],
+      },
+      placements: [{ ...map.placements![0]!, layer: "actors" }],
+    };
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface map={layeredMap} activities={[move]} playerPosition={{ x: 3, y: 4 }} onInput={() => {}} />,
+    );
+    expect(html).toContain('class="spatial-map-player" aria-label="玩家位置 3,4" style="left:37.5%;top:66.66666666666666%;width:12.5%;height:16.666666666666668%;z-index:101004"');
+    expect(html).toContain('class="spatial-placement resource-map collision-trigger placement-actionable placement-nearby" style="left:37.5%;top:83.33333333333334%;width:25%;height:16.666666666666664%;z-index:101005"');
+  });
+
   test("inherits a character map sprite unless the placement owns a graphic", () => {
     const characterMap: MapDef = {
       ...map,
@@ -244,6 +263,8 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("spatial-map-interact");
     expect(html).toContain("调查门扉");
     expect(html).toContain("<kbd>E</kbd>ACTION");
+    expect(html).toContain('class="spatial-placement-interact-cue"');
+    expect(html).toContain("<kbd>E</kbd> 调查门扉");
     expect(html).toContain('aria-keyshortcuts="E Enter Digit1"');
     expect(html).toContain('aria-label="附近地标雷达"');
     expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');

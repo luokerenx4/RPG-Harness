@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { isMapEventPlayerAction, mapPlacementEventKey, mapPointBlocker } from "@rpg-harness/engine";
+import {
+  isMapEventPlayerAction,
+  mapLayerDisplayOrder,
+  mapPlacementDisplayOrder,
+  mapPlacementEventKey,
+  mapPlayerDisplayOrder,
+  mapPointBlocker,
+} from "@rpg-harness/engine";
 import type {
   AssetSpec,
   HubActivity,
@@ -220,7 +227,7 @@ export function SpatialMapSurface({
               top: `${tile.y / layout.height * 100}%`,
               width: `${100 / layout.width}%`,
               height: `${100 / layout.height}%`,
-              zIndex: Math.round(tile.z + 1),
+              zIndex: mapLayerDisplayOrder(tile.z),
               "--tile-id": tile.tile,
               ...atlasStyle,
             } as React.CSSProperties}
@@ -282,6 +289,7 @@ export function SpatialMapSurface({
               top: `${playerPosition.y / layout.height * 100}%`,
               width: `${100 / layout.width}%`,
               height: `${100 / layout.height}%`,
+              zIndex: mapPlayerDisplayOrder(map, playerPosition),
             }}
           >{playerGraphicUrl
             ? <img src={playerGraphicUrl} alt="" aria-hidden="true" />
@@ -396,7 +404,7 @@ function Placement({
     top: `${placement.at.y / layout.height * 100}%`,
     width: `${placement.footprint.width / layout.width * 100}%`,
     height: `${placement.footprint.height / layout.height * 100}%`,
-    zIndex: Math.round(placement.z + 100),
+    zIndex: mapPlacementDisplayOrder(map, placement),
   };
 
   return (
@@ -411,6 +419,9 @@ function Placement({
       <span className="spatial-placement-marker" aria-hidden="true">
         {resourceKindIcon(resourceKind)}
       </span>
+      {nearby && primaryOperationIsManual && primaryOperation?.activity?.available && (
+        <span className="spatial-placement-interact-cue" aria-hidden="true"><kbd>E</kbd> {primaryOperation.event.label ?? "互动"}</span>
+      )}
       <span className="spatial-placement-label">
         <strong>{resourceName}</strong>
         <small>{distance === 0

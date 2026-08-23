@@ -1,4 +1,7 @@
-import type { Condition, MapConnection, MapDef, MapEventTrigger, MapPoint } from "./types";
+import type { Condition, MapConnection, MapDef, MapEventTrigger, MapPlacementDef, MapPoint } from "./types";
+
+const MAP_LAYER_ORDER_STRIDE = 10_000;
+const MAP_ENTITY_ORDER_OFFSET = 1_000;
 
 export function isMapEventPlayerAction(trigger: MapEventTrigger): boolean {
   return trigger === "interact" || trigger === "player_touch" ||
@@ -33,6 +36,34 @@ export function mapPointBlocker(map: MapDef, point: MapPoint): string | undefine
     layer.kind === "collision" && (layer.tiles?.[point.y]?.[point.x] ?? 0) !== 0
   );
   return collisionLayer ? `layer:${collisionLayer.id}` : undefined;
+}
+
+/**
+ * Stable renderer order for a map layer. Large strides leave room for
+ * entity foot-Y sorting without letting a tall sprite cross authored layers.
+ */
+export function mapLayerDisplayOrder(z: number): number {
+  return Math.round(z * MAP_LAYER_ORDER_STRIDE);
+}
+
+/**
+ * RPG field ordering: authored layer first, explicit placement z as a layer
+ * offset, then the footprint's bottom edge so lower feet render in front.
+ */
+export function mapPlacementDisplayOrder(map: MapDef, placement: MapPlacementDef): number {
+  const layerZ = placement.layer
+    ? map.layout?.layers.find((layer) => layer.id === placement.layer)?.z ?? 0
+    : 0;
+  const feetY = placement.at.y + placement.footprint.height - 1;
+  return mapLayerDisplayOrder(layerZ + placement.z) + MAP_ENTITY_ORDER_OFFSET + feetY;
+}
+
+/** The player walks in the map's first visible object layer by convention. */
+export function mapPlayerDisplayOrder(map: MapDef, point: MapPoint): number {
+  const layers = map.layout?.layers ?? [];
+  const objectLayer = layers.find((layer) => layer.kind === "object" && layer.visible)
+    ?? layers.find((layer) => layer.kind === "object");
+  return mapLayerDisplayOrder(objectLayer?.z ?? 0) + MAP_ENTITY_ORDER_OFFSET + point.y;
 }
 
 /**

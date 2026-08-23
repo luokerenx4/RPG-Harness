@@ -13,7 +13,14 @@ export {
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
-export { collectMapConnections, isMapEventPlayerAction, mapPointBlocker } from "./maps";
+export {
+  collectMapConnections,
+  isMapEventPlayerAction,
+  mapLayerDisplayOrder,
+  mapPlacementDisplayOrder,
+  mapPlayerDisplayOrder,
+  mapPointBlocker,
+} from "./maps";
 export {
   buildProjectResourceRegistry,
   buildProjectResourceGraph,

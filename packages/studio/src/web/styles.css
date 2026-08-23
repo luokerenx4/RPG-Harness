@@ -3151,6 +3151,11 @@ summary:focus-visible {
 .placement-fields input,
 .placement-fields select { width: 100%; min-width: 0; height: 28px; padding: 4px 6px; }
 .behavior-fields { grid-template-columns: repeat(2,minmax(60px,1fr)); }
+.placement-display-order { display: flex; align-items: center; gap: 5px; margin-top: 7px; padding: 6px 7px; overflow: hidden; color: #596575; border: 1px solid #252e3a; border-radius: 4px; background: #0a0e14; font-size: 7px; white-space: nowrap; }
+.placement-display-order span { margin-right: auto; color: #72808e; font-weight: 750; letter-spacing: .1em; }
+.placement-display-order code { color: #8d9aa8; font-size: 7px; }
+.placement-display-order i { color: #3f4a58; font-style: normal; }
+.placement-display-order strong { padding: 3px 5px; color: #bcebf1; border-radius: 3px; background: rgba(80,199,217,.11); font: 750 7px/1 ui-monospace,monospace; }
 .checkbox-field { justify-content: center; padding: 0; border: 1px solid var(--studio-line); border-radius: 4px; background: #0d1117; }
 .checkbox-field input { width: auto; height: auto; }
 .condition-editor { grid-template-columns: 100px minmax(0,1fr) 55px; margin: 8px 0 0; color: #68717f; font-size: 8px; }
