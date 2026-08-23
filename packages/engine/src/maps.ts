@@ -4,6 +4,11 @@ import { mapPlacementEventKey, mapPlacementKey } from "./resources";
 const MAP_LAYER_ORDER_STRIDE = 10_000;
 const MAP_ENTITY_ORDER_OFFSET = 1_000;
 
+export type MapPointBlocker =
+  | { kind: "bounds" }
+  | { kind: "placement"; placementId: string }
+  | { kind: "collision-layer"; layerId: string };
+
 export function isMapEventPlayerAction(trigger: MapEventTrigger): boolean {
   return trigger === "interact" || trigger === "player_touch" ||
     trigger === "event_touch" || trigger === "manual";
@@ -22,9 +27,21 @@ export function mapPositionLayoutKey(map: MapDef): string | null {
  * Layer visibility only controls rendering and never changes navigation.
  */
 export function mapPointBlocker(map: MapDef, point: MapPoint): string | undefined {
+  const blocker = resolveMapPointBlocker(map, point);
+  if (!blocker) return undefined;
+  if (blocker.kind === "bounds") return "bounds";
+  if (blocker.kind === "placement") return blocker.placementId;
+  return `layer:${blocker.layerId}`;
+}
+
+/** Structured collision provenance for diagnostics and authoring tools. */
+export function resolveMapPointBlocker(
+  map: MapDef,
+  point: MapPoint,
+): MapPointBlocker | undefined {
   const layout = map.layout;
   if (!layout || point.x < 0 || point.y < 0 || point.x >= layout.width || point.y >= layout.height) {
-    return "bounds";
+    return { kind: "bounds" };
   }
   const placement = (map.placements ?? []).find((candidate) =>
     candidate.collision === "block" &&
@@ -32,11 +49,13 @@ export function mapPointBlocker(map: MapDef, point: MapPoint): string | undefine
     point.x < candidate.at.x + candidate.footprint.width &&
     point.y < candidate.at.y + candidate.footprint.height
   );
-  if (placement) return placement.id;
+  if (placement) return { kind: "placement", placementId: placement.id };
   const collisionLayer = layout.layers.find((layer) =>
     layer.kind === "collision" && (layer.tiles?.[point.y]?.[point.x] ?? 0) !== 0
   );
-  return collisionLayer ? `layer:${collisionLayer.id}` : undefined;
+  return collisionLayer
+    ? { kind: "collision-layer", layerId: collisionLayer.id }
+    : undefined;
 }
 
 /** Manhattan distance from a grid point to the nearest cell in a footprint. */

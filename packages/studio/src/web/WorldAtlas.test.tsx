@@ -6,6 +6,7 @@ import {
   WorldAtlas,
   buildWorldAtlasModel,
   nextWorldAtlasCardIndex,
+  worldAtlasSourceFocus,
   worldAtlasMapKey,
 } from "./WorldAtlas";
 
@@ -115,6 +116,7 @@ describe("Studio World Atlas", () => {
     expect(branch.connections[0]).toMatchObject({
       key: "map:branch/legacy-connection:0",
       source: "legacy-connection",
+      connectionIndex: 0,
       activation: "menu",
     });
     expect(branch.connections[3]).toMatchObject({
@@ -126,6 +128,15 @@ describe("Studio World Atlas", () => {
       activation: "touch",
       chance: 0.35,
       arrival: { at: { x: 2, y: 3 } },
+    });
+    expect(worldAtlasSourceFocus(branch.connections[0]!)).toEqual({
+      kind: "legacy-connection",
+      connectionIndex: 0,
+    });
+    expect(worldAtlasSourceFocus(branch.connections[3]!)).toEqual({
+      kind: "placement",
+      placementId: "north-door",
+      eventId: "move",
     });
     expect(alpha.maps.find((node) => node.map.id === "loop")?.connections.some((connection) => connection.selfLoop)).toBe(true);
     expect(alpha.maps.find((node) => node.map.id === "field")?.connections[0]?.crossChain).toBe(true);
@@ -323,8 +334,10 @@ describe("Studio World Atlas", () => {
     expect(alpha.maps[0]?.connections[0]?.diagnostics[0]).toMatchObject({
       mapId: "target",
       sourceMapId: "source",
-      placementId: "door",
-      eventId: "move",
+      sourcePlacementId: "door",
+      sourceEventId: "move",
+      focus: { kind: "point", role: "route-arrival", at: { x: 1, y: 0 } },
+      blocker: { kind: "placement", placementId: "blocked-entry" },
       code: "blocked-route-arrival",
     });
 

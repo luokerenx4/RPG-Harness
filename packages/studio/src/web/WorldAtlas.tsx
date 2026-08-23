@@ -27,6 +27,7 @@ export type WorldAtlasRouteActivation = "menu" | "automatic" | "touch" | "intera
 export interface WorldAtlasConnection {
   key: string;
   source: MapRouteSource;
+  connectionIndex?: number;
   placementId?: string;
   eventId?: string;
   trigger?: MapEventTrigger;
@@ -41,6 +42,26 @@ export interface WorldAtlasConnection {
   selfLoop: boolean;
   conditional: boolean;
   diagnostics: MapPlayabilityDiagnostic[];
+}
+
+export type WorldAtlasSourceFocus =
+  | { kind: "placement"; placementId: string; eventId?: string }
+  | { kind: "legacy-connection"; connectionIndex: number };
+
+export function worldAtlasSourceFocus(
+  connection: WorldAtlasConnection,
+): WorldAtlasSourceFocus | undefined {
+  if (connection.source === "placement-event" && connection.placementId) {
+    return {
+      kind: "placement",
+      placementId: connection.placementId,
+      ...(connection.eventId ? { eventId: connection.eventId } : {}),
+    };
+  }
+  if (connection.source === "legacy-connection" && connection.connectionIndex !== undefined) {
+    return { kind: "legacy-connection", connectionIndex: connection.connectionIndex };
+  }
+  return undefined;
 }
 
 export interface WorldAtlasMapNode {
@@ -200,6 +221,9 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
       return {
         key: connection.key,
         source: connection.source,
+        ...(connection.connectionIndex !== undefined
+          ? { connectionIndex: connection.connectionIndex }
+          : {}),
         ...(connection.placementId ? { placementId: connection.placementId } : {}),
         ...(connection.eventId ? { eventId: connection.eventId } : {}),
         ...(connection.trigger ? { trigger: connection.trigger } : {}),
@@ -367,7 +391,7 @@ export function WorldAtlas({
   maps: MapDef[];
   resources: ProjectResourceNode[];
   assets: ProjectAssetPreview[];
-  onOpenMap: (mapId: string) => void;
+  onOpenMap: (mapId: string, focus?: WorldAtlasSourceFocus) => void;
   onCreateMap: () => void;
 }) {
   const model = useMemo(() => buildWorldAtlasModel(maps), [maps]);
@@ -567,7 +591,7 @@ export function WorldAtlas({
                               data-warning-source-key={connection.key}
                               aria-label={`Review ${warningCount} spatial ${warningCount === 1 ? "warning" : "warnings"} in source map ${map.name}`}
                               title={`${connection.diagnostics.map((diagnostic) => diagnostic.message).join("\n")}\n\nOpen authored source: ${connection.key}`}
-                              onClick={() => onOpenMap(map.id)}
+                              onClick={() => onOpenMap(map.id, worldAtlasSourceFocus(connection))}
                             ><span>WARN</span><b>{warningCount}</b></button>
                           )}
                         </li>;

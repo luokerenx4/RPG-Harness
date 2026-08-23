@@ -3,6 +3,8 @@ import {
   isMapPlacementLayerVisible,
   mapPlacementDistance,
   mapPointBlocker,
+  resolveMapPointBlocker,
+  type MapPointBlocker,
   type MapRoute,
 } from "./maps";
 import { mapPlacementEventKey } from "./resources";
@@ -26,6 +28,15 @@ export type MapPlayabilityDiagnosticCode =
 export type MapPlayabilityDiagnosticSeverity = "warning" | "info";
 
 /**
+ * Stable affected-map locator for authoring surfaces. Route diagnostics keep
+ * their authored source in the `source*` fields instead of overloading this
+ * target focus with the source door's placement id.
+ */
+export type MapPlayabilityDiagnosticFocus =
+  | { kind: "point"; role: "player-start" | "route-arrival"; at: MapPoint }
+  | { kind: "placement"; placementId: string };
+
+/**
  * Advisory authoring feedback for a spatial map. `mapId` identifies the map
  * whose field playability is affected. For an incoming route, `path` and the
  * optional source metadata identify the route that authored the landing.
@@ -36,10 +47,16 @@ export interface MapPlayabilityDiagnostic {
   code: MapPlayabilityDiagnosticCode;
   severity: MapPlayabilityDiagnosticSeverity;
   message: string;
+  focus: MapPlayabilityDiagnosticFocus;
+  blocker?: MapPointBlocker;
+  /** Placement and event affected inside `mapId`. */
   placementId?: string;
   eventId?: string;
-  /** Map that owns the route field which produced an incoming-arrival warning. */
+  /** Authored route source which produced an incoming-arrival warning. */
   sourceMapId?: string;
+  sourceConnectionIndex?: number;
+  sourcePlacementId?: string;
+  sourceEventId?: string;
   sourceKey?: string;
 }
 
@@ -79,15 +96,17 @@ export function analyzeMapPlayability(
     const seeds: MapPoint[] = [];
     if (isValidMapPoint(map, start)) {
       seeds.push(start);
-      const blocker = mapPointBlocker(map, start);
+      const blocker = resolveMapPointBlocker(map, start);
       if (blocker) {
         diagnostics.push({
           mapId: map.id,
           path: `map ${map.id}.layout.player_start`,
           code: "blocked-player-start",
           severity: "warning",
+          focus: { kind: "point", role: "player-start", at: { ...start } },
+          blocker,
           message:
-            `Player start ${formatPoint(start)} is blocked by "${blocker}". ` +
+            `Player start ${formatPoint(start)} is blocked by "${formatBlocker(blocker)}". ` +
             `Runtime can walk out of a blocked landing, but the start should be intentional.`,
         });
       }
@@ -102,19 +121,24 @@ export function analyzeMapPlayability(
       // An omitted arrival deliberately uses the same default start diagnosed
       // above. Do not repeat that one landing warning for every incoming edge.
       if (!route.arrival) continue;
-      const blocker = mapPointBlocker(map, point);
+      const blocker = resolveMapPointBlocker(map, point);
       if (!blocker) continue;
       diagnostics.push({
         mapId: map.id,
         path: routeArrivalPath(sourceMap, route),
         code: "blocked-route-arrival",
         severity: "warning",
+        focus: { kind: "point", role: "route-arrival", at: { ...point } },
+        blocker,
         message:
           `Route "${route.key}" from map "${sourceMap.id}" lands at ` +
-          `${formatPoint(point)}, blocked by "${blocker}". Runtime can walk out ` +
+          `${formatPoint(point)}, blocked by "${formatBlocker(blocker)}". Runtime can walk out ` +
           `of this landing, but the arrival should be intentional.`,
-        ...(route.placementId ? { placementId: route.placementId } : {}),
-        ...(route.eventId ? { eventId: route.eventId } : {}),
+        ...(route.placementId ? { sourcePlacementId: route.placementId } : {}),
+        ...(route.eventId ? { sourceEventId: route.eventId } : {}),
+        ...(route.connectionIndex !== undefined
+          ? { sourceConnectionIndex: route.connectionIndex }
+          : {}),
         sourceMapId: sourceMap.id,
         sourceKey: route.key,
       });
@@ -166,6 +190,7 @@ function analyzePlacement(
     const metadata = {
       placementId: placement.id,
       eventId: event.id,
+      focus: { kind: "placement", placementId: placement.id } as const,
       sourceKey: mapPlacementEventKey(map.id, placement.id, event.id),
     };
 
@@ -336,4 +361,10 @@ function pointKey(point: MapPoint): string {
 
 function formatPoint(point: MapPoint): string {
   return `(${point.x}, ${point.y})`;
+}
+
+function formatBlocker(blocker: MapPointBlocker): string {
+  if (blocker.kind === "bounds") return "bounds";
+  if (blocker.kind === "placement") return blocker.placementId;
+  return `layer:${blocker.layerId}`;
 }

@@ -22,6 +22,10 @@ import {
   mapPlacementBacklinkRemovedWithObject,
   mapPlacementDeleteBlockers,
   mapPlacementEventSummary,
+  mapPlayabilityAffectedFocusIntent,
+  mapCanvasFocusIntent,
+  mapPlayabilitySourceFocusIntent,
+  legacyConnectionSourceRange,
   mapPlacementGraphicPath,
   mapDraftHistoryReducer,
   mapPlacementResourceLabel,
@@ -34,6 +38,7 @@ import {
   nextProjectTreeIndex,
   parseResourceScalarFields,
   patchResourceScalarFields,
+  reconcileResourceSourceAfterSave,
   paintMapLayerTile,
   projectMapDraftIntoCatalog,
   reconcileMapDraftAfterSave,
@@ -49,7 +54,7 @@ import {
   MapPlacementRenameDialog,
 } from "./pages/Project";
 import { collectMapArrivalBacklinks } from "@rpg-harness/engine";
-import type { MapArrivalBacklink, MapDef, MapLayoutDef, MapPlacementDef, MapPlacementEventDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapArrivalBacklink, MapDef, MapLayoutDef, MapPlacementDef, MapPlacementEventDef, MapPlayabilityDiagnostic, ProjectResourceNode } from "@rpg-harness/engine";
 import type { ProjectAssetPreview } from "./api";
 
 describe("Studio database record fields", () => {
@@ -108,6 +113,27 @@ describe("Studio database record fields", () => {
     });
     expect(withSprite).toBe("---\nid: keeper\nname: Keeper\nmap_sprite: assets/sprites/keeper-field\n---\n\nBiography.\n");
     expect(patchResourceScalarFields(withSprite, { map_sprite: "" })).toBe(character);
+  });
+
+  test("preserves source edits made while an older save request is in flight", () => {
+    expect(reconcileResourceSourceAfterSave(
+      "id: map\nname: submitted\n",
+      "id: map\nname: newer draft\n",
+      "id: map\nname: normalized submitted\n",
+    )).toEqual({
+      source: "id: map\nname: newer draft\n",
+      savedSource: "id: map\nname: normalized submitted\n",
+      preserveCurrentDraft: true,
+    });
+    expect(reconcileResourceSourceAfterSave(
+      "id: map\nname: submitted\n",
+      "id: map\nname: submitted\n",
+      "id: map\nname: normalized submitted\n",
+    )).toEqual({
+      source: "id: map\nname: normalized submitted\n",
+      savedSource: "id: map\nname: normalized submitted\n",
+      preserveCurrentDraft: false,
+    });
   });
 });
 
@@ -238,6 +264,89 @@ describe("Studio map placement arrival lifecycle", () => {
     expect(html).toContain("map:target/placement:landing");
     expect(html).toContain("ENGINE-PROVEN REFERENCES");
     expect(html).toContain("Build a valid plan");
+  });
+
+  test("carries structured route sources through cross-map editor navigation", () => {
+    const base = {
+      mapId: "target",
+      path: "authored elsewhere",
+      code: "blocked-route-arrival",
+      severity: "warning",
+      message: "Blocked arrival",
+      focus: { kind: "point", role: "route-arrival", at: { x: 4, y: 2 } },
+      sourceMapId: "source",
+      sourceKey: "opaque-and-never-parsed",
+    } satisfies MapPlayabilityDiagnostic;
+
+    expect(mapPlayabilitySourceFocusIntent({
+      ...base,
+      sourcePlacementId: "door",
+      sourceEventId: "go",
+    })).toEqual({
+      kind: "placement",
+      mapId: "source",
+      placementId: "door",
+      eventId: "go",
+    });
+    expect(mapPlayabilitySourceFocusIntent({
+      ...base,
+      sourceConnectionIndex: 2,
+    })).toEqual({
+      kind: "legacy-connection",
+      mapId: "source",
+      connectionIndex: 2,
+    });
+    expect(mapPlayabilityAffectedFocusIntent(base)).toEqual({
+      kind: "point",
+      mapId: "target",
+      at: { x: 4, y: 2 },
+      role: "route-arrival",
+    });
+
+    const legacyFocus = mapPlayabilitySourceFocusIntent({
+      ...base,
+      sourceConnectionIndex: 2,
+    })!;
+    expect(mapCanvasFocusIntent(legacyFocus, "source")).toBeNull();
+    expect(mapCanvasFocusIntent({
+      kind: "placement",
+      mapId: "source",
+      placementId: "door",
+    }, "source")).toEqual({
+      kind: "placement",
+      mapId: "source",
+      placementId: "door",
+    });
+  });
+
+  test("selects the authored legacy connection block in raw map source", () => {
+    const sourceText = [
+      "id: gate",
+      "name: Gate",
+      "custom:",
+      "  connections:",
+      "    - fake metadata route",
+      "connections:",
+      "  # first route trivia",
+      "  - { dir: Town, target: town }",
+      "  - dir: Depths",
+      "    target: depths",
+      "    arrival: { at: [2, 1] }",
+      "placements: []",
+      "",
+    ].join("\n");
+    const range = legacyConnectionSourceRange(sourceText, 1);
+    expect(range).not.toBeNull();
+    expect(sourceText.slice(range!.start, range!.end)).toBe([
+      "  - dir: Depths",
+      "    target: depths",
+      "    arrival: { at: [2, 1] }",
+    ].join("\n") + "\n");
+    expect(legacyConnectionSourceRange(sourceText, 2)).toBeNull();
+    expect(legacyConnectionSourceRange(
+      "id: gate\nconnections: [{ dir: Town, target: town }]\n",
+      0,
+    )).toBeNull();
   });
 });
 

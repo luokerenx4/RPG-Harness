@@ -82,13 +82,24 @@ describe("analyzeMapPlayability", () => {
       path: "map placement-source.placements[gate].events[run].arrival",
       code: "blocked-route-arrival",
       severity: "warning",
-      placementId: "gate",
-      eventId: "run",
+      focus: { kind: "point", role: "route-arrival", at: { x: 4, y: 0 } },
+      blocker: { kind: "collision-layer", layerId: "collision" },
       sourceMapId: "placement-source",
+      sourcePlacementId: "gate",
+      sourceEventId: "run",
     });
+    expect(diagnostics.find(({ code }) => code === "blocked-player-start")?.focus)
+      .toEqual({ kind: "point", role: "player-start", at: { x: 0, y: 0 } });
+    expect(diagnostics.find(({ code }) => code === "blocked-player-start")?.blocker)
+      .toEqual({ kind: "collision-layer", layerId: "collision" });
     expect(diagnostics.find(({ sourceKey }) =>
       sourceKey === "map:coordinate-source/legacy-connection:0"
-    )?.path).toBe("map coordinate-source.connections[0].arrival");
+    )).toMatchObject({
+      path: "map coordinate-source.connections[0].arrival",
+      sourceMapId: "coordinate-source",
+      sourceConnectionIndex: 0,
+      focus: { kind: "point", role: "route-arrival", at: { x: 4, y: 0 } },
+    });
     expect(analyzeMapPlayability(makeGame({ maps }))).toEqual(diagnostics);
   });
 
@@ -153,6 +164,7 @@ describe("analyzeMapPlayability", () => {
     expect(diagnostics.find(({ placementId }) => placementId === "far-touch"))
       .toMatchObject({
         eventId: "run",
+        focus: { kind: "placement", placementId: "far-touch" },
         sourceKey: "map:field/placement:far-touch/event:run",
       });
   });

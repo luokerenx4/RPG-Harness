@@ -6,6 +6,8 @@ import type {
   MapDef,
   MapEventTrigger,
   MapLayerDef,
+  MapPlayabilityDiagnostic,
+  MapPoint,
   MapPlacementEventDef,
   MapPlacementDef,
   MapLayoutDef,
@@ -14,7 +16,7 @@ import type {
   SwitchDef,
   VariableDef,
 } from "@rpg-harness/engine";
-import { collectMapArrivalBacklinks, collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
+import { analyzeMapPlayability, collectMapArrivalBacklinks, collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
 import {
   fetchProject,
   fetchMapPreview,
@@ -51,6 +53,14 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import {
+  applyMapPlayabilityQuickFix,
+  groupMapPlayabilityPointDiagnostics,
+  MapPlayabilityPanel,
+  mapPlayabilityDiagnosticKey,
+  resolveMapPlayabilityQuickFix,
+  type MapPlayabilityQuickFix,
+} from "../MapPlayabilityPanel";
 import { buildMapTopologyChains, MapTopologyDialog } from "../MapTopologyDialog";
 import { NodeMapResourceBoard } from "../NodeMapResourceBoard";
 import { RouteArrivalEditor } from "../RouteArrivalEditor";
@@ -166,8 +176,20 @@ export interface MapTreeChainGroup {
   entryCount: number;
 }
 
+export type MapEditorFocusIntent =
+  | { kind: "placement"; mapId: string; placementId: string; eventId?: string }
+  | { kind: "point"; mapId: string; at: MapPoint; role: "player-start" | "route-arrival" }
+  | { kind: "legacy-connection"; mapId: string; connectionIndex: number };
+
+type MapCanvasFocusIntent = Exclude<MapEditorFocusIntent, { kind: "legacy-connection" }>;
+
+interface ResourceSourceEditRequest {
+  key: string;
+  legacyConnectionIndex?: number;
+}
+
 type ProjectNavigationIntent =
-  | { kind: "select"; key: string; label: string; section?: ProjectSection }
+  | { kind: "select"; key: string; label: string; section?: ProjectSection; mapFocus?: MapEditorFocusIntent }
   | { kind: "world-atlas"; label: string }
   | { kind: "database-overview"; label: string }
   | { kind: "create"; resourceKind: Exclude<DatabaseOverviewKind, "asset">; label: string }
@@ -192,6 +214,7 @@ export function Project({
   const [error, setError] = useState<string | null>(null);
   const [draftActive, setDraftActive] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<ProjectNavigationIntent | null>(null);
+  const [mapFocus, setMapFocus] = useState<MapEditorFocusIntent | null>(null);
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -322,7 +345,7 @@ export function Project({
     ? project.assets.find((candidate) => candidate.path === selected.id)
     : undefined;
 
-  const commitSelectResource = (key: string) => {
+  const commitSelectResource = (key: string, nextMapFocus?: MapEditorFocusIntent) => {
     const selectedResource = project.graph.resources.find((resource) => resource.key === key);
     if (selectedResource?.kind === "map") {
       const chainKey = mapTreeChainKey(mapById.get(selectedResource.id));
@@ -341,17 +364,18 @@ export function Project({
     }
     setOverviewOpen(null);
     setSelectedKey(key);
+    setMapFocus(nextMapFocus ?? null);
     setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
   };
 
-  const selectResource = (key: string) => {
+  const selectResource = (key: string, nextMapFocus?: MapEditorFocusIntent) => {
     if (draftActive && selectedKey && (key !== selectedKey || overviewOpen !== null)) {
       const label = project.graph.resources.find((resource) => resource.key === key)?.label ?? key;
       setNavigationError(null);
-      setPendingNavigation({ kind: "select", key, label });
+      setPendingNavigation({ kind: "select", key, label, ...(nextMapFocus ? { mapFocus: nextMapFocus } : {}) });
       return;
     }
-    commitSelectResource(key);
+    commitSelectResource(key, nextMapFocus);
   };
 
   const focusFirstResource = () => {
@@ -437,9 +461,10 @@ export function Project({
           });
         }
       }
-      commitSelectResource(intent.key);
+      commitSelectResource(intent.key, intent.mapFocus);
       return;
     }
+    setMapFocus(null);
     if (intent.kind === "world-atlas") {
       setSection("world");
       setQuery("");
@@ -772,9 +797,22 @@ export function Project({
               maps={project.maps}
               resources={project.graph.resources}
               assets={project.assets}
-              onOpenMap={(mapId) => {
+              onOpenMap={(mapId, focus) => {
                 const resource = project.graph.resources.find((candidate) => candidate.kind === "map" && candidate.id === mapId);
-                if (resource) selectResource(resource.key);
+                if (resource) selectResource(resource.key, focus
+                  ? focus.kind === "placement"
+                    ? {
+                        kind: "placement",
+                        mapId,
+                        placementId: focus.placementId,
+                        ...(focus.eventId ? { eventId: focus.eventId } : {}),
+                      }
+                    : {
+                        kind: "legacy-connection",
+                        mapId,
+                        connectionIndex: focus.connectionIndex,
+                      }
+                  : undefined);
               }}
               onCreateMap={() => requestNavigation({ kind: "create", resourceKind: "map", label: "New Map" })}
             />
@@ -806,6 +844,8 @@ export function Project({
               onProjectSaved={setProject}
               onDraftGuardChange={handleDraftGuardChange}
               draftActive={draftActive}
+              mapFocus={mapFocus}
+              onMapFocusConsumed={() => setMapFocus(null)}
               onSelectResource={selectResource}
               onResourceTrashed={handleResourceTrashed}
               onResourceRenamed={handleResourceRenamed}
@@ -1082,6 +1122,8 @@ function ResourceDetail({
   onProjectSaved,
   onDraftGuardChange,
   draftActive,
+  mapFocus,
+  onMapFocusConsumed,
   onSelectResource,
   onResourceTrashed,
   onResourceRenamed,
@@ -1102,13 +1144,15 @@ function ResourceDetail({
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
   draftActive: boolean;
-  onSelectResource: (key: string) => void;
+  mapFocus: MapEditorFocusIntent | null;
+  onMapFocusConsumed: () => void;
+  onSelectResource: (key: string, mapFocus?: MapEditorFocusIntent) => void;
   onResourceTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
   onResourceRenamed: (renamed: Awaited<ReturnType<typeof renameProjectResource>>) => void;
   onResourceDuplicated: (duplicated: Awaited<ReturnType<typeof duplicateProjectResource>>) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
-  const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
+  const [sourceEditRequest, setSourceEditRequest] = useState<ResourceSourceEditRequest | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(() => map === undefined);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -1123,11 +1167,26 @@ function ResourceDetail({
   const resourceActionsAvailable = REMOVABLE_KINDS.has(node.kind) && Boolean(node.source) && node.editable !== false;
 
   useEffect(() => {
+    setSourceEditRequest(null);
     setInspectorOpen(map === undefined);
     workspaceRef.current?.scrollTo({ top: 0, left: 0 });
     editorRef.current?.scrollTo({ top: 0, left: 0 });
     inspectorRef.current?.scrollTo({ top: 0, left: 0 });
   }, [node.key, map === undefined]);
+
+  useEffect(() => {
+    if (
+      !map ||
+      mapFocus?.kind !== "legacy-connection" ||
+      mapFocus.mapId !== map.id
+    ) return;
+    setInspectorOpen(true);
+    setSourceEditRequest({
+      key: node.key,
+      legacyConnectionIndex: mapFocus.connectionIndex,
+    });
+    onMapFocusConsumed();
+  }, [map?.id, mapFocus, node.key, onMapFocusConsumed]);
 
   useEffect(() => {
     setDeleteOpen(false);
@@ -1261,7 +1320,24 @@ function ResourceDetail({
           </div>
         </header>
         {map ? (
-          <MapOverview project={project} map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} onSelectResource={onSelectResource} />
+          <MapOverview
+            project={project}
+            map={map}
+            maps={maps}
+            assets={projectAssets}
+            resources={resources}
+            switches={switches}
+            variables={variables}
+            focusIntent={mapCanvasFocusIntent(mapFocus, map.id)}
+            onFocusConsumed={onMapFocusConsumed}
+            onOpenLegacySource={(connectionIndex) => {
+              setInspectorOpen(true);
+              setSourceEditRequest({ key: node.key, legacyConnectionIndex: connectionIndex });
+            }}
+            onProjectSaved={onProjectSaved}
+            onDraftGuardChange={onDraftGuardChange}
+            onSelectResource={onSelectResource}
+          />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -1275,7 +1351,7 @@ function ResourceDetail({
             draftBlocked={draftActive}
             onSelectResource={onSelectResource}
             onEditSource={node.source && node.editable !== false
-              ? () => setSourceEditKey(node.key)
+              ? () => setSourceEditRequest({ key: node.key })
               : undefined}
           />
         )}
@@ -1297,8 +1373,11 @@ function ResourceDetail({
             onProjectSaved={onProjectSaved}
             onDraftGuardChange={onDraftGuardChange}
             draftBlocked={draftActive}
-            openRequested={sourceEditKey === node.key}
-            onOpenHandled={() => setSourceEditKey(null)}
+            openRequested={sourceEditRequest?.key === node.key}
+            focusConnectionIndex={sourceEditRequest?.key === node.key
+              ? sourceEditRequest.legacyConnectionIndex
+              : undefined}
+            onOpenHandled={() => setSourceEditRequest(null)}
           />
         )}
         {missing.length > 0 && (
@@ -2026,12 +2105,66 @@ function cleanSourceValue(value: string): string {
   return value;
 }
 
+export function legacyConnectionSourceRange(
+  source: string,
+  connectionIndex: number,
+): { start: number; end: number } | null {
+  if (!Number.isInteger(connectionIndex) || connectionIndex < 0) return null;
+  const rows: Array<{ text: string; start: number }> = [];
+  let offset = 0;
+  for (const raw of source.match(/[^\r\n]*(?:\r\n|\n|$)/g) ?? []) {
+    if (!raw) continue;
+    rows.push({ text: raw.replace(/\r?\n$/, ""), start: offset });
+    offset += raw.length;
+  }
+  const headerIndex = rows.findIndex(({ text }) => /^connections\s*:\s*(?:#.*)?$/.test(text));
+  if (headerIndex < 0) return null;
+  const headerIndent = rows[headerIndex]!.text.match(/^\s*/)?.[0].length ?? 0;
+  const itemRows: number[] = [];
+  let itemIndent: number | null = null;
+  let sectionEnd = source.length;
+  for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex]!;
+    const trimmed = row.text.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const indent = row.text.match(/^\s*/)?.[0].length ?? 0;
+    if (indent <= headerIndent) {
+      sectionEnd = row.start;
+      break;
+    }
+    if (!row.text.slice(indent).startsWith("-")) continue;
+    if (itemIndent === null) itemIndent = indent;
+    if (indent === itemIndent && /^-\s/.test(row.text.slice(indent))) itemRows.push(rowIndex);
+  }
+  const targetRow = itemRows[connectionIndex];
+  if (targetRow === undefined) return null;
+  const nextRow = itemRows[connectionIndex + 1];
+  return {
+    start: rows[targetRow]!.start,
+    end: nextRow === undefined ? sectionEnd : rows[nextRow]!.start,
+  };
+}
+
+export function reconcileResourceSourceAfterSave(
+  submitted: string,
+  current: string,
+  authoritative: string,
+): { source: string; savedSource: string; preserveCurrentDraft: boolean } {
+  const preserveCurrentDraft = current !== submitted;
+  return {
+    source: preserveCurrentDraft ? current : authoritative,
+    savedSource: authoritative,
+    preserveCurrentDraft,
+  };
+}
+
 function ResourceSourceEditor({
   node,
   onProjectSaved,
   onDraftGuardChange,
   draftBlocked,
   openRequested = false,
+  focusConnectionIndex,
   onOpenHandled,
 }: {
   node: ProjectResourceNode;
@@ -2039,6 +2172,7 @@ function ResourceSourceEditor({
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
   draftBlocked: boolean;
   openRequested?: boolean;
+  focusConnectionIndex?: number;
   onOpenHandled?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -2049,64 +2183,139 @@ function ResourceSourceEditor({
   const [saving, setSaving] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedConnectionIndex, setFocusedConnectionIndex] = useState<number | null>(null);
+  const [sourceFocusRange, setSourceFocusRange] = useState<{ start: number; end: number } | null>(null);
+  const sourceTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const sourceNodeKeyRef = useRef(node.key);
+  sourceNodeKeyRef.current = node.key;
+  const loadRequestRef = useRef(0);
+  const saveRequestRef = useRef(0);
   const dirty = editing && source !== savedSource;
 
   useEffect(() => {
+    loadRequestRef.current += 1;
+    saveRequestRef.current += 1;
     setEditing(false);
     setSource("");
     setSavedSource("");
     setSourcePath(node.source ?? "");
+    setLoading(false);
+    setSaving(false);
     setConfirmCancel(false);
     setError(null);
+    setFocusedConnectionIndex(null);
+    setSourceFocusRange(null);
   }, [node.key, node.source]);
 
-  const begin = async () => {
+  const begin = async (connectionIndex?: number) => {
+    const requestId = ++loadRequestRef.current;
+    const requestedNodeKey = node.key;
     setLoading(true);
     setError(null);
+    setFocusedConnectionIndex(connectionIndex ?? null);
     try {
       const result = await fetchResourceSource(node.kind, node.id);
+      if (
+        loadRequestRef.current !== requestId ||
+        sourceNodeKeyRef.current !== requestedNodeKey
+      ) return;
       setSource(result.source);
       setSavedSource(result.source);
       setSourcePath(result.path);
+      setSourceFocusRange(connectionIndex === undefined
+        ? null
+        : legacyConnectionSourceRange(result.source, connectionIndex));
       setEditing(true);
     } catch (cause) {
+      if (
+        loadRequestRef.current !== requestId ||
+        sourceNodeKeyRef.current !== requestedNodeKey
+      ) return;
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setLoading(false);
+      if (
+        loadRequestRef.current === requestId &&
+        sourceNodeKeyRef.current === requestedNodeKey
+      ) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!openRequested || editing || loading || draftBlocked) return;
+    if (!openRequested) return;
+    if (editing) {
+      if (focusConnectionIndex !== undefined) {
+        setFocusedConnectionIndex(focusConnectionIndex);
+        setSourceFocusRange(legacyConnectionSourceRange(source, focusConnectionIndex));
+      }
+      onOpenHandled?.();
+      return;
+    }
+    if (loading || draftBlocked) return;
     onOpenHandled?.();
-    void begin();
-  }, [openRequested, editing, loading, draftBlocked]);
+    void begin(focusConnectionIndex);
+  }, [openRequested, editing, loading, draftBlocked, focusConnectionIndex]);
+
+  useEffect(() => {
+    if (!editing || !sourceFocusRange) return;
+    const frame = requestAnimationFrame(() => {
+      const textarea = sourceTextareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(sourceFocusRange.start, sourceFocusRange.end);
+      const precedingLines = source.slice(0, sourceFocusRange.start).split(/\r?\n/).length - 1;
+      textarea.scrollTop = Math.max(0, precedingLines * 20 - textarea.clientHeight / 3);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editing, sourceFocusRange]);
 
   const discardSource = () => {
     setSource(savedSource);
     setEditing(false);
     setError(null);
     setConfirmCancel(false);
+    setFocusedConnectionIndex(null);
+    setSourceFocusRange(null);
   };
 
   const save = async () => {
     if (!dirty) return false;
+    const requestId = ++saveRequestRef.current;
+    const requestedNodeKey = node.key;
+    const submittedSource = source;
     setSaving(true);
     setError(null);
     try {
-      const result = await saveResourceSource(node.kind, node.id, source);
-      setSource(result.source);
-      setSavedSource(result.source);
+      const result = await saveResourceSource(node.kind, node.id, submittedSource);
+      if (
+        saveRequestRef.current !== requestId ||
+        sourceNodeKeyRef.current !== requestedNodeKey
+      ) return false;
+      const reconciled = reconcileResourceSourceAfterSave(
+        submittedSource,
+        sourceRef.current,
+        result.source,
+      );
+      setSource(reconciled.source);
+      setSavedSource(reconciled.savedSource);
       setSourcePath(result.path);
       onProjectSaved(result.project);
-      setEditing(false);
+      setEditing(reconciled.preserveCurrentDraft);
       setConfirmCancel(false);
-      return true;
+      return !reconciled.preserveCurrentDraft;
     } catch (cause) {
+      if (
+        saveRequestRef.current !== requestId ||
+        sourceNodeKeyRef.current !== requestedNodeKey
+      ) return false;
       setError(cause instanceof Error ? cause.message : String(cause));
       return false;
     } finally {
-      setSaving(false);
+      if (
+        saveRequestRef.current === requestId &&
+        sourceNodeKeyRef.current === requestedNodeKey
+      ) setSaving(false);
     }
   };
 
@@ -2155,7 +2364,7 @@ function ResourceSourceEditor({
       <header>
         <div><h2>Source file</h2><code>{sourcePath}</code></div>
         {!editing ? (
-          <button type="button" disabled={loading || draftBlocked} onClick={begin}>
+          <button type="button" disabled={loading || draftBlocked} onClick={() => void begin()}>
             {loading ? "Loading…" : draftBlocked ? "Finish active draft" : "Edit source"}
           </button>
         ) : (
@@ -2169,9 +2378,26 @@ function ResourceSourceEditor({
         )}
       </header>
       <p className="muted">YAML/Markdown remains the source of truth. Invalid edits are rolled back atomically.</p>
+      {!editing && openRequested && focusConnectionIndex !== undefined && draftBlocked && (
+        <div className="project-warning advisory resource-source-focus" role="status">
+          <strong>Legacy route queued</strong>
+          <code>connections[{focusConnectionIndex}]</code>
+          <span>Save or discard the active map draft to open its authoritative source.</span>
+        </div>
+      )}
+      {editing && focusedConnectionIndex !== null && (
+        <div className="project-warning advisory resource-source-focus" role="status">
+          <strong>Legacy route source</strong>
+          <code>connections[{focusedConnectionIndex}]</code>
+          <span>{sourceFocusRange
+            ? "The authored YAML block is selected in the source editor."
+            : "The map source is open, but this inline YAML shape cannot be isolated automatically."}</span>
+        </div>
+      )}
       {error && <div className="project-warning"><strong>Source rejected</strong><code>{error}</code></div>}
       {editing && (
         <textarea
+          ref={sourceTextareaRef}
           className="project-source-textarea"
           value={source}
           onChange={(event) => setSource(event.target.value)}
@@ -2354,6 +2580,55 @@ export function mapArrivalBacklinkSourceDescription(backlink: MapArrivalBacklink
   ].filter(Boolean).join(" · ");
 }
 
+export function mapPlayabilitySourceFocusIntent(
+  diagnostic: MapPlayabilityDiagnostic,
+): Extract<MapEditorFocusIntent, { kind: "placement" } | { kind: "legacy-connection" }> | undefined {
+  if (!diagnostic.sourceMapId) return undefined;
+  if (diagnostic.sourcePlacementId) {
+    return {
+      kind: "placement",
+      mapId: diagnostic.sourceMapId,
+      placementId: diagnostic.sourcePlacementId,
+      ...(diagnostic.sourceEventId ? { eventId: diagnostic.sourceEventId } : {}),
+    };
+  }
+  if (diagnostic.sourceConnectionIndex !== undefined) {
+    return {
+      kind: "legacy-connection",
+      mapId: diagnostic.sourceMapId,
+      connectionIndex: diagnostic.sourceConnectionIndex,
+    };
+  }
+  return undefined;
+}
+
+export function mapPlayabilityAffectedFocusIntent(
+  diagnostic: MapPlayabilityDiagnostic,
+): MapEditorFocusIntent {
+  if (diagnostic.focus.kind === "placement") {
+    return {
+      kind: "placement",
+      mapId: diagnostic.mapId,
+      placementId: diagnostic.focus.placementId,
+      ...(diagnostic.eventId ? { eventId: diagnostic.eventId } : {}),
+    };
+  }
+  return {
+    kind: "point",
+    mapId: diagnostic.mapId,
+    at: { ...diagnostic.focus.at },
+    role: diagnostic.focus.role,
+  };
+}
+
+export function mapCanvasFocusIntent(
+  focus: MapEditorFocusIntent | null,
+  mapId: string,
+): MapCanvasFocusIntent | null {
+  if (!focus || focus.mapId !== mapId || focus.kind === "legacy-connection") return null;
+  return focus;
+}
+
 function MapOverview({
   project,
   map,
@@ -2362,6 +2637,9 @@ function MapOverview({
   resources,
   switches,
   variables,
+  focusIntent,
+  onFocusConsumed,
+  onOpenLegacySource,
   onProjectSaved,
   onDraftGuardChange,
   onSelectResource,
@@ -2373,9 +2651,12 @@ function MapOverview({
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
+  focusIntent: MapCanvasFocusIntent | null;
+  onFocusConsumed: () => void;
+  onOpenLegacySource: (connectionIndex: number) => void;
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
-  onSelectResource: (key: string) => void;
+  onSelectResource: (key: string, mapFocus?: MapEditorFocusIntent) => void;
 }) {
   const [draftHistory, dispatchDraft] = useReducer(mapDraftHistoryReducer, map, createMapDraftHistory);
   const draft = draftHistory.present;
@@ -2386,6 +2667,8 @@ function MapOverview({
   }, []);
   const [editing, setEditing] = useState(false);
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
+  const [focusedPlacementEventId, setFocusedPlacementEventId] = useState<string | null>(null);
+  const [focusedPlayabilityKey, setFocusedPlayabilityKey] = useState<string | null>(null);
   const [placementRenameOpen, setPlacementRenameOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2459,6 +2742,8 @@ function MapOverview({
     dispatchDraft({ type: "reset", map });
     setEditing(renamedPlacementId !== null);
     setSelectedPlacementId(renamedPlacementId);
+    setFocusedPlacementEventId(null);
+    setFocusedPlayabilityKey(null);
     setPlacementRenameOpen(false);
     setSaveError(null);
     setConfirmDiscard(false);
@@ -2486,6 +2771,36 @@ function MapOverview({
   }, [map]);
 
   useEffect(() => {
+    if (!focusIntent || focusIntent.mapId !== map.id) return;
+    setEditing(true);
+    setPropertiesOpen(false);
+    if (focusIntent.kind === "placement") {
+      const placement = (map.placements ?? []).find(
+        (candidate) => candidate.id === focusIntent.placementId,
+      );
+      if (placement) {
+        setMapTool("objects");
+        setSelectedPlacementId(placement.id);
+        setFocusedPlacementEventId(focusIntent.eventId ?? null);
+        if (placement.layer) setObjectLayerId(placement.layer);
+      }
+    } else if (focusIntent.kind === "point") {
+      setMapTool("objects");
+      setSelectedPlacementId(null);
+      setFocusedPlacementEventId(null);
+      const diagnostic = analyzeMapPlayability(projectMapDraftIntoCatalog(maps, map)).find(
+        (candidate) => candidate.mapId === map.id &&
+          candidate.focus.kind === "point" &&
+          candidate.focus.role === focusIntent.role &&
+          candidate.focus.at.x === focusIntent.at.x &&
+          candidate.focus.at.y === focusIntent.at.y,
+      );
+      setFocusedPlayabilityKey(diagnostic ? mapPlayabilityDiagnosticKey(diagnostic) : null);
+    }
+    onFocusConsumed();
+  }, [focusIntent, map, maps, onFocusConsumed]);
+
+  useEffect(() => {
     if (!topologyReturnFocusPending || editing || topologyOpen || reciprocalRouteOpen) return;
     setTopologyReturnFocusPending(false);
     requestAnimationFrame(() => editButtonRef.current?.focus());
@@ -2502,6 +2817,37 @@ function MapOverview({
     () => projectMapDraftIntoCatalog(maps, draft),
     [draft, maps],
   );
+  const allPlayabilityDiagnostics = useMemo(
+    () => analyzeMapPlayability(projectedMaps),
+    [projectedMaps],
+  );
+  const playabilityDiagnostics = useMemo(
+    () => allPlayabilityDiagnostics.filter(
+      (diagnostic) => diagnostic.mapId === draft.id,
+    ),
+    [allPlayabilityDiagnostics, draft.id],
+  );
+  const authoredPlayabilityDiagnostics = useMemo(
+    () => allPlayabilityDiagnostics.filter((diagnostic) =>
+      diagnostic.sourceMapId === draft.id && diagnostic.mapId !== draft.id
+    ),
+    [allPlayabilityDiagnostics, draft.id],
+  );
+  const playabilityPointGroups = useMemo(
+    () => groupMapPlayabilityPointDiagnostics(playabilityDiagnostics),
+    [playabilityDiagnostics],
+  );
+  const playabilityPlacementCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const diagnostic of playabilityDiagnostics) {
+      if (diagnostic.focus.kind !== "placement") continue;
+      counts.set(
+        diagnostic.focus.placementId,
+        (counts.get(diagnostic.focus.placementId) ?? 0) + 1,
+      );
+    }
+    return counts;
+  }, [playabilityDiagnostics]);
   const selectedPlacementBacklinks = useMemo(
     () => selectedPlacement
       ? collectMapArrivalBacklinks(projectedMaps, draft.id, selectedPlacement.id)
@@ -2551,6 +2897,14 @@ function MapOverview({
   const playerResource = resources.find((resource) => resource.key === "character:player");
   const playerGraphicPath = playerResource ? mapPaletteResourceGraphicPath(playerResource, assets) : undefined;
 
+  useEffect(() => {
+    if (!focusedPlayabilityKey) return;
+    if (playabilityDiagnostics.some(
+      (diagnostic) => mapPlayabilityDiagnosticKey(diagnostic) === focusedPlayabilityKey,
+    )) return;
+    setFocusedPlayabilityKey(null);
+  }, [focusedPlayabilityKey, playabilityDiagnostics]);
+
   const mutatePlacement = (
     id: string,
     update: (placement: MapPlacementDef) => MapPlacementDef,
@@ -2572,12 +2926,107 @@ function MapOverview({
           ? backlink.sourcePlacementId
           : null,
       );
+      setFocusedPlacementEventId(backlink.sourceEventId ?? null);
+      if (!backlink.sourcePlacementId && backlink.sourceConnectionIndex !== undefined) {
+        onOpenLegacySource(backlink.sourceConnectionIndex);
+      }
       return;
     }
     const source = resources.find((resource) =>
       resource.kind === "map" && resource.id === backlink.sourceMapId
     );
-    if (source) onSelectResource(source.key);
+    if (source) {
+      onSelectResource(source.key, backlink.sourcePlacementId
+        ? {
+            kind: "placement",
+            mapId: backlink.sourceMapId,
+            placementId: backlink.sourcePlacementId,
+            ...(backlink.sourceEventId ? { eventId: backlink.sourceEventId } : {}),
+          }
+        : backlink.sourceConnectionIndex !== undefined
+          ? {
+              kind: "legacy-connection",
+              mapId: backlink.sourceMapId,
+              connectionIndex: backlink.sourceConnectionIndex,
+            }
+          : undefined);
+    }
+  };
+
+  const selectDiagnosticPlacement = (placementId: string) => {
+    const placement = (draft.placements ?? []).find(
+      (candidate) => candidate.id === placementId,
+    );
+    if (!placement) return;
+    setEditing(true);
+    setMapTool("objects");
+    setSelectedPlacementId(placement.id);
+    if (placement.layer) setObjectLayerId(placement.layer);
+  };
+
+  const locatePlayabilityDiagnostic = (diagnostic: MapPlayabilityDiagnostic) => {
+    setFocusedPlayabilityKey(mapPlayabilityDiagnosticKey(diagnostic));
+    setEditing(true);
+    if (diagnostic.focus.kind === "placement") {
+      selectDiagnosticPlacement(diagnostic.focus.placementId);
+      return;
+    }
+    setMapTool("objects");
+    setSelectedPlacementId(null);
+  };
+
+  const inspectPlayabilityBlocker = (diagnostic: MapPlayabilityDiagnostic) => {
+    if (!diagnostic.blocker || diagnostic.blocker.kind === "bounds") return;
+    setFocusedPlayabilityKey(mapPlayabilityDiagnosticKey(diagnostic));
+    if (diagnostic.blocker.kind === "placement") {
+      selectDiagnosticPlacement(diagnostic.blocker.placementId);
+      return;
+    }
+    setEditing(true);
+    setSelectedPlacementId(null);
+    setMapTool("collision");
+    setPaintLayerId(diagnostic.blocker.layerId);
+  };
+
+  const openPlayabilitySource = (diagnostic: MapPlayabilityDiagnostic) => {
+    const focus = mapPlayabilitySourceFocusIntent(diagnostic);
+    if (!focus) return;
+    if (focus.mapId === draft.id) {
+      if (focus.kind === "placement") {
+        selectDiagnosticPlacement(focus.placementId);
+        setFocusedPlacementEventId(focus.eventId ?? null);
+      } else {
+        onOpenLegacySource(focus.connectionIndex);
+      }
+      return;
+    }
+    const source = resources.find((resource) =>
+      resource.kind === "map" && resource.id === focus.mapId
+    );
+    if (source) onSelectResource(source.key, focus);
+  };
+
+  const applyPlayabilityFix = (
+    diagnostic: MapPlayabilityDiagnostic,
+    requestedFix: MapPlayabilityQuickFix,
+  ) => {
+    const diagnosticKey = mapPlayabilityDiagnosticKey(diagnostic);
+    setDraft((current) => {
+      const currentMaps = projectMapDraftIntoCatalog(maps, current);
+      const freshDiagnostic = analyzeMapPlayability(currentMaps).find((candidate) =>
+        mapPlayabilityDiagnosticKey(candidate) === diagnosticKey
+      );
+      if (!freshDiagnostic) return current;
+      const freshFix = resolveMapPlayabilityQuickFix(currentMaps, current, freshDiagnostic);
+      if (
+        !freshFix ||
+        freshFix.kind !== requestedFix.kind ||
+        freshFix.placementId !== requestedFix.placementId
+      ) return current;
+      return applyMapPlayabilityQuickFix(current, freshFix);
+    }, `playability-fix:${requestedFix.kind}:${requestedFix.placementId}`);
+    setFocusedPlayabilityKey(diagnosticKey);
+    selectDiagnosticPlacement(requestedFix.placementId);
   };
 
   const acceptPlacementRename = (result: MapPlacementRenameUpdateResponse) => {
@@ -2968,6 +3417,7 @@ function MapOverview({
           <span>{draft.layout?.layers.length ?? 0} layers</span>
           <span>{draft.placements?.length ?? 0} placements</span>
           {stacks.length > 0 && <span className="stat-attention">{stacks.length} stacks</span>}
+          {playabilityDiagnostics.length + authoredPlayabilityDiagnostics.length > 0 && <span className="stat-warning">⚠ {playabilityDiagnostics.length + authoredPlayabilityDiagnostics.length} field</span>}
         </div>
         <div className="map-editor-actions">
           {!editing ? (
@@ -3014,6 +3464,26 @@ function MapOverview({
         </section>
       )}
       {saveError && <div className="project-warning map-validation-error" role="alert"><strong>Validation failed · draft preserved</strong><code>{saveError}</code><span>No project source was replaced. Correct the highlighted draft and try again.</span></div>}
+      <MapPlayabilityPanel
+        map={draft}
+        maps={projectedMaps}
+        diagnostics={playabilityDiagnostics}
+        authoredDiagnostics={authoredPlayabilityDiagnostics}
+        activeKey={focusedPlayabilityKey}
+        onLocate={locatePlayabilityDiagnostic}
+        onInspectBlocker={inspectPlayabilityBlocker}
+        onOpenSource={openPlayabilitySource}
+        onOpenAffected={(diagnostic) => {
+          const affected = resources.find((resource) =>
+            resource.kind === "map" && resource.id === diagnostic.mapId
+          );
+          if (affected) onSelectResource(
+            affected.key,
+            mapPlayabilityAffectedFocusIntent(diagnostic),
+          );
+        }}
+        onQuickFix={applyPlayabilityFix}
+      />
       {editing && propertiesOpen && <MapPropertiesDialog
         saved={map}
         draft={draft}
@@ -3283,16 +3753,18 @@ function MapOverview({
               const label = mapPlacementResourceLabel(placement, resources);
               const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
               const eventSummary = mapPlacementEventSummary(placement);
+              const diagnosticCount = playabilityPlacementCounts.get(placement.id) ?? 0;
               return (
                 <button
                   type="button"
-                  className={selectedPlacementId === placement.id ? "selected" : ""}
+                  className={`${selectedPlacementId === placement.id ? "selected" : ""}${diagnosticCount > 0 ? " has-diagnostic" : ""}`}
                   key={placement.id}
                   onClick={() => { setSelectedPlacementId(placement.id); if (placement.layer) setObjectLayerId(placement.layer); }}
                 >
                   <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} />
                   <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
                   <b className={`map-object-event-state${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}${eventSummary.hidden ? " hidden" : ""}`} title={eventSummary.title}><i>{eventSummary.icons || "—"}</i>{eventSummary.count}<small>{eventSummary.gated ? "◆" : eventSummary.hidden ? "○" : ""}</small></b>
+                  {diagnosticCount > 0 && <span className="map-object-diagnostic" title={`${diagnosticCount} spatial ${diagnosticCount === 1 ? "warning" : "warnings"}`}>! {diagnosticCount}</span>}
                   <small>{placement.at.x},{placement.at.y}</small>
                 </button>
               );
@@ -3441,7 +3913,13 @@ function MapOverview({
           ))}
           {draft.layout.playerStart && (
             <div
-              className={`map-player-start${editing ? " editable" : ""}`}
+              className={`map-player-start${editing ? " editable" : ""}${playabilityPointGroups.some((group) =>
+                group.x === draft.layout!.playerStart!.x &&
+                group.y === draft.layout!.playerStart!.y &&
+                group.diagnostics.some((diagnostic) =>
+                  diagnostic.focus.kind === "point" && diagnostic.focus.role === "player-start"
+                )
+              ) ? " has-diagnostic" : ""}`}
               title={editing
                 ? `Player start · ${draft.layout.playerStart.x},${draft.layout.playerStart.y} · drag or use arrow keys`
                 : `Player start · ${draft.layout.playerStart.x},${draft.layout.playerStart.y}`}
@@ -3474,14 +3952,36 @@ function MapOverview({
               }}
             ><span className={playerGraphicPath ? "map-player-start-graphic" : ""} style={playerGraphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(playerGraphicPath))})` } : undefined}>{playerGraphicPath ? "" : "◆"}</span><small>START</small></div>
           )}
+          {playabilityPointGroups.map((group) => {
+            const active = group.diagnostics.some(
+              (diagnostic) => mapPlayabilityDiagnosticKey(diagnostic) === focusedPlayabilityKey,
+            );
+            const title = group.diagnostics.map((diagnostic) => diagnostic.message).join("\n");
+            return <button
+              type="button"
+              className={`map-playability-point${active ? " active" : ""}`}
+              key={group.key}
+              aria-label={`Review ${group.diagnostics.length} spatial ${group.diagnostics.length === 1 ? "warning" : "warnings"} at ${group.x}, ${group.y}`}
+              title={title}
+              style={{
+                left: `${((group.x + .72) / width) * 100}%`,
+                top: `${((group.y + .12) / height) * 100}%`,
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                locatePlayabilityDiagnostic(group.diagnostics[0]!);
+              }}
+            ><span>!</span>{group.diagnostics.length > 1 && <b>{group.diagnostics.length}</b>}</button>;
+          })}
           {(draft.placements ?? []).map((placement) => {
             const resourceLabel = mapPlacementResourceLabel(placement, resources);
             const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
             const rendered = isMapPlacementLayerVisible(draft, placement);
             const eventSummary = mapPlacementEventSummary(placement);
+            const diagnosticCount = playabilityPlacementCounts.get(placement.id) ?? 0;
             return (
               <div
-              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}`}
+              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}${diagnosticCount > 0 ? " has-diagnostic" : ""}`}
               key={placement.id}
               draggable={editing && mapTool === "objects"}
               onDragStart={(event) => {
@@ -3500,6 +4000,7 @@ function MapOverview({
               }}
             >
               {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
+              {diagnosticCount > 0 && <span className="map-placement-diagnostic" title={`${diagnosticCount} spatial ${diagnosticCount === 1 ? "warning" : "warnings"}`}><i>!</i>{diagnosticCount > 1 && <b>{diagnosticCount}</b>}</span>}
               {eventSummary.count > 0 && <span className={`map-placement-event-summary${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}`} title={eventSummary.title}><i>{eventSummary.icons}</i><b>{eventSummary.count}</b>{eventSummary.gated && <small>◆</small>}</span>}
               <span className="map-placement-copy">{resourceLabel}</span>
               <small className="map-placement-copy">{placement.resource?.kind ?? "event"} · {placement.id}</small>
@@ -3556,6 +4057,8 @@ function MapOverview({
           placement={selectedPlacement}
           backlinks={selectedPlacementBacklinks}
           deleteBlockers={selectedPlacementDeleteBlockers}
+          focusedEventId={focusedPlacementEventId}
+          onFocusedEventConsumed={() => setFocusedPlacementEventId(null)}
           layers={draft.layout?.layers ?? []}
           assets={assets}
           resources={resources}
@@ -4178,6 +4681,8 @@ function PlacementEditor({
   placement,
   backlinks,
   deleteBlockers,
+  focusedEventId,
+  onFocusedEventConsumed,
   layers,
   assets,
   resources,
@@ -4197,6 +4702,8 @@ function PlacementEditor({
   placement: MapPlacementDef;
   backlinks: MapArrivalBacklink[];
   deleteBlockers: MapArrivalBacklink[];
+  focusedEventId?: string | null;
+  onFocusedEventConsumed: () => void;
   layers: MapLayerDef[];
   assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
@@ -4232,6 +4739,9 @@ function PlacementEditor({
     setConfirmDelete(false);
     setEditorSection("events");
   }, [placement.id]);
+  useEffect(() => {
+    if (focusedEventId) setEditorSection("events");
+  }, [focusedEventId]);
   useEffect(() => {
     if (confirmDelete) cancelDeleteRef.current?.focus();
   }, [confirmDelete]);
@@ -4356,6 +4866,8 @@ function PlacementEditor({
       {editorSection === "events" && <div role="tabpanel" aria-label="Object event pages">
         <EventPagesEditor
           placement={placement}
+          focusEventId={focusedEventId}
+          onFocusEventConsumed={onFocusedEventConsumed}
           maps={maps.some((candidate) => candidate.id === map.id)
             ? maps.map((candidate) => candidate.id === map.id ? map : candidate)
             : [...maps, map]}
@@ -4371,6 +4883,8 @@ function PlacementEditor({
 
 export function EventPagesEditor({
   placement,
+  focusEventId,
+  onFocusEventConsumed,
   maps,
   resources,
   switches,
@@ -4378,6 +4892,8 @@ export function EventPagesEditor({
   onChange,
 }: {
   placement: MapPlacementDef;
+  focusEventId?: string | null;
+  onFocusEventConsumed?: () => void;
   maps: MapDef[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
@@ -4396,6 +4912,13 @@ export function EventPagesEditor({
     if (selectedEventId && placement.events.some((event) => event.id === selectedEventId)) return;
     setSelectedEventId(placement.events[0]?.id ?? null);
   }, [placement.id, placement.events, selectedEventId]);
+
+  useEffect(() => {
+    if (focusEventId && placement.events.some((event) => event.id === focusEventId)) {
+      setSelectedEventId(focusEventId);
+      onFocusEventConsumed?.();
+    }
+  }, [focusEventId, onFocusEventConsumed, placement.events]);
 
   useEffect(() => setDeletePendingId(null), [placement.id, selectedEventId]);
   useEffect(() => {

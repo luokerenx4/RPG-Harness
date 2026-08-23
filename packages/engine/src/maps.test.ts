@@ -10,9 +10,55 @@ import {
   mapPlacementDistance,
   mapPlacementDisplayOrder,
   mapPlayerDisplayOrder,
+  mapPointBlocker,
   mapRouteActivityId,
+  resolveMapPointBlocker,
   resolveMapRoute,
 } from "./maps";
+
+test("structured point blockers distinguish placement ids from collision layers", () => {
+  const map: MapDef = {
+    id: "field",
+    name: "Field",
+    description: "",
+    layout: {
+      width: 2,
+      height: 1,
+      tileWidth: 32,
+      tileHeight: 32,
+      layers: [{
+        id: "wall",
+        kind: "collision",
+        z: 0,
+        visible: false,
+        tiles: [[1, 1]],
+      }],
+      regions: [],
+    },
+    placements: [{
+      id: "layer:wall",
+      at: { x: 0, y: 0 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "block",
+      visible: true,
+      events: [],
+    }],
+  };
+
+  expect(resolveMapPointBlocker(map, { x: 0, y: 0 })).toEqual({
+    kind: "placement",
+    placementId: "layer:wall",
+  });
+  expect(resolveMapPointBlocker(map, { x: 1, y: 0 })).toEqual({
+    kind: "collision-layer",
+    layerId: "wall",
+  });
+  // Compatibility strings are intentionally ambiguous; authoring uses the
+  // structured resolver above.
+  expect(mapPointBlocker(map, { x: 0, y: 0 })).toBe("layer:wall");
+  expect(mapPointBlocker(map, { x: 1, y: 0 })).toBe("layer:wall");
+});
 
 test("collectMapConnections projects placement map events as ordinary exits", () => {
   const connections = collectMapConnections({

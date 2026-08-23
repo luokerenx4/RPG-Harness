@@ -26,14 +26,16 @@ export {
   mapPlacementDisplayOrder,
   mapPlayerDisplayOrder,
   mapPointBlocker,
+  resolveMapPointBlocker,
   mapRouteActivityId,
   resolveMapRoute,
 } from "./maps";
-export type { MapArrivalBacklink, MapRoute, MapRouteSource } from "./maps";
+export type { MapArrivalBacklink, MapPointBlocker, MapRoute, MapRouteSource } from "./maps";
 export { analyzeMapPlayability } from "./mapPlayability";
 export type {
   MapPlayabilityDiagnostic,
   MapPlayabilityDiagnosticCode,
+  MapPlayabilityDiagnosticFocus,
   MapPlayabilityDiagnosticSeverity,
 } from "./mapPlayability";
 export {
