@@ -277,9 +277,10 @@ body {
 }
 .hub-stage-layout.has-spatial-map {
   display: grid;
-  grid-template-columns: minmax(320px, 360px) minmax(470px, 1fr);
+  grid-template-columns: minmax(500px, 1fr) minmax(280px, 340px);
   align-items: start;
   gap: 14px;
+  width: min(1180px, 100%);
 }
 .has-spatial-map .spatial-map-surface {
   position: sticky;
@@ -333,10 +334,9 @@ body {
 }
 .has-spatial-map .hub-summary .objective-card,
 .has-spatial-map .hub-summary .resource-group {
-  display: inline-block;
-  width: calc(50% - 5px);
-  margin-right: 6px;
-  vertical-align: top;
+  display: block;
+  width: 100%;
+  margin-right: 0;
 }
 
 .spatial-map-surface {
@@ -2609,6 +2609,16 @@ body {
   background: rgba(255,255,255,.035);
   font: 6px/1 ui-monospace, monospace;
 }
+.has-spatial-map .hub-column-title {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.has-spatial-map .hub-keyboard-inline {
+  flex: 1 0 100%;
+}
+.has-spatial-map.field-status-only .hub-panel {
+  align-self: start;
+}
 .hub-strategy,
 .resource-group,
 .objective-card {
@@ -2904,7 +2914,7 @@ textarea:focus-visible {
   .game-identity { border-right: 0; }
   .game-menu { border-left: 1px solid rgba(255,255,255,.065); }
   .hub-panel { grid-template-columns: minmax(220px, 250px) minmax(390px, 1fr); }
-  .hub-stage-layout.has-spatial-map { grid-template-columns: minmax(300px, 335px) minmax(430px,1fr); }
+  .hub-stage-layout.has-spatial-map { grid-template-columns: minmax(410px, 1fr) minmax(270px, 310px); }
   .ai-control-label { display: none; }
 }
 

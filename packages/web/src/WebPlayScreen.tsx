@@ -1479,8 +1479,12 @@ export function StageView({
           };
         })
         .filter((section) => section.activities.length > 0);
+      const hasSpatialMap = currentMap?.layout !== undefined;
+      const hasFieldCommands = hasSpatialMap && playerSections.length > 0;
       return (
-        <div className={`hub-stage-layout${currentMap?.layout ? " has-spatial-map" : ""}`}>
+        <div className={`hub-stage-layout${hasSpatialMap
+          ? ` has-spatial-map ${hasFieldCommands ? "has-field-commands" : "field-status-only"}`
+          : ""}`}>
           {currentMap?.layout && (
             <SpatialMapSurface
               map={currentMap}
@@ -1554,75 +1558,77 @@ export function StageView({
                 </section>
               ))}
             </aside>
-            <main className="hub-actions" aria-label="実行可能な行動">
-              <div className="hub-column-title">
-                <span>COMMAND</span>
-                <strong>行動を選ぶ</strong>
-                <small className="hub-keyboard-inline">
-                  {currentMap?.layout ? (
-                    <><kbd>Tab</kbd> 指令 <kbd>E</kbd> 调查 <kbd>Esc</kbd> 菜单</>
-                  ) : (
-                    <><kbd>↑↓</kbd> 选择 <kbd>Enter</kbd> 确认 <kbd>Esc</kbd> 菜单</>
-                  )}
-                </small>
-              </div>
-              {playerSections.map((section) => (
-                <section className="activity-section" key={section.category}>
-                  <div className="activity-section-head">
-                    <span>{section.label}</span>
-                    <span>
-                      {opportunityByCategory.get(section.category)?.decisionRequired && section.availableCount > 1 &&
-                        "CHOICE · "}
-                      {section.availableCount}/{section.activities.length}
-                    </span>
-                  </div>
-                  <ul className="activity-list">
-                    {section.activities.map(({ activity: a }) => (
-                      <li key={a.id}>
-                        <button
-                          className={`activity-btn${
-                            a.id === hubView.primaryActivityId
-                              ? " activity-primary"
-                              : ""
-                          }`}
-                          disabled={!a.available}
-                          onClick={() => onInput({ type: "doActivity", id: a.id })}
-                          title={a.lockedReason ?? ""}
-                        >
-                          <div className="activity-head">
-                            <span className="activity-title">
-                              {a.id === hubView.primaryActivityId && (
-                                <span className="primary-mark">★</span>
-                              )}
-                              {a.title}
-                            </span>
-                            {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
-                          </div>
-                          {a.description && (
-                            <div className="activity-desc">{a.description}</div>
-                          )}
-                          {playerForecastMetrics(a).length > 0 && (
-                            <div className="activity-forecast">
-                              {playerForecastMetrics(a).map((metric) => (
-                                <span
-                                  className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
-                                  key={metric.id}
-                                >
-                                  {metric.label} {formatForecastMetricValue(metric)}
-                                </span>
-                              ))}
+            {(!hasSpatialMap || hasFieldCommands) && (
+              <main className="hub-actions" aria-label="実行可能な行動">
+                <div className="hub-column-title">
+                  <span>COMMAND</span>
+                  <strong>行動を選ぶ</strong>
+                  <small className="hub-keyboard-inline">
+                    {currentMap?.layout ? (
+                      <><kbd>Tab</kbd> 指令 <kbd>E</kbd> 调查 <kbd>Esc</kbd> 菜单</>
+                    ) : (
+                      <><kbd>↑↓</kbd> 选择 <kbd>Enter</kbd> 确认 <kbd>Esc</kbd> 菜单</>
+                    )}
+                  </small>
+                </div>
+                {playerSections.map((section) => (
+                  <section className="activity-section" key={section.category}>
+                    <div className="activity-section-head">
+                      <span>{section.label}</span>
+                      <span>
+                        {opportunityByCategory.get(section.category)?.decisionRequired && section.availableCount > 1 &&
+                          "CHOICE · "}
+                        {section.availableCount}/{section.activities.length}
+                      </span>
+                    </div>
+                    <ul className="activity-list">
+                      {section.activities.map(({ activity: a }) => (
+                        <li key={a.id}>
+                          <button
+                            className={`activity-btn${
+                              a.id === hubView.primaryActivityId
+                                ? " activity-primary"
+                                : ""
+                            }`}
+                            disabled={!a.available}
+                            onClick={() => onInput({ type: "doActivity", id: a.id })}
+                            title={a.lockedReason ?? ""}
+                          >
+                            <div className="activity-head">
+                              <span className="activity-title">
+                                {a.id === hubView.primaryActivityId && (
+                                  <span className="primary-mark">★</span>
+                                )}
+                                {a.title}
+                              </span>
+                              {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
                             </div>
-                          )}
-                          {!a.available && a.lockedReason && (
-                            <div className="locked-reason">🔒 {a.lockedReason}</div>
-                          )}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </main>
+                            {a.description && (
+                              <div className="activity-desc">{a.description}</div>
+                            )}
+                            {playerForecastMetrics(a).length > 0 && (
+                              <div className="activity-forecast">
+                                {playerForecastMetrics(a).map((metric) => (
+                                  <span
+                                    className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
+                                    key={metric.id}
+                                  >
+                                    {metric.label} {formatForecastMetricValue(metric)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {!a.available && a.lockedReason && (
+                              <div className="locked-reason">🔒 {a.lockedReason}</div>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </main>
+            )}
           </div>
         </div>
       );

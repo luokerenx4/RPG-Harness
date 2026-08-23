@@ -1,10 +1,92 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Game } from "@rpg-harness/engine";
+import type { Game, Input } from "@rpg-harness/engine";
 import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, nextHubCommandIndex, resolveFeedbackTarget, StageView, systemMenuControlRows, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
+
+function mapFirstGame(spatial = true): Game {
+  return {
+    title: "Map-first fixture",
+    characters: [],
+    scripts: [],
+    maps: [{
+      id: "field",
+      name: "Crossroads",
+      description: "A test field.",
+      ...(spatial ? {
+        layout: {
+          width: 8,
+          height: 6,
+          tileWidth: 32,
+          tileHeight: 32,
+          playerStart: { x: 1, y: 1 },
+          layers: [],
+          regions: [],
+        },
+        placements: [{
+          id: "gate",
+          at: { x: 2, y: 1 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "trigger" as const,
+          visible: true,
+          resource: { kind: "map" as const, id: "town" },
+          events: [{ id: "enter", trigger: "interact" as const, label: "Enter town", order: 0 }],
+        }],
+      } : {}),
+    }, {
+      id: "town",
+      name: "Town",
+      description: "A test destination.",
+    }],
+  };
+}
+
+function hubStage(ordinaryCommands = false) {
+  return {
+    kind: "hubMenu" as const,
+    cursor: 0,
+    snapshot: {
+      day: 0,
+      maxDay: 0,
+      slot: 0,
+      slotName: "",
+      slotsPerDay: 0,
+      stats: [],
+      affections: [],
+      activities: [{
+        id: "move:town",
+        kind: "action" as const,
+        title: "Town",
+        category: "move",
+        cost: 0,
+        available: true,
+      }, ...(ordinaryCommands ? [{
+        id: "rest",
+        kind: "action" as const,
+        title: "Make camp",
+        category: "rest",
+        cost: 1,
+        available: true,
+      }] : [])],
+    },
+  };
+}
+
+function findReactElement(
+  node: React.ReactNode,
+  predicate: (element: React.ReactElement) => boolean,
+): React.ReactElement | undefined {
+  if (!React.isValidElement(node)) return undefined;
+  if (predicate(node)) return node;
+  let match: React.ReactElement | undefined;
+  React.Children.forEach((node.props as { children?: React.ReactNode }).children, (child) => {
+    if (!match) match = findReactElement(child, predicate);
+  });
+  return match;
+}
 
 describe("Web terminal handoff", () => {
   test("renders a guarded RPG system menu before returning to title", () => {
@@ -391,6 +473,69 @@ describe("Web terminal handoff", () => {
     expect(nextHubCommandIndex(-1, 3, 1)).toBe(0);
     expect(nextHubCommandIndex(-1, 3, -1)).toBe(2);
     expect(nextHubCommandIndex(2, 3, 1)).toBe(0);
+  });
+
+  test("makes a placement-only spatial map the primary field without an empty command shell", () => {
+    const html = renderToStaticMarkup(
+      <StageView
+        stage={hubStage()}
+        game={mapFirstGame()}
+        currentMapId="field"
+        currentMapPosition={{ x: 1, y: 1 }}
+        currentMapPositionMapId="field"
+        assetUrls={{}}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(html).toContain("hub-stage-layout has-spatial-map field-status-only");
+    expect(html).toContain("Crossroads 二维地图");
+    expect(html).not.toContain('class="hub-actions"');
+    expect(html).not.toContain("has-field-commands");
+  });
+
+  test("keeps ordinary field commands in the narrow rail and emits their stable engine input", () => {
+    const inputs: Input[] = [];
+    const props = {
+      stage: hubStage(true),
+      game: mapFirstGame(),
+      currentMapId: "field",
+      currentMapPosition: { x: 1, y: 1 },
+      currentMapPositionMapId: "field",
+      assetUrls: {},
+      onInput: (input: Input) => inputs.push(input),
+    };
+    const html = renderToStaticMarkup(<StageView {...props} />);
+    const tree = StageView(props);
+    const restButton = findReactElement(
+      tree,
+      (element) => element.props.className?.includes?.("activity-btn"),
+    );
+
+    expect(html).toContain("hub-stage-layout has-spatial-map has-field-commands");
+    expect(html).toContain('class="hub-actions"');
+    expect(html).toContain("Make camp");
+    expect(restButton).toBeDefined();
+    (restButton!.props as { onClick: () => void }).onClick();
+    expect(inputs).toEqual([{ type: "doActivity", id: "rest" }]);
+  });
+
+  test("leaves a non-spatial era-style Hub structurally unchanged", () => {
+    const html = renderToStaticMarkup(
+      <StageView
+        stage={hubStage(true)}
+        game={mapFirstGame(false)}
+        currentMapId="field"
+        assetUrls={{}}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(html).toContain('class="hub-stage-layout"');
+    expect(html).toContain('class="hub-actions"');
+    expect(html).toContain("Make camp");
+    expect(html).not.toContain("has-spatial-map");
+    expect(html).not.toContain("field-status-only");
   });
 
   test("hands a recoverable choice branch back to the player after an ending", () => {
