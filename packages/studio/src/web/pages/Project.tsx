@@ -2045,6 +2045,14 @@ function MapOverview({
     }));
   };
 
+  const fillPaintLayer = (tile: number) => {
+    if (!paintLayer) return;
+    setDraft((current) => ({
+      ...current,
+      layout: current.layout ? fillMapLayerTiles(current.layout, paintLayer.id, tile) : undefined,
+    }));
+  };
+
   const save = async () => {
     setSaving(true);
     setSaveError(null);
@@ -2103,6 +2111,25 @@ function MapOverview({
         event.preventDefault();
         if (dirty && !saving) void save();
         return;
+      }
+      const target = event.target as HTMLElement | null;
+      const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
+      if (!acceptsText && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === "1") {
+          event.preventDefault();
+          selectMapTool("objects");
+          return;
+        }
+        if (event.key === "2" && terrainLayers.length > 0) {
+          event.preventDefault();
+          selectMapTool("terrain");
+          return;
+        }
+        if (event.key === "3" && collisionLayers.length > 0) {
+          event.preventDefault();
+          selectMapTool("collision");
+          return;
+        }
       }
       if (event.key !== "Escape" || saving) return;
       event.preventDefault();
@@ -2256,9 +2283,9 @@ function MapOverview({
       {editing && draft.layout && (
         <section className="map-mode-toolbar" aria-label="Map editing tools">
           <nav>
-            <button type="button" className={mapTool === "objects" ? "selected" : ""} aria-pressed={mapTool === "objects"} onClick={() => selectMapTool("objects")}><span>◆</span><strong>Objects</strong><small>events &amp; start</small></button>
-            <button type="button" disabled={terrainLayers.length === 0} className={mapTool === "terrain" ? "selected" : ""} aria-pressed={mapTool === "terrain"} onClick={() => selectMapTool("terrain")}><span>▦</span><strong>Terrain</strong><small>tile layers</small></button>
-            <button type="button" disabled={collisionLayers.length === 0} className={mapTool === "collision" ? "selected" : ""} aria-pressed={mapTool === "collision"} onClick={() => selectMapTool("collision")}><span>▧</span><strong>Collision</strong><small>passability</small></button>
+            <button type="button" className={mapTool === "objects" ? "selected" : ""} aria-pressed={mapTool === "objects"} onClick={() => selectMapTool("objects")}><span>◆</span><strong>Objects</strong><small><kbd>1</kbd> events &amp; start</small></button>
+            <button type="button" disabled={terrainLayers.length === 0} className={mapTool === "terrain" ? "selected" : ""} aria-pressed={mapTool === "terrain"} onClick={() => selectMapTool("terrain")}><span>▦</span><strong>Terrain</strong><small><kbd>2</kbd> tile layers</small></button>
+            <button type="button" disabled={collisionLayers.length === 0} className={mapTool === "collision" ? "selected" : ""} aria-pressed={mapTool === "collision"} onClick={() => selectMapTool("collision")}><span>▧</span><strong>Collision</strong><small><kbd>3</kbd> passability</small></button>
           </nav>
           {paintLayer && (
             <div className="map-mode-brushes">
@@ -2276,7 +2303,8 @@ function MapOverview({
                   <button type="button" className={paintBrush === 0 ? "selected passable" : "passable"} aria-pressed={paintBrush === 0} onClick={() => setPaintBrush(0)}>Passable</button>
                 </div>
               )}
-              <span className="map-mode-hint">Drag on the map to paint · right-click erases</span>
+              <div className="map-mode-layer-actions"><button type="button" onClick={() => fillPaintLayer(paintBrush)}>Fill</button><button type="button" onClick={() => fillPaintLayer(0)}>Clear</button></div>
+              <span className="map-mode-hint">Drag to paint · ⌥ click samples · right-click erases</span>
             </div>
           )}
         </section>
@@ -2431,6 +2459,10 @@ function MapOverview({
                   onPointerDown={(event) => {
                     if (event.button !== 0) return;
                     event.preventDefault();
+                    if (event.altKey) {
+                      setPaintBrush(mapTool === "collision" ? (tile === 0 ? 0 : 1) : tile);
+                      return;
+                    }
                     const mode = tile === paintBrush ? "erase" : "paint";
                     setCanvasPainting(mode);
                     paintCanvasCell(x, y, mode === "paint" ? paintBrush : 0);
