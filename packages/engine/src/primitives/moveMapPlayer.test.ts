@@ -73,6 +73,36 @@ describe("moveMapPlayer", () => {
     });
   });
 
+  test("treats non-zero collision-layer tiles as authoritative blockers", () => {
+    const ctx = makeCtx({
+      ...game,
+      maps: [{
+        ...shrine,
+        layout: {
+          ...shrine.layout!,
+          layers: [{
+            id: "terrain",
+            kind: "collision",
+            z: 1,
+            visible: false,
+            tiles: [
+              [0, 0, 0, 0, 0],
+              [0, 0, 1, 0, 0],
+              [0, 0, 0, 0, 0],
+              [0, 0, 0, 0, 0],
+            ],
+          }],
+        },
+      }, game.maps![1]!],
+    });
+    ctx.state.baseline.currentMapId = "shrine";
+    expect(moveMapPlayer(ctx, "north")).toMatchObject({
+      moved: false,
+      blockedBy: "layer:terrain",
+      position: { x: 2, y: 2 },
+    });
+  });
+
   test("rebases a legacy cursor when a hot edit adds a spatial layout", () => {
     const ctx = makeCtx(game);
     ctx.state.baseline.currentMapId = "shrine";

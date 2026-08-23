@@ -1,5 +1,5 @@
 import { collectMapAvailableResources } from "./collectMapResources";
-import { mapPositionLayoutKey } from "../maps";
+import { mapPointBlocker, mapPositionLayoutKey } from "../maps";
 import type {
   MapFacing,
   MapPoint,
@@ -34,19 +34,8 @@ export function moveMapPlayer(
     x: position.x + delta.x,
     y: position.y + delta.y,
   };
-  if (
-    next.x < 0 || next.y < 0 ||
-    next.x >= map.layout.width || next.y >= map.layout.height
-  ) {
-    return { moved: false, position: runtime.mapPosition, blockedBy: "bounds" };
-  }
-
-  const blocker = (map.placements ?? []).find((placement) =>
-    placement.collision === "block" && containsPoint(placement.at, placement.footprint, next)
-  );
-  if (blocker) {
-    return { moved: false, position: runtime.mapPosition, blockedBy: blocker.id };
-  }
+  const blocker = mapPointBlocker(map, next);
+  if (blocker) return { moved: false, position: runtime.mapPosition, blockedBy: blocker };
 
   runtime.mapPosition = next;
   const touched = collectMapAvailableResources(ctx).find((resource) =>

@@ -426,6 +426,18 @@ body {
 }
 .spatial-map-compass span { font: 7px/1 ui-monospace, monospace; letter-spacing: .1em; }
 .spatial-map-compass i { color: #66baca; font-size: 11px; font-style: normal; transform: rotate(45deg); }
+.spatial-map-tile {
+  position: absolute;
+  pointer-events: none;
+  background: hsl(calc(var(--tile-id, 1) * 43deg) 28% 32% / .28);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035);
+}
+.spatial-map-tile.kind-collision {
+  background:
+    repeating-linear-gradient(135deg, rgba(235, 174, 90, .24) 0 3px, rgba(53, 34, 20, .38) 3px 6px),
+    rgba(33, 23, 18, .34);
+  box-shadow: inset 0 0 0 1px rgba(240, 190, 113, .23);
+}
 .spatial-map-region {
   position: absolute;
   border: 1px dashed rgba(242, 193, 93, 0.62);

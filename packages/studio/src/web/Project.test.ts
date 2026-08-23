@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   adjacentResourceKeys,
   conditionEditorMode,
+  collectMapEditorTiles,
   createMapPlacementDraft,
   createConditionDraft,
   eventTriggerMeta,
@@ -14,12 +15,14 @@ import {
   nextProjectTreeIndex,
   parseResourceScalarFields,
   patchResourceScalarFields,
+  paintMapLayerTile,
   resourceChoices,
   resolveProjectReference,
+  resizeMapLayout,
   summarizeMapTreeResource,
   summarizeMapValidation,
 } from "./pages/Project";
-import type { MapDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapDef, MapLayoutDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
 
 describe("Studio database record fields", () => {
   const source = [
@@ -207,7 +210,7 @@ describe("Studio map event resource picker", () => {
   });
 
   test("nudges the player start on the grid while clamping every edge", () => {
-    const layout = {
+    const layout: MapLayoutDef = {
       width: 3,
       height: 2,
       tileWidth: 32,
@@ -309,6 +312,34 @@ describe("Studio map event resource picker", () => {
       label: "NODE MAP · 1 RESOURCE",
     });
     expect(summarizeMapTreeResource(undefined)).toBeNull();
+  });
+
+  test("paints and resizes canonical tile-layer matrices without losing authored cells", () => {
+    const layout: MapLayoutDef = {
+      width: 3,
+      height: 2,
+      tileWidth: 32,
+      tileHeight: 32,
+      playerStart: { x: 2, y: 1 },
+      layers: [{ id: "ground", kind: "tile", z: 0, visible: true }, {
+        id: "walls",
+        kind: "collision",
+        z: 1,
+        visible: true,
+        tiles: [[0, 1, 0], [0, 0, 0]],
+      }],
+      regions: [],
+    };
+    const painted = paintMapLayerTile(layout, "ground", 2, 1, 7);
+    expect(painted.layers[0]?.tiles).toEqual([[0, 0, 0], [0, 0, 7]]);
+    expect(collectMapEditorTiles(painted)).toEqual([
+      { layerId: "ground", kind: "tile", tile: 7, x: 2, y: 1, z: 0 },
+      { layerId: "walls", kind: "collision", tile: 1, x: 1, y: 0, z: 1 },
+    ]);
+    const resized = resizeMapLayout(painted, { width: 2, height: 1 });
+    expect(resized.playerStart).toEqual({ x: 1, y: 0 });
+    expect(resized.layers[0]?.tiles).toEqual([[0, 0]]);
+    expect(resized.layers[1]?.tiles).toEqual([[0, 1]]);
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

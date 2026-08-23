@@ -2164,11 +2164,11 @@ function MapOverview({
           <div className="layout-fields">
           <label>Width<input type="number" min="1" value={draft.layout.width} onChange={(event) => setDraft((current) => ({
             ...current,
-            layout: current.layout ? { ...current.layout, width: Number(event.target.value) } : undefined,
+            layout: current.layout ? resizeMapLayout(current.layout, { width: Number(event.target.value) }) : undefined,
           }))} /></label>
           <label>Height<input type="number" min="1" value={draft.layout.height} onChange={(event) => setDraft((current) => ({
             ...current,
-            layout: current.layout ? { ...current.layout, height: Number(event.target.value) } : undefined,
+            layout: current.layout ? resizeMapLayout(current.layout, { height: Number(event.target.value) }) : undefined,
           }))} /></label>
           <label>Start X<input type="number" min="0" value={draft.layout.playerStart?.x ?? 0} onChange={(event) => setDraft((current) => ({
             ...current,
@@ -2187,6 +2187,10 @@ function MapOverview({
           <span>Drag any resource from the project tree onto the canvas.</span>
         </div>
           <MapStructureEditor
+            layout={draft.layout}
+            onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
+          />
+          <MapTilePainter
             layout={draft.layout}
             onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
           />
@@ -2308,6 +2312,21 @@ function MapOverview({
             setSelectedPlacementId(placement.id);
           }}
         >
+          {collectMapEditorTiles(draft.layout).map((tile) => (
+            <i
+              aria-hidden="true"
+              className={`map-tile-preview kind-${tile.kind}`}
+              key={`${tile.layerId}:${tile.x}:${tile.y}`}
+              style={{
+                left: `${tile.x / width * 100}%`,
+                top: `${tile.y / height * 100}%`,
+                width: `${100 / width}%`,
+                height: `${100 / height}%`,
+                zIndex: Math.round(tile.z + 1),
+                "--tile-id": tile.tile,
+              } as React.CSSProperties}
+            />
+          ))}
           {draft.layout.regions.map((region) => (
             <div
               className="map-region"
@@ -2497,6 +2516,59 @@ function MapStructureEditor({
         ))}
       </section>
     </div>
+  );
+}
+
+function MapTilePainter({
+  layout,
+  onChange,
+}: {
+  layout: MapLayoutDef;
+  onChange: (layout: MapLayoutDef) => void;
+}) {
+  const paintable = layout.layers.filter((layer) => layer.kind === "tile" || layer.kind === "collision");
+  const [layerId, setLayerId] = useState(paintable[0]?.id ?? "");
+  const [brush, setBrush] = useState(1);
+  const layer = paintable.find((candidate) => candidate.id === layerId) ?? paintable[0];
+
+  useEffect(() => {
+    if (!layer && paintable[0]) setLayerId(paintable[0].id);
+    else if (layer && layer.id !== layerId) setLayerId(layer.id);
+  }, [layer?.id, layerId, paintable.map((candidate) => candidate.id).join("\0")]);
+
+  if (!layer) {
+    return <section className="map-tile-painter empty"><strong>Tile painter</strong><span>Add a tile or collision layer to paint the grid.</span></section>;
+  }
+  const tiles = normalizeMapTileMatrix(layer.tiles, layout.width, layout.height);
+  return (
+    <section className="map-tile-painter" aria-label="Tile layer painter">
+      <header>
+        <div><span>TILE PAINTER</span><strong>Paint terrain and collision</strong><small>Tile 0 is empty. Any non-zero collision tile blocks Web movement.</small></div>
+        <label>Layer<select value={layer.id} onChange={(event) => setLayerId(event.target.value)}>{paintable.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name ?? candidate.id} · {candidate.kind}</option>)}</select></label>
+        <label>Brush<input type="number" min="0" step="1" value={brush} onChange={(event) => setBrush(Math.max(0, Math.floor(Number(event.target.value) || 0)))} /></label>
+      </header>
+      <div
+        className={`map-tile-painter-grid kind-${layer.kind}`}
+        style={{ "--map-cols": layout.width, "--map-rows": layout.height } as React.CSSProperties}
+      >
+        {tiles.flatMap((row, y) => row.map((tile, x) => (
+          <button
+            type="button"
+            className={tile === 0 ? "empty" : "painted"}
+            aria-label={`${layer.name ?? layer.id} tile ${x}, ${y}: ${tile}`}
+            key={`${x}:${y}`}
+            title={`${x},${y} · tile ${tile}`}
+            style={{ "--tile-id": tile } as React.CSSProperties}
+            onClick={() => onChange(paintMapLayerTile(layout, layer.id, x, y, tile === brush ? 0 : brush))}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onChange(paintMapLayerTile(layout, layer.id, x, y, 0));
+            }}
+          ><span>{tile || ""}</span></button>
+        )))}
+      </div>
+      <footer><span>Click to paint · click the active brush again or right-click to erase</span><strong>{tiles.flat().filter((tile) => tile !== 0).length} painted cells</strong></footer>
+    </section>
   );
 }
 
@@ -3283,6 +3355,77 @@ export function summarizeMapTreeResource(
     spatial: true,
     label: `${map.layout.width}×${map.layout.height} GRID · ${placements} OBJECT${placements === 1 ? "" : "S"} · ${regions} REGION${regions === 1 ? "" : "S"}`,
   };
+}
+
+export function normalizeMapTileMatrix(
+  tiles: number[][] | undefined,
+  width: number,
+  height: number,
+): number[][] {
+  return Array.from({ length: Math.max(1, height) }, (_, y) =>
+    Array.from({ length: Math.max(1, width) }, (_, x) => tiles?.[y]?.[x] ?? 0)
+  );
+}
+
+export function paintMapLayerTile(
+  layout: MapLayoutDef,
+  layerId: string,
+  x: number,
+  y: number,
+  tile: number,
+): MapLayoutDef {
+  if (x < 0 || y < 0 || x >= layout.width || y >= layout.height || !Number.isInteger(tile)) return layout;
+  return {
+    ...layout,
+    layers: layout.layers.map((layer) => {
+      if (layer.id !== layerId || (layer.kind !== "tile" && layer.kind !== "collision")) return layer;
+      const tiles = normalizeMapTileMatrix(layer.tiles, layout.width, layout.height);
+      tiles[y]![x] = tile;
+      return { ...layer, tiles };
+    }),
+  };
+}
+
+export function resizeMapLayout(
+  layout: MapLayoutDef,
+  patch: Partial<Pick<MapLayoutDef, "width" | "height">>,
+): MapLayoutDef {
+  const width = Math.max(1, Math.floor(patch.width ?? layout.width));
+  const height = Math.max(1, Math.floor(patch.height ?? layout.height));
+  return {
+    ...layout,
+    width,
+    height,
+    playerStart: layout.playerStart ? {
+      x: clamp(layout.playerStart.x, 0, width - 1),
+      y: clamp(layout.playerStart.y, 0, height - 1),
+    } : undefined,
+    layers: layout.layers.map((layer) => layer.tiles
+      ? { ...layer, tiles: normalizeMapTileMatrix(layer.tiles, width, height) }
+      : layer),
+  };
+}
+
+export function collectMapEditorTiles(layout: MapLayoutDef): Array<{
+  layerId: string;
+  kind: "tile" | "collision";
+  tile: number;
+  x: number;
+  y: number;
+  z: number;
+}> {
+  return layout.layers.flatMap((layer) => {
+    if (!layer.visible || (layer.kind !== "tile" && layer.kind !== "collision") || !layer.tiles) return [];
+    const kind: "tile" | "collision" = layer.kind;
+    return layer.tiles.flatMap((row, y) => row.flatMap((tile, x) => tile === 0 ? [] : [{
+      layerId: layer.id,
+      kind,
+      tile,
+      x,
+      y,
+      z: layer.z,
+    }]));
+  });
 }
 
 export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements">): string {

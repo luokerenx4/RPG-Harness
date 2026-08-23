@@ -1,4 +1,4 @@
-import type { Condition, MapConnection, MapDef, MapEventTrigger } from "./types";
+import type { Condition, MapConnection, MapDef, MapEventTrigger, MapPoint } from "./types";
 
 export function isMapEventPlayerAction(trigger: MapEventTrigger): boolean {
   return trigger === "interact" || trigger === "player_touch" ||
@@ -10,6 +10,29 @@ export function mapPositionLayoutKey(map: MapDef): string | null {
   if (!map.layout) return null;
   const start = map.layout.playerStart ?? { x: 0, y: 0 };
   return `${map.layout.width}x${map.layout.height}@${start.x},${start.y}`;
+}
+
+/**
+ * Resolve canonical map collision for both renderers and runtime movement.
+ * Collision-layer tile id 0 is walkable; every non-zero integer is solid.
+ * Layer visibility only controls rendering and never changes navigation.
+ */
+export function mapPointBlocker(map: MapDef, point: MapPoint): string | undefined {
+  const layout = map.layout;
+  if (!layout || point.x < 0 || point.y < 0 || point.x >= layout.width || point.y >= layout.height) {
+    return "bounds";
+  }
+  const placement = (map.placements ?? []).find((candidate) =>
+    candidate.collision === "block" &&
+    point.x >= candidate.at.x && point.y >= candidate.at.y &&
+    point.x < candidate.at.x + candidate.footprint.width &&
+    point.y < candidate.at.y + candidate.footprint.height
+  );
+  if (placement) return placement.id;
+  const collisionLayer = layout.layers.find((layer) =>
+    layer.kind === "collision" && (layer.tiles?.[point.y]?.[point.x] ?? 0) !== 0
+  );
+  return collisionLayer ? `layer:${collisionLayer.id}` : undefined;
 }
 
 /**

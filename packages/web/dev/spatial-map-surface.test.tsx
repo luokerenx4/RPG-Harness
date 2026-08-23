@@ -7,6 +7,7 @@ import {
   collectSpatialContextOperations,
   collectSpatialLandmarks,
   collectSpatialPlacementActivityIds,
+  collectSpatialTiles,
   describePlacementApproach,
   isSpatialInteractKey,
   mapMoveAvailability,
@@ -69,7 +70,7 @@ describe("SpatialMapSurface", () => {
   });
 
   test("describes bounded RPG field movement without changing semantic inputs", () => {
-    expect(mapMoveAvailability(map.layout, { x: 0, y: 5 })).toEqual({
+    expect(mapMoveAvailability(map, { x: 0, y: 5 })).toEqual({
       north: true,
       east: true,
       south: false,
@@ -81,6 +82,48 @@ describe("SpatialMapSurface", () => {
       .toBe("向南 1 格 · 可互动");
     expect(["Enter", "e", "E"].every(isSpatialInteractKey)).toBe(true);
     expect(isSpatialInteractKey(" ")).toBe(false);
+  });
+
+  test("projects tile data and disables movement into canonical collision", () => {
+    const tiledMap: MapDef = {
+      ...map,
+      layout: {
+        ...map.layout!,
+        layers: [{
+          id: "ground",
+          kind: "tile",
+          z: 0,
+          visible: true,
+          tiles: Array.from({ length: 6 }, (_, y) =>
+            Array.from({ length: 8 }, (_, x) => y === 4 && x === 1 ? 7 : 0)
+          ),
+        }, {
+          id: "walls",
+          kind: "collision",
+          z: 1,
+          visible: true,
+          tiles: Array.from({ length: 6 }, (_, y) =>
+            Array.from({ length: 8 }, (_, x) => y === 5 && x === 1 ? 1 : 0)
+          ),
+        }],
+      },
+    };
+    expect(collectSpatialTiles(tiledMap)).toEqual([
+      { layerId: "ground", kind: "tile", tile: 7, x: 1, y: 4, z: 0 },
+      { layerId: "walls", kind: "collision", tile: 1, x: 1, y: 5, z: 1 },
+    ]);
+    expect(mapMoveAvailability(tiledMap, { x: 0, y: 5 })).toEqual({
+      north: true,
+      east: false,
+      south: false,
+      west: false,
+    });
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface map={tiledMap} activities={[move]} playerPosition={{ x: 0, y: 5 }} onInput={() => {}} />,
+    );
+    expect(html).toContain("spatial-map-tile kind-tile");
+    expect(html).toContain("spatial-map-tile kind-collision");
+    expect(html).toContain('aria-label="向东移动" aria-keyshortcuts="ArrowRight D" disabled=""');
   });
 
   test("renders positions and omits automatic events from player controls", () => {

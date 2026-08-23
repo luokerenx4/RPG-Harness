@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { isMapEventPlayerAction, mapPlacementEventKey } from "@rpg-harness/engine";
+import { isMapEventPlayerAction, mapPlacementEventKey, mapPointBlocker } from "@rpg-harness/engine";
 import type {
   HubActivity,
   Input,
@@ -127,7 +127,8 @@ export function SpatialMapSurface({
   const nearestName = nearestLandmark
     ? placementDisplayName(nearestLandmark.placement, resourceLabels)
     : undefined;
-  const moveAvailability = mapMoveAvailability(layout, playerPosition);
+  const moveAvailability = mapMoveAvailability(map, playerPosition);
+  const visibleTiles = collectSpatialTiles(map);
 
   useEffect(() => {
     const available = contextOperations.filter(({ activity }) => activity?.available);
@@ -173,6 +174,21 @@ export function SpatialMapSurface({
       >
         <div className="spatial-map-compass" aria-hidden="true"><span>N</span><i>◆</i></div>
         <div className="spatial-map-frame" aria-hidden="true" />
+        {visibleTiles.map((tile) => (
+          <i
+            aria-hidden="true"
+            className={`spatial-map-tile kind-${tile.kind}`}
+            key={`${tile.layerId}:${tile.x}:${tile.y}`}
+            style={{
+              left: `${tile.x / layout.width * 100}%`,
+              top: `${tile.y / layout.height * 100}%`,
+              width: `${100 / layout.width}%`,
+              height: `${100 / layout.height}%`,
+              zIndex: Math.round(tile.z + 1),
+              "--tile-id": tile.tile,
+            } as React.CSSProperties}
+          />
+        ))}
         {layout.regions.map((region) => (
           <div
             className="spatial-map-region"
@@ -368,14 +384,36 @@ function placementDisplayName(
   return formatResourceName(placement.resource?.id ?? placement.id);
 }
 
-export function mapMoveAvailability(layout: MapDef["layout"], point?: MapPoint) {
-  if (!layout || !point) return { north: true, east: true, south: true, west: true };
+export function mapMoveAvailability(map: MapDef, point?: MapPoint) {
+  if (!map.layout || !point) return { north: true, east: true, south: true, west: true };
   return {
-    north: point.y > 0,
-    east: point.x < layout.width - 1,
-    south: point.y < layout.height - 1,
-    west: point.x > 0,
+    north: !mapPointBlocker(map, { x: point.x, y: point.y - 1 }),
+    east: !mapPointBlocker(map, { x: point.x + 1, y: point.y }),
+    south: !mapPointBlocker(map, { x: point.x, y: point.y + 1 }),
+    west: !mapPointBlocker(map, { x: point.x - 1, y: point.y }),
   };
+}
+
+export function collectSpatialTiles(map: MapDef): Array<{
+  layerId: string;
+  kind: "tile" | "collision";
+  tile: number;
+  x: number;
+  y: number;
+  z: number;
+}> {
+  return (map.layout?.layers ?? []).flatMap((layer) => {
+    if (!layer.visible || (layer.kind !== "tile" && layer.kind !== "collision") || !layer.tiles) return [];
+    const kind: "tile" | "collision" = layer.kind;
+    return layer.tiles.flatMap((row, y) => row.flatMap((tile, x) => tile === 0 ? [] : [{
+      layerId: layer.id,
+      kind,
+      tile,
+      x,
+      y,
+      z: layer.z,
+    }]));
+  });
 }
 
 export function describePlacementApproach(
