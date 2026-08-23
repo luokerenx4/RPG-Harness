@@ -856,6 +856,7 @@ function MapOverview({
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
 
@@ -864,6 +865,7 @@ function MapOverview({
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
+    setConfirmDiscard(false);
     setZoom(100);
   }, [map]);
 
@@ -873,6 +875,7 @@ function MapOverview({
     (placement) => placement.id === selectedPlacementId,
   );
   const stacks = groupedStacks(draft.placements ?? []);
+  const dirty = hasMapDraftChanges(map, draft);
 
   const mutatePlacement = (
     id: string,
@@ -895,6 +898,7 @@ function MapOverview({
       const saved = project.maps.find((candidate) => candidate.id === map.id);
       if (saved) setDraft(cloneMap(saved));
       setEditing(false);
+      setConfirmDiscard(false);
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -902,11 +906,52 @@ function MapOverview({
     }
   };
 
+  const discard = () => {
+    setDraft(cloneMap(map));
+    setEditing(false);
+    setSelectedPlacementId(null);
+    setSaveError(null);
+    setConfirmDiscard(false);
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (dirty && !saving) void save();
+        return;
+      }
+      if (event.key !== "Escape" || saving) return;
+      event.preventDefault();
+      if (selectedPlacementId) {
+        setSelectedPlacementId(null);
+      } else if (dirty) {
+        setConfirmDiscard(true);
+      } else {
+        setEditing(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editing, dirty, saving, selectedPlacementId, draft]);
+
+  useEffect(() => {
+    if (!editing || !dirty) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [editing, dirty]);
+
   return (
     <section className="map-overview">
       <div className="map-editor-toolbar">
         <div className="map-editor-context">
           <span className={`edit-state ${editing ? "editing" : ""}`}>{editing ? "EDITING" : "PREVIEW"}</span>
+          {editing && <span className={`map-save-state ${dirty ? "dirty" : "clean"}`}><i />{dirty ? "UNSAVED CHANGES" : "ALL CHANGES SAVED"}</span>}
           <p>{map.description || "No map description authored."}</p>
         </div>
         <div className="map-view-tools" aria-label="Map view tools">
@@ -924,21 +969,30 @@ function MapOverview({
         </div>
         <div className="map-editor-actions">
           {!editing ? (
-            <button type="button" onClick={() => setEditing(true)}>Edit map</button>
+            <button type="button" onClick={() => { setEditing(true); setConfirmDiscard(false); }}>Edit map</button>
           ) : (
             <>
-              <button type="button" className="primary" disabled={saving} onClick={save}>
-                {saving ? "Saving…" : "Save"}
+              <button type="button" className="primary" disabled={!dirty || saving} onClick={save}>
+                {saving ? "Validating…" : "Save changes  ⌘S"}
               </button>
               <button type="button" disabled={saving} onClick={() => {
-                setDraft(cloneMap(map));
-                setEditing(false);
-                setSaveError(null);
+                if (!dirty) {
+                  discard();
+                  return;
+                }
+                setSelectedPlacementId(null);
+                setConfirmDiscard(true);
               }}>Discard</button>
             </>
           )}
         </div>
       </div>
+      {confirmDiscard && (
+        <section className="map-discard-confirmation" role="alertdialog" aria-labelledby="discard-map-title">
+          <div><span>UNSAVED MAP DRAFT</span><strong id="discard-map-title">Discard spatial changes?</strong><p>Layout, placement, and event-page edits made since the last save will be lost.</p></div>
+          <div><button type="button" className="danger" onClick={discard}>Discard changes</button><button type="button" className="primary" onClick={() => setConfirmDiscard(false)}>Keep editing</button></div>
+        </section>
+      )}
       {saveError && <div className="project-warning"><strong>Validation failed</strong><code>{saveError}</code></div>}
       {editing && !draft.layout && (
         <button
@@ -1818,6 +1872,11 @@ export function resourceChoices(
 
 function cloneMap(map: MapDef): MapDef {
   return structuredClone(map);
+}
+
+export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
+  return JSON.stringify({ layout: saved.layout, placements: saved.placements ?? [] }) !==
+    JSON.stringify({ layout: draft.layout, placements: draft.placements ?? [] });
 }
 
 function clamp(value: number, min: number, max: number): number {

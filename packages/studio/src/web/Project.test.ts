@@ -3,11 +3,12 @@ import {
   conditionEditorMode,
   createConditionDraft,
   eventTriggerMeta,
+  hasMapDraftChanges,
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
 } from "./pages/Project";
-import type { ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapDef, ProjectResourceNode } from "@rpg-harness/engine";
 
 describe("Studio database record fields", () => {
   const source = [
@@ -68,6 +69,29 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(resourceChoices(resources, "script").map((resource) => resource.id)).toEqual(["a", "z"]);
     expect(resourceChoices(resources, undefined)).toEqual([]);
+  });
+
+  test("tracks only authoritative spatial map draft changes", () => {
+    const saved = {
+      id: "shrine",
+      name: "Shrine",
+      description: "saved copy",
+      layout: undefined,
+      placements: [],
+    } as MapDef;
+    expect(hasMapDraftChanges(saved, { ...saved, description: "project refresh" })).toBe(false);
+    expect(hasMapDraftChanges(saved, {
+      ...saved,
+      placements: [{
+        id: "gate",
+        at: { x: 0, y: 0 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        events: [],
+      }],
+    })).toBe(true);
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

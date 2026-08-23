@@ -2112,10 +2112,16 @@ summary:focus-visible {
   border-bottom: 1px solid var(--studio-line);
   background: #171b24;
 }
-.map-editor-context { min-width: 120px; flex: 1; }
+.map-editor-context { display: flex; min-width: 120px; flex: 1; flex-wrap: wrap; align-items: center; gap: 0 8px; }
 .map-editor-context p { margin: 2px 0 0; overflow: hidden; color: #727b88; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.map-editor-context p { width: 100%; }
 .edit-state { color: #67717f; font-size: 8px; font-weight: 750; letter-spacing: .12em; }
 .edit-state.editing { color: var(--studio-orange); }
+.map-save-state { display: inline-flex; align-items: center; gap: 4px; color: #596370; font-size: 7px; font-weight: 700; letter-spacing: .08em; }
+.map-save-state i { width: 5px; height: 5px; border-radius: 50%; background: #596370; }
+.map-save-state.dirty { color: var(--studio-orange); }
+.map-save-state.dirty i { background: var(--studio-orange); box-shadow: 0 0 7px rgba(231,168,106,.45); }
+.map-save-state.clean i { background: var(--studio-green); }
 .map-view-tools { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--studio-line); border-radius: 6px; background: #11151c; }
 .map-view-tools button { display: grid; place-items: center; width: 25px; height: 23px; padding: 0; color: #7b8592; border: 0; border-radius: 4px; background: transparent; cursor: pointer; font-size: 11px; }
 .map-view-tools button:hover,
@@ -2145,6 +2151,15 @@ summary:focus-visible {
 .map-editor-actions button.primary { color: #071216; border-color: var(--studio-accent); background: var(--studio-accent); font-weight: 700; }
 .map-editor-actions button:disabled { opacity: .5; cursor: wait; }
 .map-overview > .project-warning { margin: 9px; }
+.map-discard-confirmation { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 9px; padding: 10px 12px; border: 1px solid rgba(224,111,121,.4); border-radius: 7px; background: linear-gradient(90deg, rgba(224,111,121,.1), rgba(224,111,121,.025)); }
+.map-discard-confirmation > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.map-discard-confirmation span { color: var(--studio-red); font-size: 6px; font-weight: 750; letter-spacing: .13em; }
+.map-discard-confirmation strong { color: #d9dde3; font-size: 10px; }
+.map-discard-confirmation p { margin: 0; color: #6f7885; font-size: 8px; }
+.map-discard-confirmation > div:last-child { display: flex; flex: 0 0 auto; gap: 5px; }
+.map-discard-confirmation button { padding: 6px 9px; color: #b7bec8; border: 1px solid var(--studio-line-strong); border-radius: 5px; background: #1b2029; cursor: pointer; font-size: 8px; }
+.map-discard-confirmation button.danger { color: var(--studio-red); border-color: rgba(224,111,121,.35); background: rgba(224,111,121,.05); }
+.map-discard-confirmation button.primary { color: #071216; border-color: var(--studio-accent); background: var(--studio-accent); font-weight: 700; }
 .create-layout { width: calc(100% - 18px); min-height: 64px; margin: 9px; color: var(--studio-accent); border-style: dashed; background: rgba(80,199,217,.04); }
 
 .map-authoring-panels { margin: 8px; border: 1px solid var(--studio-line); border-radius: 7px; background: #131720; }
@@ -2243,7 +2258,7 @@ summary:focus-visible {
 .placement-editor {
   position: fixed;
   z-index: 1000;
-  top: 104px;
+  top: 158px;
   right: 326px;
   bottom: 38px;
   width: min(720px, calc(100vw - 690px));
