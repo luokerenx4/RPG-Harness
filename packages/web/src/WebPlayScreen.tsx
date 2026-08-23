@@ -289,6 +289,7 @@ export function WebPlayScreen({
   const [showBacklog, setShowBacklog] = useState(false);
   const [showArtBook, setShowArtBook] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showSystemMenu, setShowSystemMenu] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
   const [inputNoticeSource, setInputNoticeSource] = useState<string | null>(null);
   const [externalAdvance, setExternalAdvance] = useState(
@@ -511,12 +512,14 @@ export function WebPlayScreen({
           setShowArtBook(false);
         } else if (showBacklog) {
           setShowBacklog(false);
+        } else if (showSystemMenu) {
+          setShowSystemMenu(false);
         } else if (onExit) {
-          onExit();
+          setShowSystemMenu(true);
         }
         return;
       }
-      if (showBacklog || showArtBook || showFeedback) return;
+      if (showBacklog || showArtBook || showFeedback || showSystemMenu) return;
       const tag = e.target instanceof HTMLElement ? e.target.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const k = model.stage.kind;
@@ -539,7 +542,7 @@ export function WebPlayScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showFeedback, sendInput, onExit]);
+  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showFeedback, showSystemMenu, sendInput, onExit]);
 
   const currentMapId = engineRef.current?.getState().baseline.currentMapId ?? null;
   const currentMap = currentMapId
@@ -564,8 +567,8 @@ export function WebPlayScreen({
           )}
           <nav className="game-menu" aria-label="ゲームメニュー">
             {onExit && (
-              <button className="hud-btn" onClick={onExit}>
-                <span aria-hidden="true">⌂</span> 主菜单
+              <button className="hud-btn" onClick={() => setShowSystemMenu(true)}>
+                <span aria-hidden="true">☰</span> 菜单
               </button>
             )}
             {model.backlog.length > 0 && (
@@ -685,6 +688,18 @@ export function WebPlayScreen({
       {showBacklog && (
         <BacklogOverlay entries={model.backlog} onClose={() => setShowBacklog(false)} />
       )}
+      {showSystemMenu && onExit && (
+        <SystemMenuOverlay
+          gameTitle={game.title}
+          sceneLabel={sceneLabel}
+          sessionLabel={sessionLabel}
+          backlogAvailable={model.backlog.length > 0}
+          onResume={() => setShowSystemMenu(false)}
+          onBacklog={() => { setShowSystemMenu(false); setShowBacklog(true); }}
+          onArtBook={() => { setShowSystemMenu(false); setShowArtBook(true); }}
+          onExit={onExit}
+        />
+      )}
       {showArtBook && (
         <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
       )}
@@ -701,6 +716,57 @@ export function WebPlayScreen({
           onClose={() => setShowFeedback(false)}
         />
       )}
+    </div>
+  );
+}
+
+export function SystemMenuOverlay({
+  gameTitle,
+  sceneLabel,
+  sessionLabel,
+  backlogAvailable,
+  onResume,
+  onBacklog,
+  onArtBook,
+  onExit,
+}: {
+  gameTitle: string;
+  sceneLabel: string;
+  sessionLabel?: string;
+  backlogAvailable: boolean;
+  onResume: () => void;
+  onBacklog: () => void;
+  onArtBook: () => void;
+  onExit: () => void;
+}) {
+  return (
+    <div className="system-menu-overlay" role="dialog" aria-modal="true" aria-label="系统菜单" onClick={onResume}>
+      <section className="system-menu-frame" onClick={(event) => event.stopPropagation()}>
+        <header className="system-menu-heading">
+          <div><span>SYSTEM</span><strong>システムメニュー</strong></div>
+          <button type="button" onClick={onResume} aria-label="关闭系统菜单">×</button>
+        </header>
+        <div className="system-menu-body">
+          <nav className="system-menu-actions" aria-label="系统菜单操作">
+            <button type="button" className="primary" onClick={onResume}><span>▶</span><strong>继续游戏</strong><small>物語へ戻る</small></button>
+            <button type="button" disabled={!backlogAvailable} onClick={onBacklog}><span>≡</span><strong>回看记录</strong><small>会話ログ</small></button>
+            <button type="button" onClick={onArtBook}><span>◇</span><strong>設定集</strong><small>世界・人物・美術</small></button>
+            <button type="button" className="exit" onClick={onExit}><span>⌂</span><strong>返回标题</strong><small>タイトル画面へ</small></button>
+          </nav>
+          <aside className="system-menu-status">
+            <span className="system-menu-crest" aria-hidden="true">妖</span>
+            <div className="system-menu-title"><small>NOW PLAYING</small><strong>{gameTitle}</strong><span>{sceneLabel}</span></div>
+            <dl>
+              <div><dt>SAVE</dt><dd><i /> AUTO · 同期済み</dd></div>
+              <div><dt>SESSION</dt><dd>{sessionLabel ?? "local"}</dd></div>
+              <div><dt>CONTROL</dt><dd>Space / Enter · 進む</dd></div>
+              <div><dt>MAP</dt><dd>Arrow / WASD · 移動</dd></div>
+            </dl>
+            <p>ゲームの進行は共有セッションへ自動保存されます。</p>
+          </aside>
+        </div>
+        <footer><span>Esc · 閉じる</span><span>RPG HARNESS PLAYER</span></footer>
+      </section>
     </div>
   );
 }

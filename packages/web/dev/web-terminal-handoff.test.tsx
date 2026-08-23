@@ -2,11 +2,29 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView } from "../src/WebPlayScreen";
+import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
 describe("Web terminal handoff", () => {
+  test("renders a guarded RPG system menu before returning to title", () => {
+    const html = renderToStaticMarkup(<SystemMenuOverlay
+      gameTitle="妖刀奇譚"
+      sceneLabel="潰れた社"
+      sessionLabel="shared-session"
+      backlogAvailable={false}
+      onResume={() => {}}
+      onBacklog={() => {}}
+      onArtBook={() => {}}
+      onExit={() => {}}
+    />);
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain("继续游戏");
+    expect(html).toContain("返回标题");
+    expect(html).toContain("shared-session");
+    expect(html).toContain("disabled");
+  });
+
   test("labels cross-surface input diagnostics by their actual controller", () => {
     expect(inputNoticeSourceLabel("cli")).toBe("HEADLESS");
     expect(inputNoticeSourceLabel("autoplay:completionist")).toBe("HEADLESS");
