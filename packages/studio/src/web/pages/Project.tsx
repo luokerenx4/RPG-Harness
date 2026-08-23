@@ -2953,6 +2953,7 @@ function PlacementEditor({
   onClose: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editorSection, setEditorSection] = useState<"object" | "events">("events");
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const setNumber = (axis: "x" | "y", value: number) => onChange((current) => ({
@@ -2963,7 +2964,10 @@ function PlacementEditor({
   const placementChoices = resourceChoices(resources, placementKind);
   const placementLabel = mapPlacementResourceLabel(placement, resources);
 
-  useEffect(() => setConfirmDelete(false), [placement.id]);
+  useEffect(() => {
+    setConfirmDelete(false);
+    setEditorSection("events");
+  }, [placement.id]);
   useEffect(() => {
     if (confirmDelete) cancelDeleteRef.current?.focus();
   }, [confirmDelete]);
@@ -2977,6 +2981,10 @@ function PlacementEditor({
     <section className="placement-editor">
       <header className="placement-editor-heading">
         <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
+        <nav className="placement-editor-tabs" aria-label="Object editor sections" role="tablist">
+          <button type="button" role="tab" aria-selected={editorSection === "object"} className={editorSection === "object" ? "selected" : ""} onClick={() => setEditorSection("object")}><span>◇</span> Object</button>
+          <button type="button" role="tab" aria-selected={editorSection === "events"} className={editorSection === "events" ? "selected" : ""} onClick={() => setEditorSection("events")}><span>◆</span> Events <small>{placement.events.length}</small></button>
+        </nav>
         <div className="placement-heading-actions"><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       {confirmDelete && (
@@ -2995,7 +3003,7 @@ function PlacementEditor({
           <button type="button" className="danger" onClick={onDelete}>Remove object</button>
         </section>
       )}
-      <div className="placement-editor-grid">
+      {editorSection === "object" && <div className="placement-editor-grid" role="tabpanel" aria-label="Object properties">
         <section className="placement-panel placement-resource-panel">
           <header><h3>Resource</h3><span>{placement.resource ? placement.resource.kind : "event-only"}</span></header>
           <div className="placement-resource-fields">
@@ -3038,14 +3046,16 @@ function PlacementEditor({
           </div>
           <ConditionBuilder label="Placement condition" value={placement.requires} resources={resources} switches={switches} variables={variables} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
         </section>
-      </div>
-      <EventPagesEditor
-        placement={placement}
-        resources={resources}
-        switches={switches}
-        variables={variables}
-        onChange={onChange}
-      />
+      </div>}
+      {editorSection === "events" && <div role="tabpanel" aria-label="Object event pages">
+        <EventPagesEditor
+          placement={placement}
+          resources={resources}
+          switches={switches}
+          variables={variables}
+          onChange={onChange}
+        />
+      </div>}
     </section>
   );
 }
