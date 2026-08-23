@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type {
   Condition,
   MapDef,
@@ -34,6 +35,11 @@ import {
   type ResourceRenamePlan,
 } from "../api";
 import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
+import {
+  DatabaseOverview,
+  databaseSectionForKind,
+  type DatabaseOverviewKind,
+} from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
 
 const KIND_ORDER: ProjectResourceKind[] = [
@@ -119,7 +125,10 @@ const REMOVABLE_KINDS = new Set<ProjectResourceKind>([
 ]);
 
 type ProjectNavigationIntent =
-  | { kind: "select"; key: string; label: string }
+  | { kind: "select"; key: string; label: string; section?: ProjectSection }
+  | { kind: "database-overview"; label: string }
+  | { kind: "create"; resourceKind: Exclude<DatabaseOverviewKind, "asset">; label: string }
+  | { kind: "assets"; label: string }
   | { kind: "close"; key: string; label: string };
 
 export function Project({
@@ -131,6 +140,7 @@ export function Project({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const [section, setSection] = useState<ProjectSection>("world");
+  const [databaseOverviewOpen, setDatabaseOverviewOpen] = useState(false);
   const [collapsedKinds, setCollapsedKinds] = useState<Set<ProjectResourceKind>>(
     () => new Set(["manifest"]),
   );
@@ -141,6 +151,7 @@ export function Project({
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createInitialKind, setCreateInitialKind] = useState<ProjectResourceKind | null>(null);
   const [trashDialogOpen, setTrashDialogOpen] = useState(false);
   const [trashEntries, setTrashEntries] = useState<StudioTrashEntry[]>([]);
   const [lifecycleReceipt, setLifecycleReceipt] = useState<{ title: string; path: string } | null>(null);
@@ -149,9 +160,11 @@ export function Project({
   const draftGuardRef = useRef<StudioDraftGuard | null>(null);
   const createResourceButtonRef = useRef<HTMLButtonElement | null>(null);
   const trashButtonRef = useRef<HTMLButtonElement | null>(null);
+  const navigate = useNavigate();
 
   const closeCreateDialog = () => {
     setCreateDialogOpen(false);
+    setCreateInitialKind(null);
     requestAnimationFrame(() => createResourceButtonRef.current?.focus());
   };
 
@@ -235,12 +248,13 @@ export function Project({
     : undefined;
 
   const commitSelectResource = (key: string) => {
+    setDatabaseOverviewOpen(false);
     setSelectedKey(key);
     setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
   };
 
   const selectResource = (key: string) => {
-    if (draftActive && selectedKey && key !== selectedKey) {
+    if (draftActive && selectedKey && (key !== selectedKey || databaseOverviewOpen)) {
       const label = project.graph.resources.find((resource) => resource.key === key)?.label ?? key;
       setNavigationError(null);
       setPendingNavigation({ kind: "select", key, label });
@@ -312,8 +326,74 @@ export function Project({
   const finishNavigation = (intent: ProjectNavigationIntent) => {
     setPendingNavigation(null);
     setNavigationError(null);
-    if (intent.kind === "select") commitSelectResource(intent.key);
-    else commitCloseTab(intent.key);
+    if (intent.kind === "select") {
+      if (intent.section) {
+        setSection(intent.section);
+        setQuery("");
+        const resourceKind = project.graph.resources.find((resource) => resource.key === intent.key)?.kind;
+        if (resourceKind) {
+          setCollapsedKinds((current) => {
+            if (!current.has(resourceKind)) return current;
+            const next = new Set(current);
+            next.delete(resourceKind);
+            return next;
+          });
+        }
+      }
+      commitSelectResource(intent.key);
+      return;
+    }
+    if (intent.kind === "database-overview") {
+      setSection("database");
+      setQuery("");
+      setCreateDialogOpen(false);
+      setCreateInitialKind(null);
+      setDatabaseOverviewOpen(true);
+      return;
+    }
+    if (intent.kind === "create") {
+      setSection("database");
+      setQuery("");
+      setDatabaseOverviewOpen(true);
+      setCreateInitialKind(intent.resourceKind);
+      setCreateDialogOpen(true);
+      return;
+    }
+    if (intent.kind === "assets") {
+      navigate("/assets");
+      return;
+    }
+    commitCloseTab(intent.key);
+  };
+
+  const requestNavigation = (intent: ProjectNavigationIntent) => {
+    const keepsCurrentRecord = intent.kind === "select" &&
+      intent.key === selectedKey &&
+      !databaseOverviewOpen;
+    if (draftActive && !keepsCurrentRecord) {
+      setNavigationError(null);
+      setPendingNavigation(intent);
+      return;
+    }
+    finishNavigation(intent);
+  };
+
+  const openDatabaseOverview = () => {
+    requestNavigation({ kind: "database-overview", label: "Game Database" });
+  };
+
+  const openDatabaseKind = (kind: Exclude<DatabaseOverviewKind, "asset">) => {
+    const resource = project.graph.resources.find((candidate) => candidate.kind === kind);
+    if (!resource) {
+      requestNavigation({ kind: "create", resourceKind: kind, label: `New ${KIND_META[kind]?.label ?? kind} record` });
+      return;
+    }
+    requestNavigation({
+      kind: "select",
+      key: resource.key,
+      label: resource.label,
+      section: databaseSectionForKind(kind) ?? undefined,
+    });
   };
 
   const handleResourceTrashed = (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => {
@@ -387,7 +467,17 @@ export function Project({
             key={item.id}
             title={item.label}
             aria-label={item.label}
-            onClick={() => { setSection(item.id); setQuery(""); setCreateDialogOpen(false); }}
+            onClick={() => {
+              if (item.id === "database") {
+                openDatabaseOverview();
+                return;
+              }
+              setSection(item.id);
+              setQuery("");
+              setCreateDialogOpen(false);
+              setCreateInitialKind(null);
+              setDatabaseOverviewOpen(false);
+            }}
           ><span>{item.icon}</span><small>{item.label}</small></button>
         ))}
       </nav>
@@ -396,7 +486,7 @@ export function Project({
         <header className="explorer-heading">
           <div><span>PROJECT</span><strong>{SECTION_META.find((item) => item.id === section)?.label}</strong></div>
           <div className="explorer-heading-actions">
-            <small>{project.graph.resources.length}</small>
+            <small>{groups.reduce((total, group) => total + group.rows.length, 0)}</small>
             <button
               ref={trashButtonRef}
               type="button"
@@ -413,7 +503,7 @@ export function Project({
                 aria-label={`New ${SECTION_META.find((item) => item.id === section)?.label} resource`}
                 title={draftActive ? "Save or discard the current draft first" : "Create resource"}
                 disabled={draftActive}
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={() => { setCreateInitialKind(null); setCreateDialogOpen(true); }}
               >＋</button>
             )}
           </div>
@@ -499,12 +589,19 @@ export function Project({
 
       <section className="project-editor-shell">
         <nav className="document-tabs" aria-label="Open resources">
+          {databaseOverviewOpen && (
+            <div className="document-tab database-overview-tab active">
+              <button type="button" aria-current="page" onClick={openDatabaseOverview}>
+                <span>◫</span><strong>Game Database</strong>
+              </button>
+            </div>
+          )}
           {openKeys.map((key) => {
             const resource = project.graph.resources.find((candidate) => candidate.key === key);
             if (!resource) return null;
             const meta = KIND_META[resource.kind] ?? { icon: "·", label: resource.kind };
             return (
-              <div className={`document-tab ${selectedKey === key ? "active" : ""}`} key={key}>
+              <div className={`document-tab ${!databaseOverviewOpen && selectedKey === key ? "active" : ""}`} key={key}>
                 <button type="button" onClick={() => selectResource(key)}>
                   <span>{meta.icon}</span><strong>{resource.label}</strong>
                 </button>
@@ -515,7 +612,18 @@ export function Project({
           <span className="document-tabs-fill" />
         </nav>
         <div className="project-detail">
-          {selected ? (
+          {databaseOverviewOpen ? (
+            <DatabaseOverview
+              project={project}
+              onOpenKind={openDatabaseKind}
+              onCreateKind={(kind) => requestNavigation({
+                kind: "create",
+                resourceKind: kind,
+                label: `New ${KIND_META[kind]?.label ?? kind} record`,
+              })}
+              onOpenAssets={() => requestNavigation({ kind: "assets", label: "Visual Assets" })}
+            />
+          ) : selected ? (
             <ResourceDetail
               node={selected}
               map={map}
@@ -543,7 +651,7 @@ export function Project({
       {pendingNavigation && draftGuardRef.current && (
         <DraftNavigationDialog
           guard={draftGuardRef.current}
-          destination={pendingNavigation.kind === "select" ? pendingNavigation.label : "another open resource"}
+          destination={pendingNavigation.kind === "close" ? "another open resource" : pendingNavigation.label}
           saving={navigationSaving}
           error={navigationError}
           onStay={() => { setPendingNavigation(null); setNavigationError(null); }}
@@ -567,12 +675,19 @@ export function Project({
       )}
       {createDialogOpen && (
         <CreateResourceDialog
-          kinds={CREATABLE_SECTION_KINDS[section]}
+          kinds={createInitialKind
+            ? CREATABLE_SECTION_KINDS[databaseSectionForKind(createInitialKind) ?? section]
+            : CREATABLE_SECTION_KINDS[section]}
+          initialKind={createInitialKind ?? undefined}
           assets={project.assets}
           onClose={closeCreateDialog}
           onCreated={(created) => {
             setProject(created.project);
             setCreateDialogOpen(false);
+            setCreateInitialKind(null);
+            const createdSection = databaseSectionForKind(created.resource.kind);
+            if (createdSection) setSection(createdSection);
+            setQuery("");
             commitSelectResource(created.resource.key);
           }}
         />
@@ -682,19 +797,21 @@ function formatTrashDate(value: string): string {
 
 function CreateResourceDialog({
   kinds,
+  initialKind,
   assets,
   onClose,
   onCreated,
 }: {
   kinds: ProjectResourceKind[];
+  initialKind?: ProjectResourceKind;
   assets: ProjectAssetPreview[];
   onClose: () => void;
   onCreated: (created: Awaited<ReturnType<typeof createProjectResource>>) => void;
 }) {
-  const initialKind = kinds[0] ?? "script";
-  const [kind, setKind] = useState<ProjectResourceKind>(initialKind);
+  const firstKind = initialKind && kinds.includes(initialKind) ? initialKind : kinds[0] ?? "script";
+  const [kind, setKind] = useState<ProjectResourceKind>(firstKind);
   const [label, setLabel] = useState("");
-  const [id, setId] = useState(`new_${initialKind}`);
+  const [id, setId] = useState(`new_${firstKind}`);
   const [mapMode, setMapMode] = useState<"node" | "spatial">("node");
   const [mapWidth, setMapWidth] = useState("14");
   const [mapHeight, setMapHeight] = useState("10");

@@ -2224,6 +2224,130 @@ summary:focus-visible {
 .document-tabs-fill { min-width: 24px; flex: 1; border-right: 1px solid var(--studio-line); }
 
 .project-detail { min-width: 0; min-height: 0; overflow: hidden; }
+.database-overview-tab { order: -1; }
+.database-overview-tab > button:first-child { padding-right: 13px; }
+
+.database-overview {
+  display: grid;
+  grid-template-rows: auto minmax(min-content,1fr) auto;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  padding: 22px clamp(18px,3vw,36px) 16px;
+  overflow: auto;
+  color: var(--studio-text);
+  background:
+    radial-gradient(circle at 78% 4%,rgba(80,199,217,.075),transparent 26%),
+    linear-gradient(180deg,rgba(255,255,255,.012),transparent 180px),
+    var(--studio-bg);
+  scrollbar-color: #303744 transparent;
+  scrollbar-width: thin;
+}
+.database-overview-hero {
+  display: grid;
+  grid-template-columns: 66px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 112px;
+  padding: 15px 18px;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 10px;
+  background: linear-gradient(115deg,rgba(80,199,217,.085),transparent 52%),#11161e;
+  box-shadow: var(--studio-shadow);
+}
+.database-overview-mark {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  color: var(--studio-accent);
+  border: 1px solid rgba(80,199,217,.34);
+  border-radius: 9px;
+  background:
+    linear-gradient(90deg,transparent 48%,rgba(80,199,217,.13) 48% 52%,transparent 52%),
+    linear-gradient(transparent 48%,rgba(80,199,217,.13) 48% 52%,transparent 52%),
+    rgba(80,199,217,.055);
+  box-shadow: inset 0 0 24px rgba(80,199,217,.04);
+  font-size: 25px;
+  place-items: center;
+}
+.database-overview-hero > div:nth-child(2) { min-width: 0; }
+.database-overview-hero span { color: var(--studio-accent); font-size: 7px; font-weight: 800; letter-spacing: .16em; }
+.database-overview-hero h1 { margin: 4px 0 3px; color: #f0f3f6; font: 600 24px/1.15 ui-serif,Georgia,serif; }
+.database-overview-hero p { max-width: 720px; margin: 0; color: #77828f; font-size: 9px; line-height: 1.55; }
+.database-overview-hero dl { display: grid; grid-template-columns: repeat(2,minmax(70px,auto)); gap: 1px; margin: 0; overflow: hidden; border: 1px solid #2a3540; border-radius: 6px; background: #2a3540; }
+.database-overview-hero dl > div { display: flex; min-height: 53px; padding: 8px 12px; flex-direction: column; justify-content: center; gap: 3px; background: #0c1117; }
+.database-overview-hero dt { color: #5d6975; font-size: 6px; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }
+.database-overview-hero dd { margin: 0; color: #d6dce2; font: 650 17px/1 ui-monospace,monospace; }
+
+.database-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(230px,1fr));
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+}
+.database-overview-card {
+  --database-kind-accent: 80,199,217;
+  position: relative;
+  display: grid;
+  grid-template-columns: 43px minmax(0,1fr) auto;
+  grid-template-rows: minmax(82px,auto) 30px;
+  min-width: 0;
+  min-height: 124px;
+  padding: 0;
+  overflow: hidden;
+  color: #aab3bd;
+  border: 1px solid #2b3540;
+  border-radius: 8px;
+  outline: none;
+  background: linear-gradient(145deg,rgba(var(--database-kind-accent),.045),transparent 62%),#111720;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .12s ease,background .12s ease,transform .12s ease;
+}
+.database-overview-card.kind-character { --database-kind-accent: 125,171,222; }
+.database-overview-card.kind-item { --database-kind-accent: 112,204,145; }
+.database-overview-card.kind-weapon { --database-kind-accent: 224,111,121; }
+.database-overview-card.kind-skill { --database-kind-accent: 173,137,214; }
+.database-overview-card.kind-enemy { --database-kind-accent: 224,111,121; }
+.database-overview-card.kind-action { --database-kind-accent: 231,168,106; }
+.database-overview-card.kind-map { --database-kind-accent: 80,199,217; }
+.database-overview-card.kind-asset { --database-kind-accent: 195,151,222; }
+.database-overview-card > i {
+  display: grid;
+  grid-row: 1;
+  align-self: start;
+  width: 34px;
+  height: 34px;
+  margin: 12px 0 0 11px;
+  color: rgb(var(--database-kind-accent));
+  border: 1px solid rgba(var(--database-kind-accent),.28);
+  border-radius: 6px;
+  background: rgba(var(--database-kind-accent),.065);
+  font: normal 16px/1 ui-monospace,monospace;
+  place-items: center;
+}
+.database-overview-card-copy { display: flex; min-width: 0; grid-row: 1; padding: 12px 8px 9px 10px; flex-direction: column; gap: 3px; }
+.database-overview-card-copy small { color: rgb(var(--database-kind-accent)); font-size: 6px; font-weight: 800; letter-spacing: .13em; }
+.database-overview-card-copy strong { overflow: hidden; color: #dce1e6; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.database-overview-card-copy p { margin: 2px 0 0; color: #626e7b; font-size: 7px; line-height: 1.45; }
+.database-overview-card-count { display: flex; min-width: 43px; grid-row: 1; padding: 12px 11px 0 4px; flex-direction: column; align-items: flex-end; gap: 2px; }
+.database-overview-card-count b { color: #dce2e7; font: 650 17px/1 ui-monospace,monospace; }
+.database-overview-card-count small { color: #505b67; font-size: 6px; text-transform: uppercase; }
+.database-overview-card > em { display: flex; grid-column: 1 / -1; grid-row: 2; align-items: center; justify-content: space-between; padding: 0 11px; color: #66727e; border-top: 1px solid #27313b; background: #0c1117; font: normal 700 7px/1 ui-monospace,monospace; letter-spacing: .04em; }
+.database-overview-card > em span { color: rgb(var(--database-kind-accent)); font-size: 11px; }
+.database-overview-card:hover,
+.database-overview-card:focus-visible { border-color: rgba(var(--database-kind-accent),.62); background: linear-gradient(145deg,rgba(var(--database-kind-accent),.095),transparent 65%),#151b24; transform: translateY(-1px); box-shadow: 0 8px 22px rgba(0,0,0,.24),0 0 0 2px rgba(var(--database-kind-accent),.09); }
+.database-overview-card.empty { border-style: dashed; }
+.database-overview-card.empty .database-overview-card-count b,
+.database-overview-card.empty > em { color: rgb(var(--database-kind-accent)); }
+.database-overview-card.empty > em { background: rgba(var(--database-kind-accent),.045); }
+
+.database-overview-footer { display: flex; align-items: center; justify-content: flex-end; gap: 14px; min-height: 24px; color: #4e5965; font-size: 7px; }
+.database-overview-footer span { display: flex; align-items: center; gap: 4px; }
+.database-overview-footer kbd { padding: 2px 4px; color: #687481; border: 1px solid #2c3540; border-radius: 3px; background: #11161e; font: 6px/1 ui-monospace,monospace; }
+
 .resource-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
@@ -3543,6 +3667,15 @@ summary:focus-visible {
   .project-workbench { grid-template-columns: 48px 210px minmax(360px,1fr); overflow-x: auto; }
   .project-activitybar { padding-inline: 3px; }
   .project-activitybar button { width: 41px; }
+  .database-overview { gap: 11px; padding: 14px 12px 10px; }
+  .database-overview-hero { grid-template-columns: 48px minmax(0,1fr); gap: 10px; padding: 12px; }
+  .database-overview-mark { width: 46px; height: 46px; font-size: 19px; }
+  .database-overview-hero h1 { font-size: 19px; }
+  .database-overview-hero p { display: none; }
+  .database-overview-hero dl { grid-column: 1 / -1; width: 100%; }
+  .database-overview-hero dl > div { min-height: 40px; padding-block: 6px; }
+  .database-overview-grid { grid-template-columns: minmax(0,1fr); }
+  .database-overview-footer { display: none; }
   .resource-editor-heading-actions { gap: 4px; }
   .resource-sibling-nav > span { min-width: 40px; padding-inline: 4px; }
   .editor-inspector-toggle { width: 29px; height: 29px; justify-content: center; padding: 0; font-size: 0; }
