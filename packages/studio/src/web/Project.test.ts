@@ -16,6 +16,7 @@ import {
   patchResourceScalarFields,
   resourceChoices,
   resolveProjectReference,
+  summarizeMapTreeResource,
   summarizeMapValidation,
 } from "./pages/Project";
 import type { MapDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
@@ -286,6 +287,28 @@ describe("Studio map event resource picker", () => {
     expect(summarizeMapValidation({ placements: [] })).toBe(
       "semantic node map · 0 placements · 0 event pages",
     );
+  });
+
+  test("distinguishes spatial maps from semantic nodes in the World tree", () => {
+    expect(summarizeMapTreeResource({
+      layout: {
+        width: 14,
+        height: 10,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [],
+        regions: [{ id: "bank", name: "River bank", x: 0, y: 0, width: 4, height: 2 }],
+      },
+      placements: [{ id: "gate" }, { id: "altar" }],
+    } as unknown as MapDef)).toEqual({
+      spatial: true,
+      label: "14×10 GRID · 2 OBJECTS · 1 REGION",
+    });
+    expect(summarizeMapTreeResource({ placements: [{ id: "gate" }] } as unknown as MapDef)).toEqual({
+      spatial: false,
+      label: "NODE MAP · 1 RESOURCE",
+    });
+    expect(summarizeMapTreeResource(undefined)).toBeNull();
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

@@ -215,6 +215,10 @@ export function Project({
       return rows.length > 0 ? [{ kind, rows }] : [];
     });
   }, [project, query, section]);
+  const mapById = useMemo(
+    () => new Map((project?.maps ?? []).map((candidate) => [candidate.id, candidate])),
+    [project],
+  );
 
   if (error) return <div className="empty">⚠ {error}</div>;
   if (!project) return <div className="empty">loading project…</div>;
@@ -450,12 +454,15 @@ export function Project({
                   <strong>{meta.label}</strong>
                   <small>{rows.length}</small>
                 </button>
-                {!collapsed && rows.map((resource) => (
-                  <button
+                {!collapsed && rows.map((resource) => {
+                  const mapSummary = resource.kind === "map"
+                    ? summarizeMapTreeResource(mapById.get(resource.id))
+                    : null;
+                  return <button
                     type="button"
                     role="treeitem"
                     draggable={PLACEABLE_KINDS.has(resource.kind)}
-                    className={`resource-row ${selectedKey === resource.key ? "selected" : ""}`}
+                    className={`resource-row ${mapSummary ? "map-resource-row" : ""} ${selectedKey === resource.key ? "selected" : ""}`}
                     key={resource.key}
                     aria-selected={selectedKey === resource.key}
                     onClick={() => selectResource(resource.key)}
@@ -469,10 +476,14 @@ export function Project({
                     }}
                   >
                     <span className="resource-node-icon">{meta.icon}</span>
-                    <span className="resource-node-copy"><strong>{resource.label}</strong><small>{resource.id}</small></span>
+                    <span className="resource-node-copy">
+                      <strong>{resource.label}</strong>
+                      <small>{resource.id}</small>
+                      {mapSummary && <span className={mapSummary.spatial ? "resource-map-summary spatial" : "resource-map-summary"}>{mapSummary.label}</span>}
+                    </span>
                     {project.graph.missing.some((entry) => entry.referencedBy.includes(resource.key)) && <i className="resource-problem" title="Missing reference">!</i>}
-                  </button>
-                ))}
+                  </button>;
+                })}
               </section>
             );
           })}
@@ -3254,6 +3265,24 @@ function cloneMap(map: MapDef): MapDef {
 export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
   return JSON.stringify({ layout: saved.layout, placements: saved.placements ?? [] }) !==
     JSON.stringify({ layout: draft.layout, placements: draft.placements ?? [] });
+}
+
+export function summarizeMapTreeResource(
+  map: Pick<MapDef, "layout" | "placements"> | undefined,
+): { spatial: boolean; label: string } | null {
+  if (!map) return null;
+  const placements = map.placements?.length ?? 0;
+  if (!map.layout) {
+    return {
+      spatial: false,
+      label: `NODE MAP · ${placements} RESOURCE${placements === 1 ? "" : "S"}`,
+    };
+  }
+  const regions = map.layout.regions.length;
+  return {
+    spatial: true,
+    label: `${map.layout.width}×${map.layout.height} GRID · ${placements} OBJECT${placements === 1 ? "" : "S"} · ${regions} REGION${regions === 1 ? "" : "S"}`,
+  };
 }
 
 export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements">): string {
