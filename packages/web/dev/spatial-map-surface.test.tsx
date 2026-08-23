@@ -112,4 +112,30 @@ describe("SpatialMapSurface", () => {
     expect(html).not.toContain(">Leave</button>");
     expect(html).not.toContain("arrival");
   });
+
+  test("moves manual placement commands into one nearby action prompt", () => {
+    const inspectMap: MapDef = {
+      ...map,
+      layout: { ...map.layout!, regions: [{ id: "market", name: "市集", x: 1, y: 1, width: 3, height: 2 }] },
+      placements: [{
+        ...map.placements![0]!,
+        resource: { kind: "item", id: "old_key" },
+        events: [{ id: "inspect", trigger: "interact", label: "调查门扉", order: 0 }],
+      }],
+    };
+    const inspectActivity: HubActivity = { ...move, id: "map:shrine/placement:gate/event:inspect", title: "Inspect" };
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={inspectMap}
+        activities={[inspectActivity]}
+        playerPosition={{ x: 3, y: 4 }}
+        onInput={() => {}}
+      />,
+    );
+    expect(html).toContain("区域 市集");
+    expect(html).toContain("spatial-map-interact");
+    expect(html).toContain("调查门扉");
+    expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');
+    expect(html.match(/<button/g)).toHaveLength(5);
+  });
 });

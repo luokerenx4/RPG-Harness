@@ -103,6 +103,8 @@ export function SpatialMapSurface({
           <div
             className="spatial-map-region"
             key={region.id}
+            role="img"
+            aria-label={`区域 ${region.name ?? formatResourceName(region.id)}`}
             style={{
               left: `${region.x / layout.width * 100}%`,
               top: `${region.y / layout.height * 100}%`,
@@ -110,7 +112,9 @@ export function SpatialMapSurface({
               height: `${region.height / layout.height * 100}%`,
             }}
             title={region.name ?? region.id}
-          />
+          >
+            <span>{region.name ?? formatResourceName(region.id)}</span>
+          </div>
         ))}
         {visiblePlacements.map((placement) => (
           <Placement
@@ -215,6 +219,7 @@ function Placement({
       style={position}
       title={`${resourceKindLabel(resourceKind)} · ${resourceName}`}
       aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}`}
+      role="img"
     >
       <span className="spatial-placement-marker" aria-hidden="true">
         {resourceKindIcon(resourceKind)}

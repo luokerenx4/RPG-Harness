@@ -401,6 +401,19 @@ body {
   border: 1px dashed rgba(242, 193, 93, 0.62);
   background: rgba(242, 193, 93, 0.08);
 }
+.spatial-map-region > span {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  color: rgba(235,205,141,.62);
+  filter: drop-shadow(0 1px 2px #000);
+  font: 7px/1 ui-serif, serif;
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .spatial-placement {
   position: absolute;
   display: grid;
