@@ -534,18 +534,31 @@ export function AssetDetail({
       event.preventDefault();
       setPendingLeave("back");
     }}>
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 4 }}>
-            <span className={`kind-badge ${asset.kind}`}>{asset.kind}</span>{" "}
-            <span style={{ marginLeft: 8 }}>{asset.placeholder}</span>
-          </h1>
-          <div className="path mono muted">{asset.path}</div>
+      <header className="asset-record-hero">
+        <div className="asset-record-preview">
+          {asset.renderings.source ? (
+            <img
+              src={asset.renderings.sourceCompressed
+                ? `${sourceCompressedImageUrl(asset.path)}?v=${cacheKey}`
+                : `${sourceQualityImageUrl(asset.path)}?v=${cacheKey}`}
+              alt={asset.placeholder}
+            />
+          ) : <span aria-hidden="true">▧</span>}
         </div>
-        <button className="btn" onClick={copyPath}>
-          copy path
-        </button>
-      </div>
+        <div className="asset-record-identity">
+          <span>ASSET RECORD · {asset.kind.toUpperCase()}</span>
+          <h1>{asset.placeholder}</h1>
+          <code>{asset.path}</code>
+          <div>
+            <span className={`kind-badge ${asset.kind}`}>{asset.kind}</span>
+            <AssetRenderingFlags renderings={asset.renderings} />
+          </div>
+        </div>
+        <div className="asset-record-actions">
+          <span><i /> SPEC AUTHORITATIVE</span>
+          <button className="btn" onClick={copyPath}>Copy resource path</button>
+        </div>
+      </header>
 
       <div className="detail-layout">
         <div>
@@ -1149,6 +1162,17 @@ function assetEditBuffer(asset: AssetRow): AssetEditBuffer {
     refsCharactersCsv: (asset.refs?.characters ?? []).join(", "),
     refsEmotion: typeof asset.refs?.emotion === "string" ? asset.refs.emotion : "",
   };
+}
+
+function AssetRenderingFlags({ renderings }: { renderings: AssetRow["renderings"] }) {
+  return (
+    <div className="rendering-flags">
+      <span className={`flag${renderings.tuiAns ? " present" : ""}`}>ANS</span>
+      <span className={`flag${renderings.tuiTxt ? " present" : ""}`}>TXT</span>
+      <span className={`flag${renderings.source ? " present" : ""}`}>SRC</span>
+      <span className={`flag${renderings.web ? " present" : ""}`}>WEB</span>
+    </div>
+  );
 }
 
 function Layout({
