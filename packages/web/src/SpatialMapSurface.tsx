@@ -135,6 +135,7 @@ export function SpatialMapSurface({
     ? placementDisplayName(nearestLandmark.placement, resourceLabels)
     : undefined;
   const moveAvailability = mapMoveAvailability(map, playerPosition);
+  const stepTargets = collectSpatialStepTargets(map, playerPosition);
   const visibleTiles = collectSpatialTiles(map);
 
   useEffect(() => {
@@ -246,6 +247,22 @@ export function SpatialMapSurface({
             resourceLabels={resourceLabels}
           />
         ))}
+        {stepTargets.map((target) => (
+          <button
+            type="button"
+            className="spatial-map-step-cell"
+            aria-label={`${target.label}移动到 ${target.point.x},${target.point.y}`}
+            disabled={!target.available}
+            key={target.direction}
+            onClick={() => onInput({ type: "moveMap", direction: target.direction })}
+            style={{
+              left: `${target.point.x / layout.width * 100}%`,
+              top: `${target.point.y / layout.height * 100}%`,
+              width: `${100 / layout.width}%`,
+              height: `${100 / layout.height}%`,
+            }}
+          ><span aria-hidden="true">{target.arrow}</span></button>
+        ))}
         {playerPosition && (
           <div
             className="spatial-map-player"
@@ -329,7 +346,7 @@ export function SpatialMapSurface({
         </div>
       )}
       <p className="spatial-map-footnote">
-        <kbd>方向键</kbd> / <kbd>WASD</kbd> 移动 · <kbd>E</kbd> 主要互动 · 同格事件可用 <kbd>1–9</kbd> 选择
+        点击相邻格或用 <kbd>方向键</kbd> / <kbd>WASD</kbd> 移动 · <kbd>E</kbd> 主要互动 · 同格事件可用 <kbd>1–9</kbd> 选择
       </p>
     </section>
   );
@@ -422,6 +439,28 @@ export function mapMoveAvailability(map: MapDef, point?: MapPoint) {
     south: !mapPointBlocker(map, { x: point.x, y: point.y + 1 }),
     west: !mapPointBlocker(map, { x: point.x - 1, y: point.y }),
   };
+}
+
+export interface SpatialStepTarget {
+  direction: "north" | "east" | "south" | "west";
+  point: MapPoint;
+  available: boolean;
+  label: string;
+  arrow: string;
+}
+
+export function collectSpatialStepTargets(map: MapDef, point?: MapPoint): SpatialStepTarget[] {
+  if (!map.layout || !point) return [];
+  const availability = mapMoveAvailability(map, point);
+  const candidates: SpatialStepTarget[] = [
+    { direction: "north", point: { x: point.x, y: point.y - 1 }, available: availability.north, label: "向北", arrow: "↑" },
+    { direction: "east", point: { x: point.x + 1, y: point.y }, available: availability.east, label: "向东", arrow: "→" },
+    { direction: "south", point: { x: point.x, y: point.y + 1 }, available: availability.south, label: "向南", arrow: "↓" },
+    { direction: "west", point: { x: point.x - 1, y: point.y }, available: availability.west, label: "向西", arrow: "←" },
+  ];
+  return candidates.filter(({ point: candidate }) => (
+    candidate.x >= 0 && candidate.y >= 0 && candidate.x < map.layout!.width && candidate.y < map.layout!.height
+  ));
 }
 
 export function collectSpatialTiles(map: MapDef): Array<{

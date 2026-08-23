@@ -467,6 +467,39 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.spatial-map-step-cell {
+  position: absolute;
+  z-index: 940;
+  display: grid;
+  padding: 0;
+  color: rgba(217,247,251,.72);
+  border: 1px solid transparent;
+  outline: 0;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.spatial-map-step-cell span {
+  display: grid;
+  width: min(58%,22px);
+  aspect-ratio: 1;
+  opacity: 0;
+  border: 1px solid rgba(124,200,216,.58);
+  border-radius: 50%;
+  background: rgba(12,40,48,.78);
+  box-shadow: 0 3px 10px rgba(0,0,0,.45);
+  font: 9px/1 ui-monospace,monospace;
+  transition: opacity 100ms ease, transform 100ms ease;
+  place-items: center;
+  transform: scale(.78);
+}
+.spatial-map-step-cell:hover:not(:disabled),
+.spatial-map-step-cell:focus-visible { border-color: rgba(124,200,216,.5); background: rgba(55,119,132,.15); }
+.spatial-map-step-cell:hover:not(:disabled) span,
+.spatial-map-step-cell:focus-visible span { opacity: 1; transform: scale(1); }
+.spatial-map-step-cell:disabled { cursor: not-allowed; }
+.spatial-map-step-cell:disabled:hover { border-color: rgba(235,174,90,.25); background: rgba(105,70,26,.1); }
+.spatial-map-step-cell:disabled:hover span { opacity: .58; color: #d0a76e; border-color: rgba(235,174,90,.42); background: rgba(69,44,20,.68); transform: scale(1); }
 .spatial-placement {
   position: absolute;
   display: grid;
