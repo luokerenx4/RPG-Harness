@@ -7,6 +7,8 @@ import type {
   MapLayoutDef,
   ProjectResourceKind,
   ProjectResourceNode,
+  SwitchDef,
+  VariableDef,
 } from "@rpg-harness/engine";
 import {
   fetchProject,
@@ -265,6 +267,8 @@ export function Project() {
               node={selected}
               map={map}
               resources={project.graph.resources}
+              switches={project.switches}
+              variables={project.variables}
               backlinks={project.graph.backlinks[selected.key] ?? []}
               missing={project.graph.missing.filter((entry) => entry.referencedBy.includes(selected.key))}
               unreferenced={project.graph.unreferenced.includes(selected.key)}
@@ -283,6 +287,8 @@ function ResourceDetail({
   node,
   map,
   resources,
+  switches,
+  variables,
   backlinks,
   missing,
   unreferenced,
@@ -291,6 +297,8 @@ function ResourceDetail({
   node: ProjectResourceNode;
   map?: MapDef;
   resources: ProjectResourceNode[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
   backlinks: string[];
   missing: Array<{ key: string; referencedBy: string[] }>;
   unreferenced: boolean;
@@ -313,7 +321,7 @@ function ResourceDetail({
           ><span aria-hidden="true">◫</span>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
         </header>
         {map ? (
-          <MapOverview map={map} resources={resources} onProjectSaved={onProjectSaved} />
+          <MapOverview map={map} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -832,10 +840,14 @@ function ReferenceList({ title, values }: { title: string; values: string[] }) {
 function MapOverview({
   map,
   resources,
+  switches,
+  variables,
   onProjectSaved,
 }: {
   map: MapDef;
   resources: ProjectResourceNode[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
   onProjectSaved: (project: ProjectResponse) => void;
 }) {
   const [draft, setDraft] = useState<MapDef>(() => cloneMap(map));
@@ -1113,6 +1125,8 @@ function MapOverview({
           placement={selectedPlacement}
           layers={draft.layout?.layers.map((layer) => layer.id) ?? []}
           resources={resources}
+          switches={switches}
+          variables={variables}
           onChange={(update) => mutatePlacement(selectedPlacement.id, update)}
           onDelete={() => {
             setDraft((current) => ({
@@ -1289,6 +1303,8 @@ function PlacementEditor({
   placement,
   layers,
   resources,
+  switches,
+  variables,
   onChange,
   onDelete,
   onClose,
@@ -1296,6 +1312,8 @@ function PlacementEditor({
   placement: MapPlacementDef;
   layers: string[];
   resources: ProjectResourceNode[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -1353,7 +1371,7 @@ function PlacementEditor({
             <label>Facing<select value={placement.facing ?? ""} onChange={(event) => onChange((current) => ({ ...current, facing: (event.target.value || undefined) as MapPlacementDef["facing"] }))}><option value="">none</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label>
             <label className="checkbox-field"><input type="checkbox" checked={placement.visible} onChange={(event) => onChange((current) => ({ ...current, visible: event.target.checked }))} />Visible</label>
           </div>
-          <ConditionJsonEditor label="Placement condition" value={placement.requires} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
+          <ConditionBuilder label="Placement condition" value={placement.requires} resources={resources} switches={switches} variables={variables} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
         </section>
       </div>
       <div className="placement-events">
@@ -1425,9 +1443,12 @@ function PlacementEditor({
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, lockedHint: change.target.value || undefined } : candidate),
               }))} /></label>
             </div>
-            <ConditionJsonEditor
+            <ConditionBuilder
               label="Event condition"
               value={event.requires}
+              resources={resources}
+              switches={switches}
+              variables={variables}
               onChange={(requires) => onChange((current) => ({
                 ...current,
                 events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, requires } : candidate),
@@ -1440,16 +1461,177 @@ function PlacementEditor({
   );
 }
 
-function ConditionJsonEditor({
+type ConditionEditorMode =
+  | "none"
+  | "switch"
+  | "variable"
+  | "affection"
+  | "scriptCompleted"
+  | "inventory"
+  | "weaponPower"
+  | "knowsSkill"
+  | "selfSwitch"
+  | "advanced";
+
+const CONDITION_MODES: Array<{ value: ConditionEditorMode; label: string }> = [
+  { value: "none", label: "Always / no condition" },
+  { value: "switch", label: "Switch" },
+  { value: "variable", label: "Variable" },
+  { value: "affection", label: "Character affection" },
+  { value: "scriptCompleted", label: "Script completed" },
+  { value: "inventory", label: "Inventory count" },
+  { value: "weaponPower", label: "Weapon power" },
+  { value: "knowsSkill", label: "Skill learned" },
+  { value: "selfSwitch", label: "Self switch" },
+  { value: "advanced", label: "Advanced JSON" },
+];
+
+function ConditionBuilder({
   label,
   value,
+  resources,
+  switches,
+  variables,
   onChange,
-  compact = false,
 }: {
   label: string;
   value?: Condition;
+  resources: ProjectResourceNode[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
   onChange: (value?: Condition) => void;
-  compact?: boolean;
+}) {
+  const mode = conditionEditorMode(value);
+  const setMode = (next: ConditionEditorMode) => onChange(createConditionDraft(next, resources, switches, variables));
+  return (
+    <section className={`condition-builder mode-${mode}`}>
+      <header>
+        <span>{label}</span>
+        <select aria-label={`${label} type`} value={mode} onChange={(event) => setMode(event.target.value as ConditionEditorMode)}>
+          {CONDITION_MODES.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+        </select>
+      </header>
+      {mode === "none" && <p>No runtime gate. This event is available whenever its trigger runs.</p>}
+      {mode === "switch" && value && "switch" in value && (
+        <div className="condition-fields">
+          <label>Switch<select value={value.switch.name} onChange={(event) => onChange({ switch: { ...value.switch, name: event.target.value } })}>
+            {!switches.some((candidate) => candidate.id === value.switch.name) && value.switch.name && <option value={value.switch.name}>{value.switch.name} · missing</option>}
+            {switches.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label ?? candidate.description ?? candidate.id} · {candidate.id}</option>)}
+          </select></label>
+          <label>Required value<select value={String(value.switch.eq ?? true)} onChange={(event) => onChange({ switch: { ...value.switch, eq: event.target.value === "true" } })}><option value="true">ON</option><option value="false">OFF</option></select></label>
+        </div>
+      )}
+      {mode === "variable" && value && "variable" in value && (
+        <div className="condition-fields condition-fields-range">
+          <label>Variable<select value={value.variable.name} onChange={(event) => {
+            const definition = variables.find((candidate) => candidate.id === event.target.value);
+            onChange({ variable: { name: event.target.value, eq: definition?.initial ?? "" } });
+          }}>
+            {!variables.some((candidate) => candidate.id === value.variable.name) && value.variable.name && <option value={value.variable.name}>{value.variable.name} · missing</option>}
+            {variables.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label ?? candidate.description ?? candidate.id} · {candidate.id}</option>)}
+          </select></label>
+          <RangeControls
+            range={value.variable}
+            variable
+            variableType={variables.find((candidate) => candidate.id === value.variable.name)?.type}
+            onChange={(range) => onChange({ variable: { name: value.variable.name, ...range as { eq?: string | number; min?: number; max?: number } } })}
+          />
+        </div>
+      )}
+      {mode === "affection" && value && "affection" in value && (
+        <div className="condition-fields condition-fields-range">
+          <ResourceConditionSelect label="Character" kind="character" value={value.affection.character} resources={resources} onChange={(character) => onChange({ affection: { ...value.affection, character } })} />
+          <RangeControls range={value.affection} onChange={(range) => onChange({ affection: { character: value.affection.character, ...range as { eq?: number; min?: number; max?: number } } })} />
+        </div>
+      )}
+      {mode === "scriptCompleted" && value && "scriptCompleted" in value && (
+        <div className="condition-fields condition-fields-single">
+          <ResourceConditionSelect label="Completed script" kind="script" value={value.scriptCompleted} resources={resources} onChange={(scriptCompleted) => onChange({ scriptCompleted })} />
+        </div>
+      )}
+      {mode === "inventory" && value && "inventory" in value && (
+        <div className="condition-fields condition-fields-range">
+          <ResourceConditionSelect label="Item" kind="item" value={value.inventory.itemId} resources={resources} onChange={(itemId) => onChange({ inventory: { ...value.inventory, itemId } })} />
+          <RangeControls range={value.inventory} onChange={(range) => onChange({ inventory: { itemId: value.inventory.itemId, ...range as { eq?: number; min?: number; max?: number } } })} />
+        </div>
+      )}
+      {mode === "weaponPower" && value && "weaponPower" in value && (
+        <div className="condition-fields condition-fields-range">
+          <ResourceConditionSelect label="Weapon" kind="weapon" value={value.weaponPower.weaponId} resources={resources} onChange={(weaponId) => onChange({ weaponPower: { ...value.weaponPower, weaponId } })} />
+          <RangeControls range={value.weaponPower} onChange={(range) => onChange({ weaponPower: { weaponId: value.weaponPower.weaponId, ...range as { eq?: number; min?: number; max?: number } } })} />
+        </div>
+      )}
+      {mode === "knowsSkill" && value && "knowsSkill" in value && (
+        <div className="condition-fields condition-fields-single">
+          <ResourceConditionSelect label="Learned skill" kind="skill" value={value.knowsSkill} resources={resources} onChange={(knowsSkill) => onChange({ knowsSkill })} />
+        </div>
+      )}
+      {mode === "selfSwitch" && value && "selfSwitch" in value && (
+        <div className="condition-fields condition-fields-self-switch">
+          <ResourceConditionSelect label="Script" kind="script" value={value.selfSwitch.scriptId} resources={resources} onChange={(scriptId) => onChange({ selfSwitch: { ...value.selfSwitch, scriptId } })} />
+          <label>Letter<select value={value.selfSwitch.name} onChange={(event) => onChange({ selfSwitch: { ...value.selfSwitch, name: event.target.value as "A" | "B" | "C" | "D" } })}>{["A", "B", "C", "D"].map((letter) => <option key={letter}>{letter}</option>)}</select></label>
+          <label>Required value<select value={String(value.selfSwitch.eq ?? true)} onChange={(event) => onChange({ selfSwitch: { ...value.selfSwitch, eq: event.target.value === "true" } })}><option value="true">ON</option><option value="false">OFF</option></select></label>
+        </div>
+      )}
+      {mode === "advanced" && <ConditionJsonEditor value={value} onChange={onChange} />}
+    </section>
+  );
+}
+
+function RangeControls({
+  range,
+  onChange,
+  variable = false,
+  variableType,
+}: {
+  range: { eq?: unknown; min?: number; max?: number };
+  onChange: (range: { eq?: string | number; min?: number; max?: number }) => void;
+  variable?: boolean;
+  variableType?: VariableDef["type"];
+}) {
+  const operator = conditionRangeOperator(range);
+  const raw = operator === "eq" ? range.eq ?? "" : range[operator] ?? 0;
+  return (
+    <>
+      <label>Compare<select value={operator} onChange={(event) => {
+        const next = event.target.value as "eq" | "min" | "max";
+        onChange(next === "eq" ? { eq: variable ? "" : 0 } : { [next]: 0 });
+      }}><option value="eq">equals</option>{variableType !== "string" && <><option value="min">at least</option><option value="max">at most</option></>}</select></label>
+      <label>Value<input type={operator === "eq" && variable ? "text" : "number"} value={String(raw)} onChange={(event) => onChange(operator === "eq"
+        ? { eq: variable ? parseConditionLiteral(event.target.value) : Number(event.target.value) }
+        : { [operator]: Number(event.target.value) })} /></label>
+    </>
+  );
+}
+
+function ResourceConditionSelect({
+  label,
+  kind,
+  value,
+  resources,
+  onChange,
+}: {
+  label: string;
+  kind: ProjectResourceKind;
+  value: string;
+  resources: ProjectResourceNode[];
+  onChange: (id: string) => void;
+}) {
+  const choices = resourceChoices(resources, kind);
+  return (
+    <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>
+      {!choices.some((choice) => choice.id === value) && value && <option value={value}>{value} · missing</option>}
+      {choices.map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
+    </select></label>
+  );
+}
+
+function ConditionJsonEditor({
+  value,
+  onChange,
+}: {
+  value?: Condition;
+  onChange: (value?: Condition) => void;
 }) {
   const [text, setText] = useState(value ? JSON.stringify(value) : "");
   const [error, setError] = useState(false);
@@ -1473,12 +1655,52 @@ function ConditionJsonEditor({
     }
   };
   return (
-    <label className={`condition-editor ${compact ? "compact" : ""}${error ? " invalid" : ""}`}>
-      <span>{label}</span>
+    <label className={`condition-editor advanced${error ? " invalid" : ""}`}>
+      <span>JSON</span>
       <textarea value={text} placeholder='{"switch":{"name":"flag","eq":true}}' onChange={(event) => setText(event.target.value)} />
       <button type="button" onClick={apply}>{error ? "Invalid JSON" : "Apply"}</button>
     </label>
   );
+}
+
+export function conditionEditorMode(value: Condition | undefined): ConditionEditorMode {
+  if (!value) return "none";
+  for (const mode of ["switch", "variable", "affection", "scriptCompleted", "inventory", "weaponPower", "knowsSkill", "selfSwitch"] as const) {
+    if (mode in value) return mode;
+  }
+  return "advanced";
+}
+
+export function createConditionDraft(
+  mode: ConditionEditorMode,
+  resources: ProjectResourceNode[],
+  switches: SwitchDef[] = [],
+  variables: VariableDef[] = [],
+): Condition | undefined {
+  const first = (kind: ProjectResourceKind) => resourceChoices(resources, kind)[0]?.id ?? "";
+  switch (mode) {
+    case "none": return undefined;
+    case "switch": return { switch: { name: switches[0]?.id ?? "", eq: true } };
+    case "variable": return { variable: { name: variables[0]?.id ?? "", eq: variables[0]?.initial ?? "" } };
+    case "affection": return { affection: { character: first("character"), min: 1 } };
+    case "scriptCompleted": return { scriptCompleted: first("script") };
+    case "inventory": return { inventory: { itemId: first("item"), min: 1 } };
+    case "weaponPower": return { weaponPower: { weaponId: first("weapon"), min: 1 } };
+    case "knowsSkill": return { knowsSkill: first("skill") };
+    case "selfSwitch": return { selfSwitch: { scriptId: first("script"), name: "A", eq: true } };
+    case "advanced": return { all: [] };
+  }
+}
+
+function conditionRangeOperator(range: { eq?: unknown; min?: number; max?: number }): "eq" | "min" | "max" {
+  if (range.eq !== undefined) return "eq";
+  if (range.max !== undefined) return "max";
+  return "min";
+}
+
+function parseConditionLiteral(value: string): string | number {
+  if (value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  return value;
 }
 
 const EVENT_TRIGGERS: MapEventTrigger[] = [

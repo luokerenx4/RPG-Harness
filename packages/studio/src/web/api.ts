@@ -8,6 +8,8 @@ import type {
   MapAvailableResource,
   ProjectResourceKind,
   ProjectResourceGraph,
+  SwitchDef,
+  VariableDef,
 } from "@rpg-harness/engine";
 
 export interface GameSummary {
@@ -92,6 +94,8 @@ export async function fetchGame(): Promise<GameSummary> {
 export interface ProjectResponse {
   graph: ProjectResourceGraph;
   maps: MapDef[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
 }
 
 export async function fetchProject(): Promise<ProjectResponse> {

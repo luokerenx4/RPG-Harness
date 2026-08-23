@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  conditionEditorMode,
+  createConditionDraft,
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
@@ -65,5 +67,26 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(resourceChoices(resources, "script").map((resource) => resource.id)).toEqual(["a", "z"]);
     expect(resourceChoices(resources, undefined)).toEqual([]);
+  });
+
+  test("creates resource-backed RPG Maker style condition drafts", () => {
+    const resources = [
+      { key: "character:kagari", kind: "character", id: "kagari", label: "Kagari", refs: [] },
+      { key: "item:shard", kind: "item", id: "shard", label: "Shard", refs: [] },
+      { key: "script:intro", kind: "script", id: "intro", label: "Intro", refs: [] },
+      { key: "skill:dash", kind: "skill", id: "dash", label: "Dash", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(createConditionDraft("affection", resources)).toEqual({ affection: { character: "kagari", min: 1 } });
+    expect(createConditionDraft("scriptCompleted", resources)).toEqual({ scriptCompleted: "intro" });
+    expect(createConditionDraft("inventory", resources)).toEqual({ inventory: { itemId: "shard", min: 1 } });
+    expect(createConditionDraft("switch", resources, [
+      { id: "chapter_open", initial: false, label: "Chapter open" },
+    ])).toEqual({ switch: { name: "chapter_open", eq: true } });
+    expect(createConditionDraft("variable", resources, [], [
+      { id: "route", type: "string", initial: "north", label: "Route" },
+    ])).toEqual({ variable: { name: "route", eq: "north" } });
+    expect(conditionEditorMode({ all: [] })).toBe("advanced");
+    expect(conditionEditorMode({ knowsSkill: "dash" })).toBe("knowsSkill");
+    expect(conditionEditorMode(undefined)).toBe("none");
   });
 });

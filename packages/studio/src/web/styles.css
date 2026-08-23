@@ -2285,6 +2285,59 @@ summary:focus-visible {
 .condition-editor { grid-template-columns: 100px minmax(0,1fr) 55px; margin: 8px 0 0; color: #68717f; font-size: 8px; }
 .condition-editor textarea { min-height: 30px; color: #bbc3cd; border-color: var(--studio-line); background: #0b0f15; font-size: 8px; }
 .condition-editor button { padding: 4px; font-size: 8px; }
+.condition-builder {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  background: #0a0e14;
+}
+.condition-builder > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 7px 5px 9px;
+  border-bottom: 1px solid var(--studio-line);
+  background: #121720;
+}
+.condition-builder > header > span { color: #6d7784; font-size: 8px; font-weight: 700; }
+.condition-builder > header select {
+  min-width: 160px;
+  height: 24px;
+  padding: 2px 6px;
+  color: #aeb6c0;
+  border: 1px solid #303845;
+  border-radius: 4px;
+  background: #0c1016;
+  font-size: 8px;
+}
+.condition-builder > p { margin: 0; padding: 9px; color: #4f5966; font-size: 8px; }
+.condition-fields {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 130px;
+  gap: 6px;
+  padding: 8px;
+}
+.condition-fields-range { grid-template-columns: minmax(120px,1fr) 90px 90px; }
+.condition-fields-single { grid-template-columns: minmax(0,1fr); }
+.condition-fields-self-switch { grid-template-columns: minmax(130px,1fr) 70px 100px; }
+.condition-fields label { display: flex; min-width: 0; flex-direction: column; gap: 3px; color: #5f6976; font-size: 7px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.condition-fields input,
+.condition-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  padding: 4px 6px;
+  color: #c2c9d2;
+  border: 1px solid #2b3440;
+  border-radius: 4px;
+  background: #0d1117;
+  font-size: 9px;
+  text-transform: none;
+}
+.condition-builder .condition-editor.advanced { margin: 0; padding: 8px; }
 .placement-events { padding: 0 8px 8px; }
 .placement-events > header { min-height: 39px; margin: 0; }
 .placement-events > header > div { display: flex; align-items: baseline; gap: 9px; }

@@ -223,7 +223,12 @@ async function projectGame(ctx: Ctx, game: Awaited<ReturnType<typeof loadGame>>)
   }
   graph.missing.sort((left, right) => left.key.localeCompare(right.key));
   graph.unreferenced.push(...artifacts.map((artifact) => artifact.key));
-  return { graph, maps: game.maps ?? [] };
+  return {
+    graph,
+    maps: game.maps ?? [],
+    switches: game.switches ?? [],
+    variables: game.variables ?? [],
+  };
 }
 
 export async function scanProjectArtifacts(gameDir: string) {
