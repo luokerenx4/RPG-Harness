@@ -1593,6 +1593,7 @@ function PlacementEditor({
   onDelete: () => void;
   onClose: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const setNumber = (axis: "x" | "y", value: number) => onChange((current) => ({
     ...current,
     at: { ...current.at, [axis]: value },
@@ -1600,12 +1601,26 @@ function PlacementEditor({
   const placementKind = placement.resource?.kind;
   const placementChoices = resourceChoices(resources, placementKind);
   const placementLabel = mapPlacementResourceLabel(placement, resources);
+
+  useEffect(() => setConfirmDelete(false), [placement.id]);
+
   return (
     <section className="placement-editor">
       <header className="placement-editor-heading">
         <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
-        <div className="placement-heading-actions"><button type="button" className="danger" onClick={onDelete}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
+        <div className="placement-heading-actions"><button type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
+      {confirmDelete && (
+        <section className="placement-delete-confirmation" role="alertdialog" aria-labelledby="delete-placement-title">
+          <span aria-hidden="true">!</span>
+          <div>
+            <strong id="delete-placement-title">Remove “{placementLabel}” from this map?</strong>
+            <small>{placement.events.length} event {placement.events.length === 1 ? "page" : "pages"} will leave the map draft. The source file is unchanged until Save changes.</small>
+          </div>
+          <button type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          <button type="button" className="danger" onClick={onDelete}>Remove object</button>
+        </section>
+      )}
       <div className="placement-editor-grid">
         <section className="placement-panel placement-resource-panel">
           <header><h3>Resource</h3><span>{placement.resource ? placement.resource.kind : "event-only"}</span></header>
@@ -1675,6 +1690,7 @@ function EventPagesEditor({
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
 }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(placement.events[0]?.id ?? null);
+  const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
   const selectedIndex = Math.max(0, placement.events.findIndex((event) => event.id === selectedEventId));
   const selected = placement.events[selectedIndex];
 
@@ -1682,6 +1698,8 @@ function EventPagesEditor({
     if (selectedEventId && placement.events.some((event) => event.id === selectedEventId)) return;
     setSelectedEventId(placement.events[0]?.id ?? null);
   }, [placement.id, placement.events, selectedEventId]);
+
+  useEffect(() => setDeletePendingId(null), [placement.id, selectedEventId]);
 
   const patchSelected = (patch: Partial<MapPlacementEventDef>) => onChange((current) => ({
     ...current,
@@ -1707,6 +1725,7 @@ function EventPagesEditor({
         .map((event, index) => ({ ...event, order: index })),
     }));
     setSelectedEventId(nextId);
+    setDeletePendingId(null);
   };
 
   const movePage = (direction: -1 | 1) => {
@@ -1757,9 +1776,20 @@ function EventPagesEditor({
                 <button type="button" aria-label="Move page up" disabled={selectedIndex === 0} onClick={() => movePage(-1)}>↑</button>
                 <button type="button" aria-label="Move page down" disabled={selectedIndex === placement.events.length - 1} onClick={() => movePage(1)}>↓</button>
                 <button type="button" onClick={() => addPage(selected)}>Duplicate</button>
-                <button type="button" className="danger" aria-label={`Delete event ${selected.id}`} onClick={deletePage}>Delete</button>
+                <button type="button" className="danger" aria-label={`Delete event ${selected.id}`} onClick={() => setDeletePendingId(selected.id)}>Delete</button>
               </div>
             </header>
+
+            {deletePendingId === selected.id && (
+              <section className="event-page-delete-confirmation" role="alertdialog" aria-labelledby="delete-event-page-title">
+                <div>
+                  <strong id="delete-event-page-title">Remove event page “{selected.label || trigger?.label}”?</strong>
+                  <small>Its condition and resource command will leave this map draft. The source file is unchanged until Save changes.</small>
+                </div>
+                <button type="button" onClick={() => setDeletePendingId(null)}>Cancel</button>
+                <button type="button" className="danger" onClick={deletePage}>Remove page</button>
+              </section>
+            )}
 
             <div className="event-page-properties">
               <label>Page ID<input value={selected.id} aria-label={`Event ${selectedIndex + 1} id`} onChange={(change) => {
