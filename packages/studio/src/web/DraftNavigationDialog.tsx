@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 
 export interface StudioDraftGuard {
   label: string;
@@ -23,7 +23,10 @@ export function DraftNavigationDialog({
   onSave: () => void;
   onDiscard: () => void;
 }) {
+  const stayRef = useRef<HTMLButtonElement | null>(null);
+
   useEffect(() => {
+    stayRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || saving) return;
       event.preventDefault();
@@ -35,7 +38,7 @@ export function DraftNavigationDialog({
 
   return (
     <div className="draft-navigation-layer" role="presentation">
-      <button type="button" className="draft-navigation-backdrop" aria-label="Keep editing" disabled={saving} onClick={onStay} />
+      <button type="button" className="draft-navigation-backdrop" aria-hidden="true" tabIndex={-1} disabled={saving} onClick={onStay} />
       <section className="draft-navigation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="draft-navigation-title" aria-describedby="draft-navigation-description">
         <header>
           <span>UNSAVED PROJECT CHANGES</span>
@@ -48,7 +51,7 @@ export function DraftNavigationDialog({
         </div>
         {error && <div className="draft-navigation-error" role="alert"><strong>Save failed</strong><span>{error}</span></div>}
         <footer>
-          <button type="button" disabled={saving} onClick={onStay}>Keep editing <kbd>Esc</kbd></button>
+          <button ref={stayRef} type="button" disabled={saving} onClick={onStay}>Keep editing <kbd>Esc</kbd></button>
           <button type="button" className="danger" disabled={saving} onClick={onDiscard}>Discard &amp; leave</button>
           <button type="button" className="primary" disabled={saving} onClick={onSave}>{saving ? "Validating…" : "Save & leave"}</button>
         </footer>
