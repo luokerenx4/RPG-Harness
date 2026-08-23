@@ -2998,6 +2998,7 @@ summary:focus-visible {
 .map-object-identity code { max-width: 125px; overflow: hidden; color: #4f5966; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
 .map-object-strip button.selected .map-object-identity strong { color: #c8f2f6; }
 .object-dot { width: 6px; height: 6px; border: 1px solid var(--studio-accent); border-radius: 2px; background: rgba(80,199,217,.25); }
+.object-dot.authored { flex: 0 0 auto; width: 25px; height: 25px; border-color: rgba(80,199,217,.34); border-radius: 4px; background-color: #090e14; background-position: center; background-repeat: no-repeat; background-size: contain; box-shadow: inset 0 0 0 1px rgba(255,255,255,.025); filter: drop-shadow(0 2px 3px rgba(0,0,0,.58)); }
 .object-dot.collision-block { border-color: var(--studio-orange); background: rgba(231,168,106,.25); }
 .object-dot.collision-trigger { border-color: var(--studio-violet); background: rgba(172,133,245,.25); }
 .map-canvas-scroll {

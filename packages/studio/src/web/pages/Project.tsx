@@ -2564,6 +2564,7 @@ function MapOverview({
             <span>OBJECTS</span>
             {(draft.placements ?? []).map((placement) => {
               const label = mapPlacementResourceLabel(placement, resources);
+              const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
               return (
                 <button
                   type="button"
@@ -2571,7 +2572,7 @@ function MapOverview({
                   key={placement.id}
                   onClick={() => setSelectedPlacementId(placement.id)}
                 >
-                  <i className={`object-dot collision-${placement.collision}`} />
+                  <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} />
                   <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
                   <small>{placement.at.x},{placement.at.y}</small>
                 </button>
