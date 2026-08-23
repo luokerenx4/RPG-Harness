@@ -40,6 +40,13 @@ describe("Studio resource creation", () => {
     for (const [kind, parse] of Object.entries(parsers) as Array<[CreatableResourceKind, (source: string) => { id: string }]>) {
       expect(parse(projectResourceTemplate(kind, "new_record", "New Record")).id).toBe("new_record");
     }
+    expect(parseScript(projectResourceTemplate("script", "draft_scene", "Draft Scene"))).toMatchObject({
+      requires: { switch: { name: "__studio_draft__", eq: true } },
+      coverage: { ignore: true },
+    });
+    expect(parseAction(projectResourceTemplate("action", "draft_action", "Draft Action"))).toMatchObject({
+      requires: { switch: { name: "__studio_draft__", eq: true } },
+    });
   });
 
   test("creates a standalone resource and rejects overwriting the same stable id", async () => {

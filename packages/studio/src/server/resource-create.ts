@@ -82,10 +82,21 @@ export function projectResourceTemplate(
     return stringifyYaml({ id, name: label, description: "" });
   }
   if (kind === "action") {
-    return stringifyYaml({ id, title: label, cost: 1 });
+    return stringifyYaml({
+      id,
+      title: label,
+      cost: 1,
+      requires: { switch: { name: "__studio_draft__", eq: true } },
+    });
   }
   const meta: Record<string, unknown> = kind === "script"
-    ? { id, title: label, characters: [] }
+    ? {
+        id,
+        title: label,
+        characters: [],
+        requires: { switch: { name: "__studio_draft__", eq: true } },
+        coverage: { ignore: true, reason: "Studio draft; author before enabling" },
+      }
     : kind === "enemy"
       ? { id, name: label, hp: 1 }
       : kind === "weapon"

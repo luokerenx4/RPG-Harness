@@ -511,7 +511,7 @@ function CreateResourceDialog({
     }}>
       <form ref={dialogRef} className="create-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
         <header>
-          <div><span>NEW DATABASE RECORD</span><strong id="create-resource-title">Create project resource</strong><small>A validated standalone source file will become authoritative immediately.</small></div>
+          <div><span>NEW DATABASE RECORD</span><strong id="create-resource-title">Create project resource</strong><small>A validated standalone source file will become authoritative immediately. Scripts and actions start runtime-gated.</small></div>
           <button type="button" aria-label="Close new resource dialog" disabled={creating} onClick={onClose}>×</button>
         </header>
         <div className="create-resource-body">
