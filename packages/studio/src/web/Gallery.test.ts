@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AssetRow } from "./api";
-import { matchesAssetQuery, nextAssetCardIndex } from "./pages/Gallery";
+import { assetAtlasSummary, matchesAssetQuery, nextAssetCardIndex } from "./pages/Gallery";
 
 const asset = {
   path: "assets/portraits/kagari/calm",
@@ -27,5 +27,12 @@ describe("Studio asset library navigation", () => {
     expect(nextAssetCardIndex(4, 8, 3, "ArrowUp")).toBe(1);
     expect(nextAssetCardIndex(2, 8, 3, "Home")).toBe(0);
     expect(nextAssetCardIndex(2, 8, 3, "End")).toBe(7);
+  });
+
+  test("summarizes tileset capacity and id range", () => {
+    expect(assetAtlasSummary({ kind: "tileset", tileGrid: { columns: 4, rows: 4, firstId: 1 } }))
+      .toBe("4×4 atlas · 16 tiles · IDs 1–16");
+    expect(assetAtlasSummary({ kind: "tileset" })).toBe("atlas metadata missing");
+    expect(assetAtlasSummary({ kind: "portrait" })).toBeUndefined();
   });
 });

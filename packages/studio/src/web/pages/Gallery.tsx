@@ -350,14 +350,16 @@ function FilterChip({
 }
 
 function AssetCard({ asset }: { asset: AssetRow }) {
+  const atlasSummary = assetAtlasSummary(asset);
   return (
-    <Link to={`/asset/${asset.path}`} className="card" aria-label={`${asset.kind} · ${asset.placeholder} · ${asset.path}`}>
+    <Link to={`/asset/${asset.path}`} className={`card${asset.kind === "tileset" ? " tileset-card" : ""}`} aria-label={`${asset.kind} · ${asset.placeholder} · ${asset.path}${atlasSummary ? ` · ${atlasSummary}` : ""}`}>
       <div className="thumb">
         {asset.renderings.source ? (
           <img src={sourceImageUrl(asset.path)} alt={asset.placeholder} />
         ) : (
           <div className="placeholder-thumb">{asset.placeholder}</div>
         )}
+        {asset.kind === "tileset" && <span className={`atlas-stamp${asset.tileGrid ? " ready" : " missing"}`}><i aria-hidden="true">▦</i><strong>{asset.tileGrid ? `${asset.tileGrid.columns}×${asset.tileGrid.rows}` : "?×?"}</strong><small>ATLAS</small></span>}
       </div>
       <div className="body">
         <div className="row" style={{ justifyContent: "space-between" }}>
@@ -366,9 +368,18 @@ function AssetCard({ asset }: { asset: AssetRow }) {
         </div>
         <div className="path">{asset.path}</div>
         <div className="placeholder-text">{asset.placeholder}</div>
+        {atlasSummary && <div className={`asset-card-specialization${asset.tileGrid ? "" : " warning"}`}>{atlasSummary}</div>}
       </div>
     </Link>
   );
+}
+
+export function assetAtlasSummary(asset: Pick<AssetRow, "kind" | "tileGrid">): string | undefined {
+  if (asset.kind !== "tileset") return undefined;
+  const grid = asset.tileGrid;
+  if (!grid) return "atlas metadata missing";
+  const count = grid.columns * grid.rows;
+  return `${grid.columns}×${grid.rows} atlas · ${count} tiles · IDs ${grid.firstId}–${grid.firstId + count - 1}`;
 }
 
 function RenderingFlags({ r }: { r: AssetRow["renderings"] }) {
