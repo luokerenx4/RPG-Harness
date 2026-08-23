@@ -1,7 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { AssetKind, AssetRow, DanglingRefs } from "../api";
-import { fetchAssets, sourceImageUrl } from "../api";
+import { createAsset, fetchAssets, sourceImageUrl } from "../api";
+
+interface NewAssetDraft {
+  kind: AssetKind;
+  id: string;
+  placeholder: string;
+  description: string;
+  prompt: string;
+  columns: string;
+  rows: string;
+  firstId: string;
+}
+
+const EMPTY_ASSET_DRAFT: NewAssetDraft = { kind: "portrait", id: "", placeholder: "", description: "", prompt: "", columns: "4", rows: "4", firstId: "1" };
 
 // Asset gallery. Single grid, no pagination — RPG-Harness games are
 // small enough that "scroll through all your assets" is the natural
@@ -14,6 +27,7 @@ import { fetchAssets, sourceImageUrl } from "../api";
 // they are exactly the things a player would hit as placeholder text
 // in-game, so they outrank everything else in the gallery.
 export function Gallery() {
+  const navigate = useNavigate();
   const [assets, setAssets] = useState<AssetRow[] | null>(null);
   const [dangling, setDangling] = useState<DanglingRefs | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -22,8 +36,34 @@ export function Gallery() {
   // The "asset pack" view: narrow to one character's full design
   // package via refs.characters. Composes with the kind filter.
   const [charFilter, setCharFilter] = useState<string | "all">("all");
+  const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState<NewAssetDraft>(EMPTY_ASSET_DRAFT);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+
+  const submitAsset = async () => {
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const asset = await createAsset({
+        kind: createDraft.kind,
+        id: createDraft.id,
+        placeholder: createDraft.placeholder,
+        description: createDraft.description,
+        prompt: createDraft.prompt,
+        ...(createDraft.kind === "tileset" ? { tileGrid: { columns: Number(createDraft.columns), rows: Number(createDraft.rows), firstId: Number(createDraft.firstId) } } : {}),
+      });
+      setCreating(false);
+      setCreateDraft(EMPTY_ASSET_DRAFT);
+      navigate(`/asset/${asset.path}`);
+    } catch (error) {
+      setCreateError((error as Error).message);
+    } finally {
+      setCreateBusy(false);
+    }
+  };
 
   useEffect(() => {
     fetchAssets()
@@ -44,11 +84,13 @@ export function Gallery() {
       if (event.key === "Escape" && document.activeElement === searchRef.current) {
         setQuery("");
         searchRef.current?.blur();
+      } else if (event.key === "Escape" && creating) {
+        setCreating(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [creating]);
 
   const filtered = useMemo(() => {
     if (!assets) return [];
@@ -95,23 +137,6 @@ export function Gallery() {
   if (err) return <div className="empty">⚠ {err}</div>;
   if (!assets) return <div className="empty">loading…</div>;
 
-  if (
-    assets.length === 0 &&
-    (dangling?.missingAssets.length ?? 0) === 0 &&
-    (dangling?.missingEmotions.length ?? 0) === 0
-  ) {
-    return (
-      <div className="empty">
-        <p>No assets declared yet.</p>
-        <p className="muted">
-          Drop a spec.yaml under <code>assets/portraits/</code>,{" "}
-          <code>assets/backgrounds/</code>, <code>assets/cgs/</code>, or{" "}
-          <code>assets/sheets/</code>, or <code>assets/tilesets/</code> to get started.
-        </p>
-      </div>
-    );
-  }
-
   const counts = {
     all: assets.length,
     portrait: assets.filter((a) => a.kind === "portrait").length,
@@ -156,8 +181,26 @@ export function Gallery() {
           event.preventDefault();
           focusFirstAsset();
         }} placeholder="Find path, prompt, tag…" aria-label="Search assets" />{query ? <button type="button" aria-label="Clear asset search" onClick={() => setQuery("")}>×</button> : <kbd>⌘K</kbd>}</label>
+        <button type="button" className="library-create" onClick={() => { setCreateDraft(EMPTY_ASSET_DRAFT); setCreateError(null); setCreating(true); }}><span>＋</span><strong>New asset</strong></button>
         <strong>{shown}<small> shown</small></strong>
       </header>
+      {creating && (
+        <section className="asset-create-backdrop" role="dialog" aria-modal="true" aria-labelledby="new-asset-title">
+          <form className="asset-create-dialog" onSubmit={(event) => { event.preventDefault(); void submitAsset(); }}>
+            <header><div><span>ASSET DATABASE</span><h2 id="new-asset-title">Create visual resource</h2><p>Creates an authoritative spec.yaml, then opens its asset record.</p></div><button type="button" aria-label="Close asset creator" onClick={() => setCreating(false)}>×</button></header>
+            <div className="asset-create-grid">
+              <label>Kind<select value={createDraft.kind} onChange={(event) => setCreateDraft({ ...createDraft, kind: event.target.value as AssetKind })}><option value="portrait">portrait</option><option value="bg">background</option><option value="cg">CG</option><option value="sheet">sheet</option><option value="tileset">tileset</option></select></label>
+              <label>Slug<input autoFocus required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="flooded-shrine" value={createDraft.id} onChange={(event) => setCreateDraft({ ...createDraft, id: event.target.value })} /><small>lowercase kebab-case · becomes the resource path</small></label>
+              <label className="wide">Player / AI label<input required placeholder="Flooded shrine terrain atlas" value={createDraft.placeholder} onChange={(event) => setCreateDraft({ ...createDraft, placeholder: event.target.value })} /></label>
+              <label className="wide">Description<textarea required rows={2} value={createDraft.description} onChange={(event) => setCreateDraft({ ...createDraft, description: event.target.value })} /></label>
+              <label className="wide">Generation prompt<textarea required rows={4} value={createDraft.prompt} onChange={(event) => setCreateDraft({ ...createDraft, prompt: event.target.value })} /></label>
+              {createDraft.kind === "tileset" && <fieldset><legend>Tileset atlas</legend><label>Columns<input type="number" min="1" required value={createDraft.columns} onChange={(event) => setCreateDraft({ ...createDraft, columns: event.target.value })} /></label><label>Rows<input type="number" min="1" required value={createDraft.rows} onChange={(event) => setCreateDraft({ ...createDraft, rows: event.target.value })} /></label><label>First ID<input type="number" min="0" required value={createDraft.firstId} onChange={(event) => setCreateDraft({ ...createDraft, firstId: event.target.value })} /></label></fieldset>}
+            </div>
+            {createError && <div className="asset-create-error" role="alert">{createError}</div>}
+            <footer><button type="button" onClick={() => setCreating(false)}>Cancel</button><button type="submit" className="primary" disabled={createBusy}>{createBusy ? "Creating…" : "Create asset"}</button></footer>
+          </form>
+        </section>
+      )}
       <div className="library-filters">
       <div className="row">
         <FilterChip
@@ -246,7 +289,7 @@ export function Gallery() {
         {filtered.map((a) => (
           <AssetCard key={a.path} asset={a} />
         ))}
-        {shown === 0 && <div className="library-empty"><strong>No matching assets</strong><span>Clear the search or choose another resource filter.</span></div>}
+        {shown === 0 && <div className="library-empty"><strong>{assets.length === 0 ? "No assets declared yet" : "No matching assets"}</strong><span>{assets.length === 0 ? "Use New asset to create the first authoritative visual record." : "Clear the search or choose another resource filter."}</span></div>}
       </div>
       </div>
     </div>

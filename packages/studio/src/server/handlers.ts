@@ -34,6 +34,7 @@ import {
   ResourceRenameError,
 } from "./resource-rename";
 import { duplicateProjectResource } from "./resource-duplicate";
+import { AssetCreateError, createAssetRecord, validateAssetCreateInput } from "./asset-create";
 
 interface Ctx {
   gameDir: string;
@@ -78,6 +79,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "POST") {
+    if (pathname === "/api/assets") return postAsset(ctx, req);
     if (pathname === "/api/resources") return postProjectResource(ctx, req);
     if (pathname === "/api/resources/duplicate") return postDuplicateProjectResource(ctx, req);
     if (pathname === "/api/resources/rename-plan") return postResourceRenamePlan(ctx, req);
@@ -106,6 +108,18 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function postAsset(ctx: Ctx, req: Request): Promise<Response> {
+  try {
+    const input = validateAssetCreateInput(await req.json());
+    const { asset } = await createAssetRecord(ctx.gameDir, input, () => loadGame(ctx.gameDir));
+    return json(await projectAsset(asset), 201);
+  } catch (error) {
+    if (error instanceof SyntaxError) return json({ error: `invalid JSON body: ${error.message}` }, 400);
+    if (error instanceof AssetCreateError) return json({ error: error.message }, error.status);
+    return json({ error: `failed to create asset: ${(error as Error).message}` }, 500);
+  }
 }
 
 async function postDuplicateProjectResource(ctx: Ctx, req: Request): Promise<Response> {

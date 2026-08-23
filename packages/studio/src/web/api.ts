@@ -97,6 +97,15 @@ export interface PatchableSpecFields {
   tuiRender?: TuiRenderPrefs;
 }
 
+export interface CreateAssetInput {
+  kind: AssetKind;
+  id: string;
+  description: string;
+  prompt: string;
+  placeholder: string;
+  tileGrid?: NonNullable<AssetRow["tileGrid"]>;
+}
+
 export async function fetchGame(): Promise<GameSummary> {
   const r = await fetch("/api/game");
   if (!r.ok) throw new Error(`/api/game: ${r.status}`);
@@ -493,6 +502,19 @@ export async function patchSpec(
     );
     (e as Error & { status?: number }).status = r.status;
     throw e;
+  }
+  return r.json();
+}
+
+export async function createAsset(input: CreateAssetInput): Promise<AssetRow> {
+  const r = await fetch("/api/assets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(typeof body === "object" && body && "error" in body ? String((body as { error: string }).error) : r.statusText);
   }
   return r.json();
 }
