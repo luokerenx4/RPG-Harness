@@ -49,7 +49,10 @@ import {
   resolveAcceptedSpatialActivityFeedback,
   SpatialMapSurface,
 } from "./SpatialMapSurface";
-import type { SpatialActivityFeedback } from "./SpatialMapSurface";
+import type {
+  SpatialActivityFeedback,
+  SpatialMoveFeedback,
+} from "./SpatialMapSurface";
 import type {
   WebBranchContext,
   WebAiPersona,
@@ -145,6 +148,62 @@ export async function submitWebInput(
     ),
     result,
   };
+}
+
+export interface NormalizedSpatialMapCursor {
+  mapId: string;
+  position: MapPoint;
+}
+
+/**
+ * Project a save cursor onto the authored field contract. Legacy saves may
+ * have no owned runtime position yet; the engine rebases those saves to the
+ * map's authored player start before applying movement, so the Web boundary
+ * must compare against the same visible coordinate.
+ */
+export function normalizeSpatialMapCursor(
+  maps: Game["maps"],
+  state: ComposedState | undefined,
+): NormalizedSpatialMapCursor | undefined {
+  const mapId = state?.baseline.currentMapId;
+  if (!mapId) return undefined;
+  const map = maps?.find((candidate) => candidate.id === mapId);
+  if (!map?.layout) return undefined;
+  const runtimePosition = state.runtime.mapPositionMapId === mapId
+    ? state.runtime.mapPosition
+    : undefined;
+  const inBounds = runtimePosition !== undefined
+    && Number.isInteger(runtimePosition.x)
+    && Number.isInteger(runtimePosition.y)
+    && runtimePosition.x >= 0
+    && runtimePosition.y >= 0
+    && runtimePosition.x < map.layout.width
+    && runtimePosition.y < map.layout.height;
+  const position = inBounds
+    ? runtimePosition
+    : map.layout.playerStart ?? { x: 0, y: 0 };
+  return { mapId, position: { x: position.x, y: position.y } };
+}
+
+/**
+ * A move is acknowledged as blocked only after the accepted engine input has
+ * run once and the canonical map cursor did not move. Map transfers, actual
+ * steps, rejected protocol input and non-movement actions never qualify.
+ */
+export function resolveAcceptedSpatialMoveBlock(
+  maps: Game["maps"],
+  input: Input,
+  inputResult: InputResult,
+  beforeState: ComposedState | undefined,
+  afterState: ComposedState | undefined,
+): MapFacing | undefined {
+  if (input.type !== "moveMap" || !inputResult.accepted) return undefined;
+  const before = normalizeSpatialMapCursor(maps, beforeState);
+  const after = normalizeSpatialMapCursor(maps, afterState);
+  if (!before || !after || before.mapId !== after.mapId) return undefined;
+  return before.position.x === after.position.x && before.position.y === after.position.y
+    ? input.direction
+    : undefined;
 }
 
 export function inputNoticeSourceLabel(source: string): string {
@@ -304,6 +363,8 @@ export function WebPlayScreen({
     (SpatialActivityFeedback & { sequence: number }) | null
   >(null);
   const spatialActivityFeedbackSequence = useRef(0);
+  const [spatialMoveFeedback, setSpatialMoveFeedback] = useState<SpatialMoveFeedback | null>(null);
+  const spatialMoveFeedbackSequence = useRef(0);
   const [externalAdvance, setExternalAdvance] = useState(
     externalAdvanceNotice ?? null,
   );
@@ -346,6 +407,17 @@ export function WebPlayScreen({
     }, 2800);
     return () => window.clearTimeout(timeout);
   }, [spatialActivityFeedback]);
+
+  useEffect(() => {
+    if (!spatialMoveFeedback) return;
+    const currentSequence = spatialMoveFeedback.sequence;
+    const timeout = window.setTimeout(() => {
+      setSpatialMoveFeedback((current) => (
+        current?.sequence === currentSequence ? null : current
+      ));
+    }, 620);
+    return () => window.clearTimeout(timeout);
+  }, [spatialMoveFeedback]);
 
   useEffect(() => {
     if (aiTurnReceipt) setAiReceipt(aiTurnReceipt);
@@ -494,6 +566,7 @@ export function WebPlayScreen({
         const replayState = engineRef.current?.getState();
         const submitted = await submitWebInput(currentOutput, input, runner);
         if (!submitted.inputResult.accepted) {
+          setSpatialMoveFeedback(null);
           setSpatialActivityFeedback(null);
           setInputNotice(submitted.inputResult);
           setInputNoticeSource(null);
@@ -520,6 +593,25 @@ export function WebPlayScreen({
           input,
           submitted.inputResult,
         );
+        const blockedMoveDirection = resolveAcceptedSpatialMoveBlock(
+          game.maps,
+          input,
+          submitted.inputResult,
+          replayState,
+          engineRef.current?.getState(),
+        );
+        if (blockedMoveDirection) {
+          spatialMoveFeedbackSequence.current += 1;
+          setSpatialMoveFeedback({
+            direction: blockedMoveDirection,
+            sequence: spatialMoveFeedbackSequence.current,
+          });
+        } else {
+          // Any new accepted input supersedes a previous bump. This also
+          // prevents a short-lived blocked state from following an activity
+          // transfer onto the destination map.
+          setSpatialMoveFeedback(null);
+        }
         dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(
           submitted.result!,
@@ -768,6 +860,7 @@ export function WebPlayScreen({
           currentMapId={currentMapId}
           currentMapPosition={engineRef.current?.getState().runtime.mapPosition}
           currentMapPositionMapId={engineRef.current?.getState().runtime.mapPositionMapId}
+          spatialMoveFeedback={spatialMoveFeedback}
           assetUrls={assetUrls}
           onInput={sendInput}
           exploration={exploration}
@@ -1366,6 +1459,7 @@ export function StageView({
   currentMapId,
   currentMapPosition,
   currentMapPositionMapId,
+  spatialMoveFeedback,
   assetUrls,
   onInput,
   exploration,
@@ -1378,6 +1472,7 @@ export function StageView({
   currentMapId: string | null;
   currentMapPosition?: MapPoint;
   currentMapPositionMapId?: string | null;
+  spatialMoveFeedback?: SpatialMoveFeedback | null;
   assetUrls: Record<string, string>;
   onInput: (input: Input) => void;
   exploration?: WebExplorationStatus | null;
@@ -1492,6 +1587,7 @@ export function StageView({
               playerPosition={currentMapPositionMapId === currentMapId
                 ? currentMapPosition
                 : currentMap.layout.playerStart}
+              moveFeedback={spatialMoveFeedback}
               resourceLabels={spatialResourceLabels}
               resourceGraphics={spatialResourceGraphics}
               playerGraphicUrl={assetUrls[spatialResourceGraphics?.get("character:player") ?? ""]}

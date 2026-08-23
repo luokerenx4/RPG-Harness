@@ -15,6 +15,7 @@ import {
   mapPlacementDistance,
   resolveAcceptedSpatialActivityFeedback,
   resolveSpatialPlacementOperations,
+  spatialMoveBlockedMessage,
   spatialOperationUnavailableReason,
   spatialTileAtlasStyle,
   SpatialMapSurface,
@@ -90,6 +91,33 @@ describe("SpatialMapSurface", () => {
       { direction: "north", point: { x: 0, y: 4 }, available: true, label: "向北", arrow: "↑" },
       { direction: "east", point: { x: 1, y: 5 }, available: true, label: "向东", arrow: "→" },
     ]);
+  });
+
+  test("replays directional blocked feedback for every sequence", () => {
+    const first = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={map}
+        activities={[move]}
+        playerPosition={{ x: 0, y: 5 }}
+        moveFeedback={{ direction: "east", sequence: 1 }}
+        onInput={() => {}}
+      />,
+    );
+    const repeated = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={map}
+        activities={[move]}
+        playerPosition={{ x: 0, y: 5 }}
+        moveFeedback={{ direction: "east", sequence: 2 }}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(spatialMoveBlockedMessage("east")).toBe("东侧无法通行");
+    expect(first).toContain('class="spatial-map-player blocked-east" data-feedback-sequence="1"');
+    expect(repeated).toContain('class="spatial-map-player blocked-east" data-feedback-sequence="2"');
+    expect(first).toContain('aria-live="polite" aria-atomic="true"');
+    expect(first).toContain('class="spatial-map-blocked-message">东侧无法通行</em>');
   });
 
   test("projects tile data and disables movement into canonical collision", () => {

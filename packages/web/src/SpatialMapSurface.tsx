@@ -15,6 +15,7 @@ import type {
   Input,
   InputResult,
   MapDef,
+  MapFacing,
   MapPlacementDef,
   MapPlacementEventDef,
   MapPoint,
@@ -41,6 +42,11 @@ export interface SpatialContextOperation extends SpatialPlacementOperation {
 export interface SpatialActivityFeedback {
   activityId: string;
   title: string;
+}
+
+export interface SpatialMoveFeedback {
+  direction: MapFacing;
+  sequence: number;
 }
 
 type SpatialResourceLabels = ReadonlyMap<string, string>;
@@ -150,6 +156,10 @@ export function spatialOperationUnavailableReason(
     || (operation.activity ? "当前条件尚未满足" : "此事件当前未开放");
 }
 
+export function spatialMoveBlockedMessage(direction: MapFacing): string {
+  return `${({ north: "北", east: "东", south: "南", west: "西" } as const)[direction]}侧无法通行`;
+}
+
 export function SpatialMapSurface({
   map,
   activities,
@@ -161,6 +171,7 @@ export function SpatialMapSurface({
   resourceLabels,
   resourceGraphics,
   playerGraphicUrl,
+  moveFeedback,
   onInput,
 }: {
   map: MapDef;
@@ -173,6 +184,7 @@ export function SpatialMapSurface({
   resourceLabels?: SpatialResourceLabels;
   resourceGraphics?: SpatialResourceGraphics;
   playerGraphicUrl?: string;
+  moveFeedback?: SpatialMoveFeedback | null;
   onInput: (input: Input) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -192,6 +204,9 @@ export function SpatialMapSurface({
   const stepTargets = collectSpatialStepTargets(map, playerPosition);
   const visibleTiles = collectSpatialTiles(map);
   const imageLayers = collectMapImageLayers(map);
+  const blockedMoveMessage = moveFeedback
+    ? spatialMoveBlockedMessage(moveFeedback.direction)
+    : undefined;
 
   useEffect(() => {
     const available = contextOperations.filter(({ activity }) => activity?.available);
@@ -332,7 +347,9 @@ export function SpatialMapSurface({
         ))}
         {playerPosition && (
           <div
-            className="spatial-map-player"
+            className={`spatial-map-player${moveFeedback ? ` blocked-${moveFeedback.direction}` : ""}`}
+            data-feedback-sequence={moveFeedback?.sequence}
+            key={moveFeedback ? `blocked-${moveFeedback.sequence}` : "player"}
             aria-label={`玩家位置 ${playerPosition.x},${playerPosition.y}`}
             style={{
               left: `${playerPosition.x / layout.width * 100}%`,
@@ -349,14 +366,14 @@ export function SpatialMapSurface({
         )}
       </div>
       <div className="spatial-map-navigation">
-        <div className="spatial-map-awareness" aria-live="polite">
+        <div className="spatial-map-awareness" aria-live="polite" aria-atomic="true">
           <span className="spatial-map-awareness-icon" aria-hidden="true">
             {nearestLandmark?.placement.resource?.kind === "map" ? "↗" : nearestLandmark ? "◇" : "·"}
           </span>
           <span className="spatial-map-awareness-copy">
             <small>NEARBY · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
             <strong>{nearestName ?? "可见地标なし"}{nearbyLandmarks.length > 1 && <b> +{nearbyLandmarks.length - 1}</b>}</strong>
-            <em>{nearbyLandmarks.length > 1
+            <em className={blockedMoveMessage ? "spatial-map-blocked-message" : undefined}>{blockedMoveMessage ?? (nearbyLandmarks.length > 1
                 ? `${nearbyLandmarks.length} 个对象在行动范围内 · ${contextOperations.length} 个事件`
               : nearestLandmark && playerPosition
                 ? describePlacementApproach(
@@ -369,7 +386,7 @@ export function SpatialMapSurface({
                       ? "touch"
                       : undefined,
                 )
-              : "地图上没有已显露的资源"}</em>
+              : "地图上没有已显露的资源")}</em>
           </span>
           {contextOperations.length > 0 && (
             <div className={`spatial-map-context-actions${contextOperations.length > 1 ? " multiple" : ""}`} aria-label="附近可执行事件">
