@@ -16,6 +16,8 @@ export interface SpatialPlacementOperation {
   activity?: HubActivity;
 }
 
+type SpatialResourceLabels = ReadonlyMap<string, string>;
+
 export function resolveSpatialPlacementOperations(
   map: MapDef,
   placement: MapPlacementDef,
@@ -37,12 +39,14 @@ export function SpatialMapSurface({
   activities,
   backgroundUrl,
   playerPosition,
+  resourceLabels,
   onInput,
 }: {
   map: MapDef;
   activities: HubActivity[];
   backgroundUrl?: string;
   playerPosition?: MapPoint;
+  resourceLabels?: SpatialResourceLabels;
   onInput: (input: Input) => void;
 }) {
   const layout = map.layout;
@@ -54,6 +58,18 @@ export function SpatialMapSurface({
       .map((placement) => ({ placement, distance: mapPlacementDistance(playerPosition, placement) }))
       .sort((left, right) => left.distance - right.distance)[0]
     : undefined;
+  const nearestOperations = nearestPlacement
+    ? resolveSpatialPlacementOperations(map, nearestPlacement.placement, byId)
+    : [];
+  const nearestManualOperations = nearestOperations.filter(
+    ({ event }) => event.trigger === "interact" || event.trigger === "manual",
+  );
+  const nearestAction = nearestManualOperations.find(({ activity }) => activity?.available)
+    ?? nearestManualOperations[0];
+  const nearestName = nearestPlacement
+    ? placementDisplayName(nearestPlacement.placement, resourceLabels)
+    : undefined;
+  const moveAvailability = mapMoveAvailability(layout, playerPosition);
 
   return (
     <section className="spatial-map-surface" aria-label={`${map.name} 二维地图`}>
@@ -81,6 +97,8 @@ export function SpatialMapSurface({
             : `${100 / layout.width}% ${100 / layout.height}%, ${100 / layout.width}% ${100 / layout.height}%`,
         }}
       >
+        <div className="spatial-map-compass" aria-hidden="true"><span>N</span><i>◆</i></div>
+        <div className="spatial-map-frame" aria-hidden="true" />
         {layout.regions.map((region) => (
           <div
             className="spatial-map-region"
@@ -101,7 +119,7 @@ export function SpatialMapSurface({
             placement={placement}
             activities={byId}
             playerPosition={playerPosition}
-            onInput={onInput}
+            resourceLabels={resourceLabels}
           />
         ))}
         {playerPosition && (
@@ -114,28 +132,47 @@ export function SpatialMapSurface({
               width: `${100 / layout.width}%`,
               height: `${100 / layout.height}%`,
             }}
-          ><span>◆</span></div>
+          ><span>◆</span><small>YOU</small></div>
         )}
       </div>
       <div className="spatial-map-navigation">
         <div className="spatial-map-awareness" aria-live="polite">
-          <span><small>CURRENT</small><strong>{playerPosition ? `${playerPosition.x}, ${playerPosition.y}` : "—"}</strong></span>
-          <i />
-          <span><small>NEAREST</small><strong>{nearestPlacement
-            ? `${placementDisplayName(nearestPlacement.placement)} · ${nearestPlacement.distance === 0 ? "目前地" : `${nearestPlacement.distance} 格`}`
-            : "地标なし"}</strong></span>
+          <span className="spatial-map-awareness-icon" aria-hidden="true">
+            {nearestPlacement?.placement.resource?.kind === "map" ? "↗" : nearestPlacement ? "◇" : "·"}
+          </span>
+          <span className="spatial-map-awareness-copy">
+            <small>NEARBY · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
+            <strong>{nearestName ?? "可见地标なし"}</strong>
+            <em>{nearestPlacement && playerPosition
+              ? describePlacementApproach(playerPosition, nearestPlacement.placement, nearestPlacement.distance)
+              : "地图上没有已显露的资源"}</em>
+          </span>
+          {nearestAction && (
+            <button
+              className="spatial-map-interact"
+              type="button"
+              disabled={!nearestAction.activity?.available || nearestPlacement!.distance > 1}
+              title={nearestPlacement!.distance > 1
+                ? `接近地标后可互动 · 距离 ${nearestPlacement!.distance} 格`
+                : nearestAction.activity?.lockedReason ?? nearestAction.event.lockedHint ?? ""}
+              onClick={() => nearestAction.activity && onInput({ type: "doActivity", id: nearestAction.activity.id })}
+            >
+              <small>ACTION</small>
+              <strong>{nearestAction.event.label ?? nearestAction.activity?.title ?? "调查"}</strong>
+            </button>
+          )}
         </div>
         <div className="spatial-map-controls" aria-label="二维地图移动">
-          <button type="button" aria-label="向北移动" onClick={() => onInput({ type: "moveMap", direction: "north" })}>↑</button>
+          <button type="button" aria-label="向北移动" disabled={!moveAvailability.north} onClick={() => onInput({ type: "moveMap", direction: "north" })}><small>N</small>↑</button>
           <span>
-            <button type="button" aria-label="向西移动" onClick={() => onInput({ type: "moveMap", direction: "west" })}>←</button>
-            <button type="button" aria-label="向南移动" onClick={() => onInput({ type: "moveMap", direction: "south" })}>↓</button>
-            <button type="button" aria-label="向东移动" onClick={() => onInput({ type: "moveMap", direction: "east" })}>→</button>
+            <button type="button" aria-label="向西移动" disabled={!moveAvailability.west} onClick={() => onInput({ type: "moveMap", direction: "west" })}><small>W</small>←</button>
+            <button type="button" aria-label="向南移动" disabled={!moveAvailability.south} onClick={() => onInput({ type: "moveMap", direction: "south" })}><small>S</small>↓</button>
+            <button type="button" aria-label="向东移动" disabled={!moveAvailability.east} onClick={() => onInput({ type: "moveMap", direction: "east" })}><small>E</small>→</button>
           </span>
         </div>
       </div>
       <p className="spatial-map-footnote">
-        方向键 / WASD 可移动；触发结果仍提交与 Headless 相同的语义行动。
+        <kbd>方向键</kbd> / <kbd>WASD</kbd> 移动 · 接触事件与 Headless 共用同一条语义行动
       </p>
     </section>
   );
@@ -146,23 +183,22 @@ function Placement({
   placement,
   activities,
   playerPosition,
-  onInput,
+  resourceLabels,
 }: {
   map: MapDef;
   placement: MapPlacementDef;
   activities: Map<string, HubActivity>;
   playerPosition?: MapPoint;
-  onInput: (input: Input) => void;
+  resourceLabels?: SpatialResourceLabels;
 }) {
   const layout = map.layout!;
   const operations = resolveSpatialPlacementOperations(map, placement, activities);
   const resourceKind = placement.resource?.kind ?? "event";
-  const resourceName = formatResourceName(placement.resource?.id ?? placement.id);
-  const manualOperations = operations.filter(
-    ({ event }) => event.trigger === "interact" || event.trigger === "manual",
-  );
-  const primaryOperation = manualOperations.find(({ activity }) => activity?.available)
-    ?? manualOperations[0];
+  const resourceName = placementDisplayName(placement, resourceLabels);
+  const primaryOperation = operations.find(({ activity }) => activity?.available)
+    ?? operations[0];
+  const primaryOperationIsManual = primaryOperation?.event.trigger === "interact"
+    || primaryOperation?.event.trigger === "manual";
   const distance = playerPosition ? mapPlacementDistance(playerPosition, placement) : undefined;
   const nearby = distance !== undefined && distance <= 1;
   const position = {
@@ -184,28 +220,15 @@ function Placement({
         {resourceKindIcon(resourceKind)}
       </span>
       <span className="spatial-placement-label">
-        <strong>{primaryOperation?.activity?.title ?? primaryOperation?.event.label ?? resourceName}</strong>
+        <strong>{resourceName}</strong>
         <small>{distance === 0
           ? `${resourceKindLabel(resourceKind)} · 目前地`
           : nearby && primaryOperation
-            ? `${resourceKindLabel(resourceKind)} · 可互动`
+            ? `${resourceKindLabel(resourceKind)} · ${primaryOperationIsManual ? "可互动" : "接触触发"}`
             : distance !== undefined
               ? `${resourceKindLabel(resourceKind)} · ${distance} 格`
               : resourceKindLabel(resourceKind)}</small>
       </span>
-      {manualOperations.map(({ event, activity }) => (
-        <button
-          key={event.id}
-          type="button"
-          disabled={!activity?.available || !nearby}
-          title={!nearby && distance !== undefined
-            ? `接近地标后可互动 · 距离 ${distance} 格`
-            : activity?.lockedReason ?? event.lockedHint ?? ""}
-          onClick={() => activity && onInput({ type: "doActivity", id: activity.id })}
-        >
-          {event.label ?? activity?.title ?? event.id}
-        </button>
-      ))}
     </div>
   );
 }
@@ -222,8 +245,40 @@ export function mapPlacementDistance(point: MapPoint, placement: MapPlacementDef
   return dx + dy;
 }
 
-function placementDisplayName(placement: MapPlacementDef): string {
+function placementDisplayName(
+  placement: MapPlacementDef,
+  resourceLabels?: SpatialResourceLabels,
+): string {
+  if (placement.resource) {
+    const label = resourceLabels?.get(`${placement.resource.kind}:${placement.resource.id}`);
+    if (label) return label;
+  }
   return formatResourceName(placement.resource?.id ?? placement.id);
+}
+
+export function mapMoveAvailability(layout: MapDef["layout"], point?: MapPoint) {
+  if (!layout || !point) return { north: true, east: true, south: true, west: true };
+  return {
+    north: point.y > 0,
+    east: point.x < layout.width - 1,
+    south: point.y < layout.height - 1,
+    west: point.x > 0,
+  };
+}
+
+export function describePlacementApproach(
+  point: MapPoint,
+  placement: MapPlacementDef,
+  distance = mapPlacementDistance(point, placement),
+): string {
+  if (distance === 0) return placement.resource?.kind === "map" ? "脚下是区域出口" : "目前地 · 可以调查";
+  const right = placement.at.x + placement.footprint.width - 1;
+  const bottom = placement.at.y + placement.footprint.height - 1;
+  const vertical = point.y < placement.at.y ? "向南" : point.y > bottom ? "向北" : "";
+  const horizontal = point.x < placement.at.x ? "向东" : point.x > right ? "向西" : "";
+  const direction = [vertical, horizontal].filter(Boolean).join("再");
+  const triggerHint = placement.resource?.kind === "map" && distance === 1 ? " · 接触后移动" : "";
+  return `${direction || "附近"} ${distance} 格${triggerHint}`;
 }
 
 function formatResourceName(id: string): string {

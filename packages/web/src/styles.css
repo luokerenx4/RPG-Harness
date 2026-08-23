@@ -354,6 +354,48 @@ body {
   background-position: center, left top, left top;
   background-repeat: no-repeat, repeat, repeat;
 }
+.spatial-map-canvas::after {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4,7,11,.78), transparent 10%, transparent 90%, rgba(4,7,11,.78)),
+    linear-gradient(rgba(4,7,11,.58), transparent 12%, transparent 84%, rgba(4,7,11,.78));
+  content: "";
+}
+.spatial-map-frame {
+  position: absolute;
+  inset: 7px;
+  z-index: 901;
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,.055);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.22);
+}
+.spatial-map-frame::before,
+.spatial-map-frame::after {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-color: rgba(124,200,216,.46);
+  content: "";
+}
+.spatial-map-frame::before { top: -1px; left: -1px; border-top: 1px solid; border-left: 1px solid; }
+.spatial-map-frame::after { right: -1px; bottom: -1px; border-right: 1px solid; border-bottom: 1px solid; }
+.spatial-map-compass {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 34px;
+  color: rgba(220,239,242,.7);
+  filter: drop-shadow(0 2px 3px #000);
+}
+.spatial-map-compass span { font: 7px/1 ui-monospace, monospace; letter-spacing: .1em; }
+.spatial-map-compass i { color: #66baca; font-size: 11px; font-style: normal; transform: rotate(45deg); }
 .spatial-map-region {
   position: absolute;
   border: 1px dashed rgba(242, 193, 93, 0.62);
@@ -475,6 +517,18 @@ body {
   background: rgba(31, 123, 147, .95);
   font-size: 10px;
 }
+.spatial-map-player small {
+  position: absolute;
+  top: calc(50% + 13px);
+  left: 50%;
+  padding: 2px 4px;
+  border-radius: 2px;
+  color: rgba(224,248,252,.82);
+  background: rgba(7,13,18,.8);
+  font: 6px/1 ui-monospace, monospace;
+  letter-spacing: .12em;
+  transform: translateX(-50%);
+}
 .spatial-map-controls {
   display: grid;
   justify-content: center;
@@ -483,7 +537,7 @@ body {
 }
 .spatial-map-navigation {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
@@ -495,16 +549,45 @@ body {
   min-width: 0;
   gap: 8px;
   flex: 1;
-  padding: 6px 8px;
+  padding: 7px 8px;
   border: 1px solid rgba(124,200,216,.14);
   border-radius: 4px;
   background: rgba(9,14,20,.62);
 }
-.spatial-map-awareness > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.spatial-map-awareness > span:last-child { flex: 1; }
+.spatial-map-awareness-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(124,200,216,.35);
+  border-radius: 50%;
+  color: #83cedb;
+  background: rgba(44,109,122,.14);
+  font: 12px/1 ui-serif, serif;
+}
+.spatial-map-awareness-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
 .spatial-map-awareness small { color: #4d5965; font: 7px/1 ui-monospace, monospace; letter-spacing: .12em; }
-.spatial-map-awareness strong { overflow: hidden; color: #9ba8b2; font-size: 8px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.spatial-map-awareness i { width: 1px; height: 18px; background: rgba(255,255,255,.08); }
+.spatial-map-awareness-copy strong { overflow: hidden; color: #c5d6d9; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-awareness-copy em { overflow: hidden; color: #67757e; font-size: 7px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-interact {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 64px;
+  padding: 5px 8px;
+  border: 1px solid rgba(222,179,88,.42);
+  border-radius: 3px;
+  color: #f5d994;
+  background: linear-gradient(180deg, rgba(113,79,25,.25), rgba(43,32,16,.4));
+  cursor: pointer;
+  text-align: left;
+}
+.spatial-map-interact small { color: #8f7442; font: 6px/1 ui-monospace, monospace; }
+.spatial-map-interact strong { max-width: 76px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-interact:hover:not(:disabled) { border-color: rgba(242,193,93,.72); background: rgba(113,79,25,.38); }
+.spatial-map-interact:disabled { opacity: .36; cursor: not-allowed; }
 .spatial-map-controls > button {
   justify-self: center;
 }
@@ -513,6 +596,9 @@ body {
   gap: 3px;
 }
 .spatial-map-controls button {
+  position: relative;
+  display: grid;
+  place-items: center;
   width: 34px;
   height: 28px;
   border: 1px solid rgba(124, 200, 216, .5);
@@ -520,14 +606,36 @@ body {
   color: #dff9ff;
   background: rgba(65, 142, 159, .24);
   cursor: pointer;
+  font-size: 11px;
 }
 .spatial-map-controls button:hover {
   background: rgba(65, 142, 159, .55);
+}
+.spatial-map-controls button small {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  color: rgba(124,200,216,.48);
+  font: 5px/1 ui-monospace, monospace;
+}
+.spatial-map-controls button:disabled {
+  border-color: rgba(124,200,216,.14);
+  color: rgba(223,249,255,.2);
+  background: rgba(42,60,66,.1);
+  cursor: not-allowed;
 }
 .spatial-map-footnote {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.48);
   font-size: 10px;
+}
+.spatial-map-footnote kbd {
+  padding: 1px 3px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 2px;
+  color: rgba(185,201,205,.72);
+  background: rgba(255,255,255,.035);
+  font: 7px/1 ui-monospace, monospace;
 }
 @keyframes map-marker-pulse {
   0%, 100% { box-shadow: 0 3px 12px rgba(0,0,0,.48), 0 0 0 0 rgba(124,200,216,.22); }

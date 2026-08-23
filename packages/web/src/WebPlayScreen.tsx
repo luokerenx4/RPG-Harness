@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import {
   activityDecisionContext,
+  buildProjectResourceRegistry,
   choiceDecisionContext,
   classifyInput,
   Engine,
@@ -1208,6 +1209,11 @@ export function StageView({
       const currentMap = currentMapId
         ? (game.maps ?? []).find((map) => map.id === currentMapId)
         : undefined;
+      const spatialResourceLabels = currentMap?.layout
+        ? new Map(
+          [...buildProjectResourceRegistry(game).entries()].map(([key, resource]) => [key, resource.label]),
+        )
+        : undefined;
       const opportunityByCategory = new Map(
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
@@ -1220,6 +1226,7 @@ export function StageView({
               playerPosition={currentMapPositionMapId === currentMapId
                 ? currentMapPosition
                 : currentMap.layout.playerStart}
+              resourceLabels={spatialResourceLabels}
               backgroundUrl={currentMap.bg ? assetUrls[currentMap.bg] : undefined}
               onInput={onInput}
             />

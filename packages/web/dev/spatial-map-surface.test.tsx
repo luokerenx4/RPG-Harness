@@ -3,6 +3,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { HubActivity, MapDef } from "@rpg-harness/engine";
 import {
+  describePlacementApproach,
+  mapMoveAvailability,
   mapPlacementDistance,
   resolveSpatialPlacementOperations,
   SpatialMapSurface,
@@ -61,6 +63,17 @@ describe("SpatialMapSurface", () => {
     )).toEqual([{ event: placement.events[0], resource: placement.resource, activity: move }]);
   });
 
+  test("describes bounded RPG field movement without changing semantic inputs", () => {
+    expect(mapMoveAvailability(map.layout, { x: 0, y: 5 })).toEqual({
+      north: true,
+      east: true,
+      south: false,
+      west: false,
+    });
+    expect(describePlacementApproach({ x: 3, y: 4 }, map.placements![0]!))
+      .toBe("向南 1 格 · 接触后移动");
+  });
+
   test("renders positions and omits automatic events from player controls", () => {
     const mapWithHiddenPlacement: MapDef = {
       ...map,
@@ -79,6 +92,7 @@ describe("SpatialMapSurface", () => {
         map={mapWithHiddenPlacement}
         activities={[move]}
         playerPosition={{ x: 1, y: 2 }}
+        resourceLabels={new Map([["map:town", "城下町"]])}
         onInput={() => {}}
       />,
     );
@@ -87,12 +101,13 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("width:25%");
     expect(html).toContain("玩家位置 1,2");
     expect(html).toContain("POSITION 1,2");
-    expect(html).toContain("Town · 5 格");
+    expect(html).toContain("城下町");
+    expect(html).toContain("向南再向东 5 格");
     expect(html).toContain("placement-distant");
     expect(html).toContain("向南移动");
     expect(html).toContain("resource-map");
     expect(html).toContain("出口");
-    expect(html).toContain("Town");
+    expect(html).not.toContain("Town");
     expect(html).not.toContain("Private Backdrop Anchor");
     expect(html).not.toContain(">Leave</button>");
     expect(html).not.toContain("arrival");
