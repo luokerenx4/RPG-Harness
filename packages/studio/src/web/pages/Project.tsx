@@ -2845,6 +2845,24 @@ function MapOverview({
               </div>
             );
           })}
+          {editing && mapTool === "objects" && stacks.map((stack) => {
+            const selectedIndex = selectedPlacementId ? stack.ids.indexOf(selectedPlacementId) : -1;
+            return <button
+              type="button"
+              className={`map-stack-badge${selectedIndex >= 0 ? " selected" : ""}`}
+              key={stack.key}
+              aria-label={`Cycle ${stack.ids.length} objects at ${stack.key}`}
+              title={stack.ids.join(" · ")}
+              style={{ left: `${stack.x / width * 100}%`, top: `${stack.y / height * 100}%` }}
+              onClick={(event) => {
+                event.stopPropagation();
+                const id = nextStackPlacementId(stack.ids, selectedPlacementId);
+                const placement = draft.placements?.find((candidate) => candidate.id === id);
+                setSelectedPlacementId(id);
+                if (placement?.layer) setObjectLayerId(placement.layer);
+              }}
+            ><strong>×{stack.ids.length}</strong><small>{selectedIndex >= 0 ? `${selectedIndex + 1}/${stack.ids.length}` : "STACK"}</small></button>;
+          })}
         </div>
       ) : (
         <div className="node-map-preview">
@@ -2901,9 +2919,14 @@ function MapOverview({
       )}
       {stacks.length > 0 && (
         <section className="map-stacks">
-          <h3>Stacked cells</h3>
+          <h3>Stacked cells <small>cycle objects sharing one origin cell</small></h3>
           {stacks.map((stack) => (
-            <div key={stack.key}><code>{stack.key}</code><span>{stack.ids.join(" · ")}</span></div>
+            <button type="button" key={stack.key} onClick={() => {
+              const id = nextStackPlacementId(stack.ids, selectedPlacementId);
+              const placement = draft.placements?.find((candidate) => candidate.id === id);
+              setSelectedPlacementId(id);
+              if (placement?.layer) setObjectLayerId(placement.layer);
+            }}><code>{stack.key}</code><span>{stack.ids.join(" · ")}</span><small>{stack.ids.includes(selectedPlacementId ?? "") ? "next object →" : "inspect stack →"}</small></button>
           ))}
         </section>
       )}
@@ -4118,7 +4141,7 @@ function uniqueLocalId(base: string, ids: string[]): string {
   return `${base}_${suffix}`;
 }
 
-function groupedStacks(placements: MapPlacementDef[]): Array<{ key: string; ids: string[] }> {
+export function groupedStacks(placements: MapPlacementDef[]): Array<{ key: string; x: number; y: number; ids: string[] }> {
   const groups = new Map<string, string[]>();
   for (const placement of placements) {
     const key = `${placement.at.x},${placement.at.y}`;
@@ -4126,5 +4149,14 @@ function groupedStacks(placements: MapPlacementDef[]): Array<{ key: string; ids:
   }
   return [...groups.entries()]
     .filter(([, ids]) => ids.length > 1)
-    .map(([key, ids]) => ({ key, ids }));
+    .map(([key, ids]) => {
+      const [x, y] = key.split(",").map(Number);
+      return { key, x: x ?? 0, y: y ?? 0, ids };
+    });
+}
+
+export function nextStackPlacementId(ids: string[], current: string | null): string | null {
+  if (ids.length === 0) return null;
+  const index = current ? ids.indexOf(current) : -1;
+  return ids[(index + 1) % ids.length] ?? null;
 }

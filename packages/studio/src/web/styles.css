@@ -3089,6 +3089,10 @@ summary:focus-visible {
 .map-placement.collision-trigger { border-color: var(--studio-violet); }
 .map-placement.selected { outline: 2px solid #f1fbff; outline-offset: 2px; box-shadow: 0 0 0 5px rgba(80,199,217,.15), 0 4px 14px rgba(0,0,0,.45); }
 .map-placement.layer-hidden { filter: grayscale(.8); }
+.map-stack-badge { position: absolute; z-index: 2147480000; display: grid; min-width: 30px; min-height: 25px; padding: 3px 5px; color: #cbd5df; border: 1px solid #4a5563; border-radius: 4px; background: rgba(12,16,22,.94); box-shadow: 0 4px 12px rgba(0,0,0,.5); cursor: pointer; transform: translate(-45%,-55%); }
+.map-stack-badge strong { color: var(--studio-orange); font: 800 8px/1 ui-monospace,monospace; }
+.map-stack-badge small { color: #657180; font: 6px/1 ui-monospace,monospace; }
+.map-stack-badge.selected { border-color: var(--studio-orange); box-shadow: 0 0 0 3px rgba(231,168,106,.14), 0 4px 12px rgba(0,0,0,.5); }
 .map-stage-footer { display: flex; justify-content: space-between; gap: 12px; padding: 6px 9px; color: #4d5663; border-top: 1px solid var(--studio-line); font-size: 8px; }
 .node-map-preview { width: 100%; min-height: 330px; border: 1px dashed #2b3340; border-radius: 5px; background: #0d1118; }
 .node-map-preview .node-map-symbol { color: #3e8792; font-size: 34px; }
@@ -3349,8 +3353,12 @@ summary:focus-visible {
 }
 
 .map-stacks { margin: 8px; border-color: var(--studio-line); background: #10141b; }
-.map-stacks h3 { font-size: 8px; letter-spacing: .1em; }
-.map-stacks > div { color: #707986; border-color: var(--studio-line); font-size: 8px; }
+.map-stacks h3 { display: flex; align-items: center; gap: 8px; font-size: 8px; letter-spacing: .1em; }
+.map-stacks h3 small { color: #4e5966; font-size: 7px; font-weight: 400; letter-spacing: 0; }
+.map-stacks > button { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; color: #707986; border: 0; border-bottom: 1px solid var(--studio-line); background: transparent; cursor: pointer; font-size: 8px; text-align: left; }
+.map-stacks > button:last-child { border-bottom: 0; }
+.map-stacks > button:hover { color: #bac4ce; background: rgba(80,199,217,.04); }
+.map-stacks > button small { color: #53606d; font-size: 7px; }
 .map-surface-previews { margin: 0; padding: 10px; border-top: 1px solid var(--studio-line); background: #12161e; }
 .map-surface-previews > header { margin-bottom: 8px; }
 .map-surface-previews h3 { color: #9da5b0; font-size: 10px; }

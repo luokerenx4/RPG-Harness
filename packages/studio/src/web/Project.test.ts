@@ -9,6 +9,7 @@ import {
   eventTriggerMeta,
   filterPlacementPaletteResources,
   fillMapLayerTiles,
+  groupedStacks,
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPaletteResourceGraphicPath,
@@ -18,6 +19,7 @@ import {
   moveMapLayer,
   createMapDraftHistory,
   nextAvailableMapCell,
+  nextStackPlacementId,
   nudgeMapPlayerStart,
   nextProjectTreeIndex,
   parseResourceScalarFields,
@@ -277,6 +279,27 @@ describe("Studio map event resource picker", () => {
     expect(duplicate.events).not.toBe(source.events);
     expect(duplicate.requires).not.toBe(source.requires);
     expect(duplicateMapPlacementDraft(layout, [source, duplicate], source).id).toBe("gate_copy_2");
+  });
+
+  test("cycles every object authored on one map cell", () => {
+    const placements = ["event_a", "event_b", "event_c"].map((id) => ({
+      id,
+      at: { x: 4, y: 2 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "none" as const,
+      visible: true,
+      events: [],
+    }));
+    expect(groupedStacks([...placements, { ...placements[0]!, id: "elsewhere", at: { x: 1, y: 1 } }])).toEqual([{
+      key: "4,2",
+      x: 4,
+      y: 2,
+      ids: ["event_a", "event_b", "event_c"],
+    }]);
+    expect(nextStackPlacementId(["event_a", "event_b", "event_c"], null)).toBe("event_a");
+    expect(nextStackPlacementId(["event_a", "event_b", "event_c"], "event_a")).toBe("event_b");
+    expect(nextStackPlacementId(["event_a", "event_b", "event_c"], "event_c")).toBe("event_a");
   });
 
   test("places palette objects on the first cell outside existing footprints", () => {
