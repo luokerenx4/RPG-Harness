@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { AssetSpec, Game } from "@rpg-harness/engine";
 
 // 設定集 — the in-game art book. A pure projection of the game's
@@ -26,6 +26,29 @@ export function ArtBook({
 }) {
   const packs = useMemo(() => buildPacks(game), [game]);
   const [active, setActive] = useState(0);
+  const indexRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const index = indexRef.current;
+    if (!index || packs.length === 0) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+      const buttons = Array.from(index.querySelectorAll<HTMLButtonElement>("button"));
+      if (buttons.length === 0) return;
+      event.preventDefault();
+      const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const current = focused >= 0 ? focused : Math.min(active, buttons.length - 1);
+      const next = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : (current + (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1) + buttons.length) % buttons.length;
+      setActive(next);
+      buttons[next]?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, packs.length]);
 
   if (packs.length === 0) {
     return (
@@ -55,12 +78,13 @@ export function ArtBook({
         <div className="artbook-layout">
           <aside className="artbook-index">
             <header><span>CHARACTERS</span><small>{packs.length}</small></header>
-            <nav aria-label="設定集の人物">
+            <nav ref={indexRef} aria-label="設定集の人物">
               {packs.map((candidate, index) => (
                 <button
                   type="button"
                   key={candidate.id}
                   className={index === active ? "active" : ""}
+                  aria-current={index === active ? "true" : undefined}
                   onClick={() => setActive(index)}
                 >
                   <span>{String(index + 1).padStart(2, "0")}</span>
@@ -69,7 +93,7 @@ export function ArtBook({
                 </button>
               ))}
             </nav>
-            <footer><span>CANON ASSET INDEX</span><small>生成参照と同じ資料</small></footer>
+            <footer><span>↑↓ / ←→ · SELECT</span><small>生成参照と同じ資料</small></footer>
           </aside>
           <main className="artbook-scroll">
             <header className="artbook-record-head">

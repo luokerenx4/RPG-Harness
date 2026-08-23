@@ -1176,7 +1176,8 @@ body {
 .artbook-index nav { padding: 0 7px; overflow: auto; }
 .artbook-index nav button { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 48px; padding: 6px 7px; color: #818a95; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; text-align: left; }
 .artbook-index nav button:hover { color: #d6dbe0; background: rgba(255,255,255,.03); }
-.artbook-index nav button.active { color: #eef1f3; border-color: rgba(100,183,198,.3); background: linear-gradient(90deg,rgba(49,123,137,.25),rgba(49,123,137,.05)); box-shadow: inset 2px 0 #64b7c6; }
+.artbook-index nav button.active,
+.artbook-index nav button:focus-visible { color: #eef1f3; border-color: rgba(100,183,198,.3); background: linear-gradient(90deg,rgba(49,123,137,.25),rgba(49,123,137,.05)); box-shadow: inset 2px 0 #64b7c6; }
 .artbook-index nav button > span { color: #4c5661; font: 8px/1 ui-monospace,monospace; }
 .artbook-index nav button > div { display: flex; min-width: 0; flex-direction: column; }
 .artbook-index nav button strong { overflow: hidden; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
