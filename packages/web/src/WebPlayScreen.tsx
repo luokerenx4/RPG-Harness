@@ -44,7 +44,10 @@ import {
 } from "@rpg-harness/frontend-core";
 import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
-import { SpatialMapSurface } from "./SpatialMapSurface";
+import {
+  collectSpatialPlacementActivityIds,
+  SpatialMapSurface,
+} from "./SpatialMapSurface";
 import type {
   WebBranchContext,
   WebAiPersona,
@@ -1403,6 +1406,26 @@ export function StageView({
       const opportunityByCategory = new Map(
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
+      const spatialPlacementActivityIds = currentMap?.layout
+        ? collectSpatialPlacementActivityIds(
+          currentMap,
+          new Map(stage.snapshot.activities.map((activity) => [activity.id, activity])),
+        )
+        : new Set<string>();
+      const playerSections = hubView.sections
+        .map((section) => {
+          const activities = section.activities.filter(
+            ({ activity }) => !spatialPlacementActivityIds.has(activity.id),
+          );
+          const availableCount = activities.filter(({ activity }) => activity.available).length;
+          return {
+            ...section,
+            activities,
+            availableCount,
+            lockedCount: activities.length - availableCount,
+          };
+        })
+        .filter((section) => section.activities.length > 0);
       return (
         <div className={`hub-stage-layout${currentMap?.layout ? " has-spatial-map" : ""}`}>
           {currentMap?.layout && (
@@ -1483,12 +1506,12 @@ export function StageView({
                   )}
                 </small>
               </div>
-              {hubView.sections.map((section) => (
+              {playerSections.map((section) => (
                 <section className="activity-section" key={section.category}>
                   <div className="activity-section-head">
                     <span>{section.label}</span>
                     <span>
-                      {opportunityByCategory.get(section.category)?.decisionRequired &&
+                      {opportunityByCategory.get(section.category)?.decisionRequired && section.availableCount > 1 &&
                         "CHOICE · "}
                       {section.availableCount}/{section.activities.length}
                     </span>

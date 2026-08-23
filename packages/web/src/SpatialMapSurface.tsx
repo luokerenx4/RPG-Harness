@@ -83,6 +83,24 @@ export function collectSpatialContextOperations(
     });
 }
 
+/**
+ * Activities owned by visible spatial placements belong to the field surface,
+ * not the ordinary Hub command list. Headless still receives the unchanged
+ * activity array; only the Web player projection moves these commands behind
+ * proximity, touch, and map controls.
+ */
+export function collectSpatialPlacementActivityIds(
+  map: MapDef,
+  activities: ReadonlyMap<string, HubActivity>,
+): Set<string> {
+  return new Set(
+    (map.placements ?? [])
+      .filter((placement) => placement.visible)
+      .flatMap((placement) => resolveSpatialPlacementOperations(map, placement, activities))
+      .flatMap(({ activity }) => activity ? [activity.id] : []),
+  );
+}
+
 export function SpatialMapSurface({
   map,
   activities,

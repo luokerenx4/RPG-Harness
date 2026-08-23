@@ -6,6 +6,7 @@ import type { HubActivity, MapDef, MapPlacementDef } from "@rpg-harness/engine";
 import {
   collectSpatialContextOperations,
   collectSpatialLandmarks,
+  collectSpatialPlacementActivityIds,
   describePlacementApproach,
   isSpatialInteractKey,
   mapMoveAvailability,
@@ -147,6 +148,10 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain('aria-label="附近地标雷达"');
     expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');
     expect(html.match(/<button/g)).toHaveLength(5);
+    expect([...collectSpatialPlacementActivityIds(
+      inspectMap,
+      new Map([[inspectActivity.id, inspectActivity]]),
+    )]).toEqual([inspectActivity.id]);
   });
 
   test("keeps stacked resources visible and prioritizes an actionable landmark at equal distance", () => {
