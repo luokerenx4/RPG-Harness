@@ -174,6 +174,7 @@ async function getHealthRoute(): Promise<Response> {
 async function getGame(ctx: Ctx): Promise<Response> {
   const game = await loadGame(ctx.gameDir);
   return json({
+    id: path.basename(ctx.gameDir),
     title: game.title,
     counts: {
       characters: game.characters.length,

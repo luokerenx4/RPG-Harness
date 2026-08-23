@@ -11,6 +11,7 @@ import type {
 } from "@rpg-harness/engine";
 
 export interface GameSummary {
+  id: string;
   title: string;
   counts: {
     characters: number;

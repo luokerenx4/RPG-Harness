@@ -36,6 +36,19 @@ export function App() {
         </nav>
         <div className="studio-titlebar-actions">
           <span className="studio-save-state"><i /> Files are authoritative</span>
+          {game && (
+            <a
+              className="studio-playtest"
+              title="Open a fresh browser playtest session"
+              href={buildPlaytestUrl(game.id, window.location.href, createPlaytestSession())}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span aria-hidden="true">▶</span>
+              Playtest
+              <kbd>Web</kbd>
+            </a>
+          )}
         </div>
       </header>
 
@@ -76,4 +89,20 @@ function shortenPath(value: string): string {
   const parts = value.split("/").filter(Boolean);
   if (parts.length <= 3) return value;
   return `…/${parts.slice(-3).join("/")}`;
+}
+
+export function buildPlaytestUrl(gameId: string, studioHref: string, session: string): string {
+  const url = new URL(studioHref);
+  url.port = "5188";
+  url.pathname = "/";
+  url.hash = "";
+  url.search = new URLSearchParams({ game: gameId, session }).toString();
+  return url.toString();
+}
+
+function createPlaytestSession(): string {
+  const entropy = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().slice(0, 8)
+    : Date.now().toString(36);
+  return `studio-playtest-${entropy}`;
 }
