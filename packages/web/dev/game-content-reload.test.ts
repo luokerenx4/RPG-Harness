@@ -16,7 +16,7 @@ describe("Web game content reload", () => {
       "sengoku/modules/new-rule.ts",
       "sengoku/assets/backgrounds/new/spec.yml",
       "sengoku/assets/backgrounds/new/source.compressed.webp",
-      "sengoku/assets/portraits/new/source.quality.png",
+      "sengoku/assets/portraits/new/web.webp",
     ]) {
       expect(isBakedGameFile(path.join(root, relative), root)).toBe(true);
     }
@@ -26,6 +26,7 @@ describe("Web game content reload", () => {
     for (const file of [
       path.join(root, "sengoku/.rpg-harness/sessions/web/state.json"),
       path.join(root, "sengoku/assets/backgrounds/new/tui.ans"),
+      path.join(root, "sengoku/assets/portraits/new/source.quality.png"),
       path.join(root, "sengoku/modules/raid.personas.test.ts"),
       path.join(root, "sengoku/modules/raid.personas.spec.ts"),
       path.join(root, "sengoku/.DS_Store"),

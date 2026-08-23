@@ -36,6 +36,7 @@ import type {
   SkillDef,
   WeaponDef,
 } from "@rpg-harness/engine";
+import { rankWebAssetImage } from "./assetImagePolicy";
 
 const RAW = import.meta.glob("../../../examples/**/*.{md,yaml,yml}", {
   query: "?raw",
@@ -49,8 +50,10 @@ const CODE = import.meta.glob([
   "!../../../examples/**/*.spec.ts",
 ], { eager: true }) as Record<string, { default?: unknown }>;
 
-const IMAGES = import.meta.glob(
-  "../../../examples/**/assets/**/*.{webp,png,jpg,jpeg}",
+const IMAGES = import.meta.glob([
+  "../../../examples/**/assets/**/web.{webp,png,jpg,jpeg}",
+  "../../../examples/**/assets/**/source.compressed.{webp,png,jpg,jpeg}",
+],
   { query: "?url", import: "default", eager: true },
 ) as Record<string, string>;
 
@@ -243,7 +246,7 @@ function collectAssetUrls(gameId: string): Record<string, string> {
     const lastSlash = p.rel.lastIndexOf("/");
     const dir = p.rel.slice(0, lastSlash);
     const file = p.rel.slice(lastSlash + 1);
-    const pri = rankImage(file);
+    const pri = rankWebAssetImage(file);
     if (pri === 0) continue;
     const cur = best[dir];
     if (!cur || pri > cur.pri) best[dir] = { url, pri };
@@ -251,15 +254,6 @@ function collectAssetUrls(gameId: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [dir, v] of Object.entries(best)) out[dir] = v.url;
   return out;
-}
-
-// web.* > source.compressed.* > source.quality.* — same precedence the
-// loader uses, mapped to "which file do we point the <img> at".
-function rankImage(file: string): number {
-  if (file.startsWith("web.")) return 3;
-  if (file.startsWith("source.compressed.")) return 2;
-  if (file.startsWith("source.quality.")) return 1;
-  return 0;
 }
 
 function codeDefault(gameId: string, rel: string): unknown {

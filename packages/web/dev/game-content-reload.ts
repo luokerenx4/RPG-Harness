@@ -1,7 +1,8 @@
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
+import { rankWebAssetImage } from "../src/assetImagePolicy";
 
-const BAKED_GAME_FILE = /\.(?:md|ya?ml|ts|webp|png|jpe?g)$/i;
+const BAKED_CONTENT_FILE = /\.(?:md|ya?ml|ts)$/i;
 
 // import.meta.glob tracks the files that existed when loadGame.ts was
 // transformed. Vite HMR handles edits to those files, but a newly authored
@@ -45,7 +46,7 @@ export function isBakedGameFile(file: string, examplesRoot: string): boolean {
     !path.isAbsolute(relative) &&
     !relative.split(path.sep).some((segment) => segment.startsWith(".")) &&
     !/\.(?:test|spec)\.ts$/i.test(normalized) &&
-    BAKED_GAME_FILE.test(relative)
+    (BAKED_CONTENT_FILE.test(relative) || rankWebAssetImage(path.posix.basename(normalized)) > 0)
   );
 }
 
