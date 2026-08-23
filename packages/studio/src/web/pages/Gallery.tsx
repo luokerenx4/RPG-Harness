@@ -67,6 +67,12 @@ export function Gallery() {
     }
   };
 
+  const openAssetCreator = (draft: NewAssetDraft = EMPTY_ASSET_DRAFT) => {
+    setCreateDraft(draft);
+    setCreateError(null);
+    setCreating(true);
+  };
+
   useEffect(() => {
     fetchAssets()
       .then((r) => {
@@ -185,7 +191,7 @@ export function Gallery() {
           focusFirstAsset();
         }} placeholder="Find path, prompt, tag…" aria-label="Search assets" />{query ? <button type="button" aria-label="Clear asset search" onClick={() => setQuery("")}>×</button> : <kbd>⌘K</kbd>}</label>
         <div className="library-lifecycle-actions">
-          <button type="button" className="library-create" onClick={() => { setCreateDraft(EMPTY_ASSET_DRAFT); setCreateError(null); setCreating(true); }}><span>＋</span><strong>New asset</strong></button>
+          <button type="button" className="library-create" onClick={() => openAssetCreator()}><span>＋</span><strong>New asset</strong></button>
           <button type="button" className="library-trash" aria-label={`Open Asset Trash, ${trashEntries.length} entries`} onClick={() => setTrashOpen(true)}><span>♲</span>{trashEntries.length > 0 && <i>{trashEntries.length}</i>}</button>
         </div>
         <strong>{shown}<small> shown</small></strong>
@@ -278,15 +284,17 @@ export function Gallery() {
         </div>
       )}
       <div ref={gridRef} className="grid" onKeyDown={navigateAssetGrid}>
-        {ghosts.map((g) => (
-          <GhostCard
-            key={g.assetPath}
-            title={g.assetPath}
-            detail={`no spec.yaml at ${g.assetPath}/`}
-            referencedBy={g.referencedBy}
-            kind={kindFromPath(g.assetPath)}
-          />
-        ))}
+        {ghosts.map((g) => {
+          const repairDraft = missingAssetDraft(g.assetPath, g.referencedBy);
+          return <GhostCard
+              key={g.assetPath}
+              title={g.assetPath}
+              detail={`no spec.yaml at ${g.assetPath}/`}
+              referencedBy={g.referencedBy}
+              kind={kindFromPath(g.assetPath)}
+              onCreate={repairDraft ? () => openAssetCreator(repairDraft) : undefined}
+            />;
+        })}
         {ghostEmotions.map((g) => (
           <GhostCard
             key={`${g.characterId}:${g.emotion}`}
@@ -371,6 +379,28 @@ function kindFromPath(p: string): AssetKind | string {
   return seg || "?";
 }
 
+export function missingAssetDraft(assetPath: string, referencedBy: string[]): NewAssetDraft | null {
+  const parts = assetPath.split("/");
+  if (parts.length !== 3 || parts[0] !== "assets") return null;
+  const kind = kindFromPath(assetPath);
+  const id = parts[2] ?? "";
+  if (!isAssetKind(kind) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) return null;
+  const label = id.split("-").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ");
+  const sites = referencedBy.join(", ");
+  return {
+    ...EMPTY_ASSET_DRAFT,
+    kind,
+    id,
+    placeholder: label,
+    description: `Missing ${kind} record referenced by ${sites}.`,
+    prompt: `Create the ${kind} visual “${label}” for ${sites}.`,
+  };
+}
+
+function isAssetKind(value: string): value is AssetKind {
+  return value === "portrait" || value === "bg" || value === "cg" || value === "sheet" || value === "tileset";
+}
+
 function matchesTextQuery(values: Array<string | undefined>, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   return normalized.length === 0 || values.some((value) => value?.toLowerCase().includes(normalized));
@@ -412,11 +442,13 @@ function GhostCard({
   detail,
   referencedBy,
   kind,
+  onCreate,
 }: {
   title: string;
   detail: string;
   referencedBy: string[];
   kind: string;
+  onCreate?: () => void;
 }) {
   return (
     <div className="card ghost-card">
@@ -433,6 +465,7 @@ function GhostCard({
         <div className="placeholder-text muted">
           referenced by: {referencedBy.join(", ")}
         </div>
+        {onCreate && <button type="button" className="ghost-create" onClick={onCreate}><span aria-hidden="true">＋</span>Create missing spec</button>}
       </div>
     </div>
   );

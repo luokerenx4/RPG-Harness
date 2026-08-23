@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AssetRow } from "./api";
-import { assetAtlasSummary, matchesAssetQuery, nextAssetCardIndex } from "./pages/Gallery";
+import { assetAtlasSummary, matchesAssetQuery, missingAssetDraft, nextAssetCardIndex } from "./pages/Gallery";
 
 const asset = {
   path: "assets/portraits/kagari/calm",
@@ -34,5 +34,15 @@ describe("Studio asset library navigation", () => {
       .toBe("4×4 atlas · 16 tiles · IDs 1–16");
     expect(assetAtlasSummary({ kind: "tileset" })).toBe("atlas metadata missing");
     expect(assetAtlasSummary({ kind: "portrait" })).toBeUndefined();
+  });
+
+  test("turns a canonical ghost path into a prefilled repair draft", () => {
+    expect(missingAssetDraft("assets/cgs/forgotten-vow", ["script ending :cg"])).toEqual(expect.objectContaining({
+      kind: "cg",
+      id: "forgotten-vow",
+      placeholder: "Forgotten Vow",
+      description: "Missing cg record referenced by script ending :cg.",
+    }));
+    expect(missingAssetDraft("assets/cgs/not_valid", ["script ending :cg"])).toBeNull();
   });
 });

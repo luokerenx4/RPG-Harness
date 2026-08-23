@@ -3373,6 +3373,8 @@ summary:focus-visible {
 .library-empty strong { color: #8f99a5; font-size: 11px; }
 .library-empty span { font-size: 8px; }
 .ghost-banner { border-color: rgba(224,111,121,.4); border-radius: 7px; background: rgba(224,111,121,.06); font-size: 10px; }
+.ghost-create { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 28px; margin-top: 4px; color: #e3b7bc; border: 1px solid rgba(224,111,121,.38); border-radius: 4px; background: rgba(224,111,121,.07); cursor: pointer; font-size: 8px; }
+.ghost-create:hover { color: #171013; border-color: var(--studio-red); background: var(--studio-red); }
 
 .asset-detail-page { height: 100%; padding: 14px 20px 40px; overflow: auto; scrollbar-width: thin; }
 .asset-detail-page .back-link { margin-bottom: 10px; color: #747e8b; }
