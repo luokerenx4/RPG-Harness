@@ -1341,7 +1341,17 @@ export function StageView({
               ))}
             </aside>
             <main className="hub-actions" aria-label="実行可能な行動">
-              <div className="hub-column-title"><span>COMMAND</span><strong>行動を選ぶ</strong></div>
+              <div className="hub-column-title">
+                <span>COMMAND</span>
+                <strong>行動を選ぶ</strong>
+                <small className="hub-keyboard-inline">
+                  {currentMap?.layout ? (
+                    <><kbd>Tab</kbd> 指令 <kbd>E</kbd> 调查 <kbd>Esc</kbd> 菜单</>
+                  ) : (
+                    <><kbd>↑↓</kbd> 选择 <kbd>Enter</kbd> 确认 <kbd>Esc</kbd> 菜单</>
+                  )}
+                </small>
+              </div>
               {hubView.sections.map((section) => (
                 <section className="activity-section" key={section.category}>
                   <div className="activity-section-head">
@@ -1398,13 +1408,6 @@ export function StageView({
                   </ul>
                 </section>
               ))}
-              <footer className="activity-keyboard-hint">
-                {currentMap?.layout ? (
-                  <><span><kbd>Tab</kbd> 指令</span><span><kbd>E</kbd> 调查</span><span><kbd>Esc</kbd> 菜单</span></>
-                ) : (
-                  <><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 确认</span><span><kbd>Esc</kbd> 菜单</span></>
-                )}
-              </footer>
             </main>
           </div>
         </div>

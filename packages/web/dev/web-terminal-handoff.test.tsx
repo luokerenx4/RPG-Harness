@@ -387,7 +387,7 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("objective-focused");
     expect(html).toContain("SIDE · NOW");
     expect(html).toContain("Bring the memory home");
-    expect(html).toContain("↑</kbd><kbd>↓</kbd> 选择");
+    expect(html).toContain("<kbd>↑↓</kbd> 选择");
     expect(nextHubCommandIndex(-1, 3, 1)).toBe(0);
     expect(nextHubCommandIndex(-1, 3, -1)).toBe(2);
     expect(nextHubCommandIndex(2, 3, 1)).toBe(0);

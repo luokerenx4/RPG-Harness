@@ -812,28 +812,6 @@ body {
 .activity-btn.activity-primary:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 55%, #2a2a36);
 }
-.activity-keyboard-hint {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: -2px;
-  padding: 7px 2px 0;
-  color: #4e5864;
-  border-top: 1px solid rgba(255,255,255,.055);
-  font-size: 7px;
-}
-.activity-keyboard-hint span { display: inline-flex; align-items: center; gap: 3px; }
-.activity-keyboard-hint kbd {
-  min-width: 17px;
-  padding: 2px 4px;
-  color: #7d8792;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 3px;
-  background: rgba(255,255,255,.035);
-  font: 6px/1 ui-monospace, monospace;
-  text-align: center;
-}
 .primary-mark {
   margin-right: 8px;
   color: var(--accent);
@@ -1983,6 +1961,22 @@ body {
   font-family: "Yu Mincho", "Hiragino Mincho ProN", ui-serif, serif;
   font-size: 11px;
   letter-spacing: .08em;
+}
+.hub-keyboard-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4e5864;
+  font: 6px/1 ui-monospace, monospace;
+  white-space: nowrap;
+}
+.hub-keyboard-inline kbd {
+  padding: 2px 3px;
+  color: #7d8792;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 3px;
+  background: rgba(255,255,255,.035);
+  font: 6px/1 ui-monospace, monospace;
 }
 .hub-strategy,
 .resource-group,
