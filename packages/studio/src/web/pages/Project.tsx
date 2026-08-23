@@ -873,6 +873,7 @@ function ResourceDetail({
         <DeleteResourceDialog
           node={node}
           blockers={backlinks}
+          resources={resources}
           onClose={() => {
             setDeleteOpen(false);
             requestAnimationFrame(() => deleteButtonRef.current?.focus());
@@ -880,6 +881,10 @@ function ResourceDetail({
           onTrashed={(trashed) => {
             setDeleteOpen(false);
             onResourceTrashed(trashed);
+          }}
+          onOpenBlocker={(key) => {
+            setDeleteOpen(false);
+            onSelectResource(key);
           }}
         />
       )}
@@ -890,13 +895,17 @@ function ResourceDetail({
 function DeleteResourceDialog({
   node,
   blockers,
+  resources,
   onClose,
   onTrashed,
+  onOpenBlocker,
 }: {
   node: ProjectResourceNode;
   blockers: string[];
+  resources: ProjectResourceNode[];
   onClose: () => void;
   onTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
+  onOpenBlocker: (key: string) => void;
 }) {
   const [confirmation, setConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -952,7 +961,7 @@ function DeleteResourceDialog({
         <div className="delete-resource-body">
           <div className="delete-resource-summary"><i aria-hidden="true">⌫</i><div><span>{node.kind.toUpperCase()}</span><strong>{node.label}</strong><code>{node.key}</code><small>{node.source}</small></div></div>
           {blocked ? (
-            <div className="delete-resource-blockers" role="alert"><strong>Referenced resources cannot be moved</strong><span>Remove these {blockers.length} inbound reference{blockers.length === 1 ? "" : "s"} first:</span><ul>{blockers.map((key) => <li key={key}><code>{key}</code></li>)}</ul></div>
+            <div className="delete-resource-blockers" role="alert"><strong>Referenced resources cannot be moved</strong><span>Open a source below and remove its inbound reference first:</span><ul>{blockers.map((key) => <li key={key}><ResourceReference value={key} resources={resources} compact onSelectResource={onOpenBlocker} /></li>)}</ul></div>
           ) : (
             <label><span>Type <code>{node.id}</code> to confirm</span><input ref={confirmationInputRef} autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
           )}

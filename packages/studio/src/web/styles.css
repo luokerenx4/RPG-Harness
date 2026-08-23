@@ -1792,8 +1792,12 @@ summary:focus-visible {
 .delete-resource-blockers { padding: 11px 12px; color: #9da5ae; border: 1px solid rgba(231,168,106,.35); border-radius: 6px; background: rgba(231,168,106,.055); font-size: 8px; }
 .delete-resource-blockers > strong { display: block; margin-bottom: 3px; color: var(--studio-orange); font-size: 9px; }
 .delete-resource-blockers ul { display: flex; flex-wrap: wrap; gap: 5px; max-height: 100px; margin: 9px 0 0; padding: 0; overflow: auto; list-style: none; }
-.delete-resource-blockers li { padding: 4px 6px; border: 1px solid rgba(231,168,106,.2); border-radius: 3px; background: #11151b; }
+.delete-resource-blockers li { flex: 1 1 235px; min-width: 0; }
 .delete-resource-blockers code { color: #b9a18b; font-size: 7px; }
+.delete-resource-blockers .resource-reference.compact { width: 100%; border-color: rgba(231,168,106,.17); background: #11151b; }
+.delete-resource-blockers .resource-reference.compact:hover,
+.delete-resource-blockers .resource-reference.compact:focus-visible { color: #f5dfca; border-color: rgba(231,168,106,.48); background: rgba(231,168,106,.08); box-shadow: inset 2px 0 0 var(--studio-orange); }
+.delete-resource-blockers .resource-reference-icon { color: var(--studio-orange); border-color: rgba(231,168,106,.22); background: rgba(231,168,106,.05); }
 .delete-resource-error { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 9px; padding: 9px 10px; color: #bdc3cb; border: 1px solid rgba(224,111,121,.34); border-radius: 5px; background: rgba(224,111,121,.055); font-size: 8px; }
 .delete-resource-error strong { color: var(--studio-red); }
 .delete-resource-error small { grid-column: 1 / -1; color: #78676b; }
