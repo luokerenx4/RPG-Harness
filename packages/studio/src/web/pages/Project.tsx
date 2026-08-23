@@ -1774,6 +1774,7 @@ function EventPagesEditor({
   const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
   const deletePageButtonRef = useRef<HTMLButtonElement>(null);
   const cancelDeletePageRef = useRef<HTMLButtonElement>(null);
+  const eventIndexRef = useRef<HTMLElement>(null);
   const selectedIndex = Math.max(0, placement.events.findIndex((event) => event.id === selectedEventId));
   const selected = placement.events[selectedIndex];
 
@@ -1786,6 +1787,30 @@ function EventPagesEditor({
   useEffect(() => {
     if (deletePendingId) cancelDeletePageRef.current?.focus();
   }, [deletePendingId]);
+
+  useEffect(() => {
+    const index = eventIndexRef.current;
+    if (!index) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+      const buttons = Array.from(index.querySelectorAll<HTMLButtonElement>(".event-page-select"));
+      if (buttons.length === 0) return;
+      event.preventDefault();
+      const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const current = focused >= 0 ? focused : selectedIndex;
+      const next = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : nextProjectTreeIndex(current, buttons.length, ["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1);
+      const button = buttons[next];
+      if (!button) return;
+      setSelectedEventId(button.dataset.eventId ?? null);
+      button.focus();
+    };
+    index.addEventListener("keydown", onKeyDown);
+    return () => index.removeEventListener("keydown", onKeyDown);
+  }, [selectedIndex, placement.events.length]);
 
   const cancelDeletePage = () => {
     setDeletePendingId(null);
@@ -1843,12 +1868,12 @@ function EventPagesEditor({
         <div className="events-empty"><strong>No event pages</strong><span>Add a page to expose an interaction, transfer, cutscene, or automatic process.</span><button type="button" onClick={() => addPage()}>Create first page</button></div>
       ) : (
         <div className="event-pages-layout">
-          <nav className="event-page-index" aria-label="Event pages">
-            <header><span>PAGES</span><small>{placement.events.length}</small></header>
+          <nav ref={eventIndexRef} className="event-page-index" aria-label="Event pages">
+            <header><span>PAGES</span><small>{placement.events.length} · ↑↓</small></header>
             {placement.events.map((event, index) => {
               const meta = eventTriggerMeta(event.trigger);
               return (
-                <button type="button" className={index === selectedIndex ? "selected" : ""} aria-current={index === selectedIndex ? "page" : undefined} key={`${event.id}-${index}`} onClick={() => setSelectedEventId(event.id)}>
+                <button type="button" className={`event-page-select${index === selectedIndex ? " selected" : ""}`} data-event-id={event.id} aria-current={index === selectedIndex ? "page" : undefined} key={`${event.id}-${index}`} onClick={() => setSelectedEventId(event.id)}>
                   <span className="event-page-number">{index + 1}</span>
                   <span className="event-page-copy"><strong>{event.label || meta.label}</strong><small>{event.id}</small></span>
                   <i title={meta.description}>{meta.icon}</i>
