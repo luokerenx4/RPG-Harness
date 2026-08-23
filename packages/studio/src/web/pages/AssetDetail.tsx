@@ -18,6 +18,7 @@ import {
   renderTui,
   sourceCompressedImageUrl,
   sourceQualityImageUrl,
+  trashAsset,
   uploadSource,
 } from "../api";
 import type { PatchableSpecFields } from "../api";
@@ -210,6 +211,7 @@ export function AssetDetail({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<"cancel" | "back" | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // After an upload or render, the asset's renderings flip on the
   // server — refetch + re-pull the preview so the UI mirrors disk.
@@ -575,6 +577,7 @@ export function AssetDetail({
         <div className="asset-record-actions">
           <span><i /> SPEC AUTHORITATIVE</span>
           <button className="btn" onClick={copyPath}>Copy resource path</button>
+          <button className="btn asset-trash-action" disabled={editing || busy !== null} onClick={() => setDeleteOpen(true)}>Move to Trash</button>
         </div>
       </header>
 
@@ -1177,8 +1180,60 @@ export function AssetDetail({
           }}
         />
       )}
+      {deleteOpen && asset && <DeleteAssetDialog asset={asset} onClose={() => setDeleteOpen(false)} onTrashed={() => navigate("/assets")} />}
       {toast && <div className="toast">{toast}</div>}
     </Layout>
+  );
+}
+
+function DeleteAssetDialog({
+  asset,
+  onClose,
+  onTrashed,
+}: {
+  asset: AssetRow;
+  onClose: () => void;
+  onTrashed: () => void;
+}) {
+  const slug = asset.path.split("/").at(-1) ?? asset.path;
+  const [confirmation, setConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [blockers, setBlockers] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => inputRef.current?.focus(), []);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (confirmation !== slug || deleting || blockers.length > 0) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await trashAsset(asset.path);
+      onTrashed();
+    } catch (cause) {
+      const nextBlockers = (cause as Error & { blockers?: string[] }).blockers ?? [];
+      setBlockers(nextBlockers);
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="delete-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" onClick={deleting ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !deleting) onClose();
+    }}>
+      <form className="delete-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()}>
+        <header><div><span>ASSET LIFECYCLE</span><strong id="delete-asset-title">Move visual resource to Asset Trash?</strong><small>The complete asset directory stays recoverable. Studio scans player-facing references and validates the whole game before accepting the move.</small></div><button type="button" aria-label="Close delete asset dialog" disabled={deleting} onClick={onClose}>×</button></header>
+        <div className="delete-resource-body">
+          <div className="delete-resource-summary"><i aria-hidden="true">⌫</i><div><span>{asset.kind.toUpperCase()}</span><strong>{asset.placeholder}</strong><code>{asset.path}</code><small>spec.yaml and every rendering tier move together</small></div></div>
+          {blockers.length > 0 ? <div className="delete-resource-blockers" role="alert"><strong>This asset is still player-reachable</strong><span>Remove these inbound references before moving it:</span><ul>{blockers.map((blocker) => <li key={blocker}><code>{blocker}</code></li>)}</ul></div> : <label><span>Type <code>{slug}</code> to confirm</span><input ref={inputRef} autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>}
+          {error && blockers.length === 0 && <div className="delete-resource-error" role="alert"><strong>Move failed</strong><span>{error}</span><small>The authoritative asset directory was not removed.</small></div>}
+        </div>
+        <footer><span>RECOVERABLE MOVE · REFERENCE SAFE · VALIDATED RELOAD</span><div><button type="button" disabled={deleting} onClick={onClose}>Cancel</button><button type="submit" className="danger" disabled={confirmation !== slug || deleting || blockers.length > 0}>{deleting ? "Validating…" : blockers.length > 0 ? "Resolve references first" : "Move to Asset Trash"}</button></div></footer>
+      </form>
+    </div>
   );
 }
 

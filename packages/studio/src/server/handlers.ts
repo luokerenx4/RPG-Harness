@@ -35,6 +35,12 @@ import {
 } from "./resource-rename";
 import { duplicateProjectResource } from "./resource-duplicate";
 import { AssetCreateError, createAssetRecord, validateAssetCreateInput } from "./asset-create";
+import {
+  AssetDeleteError,
+  readAssetTrash,
+  restoreAssetTrashEntry,
+  trashAsset,
+} from "./asset-delete";
 
 interface Ctx {
   gameDir: string;
@@ -54,6 +60,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
     if (pathname === "/api/project") return getProject(ctx);
     if (pathname === "/api/resource-source") return getResourceSource(ctx, url);
     if (pathname === "/api/trash") return getStudioTrash(ctx);
+    if (pathname === "/api/asset-trash") return getAssetTrash(ctx);
     if (pathname === "/api/assets") return getAssets(ctx);
 
     const mapPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/preview$/);
@@ -84,6 +91,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
     if (pathname === "/api/resources/duplicate") return postDuplicateProjectResource(ctx, req);
     if (pathname === "/api/resources/rename-plan") return postResourceRenamePlan(ctx, req);
     if (pathname === "/api/trash/restore") return postRestoreStudioTrash(ctx, req);
+    if (pathname === "/api/asset-trash/restore") return postRestoreAssetTrash(ctx, req);
     // /api/assets/<asset-path>/source       — upload source.quality.png
     // /api/assets/<asset-path>/render-tui   — invoke chafa
     const m = pathname.match(/^\/api\/assets\/(.+)\/(source|render-tui)$/);
@@ -104,6 +112,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "DELETE") {
+    if (pathname === "/api/assets") return deleteAsset(ctx, url);
     if (pathname === "/api/resources") return deleteProjectResource(ctx, url);
   }
 
@@ -238,6 +247,50 @@ async function artifactBacklinks(gameDir: string, resourceKey: string): Promise<
 
 async function getStudioTrash(ctx: Ctx): Promise<Response> {
   return json({ entries: await readStudioTrash(ctx.gameDir) });
+}
+
+async function getAssetTrash(ctx: Ctx): Promise<Response> {
+  return json({ entries: await readAssetTrash(ctx.gameDir) });
+}
+
+async function postRestoreAssetTrash(ctx: Ctx, req: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const trashPath = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>).trashPath
+    : undefined;
+  if (typeof trashPath !== "string") return json({ error: "trashPath must be a string" }, 400);
+  try {
+    const restored = await restoreAssetTrashEntry(ctx.gameDir, trashPath, () => loadGame(ctx.gameDir));
+    return json({ entry: restored.entry, asset: await projectAsset(restored.asset) });
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof AssetDeleteError ? error.status : 400,
+    );
+  }
+}
+
+async function deleteAsset(ctx: Ctx, url: URL): Promise<Response> {
+  const assetPath = url.searchParams.get("path");
+  if (!assetPath) return json({ error: "path is required" }, 400);
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const trashed = await trashAsset(ctx.gameDir, game, assetPath, () => loadGame(ctx.gameDir));
+    return json({ asset: await projectAsset(trashed.asset), trashPath: trashed.trashPath });
+  } catch (error) {
+    return json(
+      {
+        error: (error as Error).message,
+        blockers: error instanceof AssetDeleteError ? error.blockers : [],
+      },
+      error instanceof AssetDeleteError ? error.status : 400,
+    );
+  }
 }
 
 async function postRestoreStudioTrash(ctx: Ctx, req: Request): Promise<Response> {

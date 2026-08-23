@@ -519,6 +519,46 @@ export async function createAsset(input: CreateAssetInput): Promise<AssetRow> {
   return r.json();
 }
 
+export interface AssetTrashEntry {
+  trashPath: string;
+  sourcePath: string;
+  deletedAt: string;
+  kind: AssetKind;
+  path: string;
+  label: string;
+}
+
+export async function fetchAssetTrash(): Promise<AssetTrashEntry[]> {
+  const response = await fetch("/api/asset-trash");
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const body = await response.json() as { entries?: AssetTrashEntry[] };
+  return body.entries ?? [];
+}
+
+export async function trashAsset(assetPath: string): Promise<{ asset: AssetRow; trashPath: string }> {
+  const response = await fetch(`/api/assets?path=${encodeURIComponent(assetPath)}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    const error = new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+    (error as Error & { blockers?: string[] }).blockers = Array.isArray(body.blockers) ? body.blockers : [];
+    throw error;
+  }
+  return response.json();
+}
+
+export async function restoreAssetTrashEntry(trashPath: string): Promise<{ entry: AssetTrashEntry; asset: AssetRow }> {
+  const response = await fetch("/api/asset-trash/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trashPath }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 // Invoke server-side chafa to produce tui.txt from source.quality.png.
 // Surfaces server status codes verbatim so the UI can branch:
 //   503 → chafa not installed (show install hint)

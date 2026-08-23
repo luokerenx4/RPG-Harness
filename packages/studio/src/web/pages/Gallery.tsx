@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { AssetKind, AssetRow, DanglingRefs } from "../api";
-import { createAsset, fetchAssets, sourceImageUrl } from "../api";
+import type { AssetKind, AssetRow, AssetTrashEntry, DanglingRefs } from "../api";
+import { createAsset, fetchAssets, fetchAssetTrash, restoreAssetTrashEntry, sourceImageUrl } from "../api";
 
 interface NewAssetDraft {
   kind: AssetKind;
@@ -40,6 +40,8 @@ export function Gallery() {
   const [createDraft, setCreateDraft] = useState<NewAssetDraft>(EMPTY_ASSET_DRAFT);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashEntries, setTrashEntries] = useState<AssetTrashEntry[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +74,7 @@ export function Gallery() {
         setDangling(r.dangling);
       })
       .catch((e) => setErr(e.message));
+    void fetchAssetTrash().then(setTrashEntries).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -181,7 +184,10 @@ export function Gallery() {
           event.preventDefault();
           focusFirstAsset();
         }} placeholder="Find path, prompt, tag…" aria-label="Search assets" />{query ? <button type="button" aria-label="Clear asset search" onClick={() => setQuery("")}>×</button> : <kbd>⌘K</kbd>}</label>
-        <button type="button" className="library-create" onClick={() => { setCreateDraft(EMPTY_ASSET_DRAFT); setCreateError(null); setCreating(true); }}><span>＋</span><strong>New asset</strong></button>
+        <div className="library-lifecycle-actions">
+          <button type="button" className="library-create" onClick={() => { setCreateDraft(EMPTY_ASSET_DRAFT); setCreateError(null); setCreating(true); }}><span>＋</span><strong>New asset</strong></button>
+          <button type="button" className="library-trash" aria-label={`Open Asset Trash, ${trashEntries.length} entries`} onClick={() => setTrashOpen(true)}><span>♲</span>{trashEntries.length > 0 && <i>{trashEntries.length}</i>}</button>
+        </div>
         <strong>{shown}<small> shown</small></strong>
       </header>
       {creating && (
@@ -201,6 +207,10 @@ export function Gallery() {
           </form>
         </section>
       )}
+      {trashOpen && <AssetTrashDialog entries={trashEntries} onClose={() => setTrashOpen(false)} onRestored={(restored) => {
+        setTrashEntries((current) => current.filter((entry) => entry.trashPath !== restored.entry.trashPath));
+        setAssets((current) => current ? [...current, restored.asset].sort((left, right) => left.kind.localeCompare(right.kind) || left.path.localeCompare(right.path)) : current);
+      }} />}
       <div className="library-filters">
       <div className="row">
         <FilterChip
@@ -291,6 +301,58 @@ export function Gallery() {
         ))}
         {shown === 0 && <div className="library-empty"><strong>{assets.length === 0 ? "No assets declared yet" : "No matching assets"}</strong><span>{assets.length === 0 ? "Use New asset to create the first authoritative visual record." : "Clear the search or choose another resource filter."}</span></div>}
       </div>
+      </div>
+    </div>
+  );
+}
+
+function AssetTrashDialog({
+  entries,
+  onClose,
+  onRestored,
+}: {
+  entries: AssetTrashEntry[];
+  onClose: () => void;
+  onRestored: (restored: Awaited<ReturnType<typeof restoreAssetTrashEntry>>) => void;
+}) {
+  const [restoringPath, setRestoringPath] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const firstRestoreRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    (firstRestoreRef.current ?? closeRef.current)?.focus();
+  }, []);
+
+  const restore = async (entry: AssetTrashEntry) => {
+    setRestoringPath(entry.trashPath);
+    setError(null);
+    try {
+      onRestored(await restoreAssetTrashEntry(entry.trashPath));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRestoringPath(null);
+    }
+  };
+
+  return (
+    <div className="studio-trash-overlay" role="dialog" aria-modal="true" aria-labelledby="asset-trash-title" onClick={restoringPath ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !restoringPath) onClose();
+    }}>
+      <div className="studio-trash-dialog" onClick={(event) => event.stopPropagation()}>
+        <header><div><span>ASSET RECOVERY SHELF</span><strong id="asset-trash-title">Asset Trash</strong><small>Restore the complete visual resource directory, then validate the authoritative game before accepting it.</small></div><button ref={closeRef} type="button" aria-label="Close Asset Trash" disabled={Boolean(restoringPath)} onClick={onClose}>×</button></header>
+        <div className="studio-trash-body">
+          {entries.length === 0 ? <div className="studio-trash-empty"><i aria-hidden="true">♲</i><strong>Asset Trash is empty</strong><span>Visual resources moved from an asset record will wait here for recovery.</span></div> : entries.map((entry, index) => (
+            <article className="studio-trash-entry" key={entry.trashPath}>
+              <i className={`kind-${entry.kind}`} aria-hidden="true">▧</i>
+              <div><span>{entry.kind}</span><strong>{entry.label}</strong><code>{entry.sourcePath}</code><small>Moved {new Date(entry.deletedAt).toLocaleString()}</small></div>
+              <button ref={index === 0 ? firstRestoreRef : undefined} type="button" disabled={Boolean(restoringPath)} onClick={() => void restore(entry)}>{restoringPath === entry.trashPath ? "Validating…" : "Restore"}</button>
+            </article>
+          ))}
+          {error && <div className="studio-trash-error" role="alert"><strong>Restore failed</strong><span>{error}</span><small>The asset remains in Asset Trash.</small></div>}
+        </div>
+        <footer><span>{entries.length} RECOVERABLE {entries.length === 1 ? "ASSET" : "ASSETS"}</span><button type="button" disabled={Boolean(restoringPath)} onClick={onClose}>Done</button></footer>
       </div>
     </div>
   );

@@ -3315,6 +3315,10 @@ summary:focus-visible {
 .library-create span { font-size: 14px; }
 .library-create strong { font-size: 8px; white-space: nowrap; }
 .library-create:hover { filter: brightness(1.08); }
+.library-lifecycle-actions { display: flex; align-items: center; gap: 6px; }
+.library-trash { position: relative; display: grid; width: 34px; height: 34px; padding: 0; color: #8d97a2; border: 1px solid var(--studio-line-strong); border-radius: 5px; background: #171d25; cursor: pointer; place-items: center; }
+.library-trash:hover { color: var(--studio-orange); border-color: rgba(231,168,106,.45); }
+.library-trash i { position: absolute; top: -6px; right: -6px; display: grid; min-width: 14px; height: 14px; padding: 0 3px; color: #1b1209; border: 1px solid #11151c; border-radius: 99px; background: var(--studio-orange); font: normal 700 7px/1 ui-monospace,monospace; place-items: center; }
 .asset-create-backdrop { position: fixed; inset: 0; z-index: 5000; display: grid; padding: 24px; place-items: center; background: rgba(3,5,8,.78); backdrop-filter: blur(9px); }
 .asset-create-dialog { width: min(680px,100%); max-height: calc(100vh - 48px); padding: 0; overflow: auto; color: var(--studio-text); border: 1px solid var(--studio-line-strong); border-radius: 10px; background: #11161e; box-shadow: 0 30px 100px rgba(0,0,0,.72); }
 .asset-create-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 18px 13px; border-bottom: 1px solid var(--studio-line); background: linear-gradient(115deg,rgba(80,199,217,.08),transparent 58%); }
@@ -3385,6 +3389,8 @@ summary:focus-visible {
 .asset-record-actions { position: relative; z-index: 1; display: flex; align-items: flex-end; flex-direction: column; gap: 9px; }
 .asset-record-actions > span { display: inline-flex; align-items: center; gap: 5px; color: #66727e; font-size: 7px; font-weight: 750; letter-spacing: .1em; }
 .asset-record-actions > span i { width: 5px; height: 5px; border-radius: 50%; background: var(--studio-green); box-shadow: 0 0 7px rgba(112,204,145,.45); }
+.asset-record-actions .asset-trash-action { color: #c9969d; border-color: rgba(224,111,121,.3); background: rgba(224,111,121,.05); }
+.asset-record-actions .asset-trash-action:hover:not(:disabled) { color: #f2cbd0; border-color: rgba(224,111,121,.58); background: rgba(224,111,121,.12); }
 .asset-detail-page .detail-section { border-color: var(--studio-line); border-radius: 8px; background: var(--studio-panel); }
 .asset-detail-page .btn { border-color: var(--studio-line-strong); border-radius: 5px; background: #1a1f28; }
 .asset-dirty-state { display: inline-flex; align-items: center; gap: 5px; color: #59636f; font-size: 7px; font-weight: 750; letter-spacing: .1em; }
