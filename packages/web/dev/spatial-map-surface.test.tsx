@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { HubActivity, MapDef } from "@rpg-harness/engine";
+import { mapPlacementEventKey } from "@rpg-harness/engine";
+import type { HubActivity, MapDef, MapPlacementDef } from "@rpg-harness/engine";
 import {
+  collectSpatialContextOperations,
+  collectSpatialLandmarks,
   describePlacementApproach,
   isSpatialInteractKey,
   mapMoveAvailability,
@@ -140,8 +143,66 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("spatial-map-interact");
     expect(html).toContain("调查门扉");
     expect(html).toContain("<kbd>E</kbd>ACTION");
-    expect(html).toContain('aria-keyshortcuts="E Enter"');
+    expect(html).toContain('aria-keyshortcuts="E Enter Digit1"');
+    expect(html).toContain('aria-label="附近地标雷达"');
     expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');
     expect(html.match(/<button/g)).toHaveLength(5);
+  });
+
+  test("keeps stacked resources visible and prioritizes an actionable landmark at equal distance", () => {
+    const decorative: MapPlacementDef = {
+      ...map.placements![0]!,
+      id: "decor",
+      at: { x: 3, y: 4 },
+      resource: { kind: "asset", id: "wall" },
+      events: [],
+    };
+    const actionable: MapPlacementDef = {
+      ...decorative,
+      id: "altar",
+      resource: { kind: "action", id: "pray" },
+      events: [{ id: "inspect", trigger: "interact", label: "祈る", order: 0 }],
+    };
+    const stackedMap: MapDef = { ...map, placements: [decorative, actionable] };
+    const eventId = mapPlacementEventKey(stackedMap.id, actionable.id, "inspect");
+    const landmarks = collectSpatialLandmarks(
+      stackedMap,
+      new Map([[eventId, { ...move, id: eventId }]]),
+      { x: 3, y: 4 },
+    );
+
+    expect(landmarks.map(({ placement }) => placement.id)).toEqual(["altar", "decor"]);
+    expect(landmarks.map(({ distance }) => distance)).toEqual([0, 0]);
+  });
+
+  test("aggregates nearby manual events without turning touch or distant events into buttons", () => {
+    const projected = (
+      id: string,
+      x: number,
+      trigger: MapPlacementDef["events"][number]["trigger"],
+    ): MapPlacementDef => ({
+      ...map.placements![0]!,
+      id,
+      at: { x, y: 4 },
+      resource: { kind: "action", id },
+      events: [{ id: "run", trigger, label: id, order: 0 }],
+    });
+    const placements = [
+      projected("locked", 3, "manual"),
+      projected("open", 4, "interact"),
+      projected("touch", 3, "player_touch"),
+      projected("far", 7, "interact"),
+    ];
+    const projectedMap: MapDef = { ...map, placements };
+    const activities = new Map(placements.map((placement) => {
+      const id = mapPlacementEventKey(projectedMap.id, placement.id, "run");
+      return [id, { ...move, id, available: placement.id !== "locked" }] as const;
+    }));
+    const context = collectSpatialContextOperations(
+      collectSpatialLandmarks(projectedMap, activities, { x: 3, y: 4 }),
+    );
+
+    expect(context.map(({ placement }) => placement.id)).toEqual(["open", "locked"]);
+    expect(context.map(({ distance }) => distance)).toEqual([1, 0]);
   });
 });

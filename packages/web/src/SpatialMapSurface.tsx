@@ -16,6 +16,17 @@ export interface SpatialPlacementOperation {
   activity?: HubActivity;
 }
 
+export interface SpatialLandmark {
+  placement: MapPlacementDef;
+  distance: number;
+  operations: SpatialPlacementOperation[];
+}
+
+export interface SpatialContextOperation extends SpatialPlacementOperation {
+  placement: MapPlacementDef;
+  distance: number;
+}
+
 type SpatialResourceLabels = ReadonlyMap<string, string>;
 
 export function resolveSpatialPlacementOperations(
@@ -32,6 +43,44 @@ export function resolveSpatialPlacementOperations(
       : activities.get(stableId);
     return [{ event, resource, activity }];
   });
+}
+
+export function collectSpatialLandmarks(
+  map: MapDef,
+  activities: ReadonlyMap<string, HubActivity>,
+  playerPosition: MapPoint,
+): SpatialLandmark[] {
+  return (map.placements ?? [])
+    .filter((placement) => placement.visible)
+    .map((placement, index) => ({
+      placement,
+      distance: mapPlacementDistance(playerPosition, placement),
+      operations: resolveSpatialPlacementOperations(map, placement, activities),
+      index,
+    }))
+    .sort((left, right) => {
+      if (left.distance !== right.distance) return left.distance - right.distance;
+      const leftActionable = left.operations.some(({ activity }) => activity?.available) ? 1 : 0;
+      const rightActionable = right.operations.some(({ activity }) => activity?.available) ? 1 : 0;
+      if (leftActionable !== rightActionable) return rightActionable - leftActionable;
+      return left.index - right.index;
+    })
+    .map(({ index: _index, ...landmark }) => landmark);
+}
+
+export function collectSpatialContextOperations(
+  landmarks: SpatialLandmark[],
+): SpatialContextOperation[] {
+  return landmarks
+    .filter(({ distance }) => distance <= 1)
+    .flatMap(({ placement, distance, operations }) => operations
+      .filter(({ event }) => event.trigger === "interact" || event.trigger === "manual")
+      .map((operation) => ({ ...operation, placement, distance })))
+    .sort((left, right) => {
+      const leftAvailable = left.activity?.available ? 1 : 0;
+      const rightAvailable = right.activity?.available ? 1 : 0;
+      return rightAvailable - leftAvailable || left.distance - right.distance;
+    });
 }
 
 export function SpatialMapSurface({
@@ -53,40 +102,30 @@ export function SpatialMapSurface({
   if (!layout) return null;
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
   const visiblePlacements = (map.placements ?? []).filter((placement) => placement.visible);
-  const nearestPlacement = playerPosition
-    ? visiblePlacements
-      .map((placement) => ({ placement, distance: mapPlacementDistance(playerPosition, placement) }))
-      .sort((left, right) => left.distance - right.distance)[0]
-    : undefined;
-  const nearestOperations = nearestPlacement
-    ? resolveSpatialPlacementOperations(map, nearestPlacement.placement, byId)
-    : [];
-  const nearestManualOperations = nearestOperations.filter(
-    ({ event }) => event.trigger === "interact" || event.trigger === "manual",
-  );
-  const nearestAction = nearestManualOperations.find(({ activity }) => activity?.available)
-    ?? nearestManualOperations[0];
-  const nearestName = nearestPlacement
-    ? placementDisplayName(nearestPlacement.placement, resourceLabels)
+  const landmarks = playerPosition ? collectSpatialLandmarks(map, byId, playerPosition) : [];
+  const nearestLandmark = landmarks[0];
+  const nearbyLandmarks = landmarks.filter(({ distance }) => distance <= 1);
+  const contextOperations = collectSpatialContextOperations(landmarks);
+  const nearestName = nearestLandmark
+    ? placementDisplayName(nearestLandmark.placement, resourceLabels)
     : undefined;
   const moveAvailability = mapMoveAvailability(layout, playerPosition);
-  const nearestActionAvailable = Boolean(
-    nearestAction?.activity?.available && nearestPlacement && nearestPlacement.distance <= 1,
-  );
 
   useEffect(() => {
-    if (!nearestActionAvailable || !nearestAction?.activity) return;
-    const activityId = nearestAction.activity.id;
+    const available = contextOperations.filter(({ activity }) => activity?.available);
+    if (available.length === 0) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const tag = event.target instanceof HTMLElement ? event.target.tagName : "";
       if (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(tag)) return;
-      if (!isSpatialInteractKey(event.key)) return;
+      const numericIndex = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : -1;
+      const operation = isSpatialInteractKey(event.key) ? available[0] : available[numericIndex];
+      if (!operation?.activity) return;
       event.preventDefault();
-      onInput({ type: "doActivity", id: activityId });
+      onInput({ type: "doActivity", id: operation.activity.id });
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [nearestActionAvailable, nearestAction?.activity, onInput]);
+  }, [contextOperations, onInput]);
 
   return (
     <section className="spatial-map-surface" aria-label={`${map.name} 二维地图`}>
@@ -159,29 +198,36 @@ export function SpatialMapSurface({
       <div className="spatial-map-navigation">
         <div className="spatial-map-awareness" aria-live="polite">
           <span className="spatial-map-awareness-icon" aria-hidden="true">
-            {nearestPlacement?.placement.resource?.kind === "map" ? "↗" : nearestPlacement ? "◇" : "·"}
+            {nearestLandmark?.placement.resource?.kind === "map" ? "↗" : nearestLandmark ? "◇" : "·"}
           </span>
           <span className="spatial-map-awareness-copy">
             <small>NEARBY · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
-            <strong>{nearestName ?? "可见地标なし"}</strong>
-            <em>{nearestPlacement && playerPosition
-              ? describePlacementApproach(playerPosition, nearestPlacement.placement, nearestPlacement.distance)
+            <strong>{nearestName ?? "可见地标なし"}{nearbyLandmarks.length > 1 && <b> +{nearbyLandmarks.length - 1}</b>}</strong>
+            <em>{nearbyLandmarks.length > 1
+              ? `${nearbyLandmarks.length} 个对象在行动范围内 · ${contextOperations.length} 个事件`
+              : nearestLandmark && playerPosition
+                ? describePlacementApproach(playerPosition, nearestLandmark.placement, nearestLandmark.distance)
               : "地图上没有已显露的资源"}</em>
           </span>
-          {nearestAction && (
-            <button
-              className="spatial-map-interact"
-              type="button"
-              aria-keyshortcuts="E Enter"
-              disabled={!nearestAction.activity?.available || nearestPlacement!.distance > 1}
-              title={nearestPlacement!.distance > 1
-                ? `接近地标后可互动 · 距离 ${nearestPlacement!.distance} 格`
-                : nearestAction.activity?.lockedReason ?? nearestAction.event.lockedHint ?? ""}
-              onClick={() => nearestAction.activity && onInput({ type: "doActivity", id: nearestAction.activity.id })}
-            >
-              <small><kbd>E</kbd>ACTION</small>
-              <strong>{nearestAction.event.label ?? nearestAction.activity?.title ?? "调查"}</strong>
-            </button>
+          {contextOperations.length > 0 && (
+            <div className={`spatial-map-context-actions${contextOperations.length > 1 ? " multiple" : ""}`} aria-label="附近可执行事件">
+              {contextOperations.map((operation, index) => (
+                <button
+                  className="spatial-map-interact"
+                  type="button"
+                  key={`${operation.placement.id}:${operation.event.id}`}
+                  aria-keyshortcuts={index === 0
+                    ? "E Enter Digit1"
+                    : index < 9 ? `Digit${index + 1}` : undefined}
+                  disabled={!operation.activity?.available}
+                  title={operation.activity?.lockedReason ?? operation.event.lockedHint ?? ""}
+                  onClick={() => operation.activity && onInput({ type: "doActivity", id: operation.activity.id })}
+                >
+                  <small><kbd>{index === 0 ? "E" : index + 1}</kbd>{contextOperations.length > 1 ? placementDisplayName(operation.placement, resourceLabels) : "ACTION"}</small>
+                  <strong>{operation.event.label ?? operation.activity?.title ?? "调查"}</strong>
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <div className="spatial-map-controls" aria-label="二维地图移动">
@@ -193,8 +239,24 @@ export function SpatialMapSurface({
           </span>
         </div>
       </div>
+      {landmarks.length > 0 && (
+        <div className="spatial-map-radar" aria-label="附近地标雷达">
+          <span className="spatial-map-radar-title"><i aria-hidden="true">⌖</i> FIELD RADAR</span>
+          {landmarks.slice(0, 4).map(({ placement, distance, operations }) => (
+            <span
+              className={`spatial-map-radar-entry resource-${placement.resource?.kind ?? "event"}${distance <= 1 ? " nearby" : ""}${operations.some(({ activity }) => activity?.available) ? " actionable" : ""}`}
+              key={placement.id}
+            >
+              <i aria-hidden="true">{resourceKindIcon(placement.resource?.kind ?? "event")}</i>
+              <strong>{placementDisplayName(placement, resourceLabels)}</strong>
+              <small>{distance === 0 ? "HERE" : `${distance} 格`}</small>
+            </span>
+          ))}
+          {landmarks.length > 4 && <span className="spatial-map-radar-more">+{landmarks.length - 4}</span>}
+        </div>
+      )}
       <p className="spatial-map-footnote">
-        <kbd>方向键</kbd> / <kbd>WASD</kbd> 移动 · 接触事件与 Headless 共用同一条语义行动
+        <kbd>方向键</kbd> / <kbd>WASD</kbd> 移动 · <kbd>E</kbd> 主要互动 · 同格事件可用 <kbd>1–9</kbd> 选择
       </p>
     </section>
   );

@@ -612,7 +612,18 @@ body {
 .spatial-map-awareness-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
 .spatial-map-awareness small { color: #4d5965; font: 7px/1 ui-monospace, monospace; letter-spacing: .12em; }
 .spatial-map-awareness-copy strong { overflow: hidden; color: #c5d6d9; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-awareness-copy strong b { margin-left: 3px; color: #e9c66e; font: 700 7px/1 ui-monospace,monospace; }
 .spatial-map-awareness-copy em { overflow: hidden; color: #67757e; font-size: 7px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-context-actions { display: flex; flex: 0 0 auto; align-items: stretch; gap: 4px; }
+.spatial-map-context-actions.multiple {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  max-width: 190px;
+  max-height: 112px;
+  padding-right: 2px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
 .spatial-map-interact {
   display: flex;
   flex: 0 0 auto;
@@ -638,6 +649,9 @@ body {
   font: 6px/1 ui-monospace, monospace;
 }
 .spatial-map-interact strong { max-width: 76px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-context-actions.multiple .spatial-map-interact { min-width: 0; padding: 5px 6px; }
+.spatial-map-context-actions.multiple .spatial-map-interact small,
+.spatial-map-context-actions.multiple .spatial-map-interact strong { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spatial-map-interact:hover:not(:disabled) { border-color: rgba(242,193,93,.72); background: rgba(113,79,25,.38); }
 .spatial-map-interact:disabled { opacity: .36; cursor: not-allowed; }
 .spatial-map-controls > button {
@@ -676,6 +690,31 @@ body {
   background: rgba(42,60,66,.1);
   cursor: not-allowed;
 }
+.spatial-map-radar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 7px;
+  padding: 5px 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 4px;
+  background: rgba(5,9,14,.42);
+}
+.spatial-map-radar-title { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; padding: 0 5px 0 1px; color: #4d5964; border-right: 1px solid rgba(255,255,255,.08); font: 6px/1 ui-monospace,monospace; letter-spacing: .09em; }
+.spatial-map-radar-title i { color: #6abccc; font-size: 9px; font-style: normal; }
+.spatial-map-radar-entry { display: grid; grid-template-columns: 15px minmax(0,1fr) auto; align-items: center; min-width: 0; gap: 4px; padding: 4px 5px; color: #74808b; border: 1px solid rgba(255,255,255,.065); border-radius: 3px; background: rgba(255,255,255,.025); }
+.spatial-map-radar-entry > i { display: grid; width: 15px; height: 15px; color: #70baca; font: normal 8px/1 ui-serif,serif; place-items: center; }
+.spatial-map-radar-entry.resource-item > i { color: #d7b65f; }
+.spatial-map-radar-entry.resource-character > i { color: #d69f8d; }
+.spatial-map-radar-entry.resource-enemy > i { color: #d5676a; }
+.spatial-map-radar-entry strong { overflow: hidden; color: #87939e; font-size: 7px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-radar-entry small { color: #4f5b66; font: 6px/1 ui-monospace,monospace; white-space: nowrap; }
+.spatial-map-radar-entry.nearby { border-color: rgba(80,199,217,.22); background: rgba(80,199,217,.045); }
+.spatial-map-radar-entry.nearby strong { color: #bdcdd0; }
+.spatial-map-radar-entry.actionable { box-shadow: inset 2px 0 0 rgba(226,188,92,.72); }
+.spatial-map-radar-more { flex: 0 0 auto; color: #596570; font: 7px/1 ui-monospace,monospace; }
 .spatial-map-footnote {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.48);
@@ -2696,7 +2735,11 @@ textarea:focus-visible {
   .choice-heading > div strong { max-width: 100%; font-size: 14px; white-space: normal; }
   .choice-panel .option-list { max-height: calc(74vh - 84px); padding: 8px; }
   .choice-panel .option-btn { min-height: 54px; padding: 8px; touch-action: manipulation; }
-  .spatial-map-navigation { align-items: stretch; }
+  .spatial-map-navigation { align-items: stretch; flex-wrap: wrap; }
+  .spatial-map-awareness { flex-basis: 100%; }
+  .spatial-map-context-actions.multiple { max-width: min(190px, 58vw); }
+  .spatial-map-radar { overflow-x: auto; scrollbar-width: thin; }
+  .spatial-map-radar-entry { flex: 0 0 auto; }
   .spatial-map-controls button { width: 44px; height: 40px; touch-action: manipulation; }
   .spatial-map-interact { min-width: 76px; min-height: 44px; touch-action: manipulation; }
   .backlog-overlay { padding: 10px; }
