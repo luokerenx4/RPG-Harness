@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { isMapEventPlayerAction, mapPlacementEventKey } from "@rpg-harness/engine";
 import type {
   HubActivity,
@@ -70,6 +70,23 @@ export function SpatialMapSurface({
     ? placementDisplayName(nearestPlacement.placement, resourceLabels)
     : undefined;
   const moveAvailability = mapMoveAvailability(layout, playerPosition);
+  const nearestActionAvailable = Boolean(
+    nearestAction?.activity?.available && nearestPlacement && nearestPlacement.distance <= 1,
+  );
+
+  useEffect(() => {
+    if (!nearestActionAvailable || !nearestAction?.activity) return;
+    const activityId = nearestAction.activity.id;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const tag = event.target instanceof HTMLElement ? event.target.tagName : "";
+      if (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].includes(tag)) return;
+      if (!isSpatialInteractKey(event.key)) return;
+      event.preventDefault();
+      onInput({ type: "doActivity", id: activityId });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [nearestActionAvailable, nearestAction?.activity, onInput]);
 
   return (
     <section className="spatial-map-surface" aria-label={`${map.name} 二维地图`}>
@@ -155,23 +172,24 @@ export function SpatialMapSurface({
             <button
               className="spatial-map-interact"
               type="button"
+              aria-keyshortcuts="E Enter"
               disabled={!nearestAction.activity?.available || nearestPlacement!.distance > 1}
               title={nearestPlacement!.distance > 1
                 ? `接近地标后可互动 · 距离 ${nearestPlacement!.distance} 格`
                 : nearestAction.activity?.lockedReason ?? nearestAction.event.lockedHint ?? ""}
               onClick={() => nearestAction.activity && onInput({ type: "doActivity", id: nearestAction.activity.id })}
             >
-              <small>ACTION</small>
+              <small><kbd>E</kbd>ACTION</small>
               <strong>{nearestAction.event.label ?? nearestAction.activity?.title ?? "调查"}</strong>
             </button>
           )}
         </div>
         <div className="spatial-map-controls" aria-label="二维地图移动">
-          <button type="button" aria-label="向北移动" disabled={!moveAvailability.north} onClick={() => onInput({ type: "moveMap", direction: "north" })}><small>N</small>↑</button>
+          <button type="button" aria-label="向北移动" aria-keyshortcuts="ArrowUp W" disabled={!moveAvailability.north} onClick={() => onInput({ type: "moveMap", direction: "north" })}><small>N</small>↑</button>
           <span>
-            <button type="button" aria-label="向西移动" disabled={!moveAvailability.west} onClick={() => onInput({ type: "moveMap", direction: "west" })}><small>W</small>←</button>
-            <button type="button" aria-label="向南移动" disabled={!moveAvailability.south} onClick={() => onInput({ type: "moveMap", direction: "south" })}><small>S</small>↓</button>
-            <button type="button" aria-label="向东移动" disabled={!moveAvailability.east} onClick={() => onInput({ type: "moveMap", direction: "east" })}><small>E</small>→</button>
+            <button type="button" aria-label="向西移动" aria-keyshortcuts="ArrowLeft A" disabled={!moveAvailability.west} onClick={() => onInput({ type: "moveMap", direction: "west" })}><small>W</small>←</button>
+            <button type="button" aria-label="向南移动" aria-keyshortcuts="ArrowDown S" disabled={!moveAvailability.south} onClick={() => onInput({ type: "moveMap", direction: "south" })}><small>S</small>↓</button>
+            <button type="button" aria-label="向东移动" aria-keyshortcuts="ArrowRight D" disabled={!moveAvailability.east} onClick={() => onInput({ type: "moveMap", direction: "east" })}><small>E</small>→</button>
           </span>
         </div>
       </div>
@@ -284,6 +302,10 @@ export function describePlacementApproach(
   const direction = [vertical, horizontal].filter(Boolean).join("再");
   const triggerHint = placement.resource?.kind === "map" && distance === 1 ? " · 接触后移动" : "";
   return `${direction || "附近"} ${distance} 格${triggerHint}`;
+}
+
+export function isSpatialInteractKey(key: string): boolean {
+  return key === "Enter" || key === "e" || key === "E";
 }
 
 function formatResourceName(id: string): string {

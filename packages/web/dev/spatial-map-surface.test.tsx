@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { HubActivity, MapDef } from "@rpg-harness/engine";
 import {
   describePlacementApproach,
+  isSpatialInteractKey,
   mapMoveAvailability,
   mapPlacementDistance,
   resolveSpatialPlacementOperations,
@@ -72,6 +73,8 @@ describe("SpatialMapSurface", () => {
     });
     expect(describePlacementApproach({ x: 3, y: 4 }, map.placements![0]!))
       .toBe("向南 1 格 · 接触后移动");
+    expect(["Enter", "e", "E"].every(isSpatialInteractKey)).toBe(true);
+    expect(isSpatialInteractKey(" ")).toBe(false);
   });
 
   test("renders positions and omits automatic events from player controls", () => {
@@ -105,6 +108,7 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("向南再向东 5 格");
     expect(html).toContain("placement-distant");
     expect(html).toContain("向南移动");
+    expect(html).toContain('aria-keyshortcuts="ArrowDown S"');
     expect(html).toContain("resource-map");
     expect(html).toContain("出口");
     expect(html).not.toContain("Town");
@@ -135,6 +139,8 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("区域 市集");
     expect(html).toContain("spatial-map-interact");
     expect(html).toContain("调查门扉");
+    expect(html).toContain("<kbd>E</kbd>ACTION");
+    expect(html).toContain('aria-keyshortcuts="E Enter"');
     expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');
     expect(html.match(/<button/g)).toHaveLength(5);
   });

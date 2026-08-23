@@ -504,7 +504,7 @@ export function WebPlayScreen({
     [aiTurnPending, commit, onCommit],
   );
 
-  // Keyboard: Space/Enter advances text; arrows/WASD move a spatial map.
+  // Keyboard: classic RPG field movement, Hub cursor navigation, confirm and cancel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -533,9 +533,26 @@ export function WebPlayScreen({
           map.id === currentMapId && map.layout !== undefined
         );
         const direction = MAP_KEY_DIRECTIONS[e.key];
-        if (spatial && direction) {
+        const commandTarget = tag === "BUTTON" || tag === "A";
+        if (spatial && direction && !commandTarget) {
           e.preventDefault();
           void sendInput({ type: "moveMap", direction });
+          return;
+        }
+        if (!spatial && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          const commands = Array.from(document.querySelectorAll<HTMLButtonElement>(
+            ".hub-actions .activity-btn:not(:disabled)",
+          ));
+          if (commands.length > 0) {
+            e.preventDefault();
+            const currentIndex = commands.indexOf(document.activeElement as HTMLButtonElement);
+            const nextIndex = nextHubCommandIndex(
+              currentIndex,
+              commands.length,
+              e.key === "ArrowDown" ? 1 : -1,
+            );
+            commands[nextIndex]?.focus();
+          }
           return;
         }
       }
@@ -1343,6 +1360,13 @@ export function StageView({
                   </ul>
                 </section>
               ))}
+              <footer className="activity-keyboard-hint">
+                {currentMap?.layout ? (
+                  <><span><kbd>Tab</kbd> 指令</span><span><kbd>E</kbd> 调查</span><span><kbd>Esc</kbd> 菜单</span></>
+                ) : (
+                  <><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 确认</span><span><kbd>Esc</kbd> 菜单</span></>
+                )}
+              </footer>
             </main>
           </div>
         </div>
@@ -1401,6 +1425,12 @@ export function StageView({
         </div>
       );
   }
+}
+
+export function nextHubCommandIndex(currentIndex: number, total: number, delta: 1 | -1): number {
+  if (total <= 0) return -1;
+  if (currentIndex < 0 || currentIndex >= total) return delta > 0 ? 0 : total - 1;
+  return (currentIndex + delta + total) % total;
 }
 
 function StatusBar({ snapshot }: { snapshot: HubSnapshot }) {

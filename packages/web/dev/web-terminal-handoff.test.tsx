@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
+import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, nextHubCommandIndex, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
@@ -381,6 +381,10 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("objective-focused");
     expect(html).toContain("SIDE · NOW");
     expect(html).toContain("Bring the memory home");
+    expect(html).toContain("↑</kbd><kbd>↓</kbd> 选择");
+    expect(nextHubCommandIndex(-1, 3, 1)).toBe(0);
+    expect(nextHubCommandIndex(-1, 3, -1)).toBe(2);
+    expect(nextHubCommandIndex(2, 3, 1)).toBe(0);
   });
 
   test("hands a recoverable choice branch back to the player after an ending", () => {

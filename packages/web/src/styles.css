@@ -598,6 +598,15 @@ body {
   text-align: left;
 }
 .spatial-map-interact small { color: #8f7442; font: 6px/1 ui-monospace, monospace; }
+.spatial-map-interact small { display: flex; align-items: center; gap: 4px; }
+.spatial-map-interact kbd {
+  padding: 1px 3px;
+  color: #e5c476;
+  border: 1px solid rgba(229,196,118,.32);
+  border-radius: 2px;
+  background: rgba(229,196,118,.08);
+  font: 6px/1 ui-monospace, monospace;
+}
 .spatial-map-interact strong { max-width: 76px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .spatial-map-interact:hover:not(:disabled) { border-color: rgba(242,193,93,.72); background: rgba(113,79,25,.38); }
 .spatial-map-interact:disabled { opacity: .36; cursor: not-allowed; }
@@ -802,6 +811,28 @@ body {
 }
 .activity-btn.activity-primary:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 55%, #2a2a36);
+}
+.activity-keyboard-hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: -2px;
+  padding: 7px 2px 0;
+  color: #4e5864;
+  border-top: 1px solid rgba(255,255,255,.055);
+  font-size: 7px;
+}
+.activity-keyboard-hint span { display: inline-flex; align-items: center; gap: 3px; }
+.activity-keyboard-hint kbd {
+  min-width: 17px;
+  padding: 2px 4px;
+  color: #7d8792;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 3px;
+  background: rgba(255,255,255,.035);
+  font: 6px/1 ui-monospace, monospace;
+  text-align: center;
 }
 .primary-mark {
   margin-right: 8px;
