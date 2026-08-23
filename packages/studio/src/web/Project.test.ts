@@ -7,6 +7,7 @@ import {
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
+  summarizeMapValidation,
 } from "./pages/Project";
 import type { MapDef, ProjectResourceNode } from "@rpg-harness/engine";
 
@@ -92,6 +93,31 @@ describe("Studio map event resource picker", () => {
         events: [],
       }],
     })).toBe(true);
+  });
+
+  test("summarizes the validated map surface for a save receipt", () => {
+    expect(summarizeMapValidation({
+      layout: {
+        width: 12,
+        height: 8,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [],
+        regions: [],
+      },
+      placements: [{
+        id: "gate",
+        at: { x: 0, y: 0 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        events: [{ id: "leave", trigger: "player_touch", order: 0 }],
+      }],
+    })).toBe("12 × 8 grid · 1 placement · 1 event page");
+    expect(summarizeMapValidation({ placements: [] })).toBe(
+      "semantic node map · 0 placements · 0 event pages",
+    );
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

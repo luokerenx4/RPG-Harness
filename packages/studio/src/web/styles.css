@@ -2187,6 +2187,19 @@ summary:focus-visible {
 .map-discard-confirmation button { padding: 6px 9px; color: #b7bec8; border: 1px solid var(--studio-line-strong); border-radius: 5px; background: #1b2029; cursor: pointer; font-size: 8px; }
 .map-discard-confirmation button.danger { color: var(--studio-red); border-color: rgba(224,111,121,.35); background: rgba(224,111,121,.05); }
 .map-discard-confirmation button.primary { color: #071216; border-color: var(--studio-accent); background: var(--studio-accent); font-weight: 700; }
+.map-validation-receipt { display: grid; grid-template-columns: 32px minmax(0,1fr) auto 24px; align-items: center; gap: 9px; margin: 9px; padding: 9px 10px; border: 1px solid rgba(112,204,145,.34); border-radius: 7px; background: linear-gradient(90deg, rgba(112,204,145,.09), rgba(112,204,145,.015)); }
+.map-validation-receipt > i { display: grid; place-items: center; width: 30px; height: 30px; color: #07130c; border-radius: 50%; background: var(--studio-green); box-shadow: 0 0 13px rgba(112,204,145,.18); font: 800 13px/1 ui-monospace, monospace; }
+.map-validation-receipt > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.map-validation-receipt span { color: var(--studio-green); font-size: 6px; font-weight: 800; letter-spacing: .14em; }
+.map-validation-receipt strong { color: #d9e4dd; font-size: 9px; }
+.map-validation-receipt small { overflow: hidden; color: #647269; font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.map-validation-receipt time { color: #69756d; font: 8px/1 ui-monospace, monospace; }
+.map-validation-receipt button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; color: #627068; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.map-validation-receipt button:hover { color: #cfe2d5; background: rgba(112,204,145,.08); }
+.map-validation-error { display: grid !important; grid-template-columns: auto minmax(0,1fr); gap: 3px 10px !important; border-color: rgba(224,111,121,.42) !important; background: rgba(224,111,121,.055) !important; }
+.map-validation-error strong { color: var(--studio-red); }
+.map-validation-error code { min-width: 0; overflow: hidden; color: #c3a4a8; text-overflow: ellipsis; white-space: nowrap; }
+.map-validation-error span { grid-column: 1 / -1; color: #78666a; font-size: 8px; }
 .create-layout { width: calc(100% - 18px); min-height: 64px; margin: 9px; color: var(--studio-accent); border-style: dashed; background: rgba(80,199,217,.04); }
 
 .map-authoring-panels { margin: 8px; border: 1px solid var(--studio-line); border-radius: 7px; background: #131720; }

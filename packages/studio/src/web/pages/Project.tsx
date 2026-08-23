@@ -939,11 +939,15 @@ function MapOverview({
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveReceipt, setSaveReceipt] = useState<{ summary: string; savedAt: string } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
+  const mapIdRef = useRef(map.id);
 
   useEffect(() => {
+    if (mapIdRef.current !== map.id) setSaveReceipt(null);
+    mapIdRef.current = map.id;
     setDraft(cloneMap(map));
     setEditing(false);
     setSelectedPlacementId(null);
@@ -979,7 +983,12 @@ function MapOverview({
       const project = await saveMapSpatial(draft);
       onProjectSaved(project);
       const saved = project.maps.find((candidate) => candidate.id === map.id);
+      const validatedMap = saved ?? draft;
       if (saved) setDraft(cloneMap(saved));
+      setSaveReceipt({
+        summary: summarizeMapValidation(validatedMap),
+        savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
       setEditing(false);
       setConfirmDiscard(false);
       return true;
@@ -1088,7 +1097,15 @@ function MapOverview({
           <div><button type="button" className="danger" onClick={discard}>Discard changes</button><button type="button" className="primary" onClick={() => setConfirmDiscard(false)}>Keep editing</button></div>
         </section>
       )}
-      {saveError && <div className="project-warning"><strong>Validation failed</strong><code>{saveError}</code></div>}
+      {saveReceipt && !saveError && (
+        <section className="map-validation-receipt" role="status">
+          <i aria-hidden="true">✓</i>
+          <div><span>PROJECT VALIDATION PASSED</span><strong>{map.name} is saved and playable</strong><small>{saveReceipt.summary} · authoritative source reloaded successfully</small></div>
+          <time>{saveReceipt.savedAt}</time>
+          <button type="button" aria-label="Dismiss validation result" onClick={() => setSaveReceipt(null)}>×</button>
+        </section>
+      )}
+      {saveError && <div className="project-warning map-validation-error" role="alert"><strong>Validation failed · draft preserved</strong><code>{saveError}</code><span>No project source was replaced. Correct the highlighted draft and try again.</span></div>}
       {editing && !draft.layout && (
         <button
           type="button"
@@ -1972,6 +1989,13 @@ function cloneMap(map: MapDef): MapDef {
 export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
   return JSON.stringify({ layout: saved.layout, placements: saved.placements ?? [] }) !==
     JSON.stringify({ layout: draft.layout, placements: draft.placements ?? [] });
+}
+
+export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements">): string {
+  const placements = map.placements ?? [];
+  const events = placements.reduce((total, placement) => total + placement.events.length, 0);
+  const grid = map.layout ? `${map.layout.width} × ${map.layout.height} grid` : "semantic node map";
+  return `${grid} · ${placements.length} placement${placements.length === 1 ? "" : "s"} · ${events} event page${events === 1 ? "" : "s"}`;
 }
 
 function clamp(value: number, min: number, max: number): number {
