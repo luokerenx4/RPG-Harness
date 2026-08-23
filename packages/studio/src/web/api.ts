@@ -342,16 +342,60 @@ export async function saveMapSpatial(
 export interface MapPreviewResponse {
   mapId: string;
   state: "deterministic-initial";
+  source: "saved" | "draft";
+  readOnly: true;
   hub: HubActivity[];
   headless: MapAvailableResource[];
   tui: string[];
 }
 
-export async function fetchMapPreview(mapId: string): Promise<MapPreviewResponse> {
-  const response = await fetch(`/api/maps/${encodeURIComponent(mapId)}/preview`);
+export class MapPreviewRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "MapPreviewRequestError";
+  }
+}
+
+export async function fetchSavedMapPreview(
+  mapId: string,
+  signal?: AbortSignal,
+): Promise<MapPreviewResponse> {
+  return readMapPreviewResponse(fetch(`/api/maps/${encodeURIComponent(mapId)}/preview`, { signal }));
+}
+
+export async function fetchMapPreview(
+  map: MapDef,
+  signal?: AbortSignal,
+): Promise<MapPreviewResponse> {
+  return readMapPreviewResponse(fetch(`/api/maps/${encodeURIComponent(map.id)}/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      layout: map.layout ?? null,
+      placements: map.placements ?? [],
+    }),
+    signal,
+  }));
+}
+
+async function readMapPreviewResponse(
+  request: Promise<Response>,
+): Promise<MapPreviewResponse> {
+  const response = await request;
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as {
+      error?: unknown;
+      code?: unknown;
+    };
+    throw new MapPreviewRequestError(
+      typeof body.error === "string" ? body.error : `HTTP ${response.status}`,
+      response.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
   }
   return response.json();
 }

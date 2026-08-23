@@ -17,6 +17,7 @@ import { collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder
 import {
   fetchProject,
   fetchMapPreview,
+  fetchSavedMapPreview,
   fetchResourceSource,
   createProjectResource,
   duplicateProjectResource,
@@ -28,9 +29,9 @@ import {
   saveMapSpatial,
   saveResourceSource,
   sourceImageUrl,
+  MapPreviewRequestError,
   type ProjectAssetPreview,
   type ProjectResponse,
-  type MapPreviewResponse,
   type StudioTrashEntry,
   type ResourceRenamePlan,
 } from "../api";
@@ -41,6 +42,17 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import {
+  createMapPreviewRequestGate,
+  isAbortError,
+  scheduleMapPreviewRequest,
+} from "../MapPreviewRequestGate";
+import {
+  createMapPreviewViewState,
+  mapPreviewDraftIdentity,
+  mapPreviewStatusLabel,
+  mapPreviewViewReducer,
+} from "../MapPreviewState";
 
 const KIND_ORDER: ProjectResourceKind[] = [
   "manifest",
@@ -3145,7 +3157,7 @@ function MapOverview({
           ))}
         </section>
       )}
-      <MapSurfacePreviews map={draft} />
+      <MapSurfacePreviews map={draft} draftActive={dirty} />
     </section>
   );
 }
@@ -3243,35 +3255,96 @@ function MapStructureEditor({
 
 type MapPreviewSurface = "2d" | "hub" | "tui" | "headless";
 
-function MapSurfacePreviews({ map }: { map: MapDef }) {
+export function MapSurfacePreviews({
+  map,
+  draftActive,
+}: {
+  map: MapDef;
+  draftActive: boolean;
+}) {
   const [surface, setSurface] = useState<MapPreviewSurface>("2d");
-  const [preview, setPreview] = useState<MapPreviewResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const previewTarget = draftActive ? "draft" : "saved";
+  const [previewState, dispatchPreview] = useReducer(
+    mapPreviewViewReducer,
+    createMapPreviewViewState(map.id, previewTarget),
+  );
+  const requestGateRef = useRef<ReturnType<typeof createMapPreviewRequestGate> | null>(null);
+  if (!requestGateRef.current) requestGateRef.current = createMapPreviewRequestGate();
+  const draftIdentity = useMemo(() => mapPreviewDraftIdentity(map), [map]);
 
   useEffect(() => {
-    setPreview(null);
-    setError(null);
-    fetchMapPreview(map.id)
-      .then(setPreview)
-      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
-  }, [map.id, map.layout, map.placements]);
+    const gate = requestGateRef.current!;
+    const request = gate.begin();
+    dispatchPreview({ type: "begin", target: previewTarget, mapId: map.id });
+    const load = () => {
+      const pending = previewTarget === "draft"
+        ? fetchMapPreview(map, request.controller.signal)
+        : fetchSavedMapPreview(map.id, request.controller.signal);
+      pending.then((value) => {
+        if (!gate.isCurrent(request)) return;
+        if (value.source !== previewTarget) {
+          dispatchPreview({
+            type: "unavailable",
+            target: previewTarget,
+            mapId: map.id,
+            error: `preview source mismatch: expected ${previewTarget}, received ${value.source}`,
+          });
+          return;
+        }
+        dispatchPreview({ type: "ready", target: previewTarget, preview: value });
+      }).catch((cause) => {
+        if (!gate.isCurrent(request) || isAbortError(cause)) return;
+        dispatchPreview({
+          type: previewTarget === "draft" && cause instanceof MapPreviewRequestError && cause.code === "invalid_map_draft"
+            ? "invalid"
+            : "unavailable",
+          target: previewTarget,
+          mapId: map.id,
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      });
+    };
+    const cancelScheduled = previewTarget === "draft"
+      ? scheduleMapPreviewRequest(load)
+      : (load(), () => {});
+    return () => {
+      cancelScheduled();
+      gate.cancel(request);
+    };
+  }, [draftIdentity, draftActive, map.id]);
+
+  const preview = previewState.preview;
+  const previewStatus = mapPreviewStatusLabel(previewState);
+  const stale = previewState.phase !== "ready" && preview !== null;
+  const staleMessage = previewState.phase === "building"
+    ? "Showing the last successful semantic projection while the current draft rebuilds."
+    : previewState.phase === "invalid"
+      ? "Showing the last successful semantic projection; the current draft is invalid."
+      : "Showing the last successful semantic projection; the preview service is unavailable.";
 
   return (
     <section className="map-surface-previews">
       <header>
-        <div><h3>Surface projections</h3><span>same Map v2 resource · deterministic initial state</span></div>
+        <div className="map-surface-preview-heading">
+          <div><h3>Surface projections</h3><span>same in-memory Map v2 resource · deterministic initial state</span></div>
+          <span className={`map-preview-source ${previewState.target} ${previewState.phase}`} role="status" aria-live="polite" aria-atomic="true">
+            <i aria-hidden="true" />{previewStatus}
+          </span>
+        </div>
         <nav aria-label="Map surface previews">
           {(["2d", "hub", "tui", "headless"] as const).map((name) => (
             <button
               type="button"
               className={surface === name ? "selected" : ""}
+              aria-pressed={surface === name}
               key={name}
               onClick={() => setSurface(name)}
             >{name === "2d" ? "2D" : name === "tui" ? "TUI" : name[0]!.toUpperCase() + name.slice(1)}</button>
           ))}
         </nav>
       </header>
-      {error && <div className="project-warning"><strong>Preview unavailable</strong><code>{error}</code></div>}
+      {stale && <div className="map-preview-stale" role="status">{staleMessage}</div>}
+      {previewState.error && <div className="project-warning" role="alert"><strong>{previewState.phase === "invalid" ? "Invalid map draft" : "Preview unavailable"} · editor state preserved</strong><code>{previewState.error}</code><span>No project source was changed.</span></div>}
       {surface === "2d" && (
         <div className="projection-placement-list">
           {(map.placements ?? []).length === 0
@@ -3286,33 +3359,35 @@ function MapSurfacePreviews({ map }: { map: MapDef }) {
             ))}
         </div>
       )}
-      {surface === "hub" && preview && (
-        <div className="projection-hub">
-          {preview.hub.map((activity) => (
-            <button type="button" disabled={!activity.available} key={activity.id}>
-              <strong>{activity.title}</strong>
-              <small>{activity.available ? activity.category : activity.lockedReason}</small>
-            </button>
-          ))}
-          {preview.hub.length === 0 && <span className="muted">No player-facing Hub activities.</span>}
-        </div>
-      )}
-      {surface === "tui" && preview && (
-        <pre className="projection-tui">{preview.tui.length > 0 ? preview.tui.join("\n") : "(no selectable operations)"}</pre>
-      )}
-      {surface === "headless" && preview && (
-        <div className="projection-headless">
-          {preview.headless.map((resource) => (
-            <div key={resource.key}>
-              <code>{resource.key}</code>
-              <span>{resource.label}</span>
-              <small>{resource.activity ? resource.activity.id : resource.trigger ?? "resource"}</small>
-              <b className={resource.available ? "available" : "locked"}>{resource.available ? "available" : "locked"}</b>
-            </div>
-          ))}
-        </div>
-      )}
-      {!preview && surface !== "2d" && !error && <span className="muted">building semantic preview…</span>}
+      {surface !== "2d" && <div className="map-semantic-preview" aria-busy={previewState.phase === "building"}>
+        {surface === "hub" && preview && (
+          <div className="projection-hub">
+            {preview.hub.map((activity) => (
+              <div className={`projection-hub-card ${activity.available ? "available" : "locked"}`} aria-label={`${activity.title} · ${activity.available ? "available" : activity.lockedReason ?? "locked"}`} key={activity.id}>
+                <strong>{activity.title}</strong>
+                <small>{activity.available ? activity.category : activity.lockedReason}</small>
+              </div>
+            ))}
+            {preview.hub.length === 0 && <span className="muted">No player-facing Hub activities.</span>}
+          </div>
+        )}
+        {surface === "tui" && preview && (
+          <pre className="projection-tui">{preview.tui.length > 0 ? preview.tui.join("\n") : "(no selectable operations)"}</pre>
+        )}
+        {surface === "headless" && preview && (
+          <div className="projection-headless">
+            {preview.headless.map((resource) => (
+              <div key={resource.key}>
+                <code>{resource.key}</code>
+                <span>{resource.label}</span>
+                <small>{resource.activity ? resource.activity.id : resource.trigger ?? "resource"}</small>
+                <b className={resource.available ? "available" : "locked"}>{resource.available ? "available" : "locked"}</b>
+              </div>
+            ))}
+          </div>
+        )}
+        {!preview && !previewState.error && <span className="muted">building semantic preview…</span>}
+      </div>}
     </section>
   );
 }

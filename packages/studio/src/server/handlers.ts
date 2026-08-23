@@ -15,7 +15,11 @@ import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
-import { updateMapSpatial, type MapSpatialPatch } from "./map-write";
+import {
+  previewMapSpatialPatch,
+  updateMapSpatial,
+  type MapSpatialPatch,
+} from "./map-write";
 import { readResourceSource, updateResourceSource } from "./resource-source";
 import {
   createProjectResource,
@@ -87,6 +91,10 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "POST") {
+    const mapPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/preview$/);
+    if (mapPreviewMatch?.[1]) {
+      return postMapDraftPreview(ctx, decodeURIComponent(mapPreviewMatch[1]), req);
+    }
     if (pathname === "/api/assets") return postAsset(ctx, req);
     if (pathname === "/api/resources") return postProjectResource(ctx, req);
     if (pathname === "/api/resources/duplicate") return postDuplicateProjectResource(ctx, req);
@@ -399,23 +407,74 @@ async function getMapPreview(ctx: Ctx, mapId: string): Promise<Response> {
     const game = await loadGame(ctx.gameDir);
     const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
     if (!map) return json({ error: "map not found" }, 404);
-    const state = createInitialState(game, { seed: 0 });
-    state.baseline.currentMapId = mapId;
-    const preset = buildPresetContext(game, state, () => 0.5);
-    const headless = collectMapAvailableResources(preset);
-    const hub = collectMapActivities(preset);
-    return json({
-      mapId,
-      state: "deterministic-initial",
-      hub,
-      headless,
-      tui: hub.map((activity, index) =>
-        `${index === 0 ? ">" : " "} ${activity.title}${activity.available ? "" : `  [LOCKED: ${activity.lockedReason ?? "condition"}]`}`
-      ),
-    });
+    return json(projectMapPreview(game, mapId, "saved"));
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
+}
+
+/**
+ * Read-only preview of a Studio map draft. The patch is parsed and validated
+ * through the exact same in-memory path as Save, then projected without ever
+ * invoking updateMapSpatial or writing the authored source.
+ */
+async function postMapDraftPreview(
+  ctx: Ctx,
+  mapId: string,
+  req: Request,
+): Promise<Response> {
+  let game: Awaited<ReturnType<typeof loadGame>>;
+  try {
+    game = await loadGame(ctx.gameDir);
+  } catch (error) {
+    return json({ error: (error as Error).message, code: "preview_unavailable" }, 500);
+  }
+  const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
+  if (!map) return json({ error: "map not found" }, 404);
+  const parsed = await readMapSpatialPatch(req);
+  if (parsed instanceof Response) return parsed;
+  const abs = await resolveMapFile(ctx.gameDir, mapId);
+  if (!abs) return json({ error: "map source file not found" }, 404);
+  let original: string;
+  try {
+    original = await readFile(abs, "utf-8");
+  } catch (error) {
+    return json({ error: (error as Error).message, code: "preview_unavailable" }, 500);
+  }
+  let preview: ReturnType<typeof previewMapSpatialPatch>;
+  try {
+    preview = previewMapSpatialPatch(original, game, mapId, parsed, abs);
+  } catch (error) {
+    return json({ error: (error as Error).message, code: "invalid_map_draft" }, 400);
+  }
+  try {
+    return json(projectMapPreview(preview.game, mapId, "draft"));
+  } catch (error) {
+    return json({ error: (error as Error).message, code: "preview_unavailable" }, 500);
+  }
+}
+
+export function projectMapPreview(
+  game: Awaited<ReturnType<typeof loadGame>>,
+  mapId: string,
+  source: "saved" | "draft",
+) {
+  const state = createInitialState(game, { seed: 0 });
+  state.baseline.currentMapId = mapId;
+  const preset = buildPresetContext(game, state, () => 0.5);
+  const headless = collectMapAvailableResources(preset);
+  const hub = collectMapActivities(preset);
+  return {
+    mapId,
+    state: "deterministic-initial" as const,
+    source,
+    readOnly: true as const,
+    hub,
+    headless,
+    tui: hub.map((activity, index) =>
+      `${index === 0 ? ">" : " "} ${activity.title}${activity.available ? "" : `  [LOCKED: ${activity.lockedReason ?? "condition"}]`}`
+    ),
+  };
 }
 
 async function getResourceSource(ctx: Ctx, url: URL): Promise<Response> {
@@ -665,7 +724,21 @@ async function patchMapSpatial(
   const game = await loadGame(ctx.gameDir);
   const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
   if (!map) return json({ error: "map not found" }, 404);
+  const patch = await readMapSpatialPatch(req);
+  if (patch instanceof Response) return patch;
 
+  const abs = await resolveMapFile(ctx.gameDir, mapId);
+  if (!abs) return json({ error: "map source file not found" }, 404);
+  try {
+    await updateMapSpatial(abs, game, mapId, patch);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+  const updated = await loadGame(ctx.gameDir);
+  return json(await projectGame(ctx, updated));
+}
+
+async function readMapSpatialPatch(req: Request): Promise<MapSpatialPatch | Response> {
   let raw: unknown;
   try {
     raw = await req.json();
@@ -682,16 +755,7 @@ async function patchMapSpatial(
   if (!Array.isArray(body.placements)) {
     return json({ error: "placements must be an array" }, 400);
   }
-
-  const abs = await resolveMapFile(ctx.gameDir, mapId);
-  if (!abs) return json({ error: "map source file not found" }, 404);
-  try {
-    await updateMapSpatial(abs, game, mapId, body as unknown as MapSpatialPatch);
-  } catch (error) {
-    return json({ error: (error as Error).message }, 400);
-  }
-  const updated = await loadGame(ctx.gameDir);
-  return json(await projectGame(ctx, updated));
+  return body as unknown as MapSpatialPatch;
 }
 
 async function resolveMapFile(gameDir: string, mapId: string): Promise<string | undefined> {

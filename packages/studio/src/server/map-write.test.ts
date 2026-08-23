@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { serializeSpatialMapPatch } from "./map-write";
+import type { Game } from "@rpg-harness/engine";
+import { parseMap } from "@rpg-harness/parser";
+import { previewMapSpatialPatch, serializeSpatialMapPatch } from "./map-write";
 
 describe("serializeSpatialMapPatch", () => {
   test("round-trips spatial fields while retaining unrelated authored YAML", () => {
@@ -56,5 +58,46 @@ describe("serializeSpatialMapPatch", () => {
       resource: { kind: "character", id: "guide" },
       asset: "assets/sheets/guide-map",
     });
+  });
+
+  test("overlays exactly one target without mutating the input game", () => {
+    const original = "id: town\nname: Town\ndescription: Saved\n";
+    const map = parseMap(original, "maps/town.yaml");
+    const game: Game = { title: "Preview", characters: [], scripts: [], maps: [map] };
+    const before = structuredClone(game);
+    const result = previewMapSpatialPatch(original, game, "town", {
+      layout: {
+        width: 2,
+        height: 2,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [],
+        regions: [],
+      },
+      placements: [],
+    });
+
+    expect(game).toEqual(before);
+    expect(result.game).not.toBe(game);
+    expect(result.game.maps?.[0]).toBe(result.map);
+    expect(result.map.layout).toMatchObject({ width: 2, height: 2 });
+  });
+
+  test("rejects a missing or ambiguous target before returning a detached map", () => {
+    const original = "id: town\nname: Town\ndescription: Saved\n";
+    const town = parseMap(original, "maps/town.yaml");
+    const patch = { layout: null, placements: [] };
+    expect(() => previewMapSpatialPatch(original, {
+      title: "Preview",
+      characters: [],
+      scripts: [],
+      maps: [],
+    }, "town", patch)).toThrow("map not found: town");
+    expect(() => previewMapSpatialPatch(original, {
+      title: "Preview",
+      characters: [],
+      scripts: [],
+      maps: [town, structuredClone(town)],
+    }, "town", patch)).toThrow("map id is not unique: town");
   });
 });

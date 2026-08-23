@@ -13,6 +13,12 @@ export interface MapSpatialPatch {
   placements: MapPlacementDef[];
 }
 
+export interface SpatialMapPatchPreview {
+  content: string;
+  game: Game;
+  map: MapDef;
+}
+
 export function serializeSpatialMapPatch(
   original: string,
   patch: MapSpatialPatch,
@@ -34,6 +40,38 @@ export function serializeSpatialMapPatch(
   return { content, map: parseMap(content, source) };
 }
 
+/**
+ * Apply and validate a Studio spatial patch entirely in memory.
+ *
+ * Both draft previews and authoritative saves use this path so the previewed
+ * MapDef cannot drift from what Save would parse and validate. This function
+ * deliberately performs no filesystem work.
+ */
+export function previewMapSpatialPatch(
+  original: string,
+  game: Game,
+  mapId: string,
+  patch: MapSpatialPatch,
+  source?: string,
+): SpatialMapPatchPreview {
+  const matches = (game.maps ?? []).filter((map) => map.id === mapId);
+  if (matches.length !== 1) {
+    throw new Error(matches.length === 0
+      ? `map not found: ${mapId}`
+      : `map id is not unique: ${mapId}`);
+  }
+  const next = serializeSpatialMapPatch(original, patch, source);
+  if (next.map.id !== mapId) {
+    throw new Error(`map id changed from ${mapId} to ${next.map.id}`);
+  }
+  const previewGame: Game = {
+    ...game,
+    maps: (game.maps ?? []).map((map) => map.id === mapId ? next.map : map),
+  };
+  validateGame(previewGame);
+  return { ...next, game: previewGame };
+}
+
 export async function updateMapSpatial(
   absPath: string,
   game: Game,
@@ -41,14 +79,7 @@ export async function updateMapSpatial(
   patch: MapSpatialPatch,
 ): Promise<MapDef> {
   const original = await readFile(absPath, "utf-8");
-  const next = serializeSpatialMapPatch(original, patch, absPath);
-  if (next.map.id !== mapId) {
-    throw new Error(`map id changed from ${mapId} to ${next.map.id}`);
-  }
-  validateGame({
-    ...game,
-    maps: (game.maps ?? []).map((map) => map.id === mapId ? next.map : map),
-  });
+  const next = previewMapSpatialPatch(original, game, mapId, patch, absPath);
   if (next.content === original) return next.map;
 
   const temporary = absPath + ".studio.tmp";
