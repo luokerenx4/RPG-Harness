@@ -205,8 +205,17 @@ body {
   min-height: 132px;
 }
 .dialogue-box.clickable {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(50px,1fr) auto;
+  padding: 0;
+  overflow: hidden;
   cursor: pointer;
 }
+.dialogue-box.clickable:focus-visible { outline: none; border-color: var(--rpg-line-strong); box-shadow: 0 18px 52px rgba(0,0,0,.48), inset 3px 0 0 var(--accent), 0 0 0 2px rgba(213,170,80,.09); }
+.message-window-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 34px; padding: 8px 14px 7px 17px; color: #806d48; border-bottom: 1px solid rgba(255,255,255,.065); background: linear-gradient(90deg,rgba(213,170,80,.07),transparent 45%); font: 7px/1 ui-monospace,monospace; letter-spacing: .14em; }
+.message-window-heading > span { color: #a68143; font-weight: 750; }
+.message-window-heading > small { color: #50535b; font: inherit; letter-spacing: .08em; }
 .dialogue-box.error pre {
   color: #f88;
   white-space: pre-wrap;
@@ -214,12 +223,13 @@ body {
 .speaker {
   color: var(--accent);
   font-weight: 700;
-  margin-bottom: 8px;
-  font-size: 17px;
+  margin: 0;
+  font-size: 14px;
 }
 .narration-text,
 .dialogue-text {
   margin: 0;
+  padding: 17px 26px 10px;
   font-size: 18px;
   line-height: 1.75;
 }
@@ -228,11 +238,19 @@ body {
   font-style: italic;
 }
 .advance-hint {
-  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 16px 8px;
   text-align: right;
   color: var(--dim);
-  font-size: 12px;
+  font: 8px/1 ui-monospace,monospace;
 }
+.advance-hint > span { color: var(--accent); animation: message-cursor 1.3s ease-in-out infinite; }
+.advance-hint kbd { padding: 2px 4px; color: #9e895d; border: 1px solid rgba(213,170,80,.2); border-radius: 3px; background: rgba(213,170,80,.04); font: inherit; }
+@keyframes message-cursor { 0%,100% { opacity: .45; transform: translateY(-1px); } 50% { opacity: 1; transform: translateY(2px); } }
 
 /* ---------- choice / hub / scriptComplete ---------- */
 
@@ -2361,9 +2379,10 @@ textarea:focus-visible {
   .has-spatial-map .hub-summary .objective-card,
   .has-spatial-map .hub-summary .resource-group { display: block; width: 100%; margin-right: 0; }
   .hub-summary { padding-right: 0; padding-bottom: 4px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.07); }
-  .dialogue-box { padding: 18px; }
+  .dialogue-box:not(.clickable) { padding: 18px; }
+  .message-window-heading { padding-inline: 12px; }
   .narration-text,
-  .dialogue-text { font-size: 16px; }
+  .dialogue-text { padding: 14px 16px 8px; font-size: 16px; }
   .choice-heading { align-items: flex-start; flex-direction: column; gap: 7px; min-height: 0; padding: 11px 13px; }
   .choice-heading > div strong { max-width: 100%; font-size: 14px; white-space: normal; }
   .choice-panel .option-list { max-height: calc(74vh - 84px); padding: 8px; }

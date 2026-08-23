@@ -522,6 +522,11 @@ export function WebPlayScreen({
     : model.stage.kind === "scriptComplete"
       ? `scripts:${model.stage.completedId}:${model.stage.nextAvailable.map((script) => script.id).join("|")}`
       : null;
+  const storyFocusKey = model.stage.kind === "narration"
+    ? `narration:${model.stage.text}`
+    : model.stage.kind === "dialogue"
+      ? `dialogue:${model.stage.speakerName}:${model.stage.text}`
+      : null;
 
   useEffect(() => {
     if (!optionFocusKey) return;
@@ -530,6 +535,14 @@ export function WebPlayScreen({
     });
     return () => cancelAnimationFrame(frame);
   }, [optionFocusKey]);
+
+  useEffect(() => {
+    if (!storyFocusKey) return;
+    const frame = requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".dialogue-box.clickable")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [storyFocusKey]);
 
   // Keyboard: classic RPG field movement, Hub cursor navigation, confirm and cancel.
   useEffect(() => {
@@ -1272,17 +1285,18 @@ export function StageView({
       );
     case "narration":
       return (
-        <div className="dialogue-box clickable" onClick={() => onInput({ type: "next" })}>
+        <div className="dialogue-box clickable" role="button" tabIndex={0} aria-label={`旁白：${stage.text}`} aria-keyshortcuts="Enter Space" onClick={() => onInput({ type: "next" })}>
+          <header className="message-window-heading"><span>NARRATION</span><small>AUTO SAVE · ON</small></header>
           <p className="narration-text">{stage.text}</p>
-          <div className="advance-hint">▼ クリック / Space</div>
+          <div className="advance-hint"><span aria-hidden="true">▼</span><kbd>Enter</kbd> / <kbd>Space</kbd> · 進む</div>
         </div>
       );
     case "dialogue":
       return (
-        <div className="dialogue-box clickable" onClick={() => onInput({ type: "next" })}>
-          <div className="speaker">{stage.speakerName}</div>
+        <div className="dialogue-box clickable" role="button" tabIndex={0} aria-label={`${stage.speakerName}：${stage.text}`} aria-keyshortcuts="Enter Space" onClick={() => onInput({ type: "next" })}>
+          <header className="message-window-heading"><strong className="speaker">{stage.speakerName}</strong><small>DIALOGUE</small></header>
           <p className="dialogue-text">{stage.text}</p>
-          <div className="advance-hint">▼ クリック / Space</div>
+          <div className="advance-hint"><span aria-hidden="true">▼</span><kbd>Enter</kbd> / <kbd>Space</kbd> · 進む</div>
         </div>
       );
     case "choice":
