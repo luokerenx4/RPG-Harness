@@ -653,6 +653,8 @@ export interface AssetSpec {
   styleRef?: string;
   refs?: AssetRefs;
   sizeHint?: AssetSize;
+  /** Sprite-atlas contract for `tileset` assets. Tile ids are row-major. */
+  tileGrid?: AssetTileGrid;
   tags?: string[];
   // Authoring-side render preferences. The studio writes here after a
   // successful chafa render so the "winning combo" persists across
@@ -692,6 +694,12 @@ export interface AssetRefs {
 export interface AssetSize {
   tui?: { cols: number; rows: number };
   web?: { aspect: string };
+}
+
+export interface AssetTileGrid {
+  columns: number;
+  rows: number;
+  firstId: number;
 }
 
 export interface AssetRenderings {

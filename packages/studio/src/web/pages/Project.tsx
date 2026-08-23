@@ -517,6 +517,7 @@ export function Project({
               node={selected}
               map={map}
               asset={asset}
+              projectAssets={project.assets}
               resources={project.graph.resources}
               switches={project.switches}
               variables={project.variables}
@@ -752,6 +753,7 @@ function ResourceDetail({
   node,
   map,
   asset,
+  projectAssets,
   resources,
   switches,
   variables,
@@ -769,6 +771,7 @@ function ResourceDetail({
   node: ProjectResourceNode;
   map?: MapDef;
   asset?: ProjectAssetPreview;
+  projectAssets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
@@ -936,7 +939,7 @@ function ResourceDetail({
           </div>
         </header>
         {map ? (
-          <MapOverview map={map} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
+          <MapOverview map={map} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -1911,6 +1914,7 @@ function ResourceReference({
 
 function MapOverview({
   map,
+  assets,
   resources,
   switches,
   variables,
@@ -1918,6 +1922,7 @@ function MapOverview({
   onDraftGuardChange,
 }: {
   map: MapDef;
+  assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
@@ -1959,6 +1964,10 @@ function MapOverview({
   );
   const stacks = groupedStacks(draft.placements ?? []);
   const dirty = hasMapDraftChanges(map, draft);
+  const tilesets = assets.filter((candidate) => candidate.kind === "tileset");
+  const tilesetAsset = draft.layout?.tileset
+    ? tilesets.find((candidate) => candidate.path === draft.layout?.tileset)
+    : undefined;
   const paletteGroups = useMemo(() => {
     const filtered = filterPlacementPaletteResources(resources, paletteQuery);
     return KIND_ORDER.flatMap((kind) => {
@@ -2184,6 +2193,10 @@ function MapOverview({
               playerStart: { x: current.layout.playerStart?.x ?? 0, y: Number(event.target.value) },
             } : undefined,
           }))} /></label>
+          <label className="layout-tileset-field">Tileset<select value={draft.layout.tileset ?? ""} onChange={(event) => setDraft((current) => ({
+            ...current,
+            layout: current.layout ? { ...current.layout, tileset: event.target.value || undefined } : undefined,
+          }))}><option value="">Procedural colors</option>{tilesets.map((candidate) => <option value={candidate.path} key={candidate.path}>{candidate.placeholder}</option>)}</select></label>
           <span>Drag any resource from the project tree onto the canvas.</span>
         </div>
           <MapStructureEditor
@@ -2192,6 +2205,7 @@ function MapOverview({
           />
           <MapTilePainter
             layout={draft.layout}
+            tileset={tilesetAsset}
             onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
           />
         </details>
@@ -2312,10 +2326,12 @@ function MapOverview({
             setSelectedPlacementId(placement.id);
           }}
         >
-          {collectMapEditorTiles(draft.layout).map((tile) => (
+          {collectMapEditorTiles(draft.layout).map((tile) => {
+            const atlasStyle = tile.kind === "tile" ? studioTileAtlasStyle(tile.tile, tilesetAsset) : undefined;
+            return (
             <i
               aria-hidden="true"
-              className={`map-tile-preview kind-${tile.kind}`}
+              className={`map-tile-preview kind-${tile.kind}${atlasStyle ? " atlas" : ""}`}
               key={`${tile.layerId}:${tile.x}:${tile.y}`}
               style={{
                 left: `${tile.x / width * 100}%`,
@@ -2324,9 +2340,11 @@ function MapOverview({
                 height: `${100 / height}%`,
                 zIndex: Math.round(tile.z + 1),
                 "--tile-id": tile.tile,
+                ...atlasStyle,
               } as React.CSSProperties}
             />
-          ))}
+            );
+          })}
           {draft.layout.regions.map((region) => (
             <div
               className="map-region"
@@ -2525,9 +2543,11 @@ function MapStructureEditor({
 
 function MapTilePainter({
   layout,
+  tileset,
   onChange,
 }: {
   layout: MapLayoutDef;
+  tileset?: ProjectAssetPreview;
   onChange: (layout: MapLayoutDef) => void;
 }) {
   const paintable = layout.layers.filter((layer) => layer.kind === "tile" || layer.kind === "collision");
@@ -2578,6 +2598,21 @@ function MapTilePainter({
         <button type="button" onClick={() => fillLayer(0)}>Clear layer</button>
         <span>Hold and drag to paint continuously</span>
       </div>
+      {tileset?.tileGrid && (
+        <div className="map-tileset-palette" aria-label="Tileset brush palette">
+          <span>ATLAS · {tileset.tileGrid.columns} × {tileset.tileGrid.rows}</span>
+          {Array.from({ length: tileset.tileGrid.columns * tileset.tileGrid.rows }, (_, index) => tileset.tileGrid!.firstId + index).map((tile) => (
+            <button
+              type="button"
+              className={brush === tile ? "selected" : ""}
+              aria-label={`Use tile ${tile}`}
+              key={tile}
+              style={studioTileAtlasStyle(tile, tileset)}
+              onClick={() => setBrush(tile)}
+            ><small>{tile}</small></button>
+          ))}
+        </div>
+      )}
       <div
         className={`map-tile-painter-grid kind-${layer.kind}`}
         style={{ "--map-cols": layout.width, "--map-rows": layout.height } as React.CSSProperties}
@@ -3502,6 +3537,25 @@ export function collectMapEditorTiles(layout: MapLayoutDef): Array<{
       z: layer.z,
     }]));
   });
+}
+
+export function studioTileAtlasStyle(
+  tile: number,
+  tileset?: Pick<ProjectAssetPreview, "path" | "tileGrid" | "renderings">,
+): React.CSSProperties | undefined {
+  const grid = tileset?.tileGrid;
+  const hasImage = tileset && Object.values(tileset.renderings).some(Boolean);
+  if (!grid || !hasImage) return undefined;
+  const index = tile - grid.firstId;
+  if (index < 0 || index >= grid.columns * grid.rows) return undefined;
+  const column = index % grid.columns;
+  const row = Math.floor(index / grid.columns);
+  return {
+    backgroundImage: `url(${JSON.stringify(sourceImageUrl(tileset.path))})`,
+    backgroundPosition: `${grid.columns === 1 ? 0 : column / (grid.columns - 1) * 100}% ${grid.rows === 1 ? 0 : row / (grid.rows - 1) * 100}%`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${grid.columns * 100}% ${grid.rows * 100}%`,
+  };
 }
 
 export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements">): string {

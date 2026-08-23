@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { isMapEventPlayerAction, mapPlacementEventKey, mapPointBlocker } from "@rpg-harness/engine";
 import type {
+  AssetSpec,
   HubActivity,
   Input,
   MapDef,
@@ -105,6 +106,8 @@ export function SpatialMapSurface({
   map,
   activities,
   backgroundUrl,
+  tileset,
+  tilesetUrl,
   playerPosition,
   resourceLabels,
   onInput,
@@ -112,6 +115,8 @@ export function SpatialMapSurface({
   map: MapDef;
   activities: HubActivity[];
   backgroundUrl?: string;
+  tileset?: AssetSpec;
+  tilesetUrl?: string;
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
   onInput: (input: Input) => void;
@@ -174,10 +179,14 @@ export function SpatialMapSurface({
       >
         <div className="spatial-map-compass" aria-hidden="true"><span>N</span><i>◆</i></div>
         <div className="spatial-map-frame" aria-hidden="true" />
-        {visibleTiles.map((tile) => (
+        {visibleTiles.map((tile) => {
+          const atlasStyle = tile.kind === "tile"
+            ? spatialTileAtlasStyle(tile.tile, tileset, tilesetUrl)
+            : undefined;
+          return (
           <i
             aria-hidden="true"
-            className={`spatial-map-tile kind-${tile.kind}`}
+            className={`spatial-map-tile kind-${tile.kind}${atlasStyle ? " atlas" : ""}`}
             key={`${tile.layerId}:${tile.x}:${tile.y}`}
             style={{
               left: `${tile.x / layout.width * 100}%`,
@@ -186,9 +195,11 @@ export function SpatialMapSurface({
               height: `${100 / layout.height}%`,
               zIndex: Math.round(tile.z + 1),
               "--tile-id": tile.tile,
+              ...atlasStyle,
             } as React.CSSProperties}
           />
-        ))}
+          );
+        })}
         {layout.regions.map((region) => (
           <div
             className="spatial-map-region"
@@ -414,6 +425,25 @@ export function collectSpatialTiles(map: MapDef): Array<{
       z: layer.z,
     }]));
   });
+}
+
+export function spatialTileAtlasStyle(
+  tile: number,
+  tileset?: Pick<AssetSpec, "tileGrid">,
+  tilesetUrl?: string,
+): React.CSSProperties | undefined {
+  const grid = tileset?.tileGrid;
+  if (!grid || !tilesetUrl) return undefined;
+  const index = tile - grid.firstId;
+  if (index < 0 || index >= grid.columns * grid.rows) return undefined;
+  const column = index % grid.columns;
+  const row = Math.floor(index / grid.columns);
+  return {
+    backgroundImage: `url(${JSON.stringify(tilesetUrl)})`,
+    backgroundPosition: `${grid.columns === 1 ? 0 : column / (grid.columns - 1) * 100}% ${grid.rows === 1 ? 0 : row / (grid.rows - 1) * 100}%`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${grid.columns * 100}% ${grid.rows * 100}%`,
+  };
 }
 
 export function describePlacementApproach(

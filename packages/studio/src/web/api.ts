@@ -56,6 +56,11 @@ export interface AssetRow {
     tui?: { cols: number; rows: number };
     web?: { aspect: string };
   };
+  tileGrid?: {
+    columns: number;
+    rows: number;
+    firstId: number;
+  };
   tags?: string[];
   tuiRender?: TuiRenderPrefs;
   renderings: {
@@ -74,7 +79,7 @@ export interface AssetRow {
 
 export type ProjectAssetPreview = Pick<
   AssetRow,
-  "path" | "kind" | "placeholder" | "renderings"
+  "path" | "kind" | "placeholder" | "tileGrid" | "renderings"
 >;
 
 // Subset of AssetRow the studio is allowed to mutate via PATCH.

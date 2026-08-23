@@ -1,0 +1,16 @@
+kind: tileset
+description: 水没した社の黒い水、濡れ石、葦原、流木、石段をまとめた四行四列の地形図塊。
+prompt: >-
+  Exactly sixteen orthographic top-down terrain tiles for a flooded Sengoku-era
+  Japanese shrine, arranged in a precise four-by-four atlas: dark shallow water,
+  wet stone paving, mossy edges, muddy reeds, submerged steps, cracked flagstones,
+  driftwood, and compatible corner variants. Hand-painted dark-fantasy JRPG style;
+  terrain only, with no characters, labels, UI, logos, or watermark.
+placeholder: 水没神社の水路・石畳・葦・石段を収めた 4×4 地形タイル
+tile_grid:
+  columns: 4
+  rows: 4
+  first_id: 1
+size_hint:
+  web: { aspect: "1:1" }
+tags: [sumida, shrine, water, stone, reeds, terrain]

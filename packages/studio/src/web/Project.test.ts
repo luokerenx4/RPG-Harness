@@ -23,6 +23,7 @@ import {
   resizeMapLayout,
   summarizeMapTreeResource,
   summarizeMapValidation,
+  studioTileAtlasStyle,
 } from "./pages/Project";
 import type { MapDef, MapLayoutDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
 
@@ -347,6 +348,15 @@ describe("Studio map event resource picker", () => {
       ["walls", 0],
       ["ground", 1],
     ]);
+    expect(studioTileAtlasStyle(6, {
+      path: "assets/tilesets/shrine",
+      tileGrid: { columns: 4, rows: 4, firstId: 1 },
+      renderings: { sourceQuality: true, source: true, sourceCompressed: false, tuiTxt: false, tuiAns: false, web: false },
+    })).toMatchObject({
+      backgroundImage: 'url("/files/source/assets/tilesets/shrine")',
+      backgroundPosition: `${1 / 3 * 100}% ${1 / 3 * 100}%`,
+      backgroundSize: "400% 400%",
+    });
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

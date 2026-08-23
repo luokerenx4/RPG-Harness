@@ -13,6 +13,7 @@ import {
   mapMoveAvailability,
   mapPlacementDistance,
   resolveSpatialPlacementOperations,
+  spatialTileAtlasStyle,
   SpatialMapSurface,
 } from "../src/SpatialMapSurface";
 
@@ -124,6 +125,13 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("spatial-map-tile kind-tile");
     expect(html).toContain("spatial-map-tile kind-collision");
     expect(html).toContain('aria-label="向东移动" aria-keyshortcuts="ArrowRight D" disabled=""');
+    expect(spatialTileAtlasStyle(6, {
+      tileGrid: { columns: 4, rows: 4, firstId: 1 },
+    }, "/tiles.png")).toMatchObject({
+      backgroundImage: 'url("/tiles.png")',
+      backgroundPosition: `${1 / 3 * 100}% ${1 / 3 * 100}%`,
+      backgroundSize: "400% 400%",
+    });
   });
 
   test("renders positions and omits automatic events from player controls", () => {

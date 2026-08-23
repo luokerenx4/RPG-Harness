@@ -481,6 +481,7 @@ export function projectAssetPreview(asset: AssetSpec) {
     path: asset.path,
     kind: asset.kind,
     placeholder: asset.placeholder,
+    ...(asset.tileGrid ? { tileGrid: asset.tileGrid } : {}),
     renderings: {
       source: asset.renderings.source !== undefined,
       sourceQuality: asset.renderings.sourceQuality !== undefined,

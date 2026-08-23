@@ -93,6 +93,25 @@ describe("parseAssetSpec — snake_case → camelCase", () => {
     expect((spec as Record<string, unknown>).style_ref).toBeUndefined();
   });
 
+  test("tile_grid → tileGrid for tileset atlases", () => {
+    const spec = parseAssetSpec(
+      [
+        "kind: tileset",
+        "description: x",
+        "prompt: y",
+        "placeholder: z",
+        "tile_grid: { columns: 4, rows: 3, first_id: 1 }",
+      ].join("\n"),
+      "assets/tilesets/shrine",
+    );
+    expect(spec.tileGrid).toEqual({ columns: 4, rows: 3, firstId: 1 });
+    expect((spec as Record<string, unknown>).tile_grid).toBeUndefined();
+    expect(() => parseAssetSpec(
+      "kind: bg\ndescription: x\nprompt: y\nplaceholder: z\ntile_grid: { columns: 4, rows: 4 }",
+      "assets/backgrounds/not-a-tileset",
+    )).toThrow(/only valid.*tileset/);
+  });
+
   test("size_hint → sizeHint with cols/rows + aspect", () => {
     const spec = parseAssetSpec(
       [

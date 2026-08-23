@@ -53,6 +53,7 @@ const KNOWN_KEYS = [
   "style_ref",
   "refs",
   "size_hint",
+  "tile_grid",
   "tags",
   "tui_render",
 ] as const;
@@ -114,6 +115,12 @@ export function parseAssetSpec(
   if (obj.size_hint !== undefined) {
     spec.sizeHint = parseSizeHint(obj.size_hint, relPath);
   }
+  if (obj.tile_grid !== undefined) {
+    if (kind !== "tileset") {
+      throw new AssetParseError("`tile_grid` is only valid for `kind: tileset`", relPath);
+    }
+    spec.tileGrid = parseTileGrid(obj.tile_grid, relPath);
+  }
   if (obj.tags !== undefined) spec.tags = parseTags(obj.tags, relPath);
   if (obj.tui_render !== undefined) {
     spec.tuiRender = parseTuiRender(obj.tui_render, relPath);
@@ -123,6 +130,26 @@ export function parseAssetSpec(
   if (custom) spec.custom = custom;
 
   return spec;
+}
+
+function parseTileGrid(raw: unknown, source: string) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new AssetParseError("`tile_grid` must be an object", source);
+  }
+  const obj = raw as Record<string, unknown>;
+  const columns = obj.columns;
+  const rows = obj.rows;
+  const firstId = obj.first_id ?? 1;
+  if (!Number.isInteger(columns) || (columns as number) <= 0) {
+    throw new AssetParseError("`tile_grid.columns` must be a positive integer", source);
+  }
+  if (!Number.isInteger(rows) || (rows as number) <= 0) {
+    throw new AssetParseError("`tile_grid.rows` must be a positive integer", source);
+  }
+  if (!Number.isInteger(firstId) || (firstId as number) < 0) {
+    throw new AssetParseError("`tile_grid.first_id` must be a non-negative integer", source);
+  }
+  return { columns: columns as number, rows: rows as number, firstId: firstId as number };
 }
 
 function requireString(

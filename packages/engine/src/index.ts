@@ -159,6 +159,7 @@ export type {
   AssetRefs,
   AssetRenderings,
   AssetSize,
+  AssetTileGrid,
   AssetSpec,
   TuiRenderPrefs,
   Beat,
