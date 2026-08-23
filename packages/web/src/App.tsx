@@ -57,6 +57,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [autoStartConsumed, setAutoStartConsumed] = useState(false);
   const [aiTurnPending, setAiTurnPending] = useState(false);
+  const [freshStartGameId, setFreshStartGameId] = useState<string | null>(null);
   const requestedGame = useMemo(
     () => requestedWebGame(window.location.search),
     [],
@@ -80,6 +81,17 @@ export function App() {
   useEffect(() => {
     void refreshSessions();
   }, [refreshSessions]);
+
+  useEffect(() => {
+    if (!freshStartGameId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setFreshStartGameId(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [freshStartGameId]);
 
   const start = useCallback(async (id: string, fresh: boolean) => {
     try {
@@ -400,7 +412,8 @@ export function App() {
                   <button
                     className="picker-fresh"
                     title="セーブを消して最初から"
-                    onClick={() => void start(g.id, true)}
+                    aria-haspopup="dialog"
+                    onClick={() => setFreshStartGameId(g.id)}
                   >
                     <span>↻</span> 最初から
                   </button>
@@ -411,6 +424,27 @@ export function App() {
         </ul>
         <footer className="picker-footer"><span>FILES ARE AUTHORITATIVE</span><span>WEB SURFACE · READY</span></footer>
       </main>
+      {freshStartGameId && (
+        <div className="picker-reset-overlay" onClick={() => setFreshStartGameId(null)}>
+          <section className="picker-reset-dialog" role="alertdialog" aria-modal="true" aria-labelledby="picker-reset-title" onClick={(event) => event.stopPropagation()}>
+            <span className="picker-reset-kicker">NEW GAME</span>
+            <div className="picker-reset-emblem" aria-hidden="true">↻</div>
+            <h2 id="picker-reset-title">最初から始めますか？</h2>
+            <strong>{games.find((game) => game.id === freshStartGameId)?.title ?? freshStartGameId}</strong>
+            <p>現在のセーブを消去して、新しい物語を開始します。共有セッションの進行は元に戻せません。</p>
+            <small>{sessionInfo?.label ?? "local save"}</small>
+            <div className="picker-reset-actions">
+              <button type="button" autoFocus onClick={() => setFreshStartGameId(null)}>キャンセル</button>
+              <button type="button" className="danger" onClick={() => {
+                const id = freshStartGameId;
+                setFreshStartGameId(null);
+                void start(id, true);
+              }}>セーブを消して開始</button>
+            </div>
+            <footer>Esc · 戻る</footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -1666,6 +1666,43 @@ body {
   font: 7px/1 ui-monospace, monospace;
   letter-spacing: .12em;
 }
+.picker-reset-overlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3,4,7,.78);
+  backdrop-filter: blur(8px) saturate(.72);
+}
+.picker-reset-dialog {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: min(440px,100%);
+  overflow: hidden;
+  padding: 26px 28px 20px;
+  border: 1px solid rgba(213,170,80,.42);
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 0,rgba(202,157,69,.11),transparent 38%),#101218;
+  box-shadow: 0 30px 100px rgba(0,0,0,.72),inset 0 0 0 1px rgba(255,255,255,.025);
+  flex-direction: column;
+  text-align: center;
+}
+.picker-reset-dialog::after { position: absolute; right: -16px; bottom: -65px; color: rgba(213,170,80,.035); content: "新"; font: 160px/1 ui-serif,serif; pointer-events: none; }
+.picker-reset-kicker { color: #ae8540; font: 7px/1 ui-monospace,monospace; letter-spacing: .22em; }
+.picker-reset-emblem { display: grid; z-index: 1; place-items: center; width: 42px; height: 42px; margin: 15px 0 11px; color: #171009; border: 1px solid #d7ad5c; border-radius: 50%; background: linear-gradient(145deg,#ddb86b,#91642b); box-shadow: 0 8px 24px rgba(0,0,0,.36); font-size: 18px; }
+.picker-reset-dialog h2 { z-index: 1; margin: 0; color: #eee9df; font: 600 18px/1.3 ui-serif,Georgia,serif; letter-spacing: .06em; }
+.picker-reset-dialog > strong { z-index: 1; margin-top: 8px; color: #c9a95e; font-size: 11px; }
+.picker-reset-dialog > p { z-index: 1; max-width: 330px; margin: 11px 0 8px; color: #77777b; font-size: 9px; line-height: 1.65; }
+.picker-reset-dialog > small { z-index: 1; color: #4f5259; font: 7px/1 ui-monospace,monospace; }
+.picker-reset-actions { display: flex; z-index: 1; gap: 7px; width: 100%; margin-top: 20px; }
+.picker-reset-dialog button { flex: 1; min-height: 39px; color: #adb0b5; border: 1px solid rgba(255,255,255,.11); border-radius: 4px; background: rgba(255,255,255,.035); cursor: pointer; font-size: 9px; }
+.picker-reset-dialog button:hover { color: #fff; border-color: rgba(213,170,80,.4); background: rgba(213,170,80,.07); }
+.picker-reset-dialog button.danger { color: #d9a9a9; border-color: rgba(191,91,91,.32); background: rgba(127,43,43,.12); }
+.picker-reset-dialog button.danger:hover { color: #f0caca; border-color: rgba(210,102,102,.55); background: rgba(127,43,43,.22); }
+.picker-reset-dialog > footer { z-index: 1; margin-top: 14px; color: #42464e; font: 7px/1 ui-monospace,monospace; }
 
 @media (max-width: 760px) {
   .picker { grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); overflow-y: auto; }
