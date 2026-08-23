@@ -1042,6 +1042,8 @@ function MapOverview({
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
   const mapIdRef = useRef(map.id);
+  const discardButtonRef = useRef<HTMLButtonElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (mapIdRef.current !== map.id) setSaveReceipt(null);
@@ -1117,6 +1119,15 @@ function MapOverview({
   useEffect(() => () => onDraftGuardChange(null), [onDraftGuardChange]);
 
   useEffect(() => {
+    if (confirmDiscard) keepEditingRef.current?.focus();
+  }, [confirmDiscard]);
+
+  const cancelDiscard = () => {
+    setConfirmDiscard(false);
+    requestAnimationFrame(() => discardButtonRef.current?.focus());
+  };
+
+  useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -1126,6 +1137,10 @@ function MapOverview({
       }
       if (event.key !== "Escape" || saving) return;
       event.preventDefault();
+      if (confirmDiscard) {
+        cancelDiscard();
+        return;
+      }
       if (selectedPlacementId) {
         setSelectedPlacementId(null);
       } else if (dirty) {
@@ -1136,7 +1151,7 @@ function MapOverview({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, dirty, saving, selectedPlacementId, draft]);
+  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard]);
 
   useEffect(() => {
     if (!editing || !dirty) return;
@@ -1177,7 +1192,7 @@ function MapOverview({
               <button type="button" className="primary" disabled={!dirty || saving} onClick={save}>
                 {saving ? "Validating…" : "Save changes  ⌘S"}
               </button>
-              <button type="button" disabled={saving} onClick={() => {
+              <button ref={discardButtonRef} type="button" disabled={saving} onClick={() => {
                 if (!dirty) {
                   discard();
                   return;
@@ -1190,9 +1205,9 @@ function MapOverview({
         </div>
       </div>
       {confirmDiscard && (
-        <section className="map-discard-confirmation" role="alertdialog" aria-labelledby="discard-map-title">
-          <div><span>UNSAVED MAP DRAFT</span><strong id="discard-map-title">Discard spatial changes?</strong><p>Layout, placement, and event-page edits made since the last save will be lost.</p></div>
-          <div><button type="button" className="danger" onClick={discard}>Discard changes</button><button type="button" className="primary" onClick={() => setConfirmDiscard(false)}>Keep editing</button></div>
+        <section className="map-discard-confirmation" role="alertdialog" aria-labelledby="discard-map-title" aria-describedby="discard-map-description">
+          <div><span>UNSAVED MAP DRAFT</span><strong id="discard-map-title">Discard spatial changes?</strong><p id="discard-map-description">Layout, placement, and event-page edits made since the last save will be lost.</p></div>
+          <div><button type="button" className="danger" onClick={discard}>Discard changes</button><button ref={keepEditingRef} type="button" className="primary" onClick={cancelDiscard}>Keep editing <kbd>Esc</kbd></button></div>
         </section>
       )}
       {saveReceipt && !saveError && (
@@ -1594,6 +1609,8 @@ function PlacementEditor({
   onClose: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const setNumber = (axis: "x" | "y", value: number) => onChange((current) => ({
     ...current,
     at: { ...current.at, [axis]: value },
@@ -1603,21 +1620,34 @@ function PlacementEditor({
   const placementLabel = mapPlacementResourceLabel(placement, resources);
 
   useEffect(() => setConfirmDelete(false), [placement.id]);
+  useEffect(() => {
+    if (confirmDelete) cancelDeleteRef.current?.focus();
+  }, [confirmDelete]);
+
+  const cancelDelete = () => {
+    setConfirmDelete(false);
+    requestAnimationFrame(() => deleteButtonRef.current?.focus());
+  };
 
   return (
     <section className="placement-editor">
       <header className="placement-editor-heading">
         <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
-        <div className="placement-heading-actions"><button type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
+        <div className="placement-heading-actions"><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       {confirmDelete && (
-        <section className="placement-delete-confirmation" role="alertdialog" aria-labelledby="delete-placement-title">
+        <section className="placement-delete-confirmation" role="alertdialog" aria-labelledby="delete-placement-title" aria-describedby="delete-placement-description" onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          cancelDelete();
+        }}>
           <span aria-hidden="true">!</span>
           <div>
             <strong id="delete-placement-title">Remove “{placementLabel}” from this map?</strong>
-            <small>{placement.events.length} event {placement.events.length === 1 ? "page" : "pages"} will leave the map draft. The source file is unchanged until Save changes.</small>
+            <small id="delete-placement-description">{placement.events.length} event {placement.events.length === 1 ? "page" : "pages"} will leave the map draft. The source file is unchanged until Save changes.</small>
           </div>
-          <button type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          <button ref={cancelDeleteRef} type="button" onClick={cancelDelete}>Cancel <kbd>Esc</kbd></button>
           <button type="button" className="danger" onClick={onDelete}>Remove object</button>
         </section>
       )}
@@ -1691,6 +1721,8 @@ function EventPagesEditor({
 }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(placement.events[0]?.id ?? null);
   const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
+  const deletePageButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelDeletePageRef = useRef<HTMLButtonElement>(null);
   const selectedIndex = Math.max(0, placement.events.findIndex((event) => event.id === selectedEventId));
   const selected = placement.events[selectedIndex];
 
@@ -1700,6 +1732,14 @@ function EventPagesEditor({
   }, [placement.id, placement.events, selectedEventId]);
 
   useEffect(() => setDeletePendingId(null), [placement.id, selectedEventId]);
+  useEffect(() => {
+    if (deletePendingId) cancelDeletePageRef.current?.focus();
+  }, [deletePendingId]);
+
+  const cancelDeletePage = () => {
+    setDeletePendingId(null);
+    requestAnimationFrame(() => deletePageButtonRef.current?.focus());
+  };
 
   const patchSelected = (patch: Partial<MapPlacementEventDef>) => onChange((current) => ({
     ...current,
@@ -1776,17 +1816,22 @@ function EventPagesEditor({
                 <button type="button" aria-label="Move page up" disabled={selectedIndex === 0} onClick={() => movePage(-1)}>↑</button>
                 <button type="button" aria-label="Move page down" disabled={selectedIndex === placement.events.length - 1} onClick={() => movePage(1)}>↓</button>
                 <button type="button" onClick={() => addPage(selected)}>Duplicate</button>
-                <button type="button" className="danger" aria-label={`Delete event ${selected.id}`} onClick={() => setDeletePendingId(selected.id)}>Delete</button>
+                <button ref={deletePageButtonRef} type="button" className="danger" aria-label={`Delete event ${selected.id}`} onClick={() => setDeletePendingId(selected.id)}>Delete</button>
               </div>
             </header>
 
             {deletePendingId === selected.id && (
-              <section className="event-page-delete-confirmation" role="alertdialog" aria-labelledby="delete-event-page-title">
+              <section className="event-page-delete-confirmation" role="alertdialog" aria-labelledby="delete-event-page-title" aria-describedby="delete-event-page-description" onKeyDown={(event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                event.stopPropagation();
+                cancelDeletePage();
+              }}>
                 <div>
                   <strong id="delete-event-page-title">Remove event page “{selected.label || trigger?.label}”?</strong>
-                  <small>Its condition and resource command will leave this map draft. The source file is unchanged until Save changes.</small>
+                  <small id="delete-event-page-description">Its condition and resource command will leave this map draft. The source file is unchanged until Save changes.</small>
                 </div>
-                <button type="button" onClick={() => setDeletePendingId(null)}>Cancel</button>
+                <button ref={cancelDeletePageRef} type="button" onClick={cancelDeletePage}>Cancel <kbd>Esc</kbd></button>
                 <button type="button" className="danger" onClick={deletePage}>Remove page</button>
               </section>
             )}
