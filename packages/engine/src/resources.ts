@@ -39,7 +39,7 @@ export function buildProjectResourceRegistry(game: Game): ProjectResourceRegistr
   for (const value of game.scripts) add("script", value.id, value.title, value);
   for (const value of game.actions ?? []) add("action", value.id, value.title, value);
   for (const value of game.assets ?? []) {
-    add("asset", value.path, value.description || value.path, value);
+    add("asset", value.path, value.placeholder || value.description || value.path, value);
   }
   for (const value of game.modules ?? []) add("module", value.id, value.id, value);
 

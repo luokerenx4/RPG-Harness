@@ -22,12 +22,22 @@ function game(overrides: Partial<Game> = {}): Game {
 
 describe("project resource registry", () => {
   test("indexes standard resources under stable namespaced keys", () => {
-    const registry = buildProjectResourceRegistry(game());
+    const registry = buildProjectResourceRegistry(game({
+      assets: [{
+        path: "assets/portraits/hero",
+        kind: "portrait",
+        description: "A deliberately long author-facing visual description.",
+        prompt: "Hero portrait",
+        placeholder: "[Hero] Ready stance",
+        renderings: {},
+      }],
+    }));
     expect(registry.get("manifest:game")?.label).toBe("registry");
     expect(registry.get("character:hero")?.label).toBe("Hero");
     expect(registry.get("map:town")?.label).toBe("Town");
     expect(registry.get("script:intro")?.label).toBe("Intro");
     expect(registry.get("action:rest")?.label).toBe("Rest");
+    expect(registry.get("asset:assets/portraits/hero")?.label).toBe("[Hero] Ready stance");
     expect(resolveProjectResource(registry, { kind: "map", id: "town" })?.id)
       .toBe("town");
   });
