@@ -1858,8 +1858,9 @@ body {
 .picker-reset-dialog > p { z-index: 1; max-width: 330px; margin: 11px 0 8px; color: #77777b; font-size: 9px; line-height: 1.65; }
 .picker-reset-dialog > small { z-index: 1; color: #4f5259; font: 7px/1 ui-monospace,monospace; }
 .picker-reset-actions { display: flex; z-index: 1; gap: 7px; width: 100%; margin-top: 20px; }
-.picker-reset-dialog button { flex: 1; min-height: 39px; color: #adb0b5; border: 1px solid rgba(255,255,255,.11); border-radius: 4px; background: rgba(255,255,255,.035); cursor: pointer; font-size: 9px; }
-.picker-reset-dialog button:hover { color: #fff; border-color: rgba(213,170,80,.4); background: rgba(213,170,80,.07); }
+.picker-reset-dialog button { flex: 1; min-height: 44px; color: #adb0b5; border: 1px solid rgba(255,255,255,.11); border-radius: 4px; background: rgba(255,255,255,.035); cursor: pointer; font-size: 9px; }
+.picker-reset-dialog button:hover,
+.picker-reset-dialog button:focus-visible { color: #fff; outline: none; border-color: rgba(213,170,80,.4); background: rgba(213,170,80,.07); box-shadow: inset 2px 0 0 var(--accent); }
 .picker-reset-dialog button.danger { color: #d9a9a9; border-color: rgba(191,91,91,.32); background: rgba(127,43,43,.12); }
 .picker-reset-dialog button.danger:hover { color: #f0caca; border-color: rgba(210,102,102,.55); background: rgba(127,43,43,.22); }
 .picker-reset-dialog > footer { z-index: 1; margin-top: 14px; color: #42464e; font: 7px/1 ui-monospace,monospace; }

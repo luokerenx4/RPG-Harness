@@ -59,6 +59,7 @@ export function App() {
   const [aiTurnPending, setAiTurnPending] = useState(false);
   const [freshStartGameId, setFreshStartGameId] = useState<string | null>(null);
   const pickerListRef = useRef<HTMLUListElement>(null);
+  const freshStartReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const requestedGame = useMemo(
     () => requestedWebGame(window.location.search),
     [],
@@ -83,16 +84,42 @@ export function App() {
     void refreshSessions();
   }, [refreshSessions]);
 
+  const closeFreshStart = useCallback(() => {
+    setFreshStartGameId(null);
+    requestAnimationFrame(() => freshStartReturnFocusRef.current?.focus());
+  }, []);
+
   useEffect(() => {
     if (!freshStartGameId) return;
+    const dialog = document.querySelector<HTMLElement>(".picker-reset-dialog");
+    const buttons = () => Array.from(dialog?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setFreshStartGameId(null);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeFreshStart();
+        return;
+      }
+      const entries = buttons();
+      if (entries.length === 0) return;
+      const currentIndex = entries.indexOf(document.activeElement as HTMLButtonElement);
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const nextIndex = event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? entries.length - 1
+            : nextPickerIndex(currentIndex, entries.length, event.key === "ArrowRight" ? 1 : -1);
+        entries[nextIndex]?.focus();
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        entries[nextPickerIndex(currentIndex, entries.length, event.shiftKey ? -1 : 1)]?.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [freshStartGameId]);
+  }, [freshStartGameId, closeFreshStart]);
 
   useEffect(() => {
     const list = pickerListRef.current;
@@ -437,7 +464,10 @@ export function App() {
                     className="picker-fresh"
                     title="セーブを消して最初から"
                     aria-haspopup="dialog"
-                    onClick={() => setFreshStartGameId(g.id)}
+                    onClick={(event) => {
+                      freshStartReturnFocusRef.current = event.currentTarget;
+                      setFreshStartGameId(g.id);
+                    }}
                   >
                     <span>↻</span> 最初から
                   </button>
@@ -449,23 +479,23 @@ export function App() {
         <footer className="picker-footer"><span>↑↓ SELECT · ENTER START</span><span>FILES ARE AUTHORITATIVE</span><span>WEB SURFACE · READY</span></footer>
       </main>
       {freshStartGameId && (
-        <div className="picker-reset-overlay" onClick={() => setFreshStartGameId(null)}>
-          <section className="picker-reset-dialog" role="alertdialog" aria-modal="true" aria-labelledby="picker-reset-title" onClick={(event) => event.stopPropagation()}>
+        <div className="picker-reset-overlay" onClick={closeFreshStart}>
+          <section className="picker-reset-dialog" role="alertdialog" aria-modal="true" aria-labelledby="picker-reset-title" aria-describedby="picker-reset-description" onClick={(event) => event.stopPropagation()}>
             <span className="picker-reset-kicker">NEW GAME</span>
             <div className="picker-reset-emblem" aria-hidden="true">↻</div>
             <h2 id="picker-reset-title">最初から始めますか？</h2>
             <strong>{games.find((game) => game.id === freshStartGameId)?.title ?? freshStartGameId}</strong>
-            <p>現在のセーブを消去して、新しい物語を開始します。共有セッションの進行は元に戻せません。</p>
+            <p id="picker-reset-description">現在のセーブを消去して、新しい物語を開始します。共有セッションの進行は元に戻せません。</p>
             <small>{sessionInfo?.label ?? "local save"}</small>
             <div className="picker-reset-actions">
-              <button type="button" autoFocus onClick={() => setFreshStartGameId(null)}>キャンセル</button>
+              <button type="button" autoFocus onClick={closeFreshStart}>キャンセル</button>
               <button type="button" className="danger" onClick={() => {
                 const id = freshStartGameId;
                 setFreshStartGameId(null);
                 void start(id, true);
               }}>セーブを消して開始</button>
             </div>
-            <footer>Esc · 戻る</footer>
+            <footer>←→ · 選択　Enter · 決定　Esc · 戻る</footer>
           </section>
         </div>
       )}
