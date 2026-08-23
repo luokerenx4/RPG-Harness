@@ -297,24 +297,32 @@ function ResourceDetail({
   onProjectSaved: (project: ProjectResponse) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
+  const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   return (
-    <div className="resource-workspace">
+    <div className={`resource-workspace${inspectorOpen ? "" : " inspector-collapsed"}`}>
       <main className="resource-editor-pane">
         <header className="resource-editor-heading">
           <div className={`resource-editor-icon kind-${node.kind}`}>{meta.icon}</div>
           <div><span>{meta.label}</span><h1>{node.label}</h1><code>{node.key}</code></div>
+          <button
+            type="button"
+            className="editor-inspector-toggle"
+            aria-pressed={inspectorOpen}
+            onClick={() => setInspectorOpen((current) => !current)}
+          ><span aria-hidden="true">◫</span>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
         </header>
         {map ? (
           <MapOverview map={map} resources={resources} onProjectSaved={onProjectSaved} />
         ) : (
-          <div className="resource-data-sheet">
-            <div className="resource-data-hero"><span>{meta.icon}</span><strong>{node.label}</strong><code>{node.id}</code></div>
-            <div className="resource-data-guidance">
-              <span>AUTHORING RESOURCE</span>
-              <h2>Edit the source, keep the graph honest.</h2>
-              <p>This resource participates in the same project registry as maps, events, assets, and tests. Its source file remains authoritative.</p>
-            </div>
-          </div>
+          <ResourceRecordEditor
+            node={node}
+            icon={meta.icon}
+            kindLabel={meta.label}
+            onEditSource={node.source && node.editable !== false
+              ? () => setSourceEditKey(node.key)
+              : undefined}
+          />
         )}
       </main>
 
@@ -329,7 +337,12 @@ function ResourceDetail({
           </dl>
         </section>
         {node.source && node.editable !== false && (
-          <ResourceSourceEditor node={node} onProjectSaved={onProjectSaved} />
+          <ResourceSourceEditor
+            node={node}
+            onProjectSaved={onProjectSaved}
+            openRequested={sourceEditKey === node.key}
+            onOpenHandled={() => setSourceEditKey(null)}
+          />
         )}
         {missing.length > 0 && (
           <section className="project-warning">
@@ -350,12 +363,152 @@ function ResourceDetail({
   );
 }
 
+function ResourceRecordEditor({
+  node,
+  icon,
+  kindLabel,
+  onEditSource,
+}: {
+  node: ProjectResourceNode;
+  icon: string;
+  kindLabel: string;
+  onEditSource?: () => void;
+}) {
+  const [source, setSource] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSource(null);
+    setError(null);
+    if (!node.source) return () => { cancelled = true; };
+    void fetchResourceSource(node.kind, node.id)
+      .then((result) => {
+        if (!cancelled) setSource(result.source);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      });
+    return () => { cancelled = true; };
+  }, [node.id, node.kind, node.source]);
+
+  const summary = useMemo(() => source ? summarizeResourceSource(source) : null, [source]);
+
+  return (
+    <section className="resource-record-editor">
+      <header className="record-toolbar">
+        <div><span>DATABASE RECORD</span><strong>{singularResourceLabel(kindLabel)}</strong></div>
+        <div>
+          <code>{node.source ?? "virtual resource"}</code>
+          {onEditSource && <button type="button" onClick={onEditSource}>Edit source</button>}
+        </div>
+      </header>
+      <div className="record-hero">
+        <div className="record-hero-icon">{icon}</div>
+        <div><span>{node.kind}</span><h2>{node.label}</h2><code>{node.id}</code></div>
+        <span className="record-authority"><i /> AUTHORITATIVE</span>
+      </div>
+      {!node.source ? (
+        <div className="record-message"><strong>Virtual resource</strong><span>This record is provided by project code and has no standalone source document.</span></div>
+      ) : error ? (
+        <div className="record-message error"><strong>Source preview unavailable</strong><span>{error}</span></div>
+      ) : !summary ? (
+        <div className="record-loading"><i /><span>Reading source record…</span></div>
+      ) : (
+        <div className="record-body">
+          <section className="record-section">
+            <header><span>FIELDS</span><small>{summary.properties.length}</small></header>
+            {summary.properties.length > 0 ? (
+              <dl className="record-properties">
+                {summary.properties.map((property) => (
+                  <div key={property.key}><dt>{property.key}</dt><dd>{property.value}</dd></div>
+                ))}
+              </dl>
+            ) : <p className="record-empty">No top-level fields detected.</p>}
+          </section>
+          {(summary.sections.length > 0 || summary.excerpt) && (
+            <section className="record-section record-document">
+              <header><span>DOCUMENT</span><small>{summary.sections.length} sections</small></header>
+              {summary.sections.length > 0 && (
+                <div className="record-outline">
+                  {summary.sections.map((section) => <span key={section}>{section}</span>)}
+                </div>
+              )}
+              {summary.excerpt && <p>{summary.excerpt}</p>}
+            </section>
+          )}
+          {node.refs.length > 0 && (
+            <section className="record-section">
+              <header><span>LINKED RESOURCES</span><small>{node.refs.length}</small></header>
+              <div className="record-links">{node.refs.map((ref) => <code key={ref}>{ref}</code>)}</div>
+            </section>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function summarizeResourceSource(source: string): {
+  properties: Array<{ key: string; value: string }>;
+  sections: string[];
+  excerpt: string;
+} {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  let metadata = lines;
+  let body = lines;
+  let hasFrontmatter = false;
+  if (lines[0]?.trim() === "---") {
+    const end = lines.slice(1).findIndex((line) => line.trim() === "---");
+    if (end >= 0) {
+      hasFrontmatter = true;
+      metadata = lines.slice(1, end + 1);
+      body = lines.slice(end + 2);
+    }
+  }
+  const properties = metadata.flatMap((line) => {
+    const match = line.match(/^([A-Za-z0-9_.-]+):(?:\s*(.*))?$/);
+    if (!match?.[1]) return [];
+    const value = (match[2] ?? "").trim();
+    return [{ key: match[1], value: cleanSourceValue(value || "{…}") }];
+  }).slice(0, 16);
+  const documentLines = hasFrontmatter ? body : [];
+  const sections = documentLines.flatMap((line) => {
+    const match = line.match(/^#{1,4}\s+(.+)$/);
+    return match?.[1] ? [match[1].trim()] : [];
+  }).slice(0, 8);
+  const excerpt = documentLines
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#") && !line.startsWith("@") && !line.startsWith("[") && !line.startsWith(":"))
+    .join(" ")
+    .replace(/[*_`]/g, "")
+    .slice(0, 420);
+  return { properties, sections, excerpt };
+}
+
+function singularResourceLabel(label: string): string {
+  if (label.endsWith("ies")) return `${label.slice(0, -3)}y`;
+  if (label.endsWith("s")) return label.slice(0, -1);
+  return label;
+}
+
+function cleanSourceValue(value: string): string {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 function ResourceSourceEditor({
   node,
   onProjectSaved,
+  openRequested = false,
+  onOpenHandled,
 }: {
   node: ProjectResourceNode;
   onProjectSaved: (project: ProjectResponse) => void;
+  openRequested?: boolean;
+  onOpenHandled?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState("");
@@ -385,6 +538,12 @@ function ResourceSourceEditor({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!openRequested || editing || loading) return;
+    onOpenHandled?.();
+    void begin();
+  }, [openRequested]);
 
   const save = async () => {
     setSaving(true);
