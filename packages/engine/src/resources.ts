@@ -148,6 +148,7 @@ function collectResourceRefs(
     for (const module of obj.modules ?? []) add({ kind: "module", id: module.id });
     for (const endCondition of obj.training?.endConditions ?? []) addCondition(endCondition.when);
   } else if (kind === "character") {
+    if (obj.mapSprite) add({ kind: "asset", id: obj.mapSprite });
     for (const asset of Object.values(obj.portraits ?? {})) {
       if (typeof asset === "string") add({ kind: "asset", id: asset });
     }

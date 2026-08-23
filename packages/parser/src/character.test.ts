@@ -28,6 +28,13 @@ describe("parseCharacter — portraits", () => {
     expect(c.defaultPortrait).toBe("normal");
   });
 
+  test("map_sprite is a first-class character graphic", () => {
+    const c = parseCharacter(front("map_sprite: assets/sprites/kagari-field\n"));
+    expect(c.mapSprite).toBe("assets/sprites/kagari-field");
+    expect(c.custom).toBeUndefined();
+    expect(() => parseCharacter(front("map_sprite: \"\"\n"))).toThrow(/non-empty asset path/);
+  });
+
   test("non-string portrait value throws", () => {
     expect(() =>
       parseCharacter(front("portraits:\n  default: 5\n")),

@@ -29,6 +29,7 @@ export interface SpatialContextOperation extends SpatialPlacementOperation {
 }
 
 type SpatialResourceLabels = ReadonlyMap<string, string>;
+type SpatialResourceGraphics = ReadonlyMap<string, string>;
 
 export function resolveSpatialPlacementOperations(
   map: MapDef,
@@ -111,6 +112,7 @@ export function SpatialMapSurface({
   assetUrls,
   playerPosition,
   resourceLabels,
+  resourceGraphics,
   onInput,
 }: {
   map: MapDef;
@@ -121,6 +123,7 @@ export function SpatialMapSurface({
   assetUrls?: Readonly<Record<string, string>>;
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
+  resourceGraphics?: SpatialResourceGraphics;
   onInput: (input: Input) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -247,7 +250,9 @@ export function SpatialMapSurface({
             activities={byId}
             playerPosition={playerPosition}
             resourceLabels={resourceLabels}
-            graphicUrl={placement.asset ? assetUrls?.[placement.asset] : undefined}
+            graphicUrl={assetUrls?.[placement.asset ?? (
+              placement.resource ? resourceGraphics?.get(`${placement.resource.kind}:${placement.resource.id}`) ?? "" : ""
+            )]}
           />
         ))}
         {stepTargets.map((target) => (

@@ -1403,6 +1403,11 @@ export function StageView({
           [...buildProjectResourceRegistry(game).entries()].map(([key, resource]) => [key, resource.label]),
         )
         : undefined;
+      const spatialResourceGraphics = currentMap?.layout
+        ? new Map(game.characters.flatMap((character) => character.mapSprite
+          ? [[`character:${character.id}`, character.mapSprite] as const]
+          : []))
+        : undefined;
       const opportunityByCategory = new Map(
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
@@ -1436,6 +1441,7 @@ export function StageView({
                 ? currentMapPosition
                 : currentMap.layout.playerStart}
               resourceLabels={spatialResourceLabels}
+              resourceGraphics={spatialResourceGraphics}
               backgroundUrl={currentMap.bg ? assetUrls[currentMap.bg] : undefined}
               tileset={currentMap.layout.tileset
                 ? (game.assets ?? []).find((asset) => asset.path === currentMap.layout!.tileset)

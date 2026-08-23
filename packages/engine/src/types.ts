@@ -237,6 +237,8 @@ export interface ComposedState {
 export interface CharacterDef {
   id: string;
   name: string;
+  /** Default map-scale graphic. Individual placements may override it. */
+  mapSprite?: string;
   // Declared per-character stats. Each entry's `initial` seeds the
   // engine's CharacterState.stats at game start. `affection` is the
   // canonical example but games can register any name.

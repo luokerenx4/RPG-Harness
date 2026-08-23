@@ -975,6 +975,7 @@ function ResourceDetail({
             icon={meta.icon}
             kindLabel={meta.label}
             asset={asset}
+            projectAssets={projectAssets}
             resources={resources}
             onProjectSaved={onProjectSaved}
             onDraftGuardChange={onDraftGuardChange}
@@ -1328,6 +1329,7 @@ function ResourceRecordEditor({
   icon,
   kindLabel,
   asset,
+  projectAssets,
   resources,
   onProjectSaved,
   onDraftGuardChange,
@@ -1339,6 +1341,7 @@ function ResourceRecordEditor({
   icon: string;
   kindLabel: string;
   asset?: ProjectAssetPreview;
+  projectAssets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
@@ -1374,7 +1377,11 @@ function ResourceRecordEditor({
   }, [node]);
 
   const summary = useMemo(() => source ? summarizeResourceSource(source) : null, [source]);
-  const fields = useMemo(() => source ? parseResourceScalarFields(source) : [], [source]);
+  const fields = useMemo(() => {
+    const parsed = source ? parseResourceScalarFields(source) : [];
+    if (node.kind !== "character" || parsed.some((field) => field.key === "map_sprite")) return parsed;
+    return [...parsed, { key: "map_sprite", kind: "text" as const, value: "", displayValue: "System marker", editable: true }];
+  }, [source, node.kind]);
   const editableFields = fields.filter((field) => field.editable);
   const dirty = editableFields.some((field) => draft[field.key] !== field.value);
   const invalid = editableFields.some((field) =>
@@ -1503,6 +1510,11 @@ function ResourceRecordEditor({
                         value={String(draft[field.key])}
                         onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value === "true" }))}
                       ><option value="true">true</option><option value="false">false</option></select>
+                    ) : field.key === "map_sprite" ? (
+                      <select value={String(draft[field.key] ?? "")} onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}>
+                        <option value="">System marker</option>
+                        {projectAssets.filter((candidate) => candidate.kind === "sprite").map((candidate) => <option value={candidate.path} key={candidate.path}>{candidate.placeholder} · {candidate.path}</option>)}
+                      </select>
                     ) : (
                       <input
                         type={field.kind === "number" ? "number" : "text"}
@@ -1608,17 +1620,23 @@ export function patchResourceScalarFields(
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const { start, end } = sourceMetadataRange(lines);
   const fields = new Map(parseResourceScalarFields(source).map((field) => [field.key, field]));
-  const next = lines.map((line, index) => {
+  const next = lines.flatMap((line, index) => {
     if (index < start || index >= end) return line;
     const match = line.match(/^([A-Za-z0-9_.-]+):(\s*)(.*)$/);
     const key = match?.[1];
     if (!key || !Object.prototype.hasOwnProperty.call(values, key)) return line;
     const field = fields.get(key);
     if (!field?.editable) return line;
+    if (key === "map_sprite" && values[key] === "") return [];
     const suffix = splitInlineYamlComment(match[3] ?? "");
     const serialized = serializeResourceScalar(values[key]!, field.kind, suffix.value.trim());
     return `${key}:${match[2] || " "}${serialized}${suffix.comment ? ` ${suffix.comment}` : ""}`;
   });
+  const additions = Object.entries(values).flatMap(([key, value]) =>
+    fields.has(key) || value === "" ? [] : [`${key}: ${serializeResourceScalar(value, "text", "")}`]
+  );
+  const insertion = lines[0]?.trim() === "---" ? end : next.length;
+  next.splice(insertion, 0, ...additions);
   return next.join(newline);
 }
 
@@ -2704,6 +2722,7 @@ function MapOverview({
           )}
           {(draft.placements ?? []).map((placement) => {
             const resourceLabel = mapPlacementResourceLabel(placement, resources);
+            const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
             return (
               <div
               className={`map-placement collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}`}
@@ -2724,7 +2743,7 @@ function MapOverview({
                 opacity: placement.visible ? 1 : 0.45,
               }}
             >
-              {placement.asset && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(placement.asset))})` }} aria-hidden="true" />}
+              {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
               <span className="map-placement-copy">{resourceLabel}</span>
               <small className="map-placement-copy">{placement.resource?.kind ?? "event"} · {placement.id}</small>
               </div>
@@ -2982,6 +3001,8 @@ function PlacementEditor({
   const placementKind = placement.resource?.kind;
   const placementChoices = resourceChoices(resources, placementKind);
   const placementLabel = mapPlacementResourceLabel(placement, resources);
+  const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
+  const inheritedGraphic = placement.asset ? undefined : graphicPath;
 
   useEffect(() => {
     setConfirmDelete(false);
@@ -3044,13 +3065,13 @@ function PlacementEditor({
             </select></label>
           </div>
           <div className="placement-graphic-fields">
-            <span className={`placement-graphic-preview${placement.asset ? " authored" : ""}`} style={placement.asset ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(placement.asset))})` } : undefined} aria-hidden="true">{placement.asset ? "" : "◇"}</span>
+            <span className={`placement-graphic-preview${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} aria-hidden="true">{graphicPath ? "" : "◇"}</span>
             <label>Map graphic<select value={placement.asset ?? ""} onChange={(event) => onChange((current) => ({ ...current, asset: event.target.value || undefined }))}>
-              <option value="">System marker</option>
+              <option value="">{inheritedGraphic ? "Character default" : "System marker"}</option>
               {assets.some((asset) => asset.kind === "sprite") && <optgroup label="Map sprites">{assets.filter((asset) => asset.kind === "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder}</option>)}</optgroup>}
               <optgroup label="Scene and design assets">{assets.filter((asset) => asset.kind !== "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}</optgroup>
             </select></label>
-            <small>{placement.asset ?? "Renderer-owned marker · Headless ignores the visual"}</small>
+            <small>{placement.asset ?? (inheritedGraphic ? `Inherited · ${inheritedGraphic}` : "Renderer-owned marker · Headless ignores the visual")}</small>
           </div>
           <p>Choose from the project database. The stable resource ID is written into the map source.</p>
         </section>
@@ -3599,6 +3620,19 @@ export function mapPlacementResourceLabel(
   if (!placement.resource) return placement.id;
   const key = `${placement.resource.kind}:${placement.resource.id}`;
   return resources.find((resource) => resource.key === key)?.label ?? placement.resource.id;
+}
+
+export function mapPlacementGraphicPath(
+  placement: MapPlacementDef,
+  resources: ProjectResourceNode[],
+  assets: ProjectAssetPreview[],
+): string | undefined {
+  if (placement.asset) return placement.asset;
+  if (placement.resource?.kind !== "character") return undefined;
+  const character = resources.find((resource) => resource.key === `character:${placement.resource!.id}`);
+  return assets.find((asset) =>
+    asset.kind === "sprite" && character?.refs.includes(`asset:${asset.path}`)
+  )?.path;
 }
 
 export function nextProjectTreeIndex(currentIndex: number, total: number, delta: 1 | -1): number {

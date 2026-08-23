@@ -182,6 +182,42 @@ describe("SpatialMapSurface", () => {
     expect(html).not.toContain("arrival");
   });
 
+  test("inherits a character map sprite unless the placement owns a graphic", () => {
+    const characterMap: MapDef = {
+      ...map,
+      placements: [{
+        ...map.placements![0]!,
+        id: "keeper",
+        resource: { kind: "character", id: "keeper" },
+        asset: undefined,
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={characterMap}
+        activities={[]}
+        assetUrls={{ "assets/sprites/keeper": "/assets/keeper.webp" }}
+        resourceGraphics={new Map([["character:keeper", "assets/sprites/keeper"]])}
+        onInput={() => {}}
+      />,
+    );
+    expect(html).toContain('class="spatial-placement-graphic" src="/assets/keeper.webp"');
+    const override = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={{ ...characterMap, placements: [{ ...characterMap.placements![0]!, asset: "assets/sprites/disguise" }] }}
+        activities={[]}
+        assetUrls={{
+          "assets/sprites/keeper": "/assets/keeper.webp",
+          "assets/sprites/disguise": "/assets/disguise.webp",
+        }}
+        resourceGraphics={new Map([["character:keeper", "assets/sprites/keeper"]])}
+        onInput={() => {}}
+      />,
+    );
+    expect(override).toContain('src="/assets/disguise.webp"');
+    expect(override).not.toContain('src="/assets/keeper.webp"');
+  });
+
   test("moves manual placement commands into one nearby action prompt", () => {
     const inspectMap: MapDef = {
       ...map,

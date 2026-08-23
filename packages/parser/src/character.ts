@@ -10,6 +10,7 @@ const KNOWN_KEYS = [
   "stats",
   "portraits",
   "defaultPortrait",
+  "map_sprite",
 ] as const;
 
 export function parseCharacter(content: string): CharacterDef {
@@ -48,6 +49,14 @@ export function parseCharacter(content: string): CharacterDef {
       );
     }
     def.defaultPortrait = meta.defaultPortrait;
+  }
+  if (meta.map_sprite !== undefined) {
+    if (typeof meta.map_sprite !== "string" || meta.map_sprite.length === 0) {
+      throw new CharacterParseError(
+        `Character ${meta.id}.map_sprite must be a non-empty asset path string`,
+      );
+    }
+    def.mapSprite = meta.map_sprite;
   }
 
   const custom = extractCustom(meta, KNOWN_KEYS);

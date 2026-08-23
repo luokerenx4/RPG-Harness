@@ -11,6 +11,7 @@ import {
   fillMapLayerTiles,
   hasMapDraftChanges,
   mapEventCommandSummary,
+  mapPlacementGraphicPath,
   mapDraftHistoryReducer,
   mapPlacementResourceLabel,
   moveMapLayer,
@@ -29,6 +30,7 @@ import {
   studioTileAtlasStyle,
 } from "./pages/Project";
 import type { MapDef, MapLayoutDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { ProjectAssetPreview } from "./api";
 
 describe("Studio database record fields", () => {
   const source = [
@@ -77,6 +79,15 @@ describe("Studio database record fields", () => {
       "Body remains untouched.",
       "",
     ].join("\n"));
+  });
+
+  test("adds and removes the optional character map_sprite without touching prose", () => {
+    const character = "---\nid: keeper\nname: Keeper\n---\n\nBiography.\n";
+    const withSprite = patchResourceScalarFields(character, {
+      map_sprite: "assets/sprites/keeper-field",
+    });
+    expect(withSprite).toBe("---\nid: keeper\nname: Keeper\nmap_sprite: assets/sprites/keeper-field\n---\n\nBiography.\n");
+    expect(patchResourceScalarFields(withSprite, { map_sprite: "" })).toBe(character);
   });
 });
 
@@ -159,6 +170,29 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(mapPlacementResourceLabel(placement, resources)).toBe("魂石の欠片");
     expect(placement.id).toBe("altar_shard");
+  });
+
+  test("inherits a character sprite while preserving placement graphic overrides", () => {
+    const placement = {
+      id: "keeper",
+      resource: { kind: "character", id: "keeper" },
+    } as MapPlacementDef;
+    const resources = [{
+      key: "character:keeper",
+      kind: "character",
+      id: "keeper",
+      label: "Keeper",
+      refs: ["asset:assets/sprites/keeper"],
+    }] as ProjectResourceNode[];
+    const assets = [{
+      path: "assets/sprites/keeper",
+      kind: "sprite",
+      placeholder: "Keeper map sprite",
+      renderings: {},
+    }] as ProjectAssetPreview[];
+    expect(mapPlacementGraphicPath(placement, resources, assets)).toBe("assets/sprites/keeper");
+    expect(mapPlacementGraphicPath({ ...placement, asset: "assets/sprites/disguise" }, resources, assets))
+      .toBe("assets/sprites/disguise");
   });
 
   test("creates accessible object-palette placements with RPG Maker event defaults", () => {

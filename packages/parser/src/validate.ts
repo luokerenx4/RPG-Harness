@@ -88,6 +88,21 @@ export function validateGame(game: Game): void {
 
   const issues: Issue[] = [];
 
+  for (const character of game.characters) {
+    if (!character.mapSprite) continue;
+    if (!reg.assets.has(character.mapSprite)) {
+      issues.push({
+        path: `character ${character.id}.map_sprite`,
+        message: `undeclared asset "${character.mapSprite}". Declared: ${listOrNone(reg.assets)}`,
+      });
+    } else if (reg.assetKinds.get(character.mapSprite) !== "sprite") {
+      issues.push({
+        path: `character ${character.id}.map_sprite`,
+        message: `asset "${character.mapSprite}" must have kind "sprite"`,
+      });
+    }
+  }
+
   for (const scriptId of game.aiAudit?.requiredScripts ?? []) {
     if (!reg.scripts.has(scriptId)) {
       issues.push({

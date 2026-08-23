@@ -40,6 +40,25 @@ describe("validateGame — clean games pass", () => {
       ),
     ).not.toThrow();
   });
+
+  test("character map_sprite must resolve to a sprite asset", () => {
+    const sprite = {
+      path: "assets/sprites/alice-field",
+      kind: "sprite" as const,
+      description: "Alice on the field",
+      prompt: "Map sprite",
+      placeholder: "Alice field sprite",
+      renderings: {},
+    };
+    expect(() => validateGame(baseGame({
+      characters: [{ id: "alice", name: "Alice", mapSprite: sprite.path }],
+      assets: [sprite],
+    }))).not.toThrow();
+    expect(() => validateGame(baseGame({
+      characters: [{ id: "alice", name: "Alice", mapSprite: "assets/portraits/alice" }],
+      assets: [{ ...sprite, path: "assets/portraits/alice", kind: "portrait" }],
+    }))).toThrow(/must have kind "sprite"/);
+  });
 });
 
 describe("validateGame — choice coverage ids", () => {
