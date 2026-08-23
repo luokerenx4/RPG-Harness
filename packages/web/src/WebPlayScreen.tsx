@@ -1518,16 +1518,42 @@ export function BacklogOverlay({
   entries: BacklogEntry[];
   onClose: () => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const frame = requestAnimationFrame(() => {
+      scroll.scrollTop = scroll.scrollHeight;
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "Home") scroll.scrollTop = 0;
+      else if (event.key === "End") scroll.scrollTop = scroll.scrollHeight;
+      else {
+        const direction = ["ArrowDown", "PageDown"].includes(event.key) ? 1 : -1;
+        const distance = event.key.startsWith("Page") ? scroll.clientHeight * 0.82 : 72;
+        scroll.scrollTop += direction * distance;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [entries.length]);
+
   return (
     <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="回看" onClick={onClose}>
       <div className="backlog-inner" onClick={(e) => e.stopPropagation()}>
-        <div className="backlog-head">
-          <span>回看</span>
+        <header className="backlog-head">
+          <div><span>BACKLOG · {entries.length} LOGS</span><strong>回想記録</strong></div>
           <button className="hud-btn" autoFocus onClick={onClose} aria-label="关闭回看记录">
             閉じる <kbd>Esc</kbd>
           </button>
-        </div>
-        <div className="backlog-scroll">
+        </header>
+        <div ref={scrollRef} className="backlog-scroll" tabIndex={0} aria-label="对话记录">
           {entries.map((entry, i) => {
             if (entry.kind === "sceneBreak") return <hr key={i} className="scene-break" />;
             if (entry.kind === "dialogue")
@@ -1553,6 +1579,7 @@ export function BacklogOverlay({
             );
           })}
         </div>
+        <footer className="backlog-footer"><span>↑↓ SCROLL · PGUP/PGDN PAGE · HOME/END JUMP</span><span>LATEST LOG · {String(entries.length).padStart(3, "0")}</span></footer>
       </div>
     </div>
   );
