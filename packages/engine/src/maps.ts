@@ -66,6 +66,13 @@ export function mapPlayerDisplayOrder(map: MapDef, point: MapPoint): number {
   return mapLayerDisplayOrder(objectLayer?.z ?? 0) + MAP_ENTITY_ORDER_OFFSET + point.y;
 }
 
+/** Visual surfaces honor both the placement and its authored layer visibility. */
+export function isMapPlacementLayerVisible(map: MapDef, placement: MapPlacementDef): boolean {
+  if (!placement.visible) return false;
+  if (!placement.layer) return true;
+  return map.layout?.layers.find((layer) => layer.id === placement.layer)?.visible ?? true;
+}
+
 /**
  * Canonical outgoing-map projection during Map v2 migration. Placement-backed
  * exits and legacy `connections` share one runtime contract, so modules do not

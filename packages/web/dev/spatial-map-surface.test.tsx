@@ -202,6 +202,20 @@ describe("SpatialMapSurface", () => {
     );
     expect(html).toContain('class="spatial-map-player" aria-label="玩家位置 3,4" style="left:37.5%;top:66.66666666666666%;width:12.5%;height:16.666666666666668%;z-index:101004"');
     expect(html).toContain('class="spatial-placement resource-map collision-trigger placement-actionable placement-nearby" style="left:37.5%;top:83.33333333333334%;width:25%;height:16.666666666666664%;z-index:101005"');
+
+    const hiddenLayerMap: MapDef = {
+      ...layeredMap,
+      layout: {
+        ...layeredMap.layout!,
+        layers: layeredMap.layout!.layers.map((layer) => layer.id === "actors" ? { ...layer, visible: false } : layer),
+      },
+    };
+    const hiddenHtml = renderToStaticMarkup(
+      <SpatialMapSurface map={hiddenLayerMap} activities={[move]} playerPosition={{ x: 3, y: 4 }} onInput={() => {}} />,
+    );
+    expect(hiddenHtml).toContain("0 LANDMARKS");
+    expect(hiddenHtml).not.toContain('aria-label="出口 Town"');
+    expect(collectSpatialPlacementActivityIds(hiddenLayerMap, new Map([[move.id, move]]))).toEqual(new Set([move.id]));
   });
 
   test("inherits a character map sprite unless the placement owns a graphic", () => {

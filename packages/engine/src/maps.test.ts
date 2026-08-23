@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { MapDef, MapPlacementDef } from "./types";
-import { collectMapConnections, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "./maps";
+import { collectMapConnections, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "./maps";
 
 test("collectMapConnections projects placement map events as ordinary exits", () => {
   const connections = collectMapConnections({
@@ -60,4 +60,9 @@ test("map display order respects authored layers before foot-Y sorting", () => {
   expect(mapPlacementDisplayOrder(map, lowerActor)).toBeGreaterThan(mapPlacementDisplayOrder(map, actor));
   expect(mapPlacementDisplayOrder(map, canopy)).toBeGreaterThan(mapPlacementDisplayOrder(map, lowerActor));
   expect(mapPlayerDisplayOrder(map, { x: 3, y: 6 })).toBe(mapPlacementDisplayOrder(map, actor));
+  expect(isMapPlacementLayerVisible(map, actor)).toBe(true);
+  expect(isMapPlacementLayerVisible({
+    ...map,
+    layout: { ...map.layout!, layers: map.layout!.layers.map((layer) => layer.id === "actors" ? { ...layer, visible: false } : layer) },
+  }, actor)).toBe(false);
 });

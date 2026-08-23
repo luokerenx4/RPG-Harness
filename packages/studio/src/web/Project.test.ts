@@ -245,6 +245,7 @@ describe("Studio map event resource picker", () => {
       collision: "trigger",
       events: [{ id: "page_1", trigger: "interact", label: "Event", order: 0 }],
     });
+    expect(createMapPlacementDraft(script, [], { x: 3, y: 2 }, "actors").layer).toBe("actors");
   });
 
   test("duplicates a complete RPG event object beside its source with a stable identity", () => {

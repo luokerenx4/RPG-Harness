@@ -12,7 +12,7 @@ import type {
   SwitchDef,
   VariableDef,
 } from "@rpg-harness/engine";
-import { mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
+import { isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
 import {
   fetchProject,
   fetchMapPreview,
@@ -2040,6 +2040,7 @@ function MapOverview({
   const [paletteKind, setPaletteKind] = useState<ProjectResourceKind | "all">("all");
   const [mapTool, setMapTool] = useState<MapEditorTool>("objects");
   const [paintLayerId, setPaintLayerId] = useState("");
+  const [objectLayerId, setObjectLayerId] = useState("");
   const [paintBrush, setPaintBrush] = useState(1);
   const [canvasPainting, setCanvasPainting] = useState<"paint" | "erase" | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState("");
@@ -2063,6 +2064,7 @@ function MapOverview({
     setPaletteKind("all");
     setMapTool("objects");
     setPaintLayerId("");
+    setObjectLayerId("");
     setPaintBrush(1);
     setCanvasPainting(null);
     setSelectedRegionId("");
@@ -2081,6 +2083,9 @@ function MapOverview({
     : undefined;
   const terrainLayers = draft.layout?.layers.filter((layer) => layer.kind === "tile") ?? [];
   const collisionLayers = draft.layout?.layers.filter((layer) => layer.kind === "collision") ?? [];
+  const objectLayers = draft.layout?.layers.filter((layer) => layer.kind === "object") ?? [];
+  const activeObjectLayer = objectLayers.find((layer) => layer.id === objectLayerId) ?? objectLayers[0];
+  const layerStack = [...(draft.layout?.layers ?? [])].sort((left, right) => right.z - left.z);
   const toolLayers = mapTool === "terrain" ? terrainLayers : mapTool === "collision" ? collisionLayers : [];
   const paintLayer = toolLayers.find((layer) => layer.id === paintLayerId) ?? toolLayers[0];
   const paintTiles = draft.layout && paintLayer
@@ -2129,6 +2134,7 @@ function MapOverview({
       resource,
       draft.placements ?? [],
       nextAvailableMapCell(draft.layout, draft.placements ?? []),
+      activeObjectLayer?.id,
     );
     setDraft((current) => ({
       ...current,
@@ -2149,8 +2155,33 @@ function MapOverview({
       setPaintBrush(1);
     } else if (tool === "regions") {
       setSelectedRegionId(draft.layout?.regions[0]?.id ?? "");
+    } else if (tool === "objects") {
+      setObjectLayerId(activeObjectLayer?.id ?? "");
     }
   };
+
+  const selectMapLayer = (layer: MapLayerDef) => {
+    if (layer.kind === "tile") {
+      selectMapTool("terrain");
+      setPaintLayerId(layer.id);
+    } else if (layer.kind === "collision") {
+      selectMapTool("collision");
+      setPaintLayerId(layer.id);
+    } else if (layer.kind === "object") {
+      selectMapTool("objects");
+      setObjectLayerId(layer.id);
+    } else if (layer.kind === "region") {
+      selectMapTool("regions");
+    }
+  };
+
+  const toggleMapLayerVisibility = (id: string) => setDraft((current) => ({
+    ...current,
+    layout: current.layout ? {
+      ...current.layout,
+      layers: current.layout.layers.map((layer) => layer.id === id ? { ...layer, visible: !layer.visible } : layer),
+    } : undefined,
+  }));
 
   const paintCanvasCell = (x: number, y: number, tile: number, group?: string) => {
     if (!paintLayer) return;
@@ -2498,6 +2529,32 @@ function MapOverview({
           )}
         </section>
       )}
+      {editing && draft.layout && (
+        <section className="map-layer-stack" aria-label="Map layer stack">
+          <header><span>LAYERS</span><strong>{layerStack.length}</strong><small>top to bottom · z order</small></header>
+          <div>
+            {layerStack.map((layer) => {
+              const active = (
+                layer.kind === "object" && mapTool === "objects" && activeObjectLayer?.id === layer.id
+              ) || (
+                (layer.kind === "tile" && mapTool === "terrain" || layer.kind === "collision" && mapTool === "collision") && paintLayer?.id === layer.id
+              ) || (
+                layer.kind === "region" && mapTool === "regions"
+              );
+              const layerObjectCount = layer.kind === "object" ? (draft.placements ?? []).filter((placement) => placement.layer === layer.id).length : undefined;
+              return <span className={`${active ? "active " : ""}${layer.visible ? "visible" : "hidden"}`} key={layer.id}>
+                <button type="button" className="map-layer-select" disabled={layer.kind === "image"} aria-pressed={active} onClick={() => selectMapLayer(layer)}>
+                  <i aria-hidden="true">{layer.kind === "tile" ? "▦" : layer.kind === "collision" ? "▧" : layer.kind === "object" ? "◆" : layer.kind === "region" ? "▱" : "▣"}</i>
+                  <b>{layer.name ?? layer.id}</b>
+                  <small>{layer.kind}{layerObjectCount !== undefined ? ` · ${layerObjectCount}` : ""}</small>
+                  <code>z {layer.z}</code>
+                </button>
+                <button type="button" className="map-layer-visibility" aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name ?? layer.id} layer`} aria-pressed={layer.visible} onClick={() => toggleMapLayerVisibility(layer.id)}>{layer.visible ? "●" : "○"}</button>
+              </span>;
+            })}
+          </div>
+        </section>
+      )}
       {editing && draft.layout && mapTool === "objects" && (
         <section className="map-object-palette" aria-label="Map object palette">
           <div className="map-object-palette-heading">
@@ -2572,7 +2629,7 @@ function MapOverview({
                   type="button"
                   className={selectedPlacementId === placement.id ? "selected" : ""}
                   key={placement.id}
-                  onClick={() => setSelectedPlacementId(placement.id)}
+                  onClick={() => { setSelectedPlacementId(placement.id); if (placement.layer) setObjectLayerId(placement.layer); }}
                 >
                   <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} />
                   <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
@@ -2622,7 +2679,7 @@ function MapOverview({
             const resourceKey = event.dataTransfer.getData("application/x-autogal-resource");
             const resource = resources.find((candidate) => candidate.key === resourceKey);
             if (!resource || !PLACEABLE_KINDS.has(resource.kind)) return;
-            const placement = createMapPlacementDraft(resource, draft.placements ?? [], { x, y });
+            const placement = createMapPlacementDraft(resource, draft.placements ?? [], { x, y }, activeObjectLayer?.id);
             setDraft((current) => ({
               ...current,
               placements: [...(current.placements ?? []), placement],
@@ -2754,16 +2811,17 @@ function MapOverview({
           {(draft.placements ?? []).map((placement) => {
             const resourceLabel = mapPlacementResourceLabel(placement, resources);
             const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
+            const rendered = isMapPlacementLayerVisible(draft, placement);
             return (
               <div
-              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}`}
+              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}`}
               key={placement.id}
               draggable={editing && mapTool === "objects"}
               onDragStart={(event) => {
                 event.dataTransfer.setData("application/x-autogal-placement", placement.id);
                 event.dataTransfer.effectAllowed = "move";
               }}
-              onClick={(event) => { event.stopPropagation(); setSelectedPlacementId(placement.id); }}
+              onClick={(event) => { event.stopPropagation(); setSelectedPlacementId(placement.id); if (placement.layer) setObjectLayerId(placement.layer); }}
               title={`${resourceLabel} · ${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
               style={{
                 left: `${(placement.at.x / width) * 100}%`,
@@ -2771,7 +2829,7 @@ function MapOverview({
                 width: `${(placement.footprint.width / width) * 100}%`,
                 height: `${(placement.footprint.height / height) * 100}%`,
                 zIndex: mapPlacementDisplayOrder(draft, placement),
-                opacity: placement.visible ? 1 : 0.45,
+                opacity: rendered ? 1 : 0.18,
               }}
             >
               {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
@@ -3949,12 +4007,14 @@ export function createMapPlacementDraft(
   resource: ProjectResourceNode | undefined,
   placements: MapPlacementDef[],
   at: { x: number; y: number },
+  layer?: string,
 ): MapPlacementDef {
   const eventDriven = !resource || resource.kind === "map" || resource.kind === "script" || resource.kind === "action";
   return {
     id: uniquePlacementId(resource?.id ?? "event", placements),
     at,
     ...(resource ? { resource: { kind: resource.kind, id: resource.id } } : {}),
+    ...(layer ? { layer } : {}),
     z: 0,
     footprint: { width: 1, height: 1 },
     collision: !resource || resource.kind === "map" ? "trigger" : "none",

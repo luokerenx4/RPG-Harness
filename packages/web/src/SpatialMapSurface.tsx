@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   isMapEventPlayerAction,
+  isMapPlacementLayerVisible,
   mapLayerDisplayOrder,
   mapPlacementDisplayOrder,
   mapPlacementEventKey,
@@ -60,7 +61,7 @@ export function collectSpatialLandmarks(
   playerPosition: MapPoint,
 ): SpatialLandmark[] {
   return (map.placements ?? [])
-    .filter((placement) => placement.visible)
+    .filter((placement) => isMapPlacementLayerVisible(map, placement))
     .map((placement, index) => ({
       placement,
       distance: mapPlacementDistance(playerPosition, placement),
@@ -93,10 +94,9 @@ export function collectSpatialContextOperations(
 }
 
 /**
- * Activities owned by visible spatial placements belong to the field surface,
- * not the ordinary Hub command list. Headless still receives the unchanged
- * activity array; only the Web player projection moves these commands behind
- * proximity, touch, and map controls.
+ * Activities owned by spatial placements belong to the field surface, not the
+ * ordinary Hub command list. A hidden visual layer must not leak its commands
+ * back into the Web menu. Headless still receives the unchanged activity array.
  */
 export function collectSpatialPlacementActivityIds(
   map: MapDef,
@@ -104,7 +104,6 @@ export function collectSpatialPlacementActivityIds(
 ): Set<string> {
   return new Set(
     (map.placements ?? [])
-      .filter((placement) => placement.visible)
       .flatMap((placement) => resolveSpatialPlacementOperations(map, placement, activities))
       .flatMap(({ activity }) => activity ? [activity.id] : []),
   );
@@ -140,7 +139,7 @@ export function SpatialMapSurface({
   const layout = map.layout;
   if (!layout) return null;
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
-  const visiblePlacements = (map.placements ?? []).filter((placement) => placement.visible);
+  const visiblePlacements = (map.placements ?? []).filter((placement) => isMapPlacementLayerVisible(map, placement));
   const landmarks = playerPosition ? collectSpatialLandmarks(map, byId, playerPosition) : [];
   const nearestLandmark = landmarks[0];
   const nearbyLandmarks = landmarks.filter(({ distance }) => distance <= 1);
