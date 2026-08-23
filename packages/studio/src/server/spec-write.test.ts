@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { specYamlPath, updateSpec } from "./spec-write";
+import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
 
 let tmp: string;
 
@@ -103,16 +103,30 @@ tui_render:
     await updateSpec(p, {
       styleRef: "assets/portraits/k-normal",
       sizeHint: { tui: { cols: 40, rows: 24 } },
+      tileGrid: { columns: 4, rows: 3, firstId: 1 },
       tuiRender: { symbols: "quad" },
     });
     const after = await readFile(p, "utf-8");
     expect(after).toContain("style_ref:");
     expect(after).toContain("size_hint:");
+    expect(after).toContain("tile_grid:");
+    expect(after).toContain("first_id: 1");
     expect(after).toContain("tui_render:");
     // The camelCase keys must NOT leak into the YAML.
     expect(after).not.toContain("styleRef");
     expect(after).not.toContain("sizeHint");
+    expect(after).not.toContain("tileGrid");
     expect(after).not.toContain("tuiRender");
+  });
+
+  test("validates editable tileset atlas metadata", () => {
+    expect(parsePatchBody({ tileGrid: { columns: 4, rows: 4, firstId: 1 } })).toEqual({
+      fields: { tileGrid: { columns: 4, rows: 4, firstId: 1 } },
+    });
+    expect(parsePatchBody({ tileGrid: { columns: 0, rows: 4, firstId: 1 } })).toEqual({
+      error: "tileGrid.columns must be a positive integer",
+    });
+    expect(parsePatchBody({ tileGrid: null })).toEqual({ fields: { tileGrid: null } });
   });
 
   test("setting a field to null removes it", async () => {

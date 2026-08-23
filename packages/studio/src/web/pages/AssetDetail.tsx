@@ -123,6 +123,9 @@ interface AssetEditBuffer {
   sizeTuiCols: string;
   sizeTuiRows: string;
   sizeWebAspect: string;
+  tileColumns: string;
+  tileRows: string;
+  tileFirstId: string;
   refsCharactersCsv: string;
   refsEmotion: string;
 }
@@ -400,6 +403,21 @@ export function AssetDetail({
       patch.sizeHint = newSizeHint;
     }
 
+    if (asset.kind === "tileset") {
+      const hasTileGrid = editBuf.tileColumns !== "" || editBuf.tileRows !== "" || editBuf.tileFirstId !== "";
+      const columns = Number(editBuf.tileColumns);
+      const rows = Number(editBuf.tileRows);
+      const firstId = Number(editBuf.tileFirstId);
+      if (hasTileGrid && (!Number.isInteger(columns) || columns <= 0 || !Number.isInteger(rows) || rows <= 0 || !Number.isInteger(firstId) || firstId < 0)) {
+        setSaveError("Tileset grid needs positive whole-number columns/rows and a non-negative first tile ID.");
+        return false;
+      }
+      const newTileGrid = hasTileGrid ? { columns, rows, firstId } : null;
+      if (JSON.stringify(newTileGrid) !== JSON.stringify(asset.tileGrid ?? null)) {
+        patch.tileGrid = newTileGrid;
+      }
+    }
+
     // refs: only the structured fields (characters, emotion). Other
     // free-form ref keys would round-trip through the server but the
     // form doesn't expose them — full-edit lives in spec.yaml direct.
@@ -616,6 +634,12 @@ export function AssetDetail({
                     <dd className="mono">aspect {asset.sizeHint.web.aspect}</dd>
                   </>
                 )}
+                {asset.tileGrid && (
+                  <>
+                    <dt>tile_grid</dt>
+                    <dd className="mono">{asset.tileGrid.columns} × {asset.tileGrid.rows} · first ID {asset.tileGrid.firstId}</dd>
+                  </>
+                )}
                 {asset.tags && asset.tags.length > 0 && (
                   <>
                     <dt>tags</dt>
@@ -691,6 +715,14 @@ export function AssetDetail({
                     />
                   </label>
                 </div>
+                {asset.kind === "tileset" && (
+                  <div className="tileset-grid-editor" aria-label="Tileset atlas grid">
+                    <div><span>TILESET ATLAS</span><strong>Row-major sprite grid</strong><small>These values drive the Studio brush palette and Web tile projection.</small><output>{editBuf.tileColumns && editBuf.tileRows ? `${Number(editBuf.tileColumns) * Number(editBuf.tileRows)} tiles` : "grid not configured"}</output></div>
+                    <label className="edit-field"><span>columns</span><input type="number" min={1} value={editBuf.tileColumns} onChange={(e) => setEditBuf({ ...editBuf, tileColumns: e.target.value })} /></label>
+                    <label className="edit-field"><span>rows</span><input type="number" min={1} value={editBuf.tileRows} onChange={(e) => setEditBuf({ ...editBuf, tileRows: e.target.value })} /></label>
+                    <label className="edit-field"><span>first tile ID</span><input type="number" min={0} value={editBuf.tileFirstId} onChange={(e) => setEditBuf({ ...editBuf, tileFirstId: e.target.value })} /></label>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1159,6 +1191,9 @@ function assetEditBuffer(asset: AssetRow): AssetEditBuffer {
     sizeTuiCols: asset.sizeHint?.tui?.cols ? String(asset.sizeHint.tui.cols) : "",
     sizeTuiRows: asset.sizeHint?.tui?.rows ? String(asset.sizeHint.tui.rows) : "",
     sizeWebAspect: asset.sizeHint?.web?.aspect ?? "",
+    tileColumns: asset.tileGrid ? String(asset.tileGrid.columns) : "",
+    tileRows: asset.tileGrid ? String(asset.tileGrid.rows) : "",
+    tileFirstId: asset.tileGrid ? String(asset.tileGrid.firstId) : "",
     refsCharactersCsv: (asset.refs?.characters ?? []).join(", "),
     refsEmotion: typeof asset.refs?.emotion === "string" ? asset.refs.emotion : "",
   };

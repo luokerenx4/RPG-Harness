@@ -92,6 +92,7 @@ export interface PatchableSpecFields {
   styleRef?: string | null;
   refs?: AssetRow["refs"];
   sizeHint?: AssetRow["sizeHint"];
+  tileGrid?: AssetRow["tileGrid"] | null;
   tags?: string[];
   tuiRender?: TuiRenderPrefs;
 }

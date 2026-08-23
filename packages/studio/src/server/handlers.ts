@@ -677,6 +677,7 @@ async function projectAsset(a: AssetSpec) {
     ...(a.styleRef !== undefined ? { styleRef: a.styleRef } : {}),
     ...(a.refs !== undefined ? { refs: a.refs } : {}),
     ...(a.sizeHint !== undefined ? { sizeHint: a.sizeHint } : {}),
+    ...(a.tileGrid !== undefined ? { tileGrid: a.tileGrid } : {}),
     ...(a.tags !== undefined ? { tags: a.tags } : {}),
     ...(a.tuiRender !== undefined ? { tuiRender: a.tuiRender } : {}),
     renderings: {
@@ -910,6 +911,9 @@ async function patchSpec(
   }
   const parsed = parsePatchBody(raw);
   if ("error" in parsed) return json({ error: parsed.error }, 400);
+  if (parsed.fields.tileGrid !== undefined && spec.kind !== "tileset") {
+    return json({ error: "tileGrid is only editable for tileset assets" }, 400);
+  }
 
   if (Object.keys(parsed.fields).length === 0) {
     // Nothing to do but report success with the current asset state

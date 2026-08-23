@@ -3354,6 +3354,13 @@ summary:focus-visible {
 .asset-dirty-state.dirty i { background: var(--studio-orange); box-shadow: 0 0 7px rgba(231,168,106,.45); }
 .asset-save-error { display: flex; gap: 8px; margin-bottom: 10px; padding: 8px 9px; color: #9ca5af; border: 1px solid rgba(224,111,121,.34); border-radius: 5px; background: rgba(224,111,121,.055); font-size: 8px; }
 .asset-save-error strong { flex: 0 0 auto; color: var(--studio-red); }
+.tileset-grid-editor { display: grid; grid-template-columns: minmax(130px,1fr) repeat(3,minmax(58px,70px)); align-items: end; gap: 8px; padding: 10px; border: 1px solid rgba(80,199,217,.2); border-radius: 6px; background: linear-gradient(115deg,rgba(80,199,217,.055),transparent 55%),#10151c; }
+.tileset-grid-editor > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.tileset-grid-editor > div span { color: var(--studio-accent); font-size: 7px; font-weight: 800; letter-spacing: .13em; }
+.tileset-grid-editor > div strong { color: #cdd5dc; font-size: 10px; }
+.tileset-grid-editor > div small { color: #606c78; font-size: 7px; line-height: 1.35; }
+.tileset-grid-editor .edit-field { gap: 3px; font-size: 8px; }
+.tileset-grid-editor output { align-self: flex-start; margin-top: 3px; padding: 4px 6px; color: #8ea0ab; border: 1px solid #29323c; border-radius: 4px; background: #0b1016; font: 7px/1 ui-monospace,monospace; }
 
 @media (min-width: 1500px) {
   .project-workbench { grid-template-columns: 60px 310px minmax(0,1fr); }

@@ -27,6 +27,7 @@ export type EditableSpecFields = Partial<{
   styleRef: string | null; // null to remove
   refs: AssetSpec["refs"];
   sizeHint: AssetSpec["sizeHint"];
+  tileGrid: AssetSpec["tileGrid"] | null;
   tags: string[];
   tuiRender: TuiRenderPrefs;
 }>;
@@ -38,6 +39,7 @@ export type EditableSpecFields = Partial<{
 const KEY_TRANSLATIONS: Record<string, string> = {
   styleRef: "style_ref",
   sizeHint: "size_hint",
+  tileGrid: "tile_grid",
   tuiRender: "tui_render",
 };
 function yamlKey(camel: string): string {
@@ -88,6 +90,12 @@ function applyPatch(doc: Document, patch: EditableSpecFields): void {
     const key = yamlKey(camelKey);
     if (value === null) {
       doc.delete(key);
+      continue;
+    }
+
+    if (camelKey === "tileGrid") {
+      const grid = value as NonNullable<AssetSpec["tileGrid"]>;
+      doc.setIn([key], { columns: grid.columns, rows: grid.rows, first_id: grid.firstId });
       continue;
     }
 
@@ -143,6 +151,7 @@ const EDITABLE_KEYS = [
   "styleRef",
   "refs",
   "sizeHint",
+  "tileGrid",
   "tags",
   "tuiRender",
 ] as const;
@@ -222,6 +231,30 @@ export function parsePatchBody(
       return { error: "sizeHint must be an object" };
     }
     out.sizeHint = obj.sizeHint as AssetSpec["sizeHint"];
+  }
+  if (obj.tileGrid !== undefined) {
+    if (obj.tileGrid === null) {
+      out.tileGrid = null;
+    } else {
+      if (!obj.tileGrid || typeof obj.tileGrid !== "object" || Array.isArray(obj.tileGrid)) {
+        return { error: "tileGrid must be an object or null" };
+      }
+      const grid = obj.tileGrid as Record<string, unknown>;
+      if (!Number.isInteger(grid.columns) || (grid.columns as number) <= 0) {
+        return { error: "tileGrid.columns must be a positive integer" };
+      }
+      if (!Number.isInteger(grid.rows) || (grid.rows as number) <= 0) {
+        return { error: "tileGrid.rows must be a positive integer" };
+      }
+      if (!Number.isInteger(grid.firstId) || (grid.firstId as number) < 0) {
+        return { error: "tileGrid.firstId must be a non-negative integer" };
+      }
+      out.tileGrid = {
+        columns: grid.columns as number,
+        rows: grid.rows as number,
+        firstId: grid.firstId as number,
+      };
+    }
   }
   if (obj.tags !== undefined) {
     if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
