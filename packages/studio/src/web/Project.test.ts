@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   conditionEditorMode,
   createConditionDraft,
+  eventTriggerMeta,
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
@@ -88,5 +89,18 @@ describe("Studio map event resource picker", () => {
     expect(conditionEditorMode({ all: [] })).toBe("advanced");
     expect(conditionEditorMode({ knowsSkill: "dash" })).toBe("knowsSkill");
     expect(conditionEditorMode(undefined)).toBe("none");
+  });
+
+  test("presents engine trigger ids as readable event-page controls", () => {
+    expect(eventTriggerMeta("interact")).toEqual({
+      icon: "◎",
+      label: "Action Button",
+      description: "Runs when the player deliberately interacts with this object.",
+    });
+    expect(eventTriggerMeta("quest:resolved")).toEqual({
+      icon: "⌁",
+      label: "quest · resolved",
+      description: "Custom engine trigger: quest:resolved",
+    });
   });
 });

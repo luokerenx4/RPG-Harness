@@ -3,6 +3,7 @@ import type {
   Condition,
   MapDef,
   MapEventTrigger,
+  MapPlacementEventDef,
   MapPlacementDef,
   MapLayoutDef,
   ProjectResourceKind,
@@ -1374,89 +1375,167 @@ function PlacementEditor({
           <ConditionBuilder label="Placement condition" value={placement.requires} resources={resources} switches={switches} variables={variables} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
         </section>
       </div>
-      <div className="placement-events">
-        <header><div><h3>Events</h3><span>Ordered triggers attached to this object</span></div><button type="button" onClick={() => onChange((current) => ({
-          ...current,
-          events: [...current.events, {
-            id: uniqueLocalId("event", current.events.map((event) => event.id)),
-            trigger: "interact",
-            label: "Interact",
-            order: current.events.length,
-          }],
-        }))}>+ Event</button></header>
-        {placement.events.length === 0 && <div className="events-empty">No events. Add one to expose an interaction or automatic trigger.</div>}
-        {placement.events.map((event, index) => (
-          <article className="placement-event-card" key={index}>
-            <header>
-              <span className="event-order">{index + 1}</span>
-              <input value={event.id} aria-label={`Event ${index + 1} id`} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, id: change.target.value } : candidate),
-              }))} />
-              <select value={event.trigger} aria-label={`Event ${index + 1} trigger`} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, trigger: change.target.value as MapEventTrigger } : candidate),
-              }))}>{EVENT_TRIGGERS.map((trigger) => <option key={trigger}>{trigger}</option>)}</select>
-              <button type="button" className="danger" aria-label={`Delete event ${event.id}`} onClick={() => onChange((current) => ({
-                ...current,
-                events: current.events.filter((_, eventIndex) => eventIndex !== index),
-              }))}>×</button>
+      <EventPagesEditor
+        placement={placement}
+        resources={resources}
+        switches={switches}
+        variables={variables}
+        onChange={onChange}
+      />
+    </section>
+  );
+}
+
+function EventPagesEditor({
+  placement,
+  resources,
+  switches,
+  variables,
+  onChange,
+}: {
+  placement: MapPlacementDef;
+  resources: ProjectResourceNode[];
+  switches: SwitchDef[];
+  variables: VariableDef[];
+  onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
+}) {
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(placement.events[0]?.id ?? null);
+  const selectedIndex = Math.max(0, placement.events.findIndex((event) => event.id === selectedEventId));
+  const selected = placement.events[selectedIndex];
+
+  useEffect(() => {
+    if (selectedEventId && placement.events.some((event) => event.id === selectedEventId)) return;
+    setSelectedEventId(placement.events[0]?.id ?? null);
+  }, [placement.id, placement.events, selectedEventId]);
+
+  const patchSelected = (patch: Partial<MapPlacementEventDef>) => onChange((current) => ({
+    ...current,
+    events: current.events.map((event, index) => index === selectedIndex ? { ...event, ...patch } : event),
+  }));
+
+  const addPage = (source?: MapPlacementEventDef) => {
+    const id = uniqueLocalId(source ? `${source.id}_copy` : "event", placement.events.map((event) => event.id));
+    const next: MapPlacementEventDef = source
+      ? { ...structuredClone(source), id, order: placement.events.length }
+      : { id, trigger: "interact", label: "Interact", order: placement.events.length };
+    onChange((current) => ({ ...current, events: [...current.events, next] }));
+    setSelectedEventId(id);
+  };
+
+  const deletePage = () => {
+    if (!selected) return;
+    const nextId = placement.events[selectedIndex + 1]?.id ?? placement.events[selectedIndex - 1]?.id ?? null;
+    onChange((current) => ({
+      ...current,
+      events: current.events
+        .filter((_, index) => index !== selectedIndex)
+        .map((event, index) => ({ ...event, order: index })),
+    }));
+    setSelectedEventId(nextId);
+  };
+
+  const movePage = (direction: -1 | 1) => {
+    const destination = selectedIndex + direction;
+    if (!selected || destination < 0 || destination >= placement.events.length) return;
+    onChange((current) => {
+      const events = [...current.events];
+      [events[selectedIndex], events[destination]] = [events[destination]!, events[selectedIndex]!];
+      return { ...current, events: events.map((event, index) => ({ ...event, order: index })) };
+    });
+  };
+
+  const trigger = selected ? eventTriggerMeta(selected.trigger) : null;
+  return (
+    <section className="placement-events event-pages-workbench">
+      <header>
+        <div><h3>Event pages</h3><span>RPG Maker-style bindings · same engine events</span></div>
+        <button type="button" onClick={() => addPage()}>+ New page</button>
+      </header>
+      {placement.events.length === 0 || !selected ? (
+        <div className="events-empty"><strong>No event pages</strong><span>Add a page to expose an interaction, transfer, cutscene, or automatic process.</span><button type="button" onClick={() => addPage()}>Create first page</button></div>
+      ) : (
+        <div className="event-pages-layout">
+          <nav className="event-page-index" aria-label="Event pages">
+            <header><span>PAGES</span><small>{placement.events.length}</small></header>
+            {placement.events.map((event, index) => {
+              const meta = eventTriggerMeta(event.trigger);
+              return (
+                <button type="button" className={index === selectedIndex ? "selected" : ""} aria-current={index === selectedIndex ? "page" : undefined} key={`${event.id}-${index}`} onClick={() => setSelectedEventId(event.id)}>
+                  <span className="event-page-number">{index + 1}</span>
+                  <span className="event-page-copy"><strong>{event.label || meta.label}</strong><small>{event.id}</small></span>
+                  <i title={meta.description}>{meta.icon}</i>
+                  {event.requires && <b title="This page has a condition">◆</b>}
+                </button>
+              );
+            })}
+            <button type="button" className="event-page-add" onClick={() => addPage()}>＋ Add page</button>
+          </nav>
+
+          <article className="event-page-editor">
+            <header className="event-page-heading">
+              <div className="event-trigger-emblem" aria-hidden="true">{trigger?.icon}</div>
+              <div><span>EVENT PAGE · {selectedIndex + 1}</span><strong>{selected.label || trigger?.label}</strong><small>{trigger?.description}</small></div>
+              <div className="event-page-actions">
+                <button type="button" aria-label="Move page up" disabled={selectedIndex === 0} onClick={() => movePage(-1)}>↑</button>
+                <button type="button" aria-label="Move page down" disabled={selectedIndex === placement.events.length - 1} onClick={() => movePage(1)}>↓</button>
+                <button type="button" onClick={() => addPage(selected)}>Duplicate</button>
+                <button type="button" className="danger" aria-label={`Delete event ${selected.id}`} onClick={deletePage}>Delete</button>
+              </div>
             </header>
-            <div className="event-fields">
-              <label>Player label<input value={event.label ?? ""} placeholder="Interact" onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, label: change.target.value || undefined } : candidate),
-              }))} /></label>
-              <label>Order<input type="number" value={event.order} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, order: Number(change.target.value) } : candidate),
-              }))} /></label>
-              <label>Chance<input type="number" min="0" max="1" step="0.05" value={event.chance ?? 1} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, chance: Number(change.target.value) } : candidate),
-              }))} /></label>
-              <label>Run<select value={event.run?.kind ?? ""} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? {
-                ...candidate,
-                run: change.target.value ? {
-                  kind: change.target.value as ProjectResourceKind,
-                  id: resourceChoices(resources, change.target.value as ProjectResourceKind)[0]?.id ?? "",
-                } : undefined,
-              } : candidate),
-              }))}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-              <label>Project record<select value={event.run?.id ?? ""} disabled={!event.run} onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index && candidate.run ? { ...candidate, run: { ...candidate.run, id: change.target.value } } : candidate),
-              }))}>
-                {!event.run ? <option value="">same as placement</option> : (
-                  <>
-                    {!resourceChoices(resources, event.run.kind).some((choice) => choice.id === event.run?.id) && (
-                      <option value={event.run.id}>{event.run.id} · missing</option>
-                    )}
-                    {resourceChoices(resources, event.run.kind).map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
-                  </>
-                )}
+
+            <div className="event-page-properties">
+              <label>Page ID<input value={selected.id} aria-label={`Event ${selectedIndex + 1} id`} onChange={(change) => {
+                setSelectedEventId(change.target.value);
+                patchSelected({ id: change.target.value });
+              }} /></label>
+              <label>Player label<input value={selected.label ?? ""} placeholder={trigger?.label} onChange={(change) => patchSelected({ label: change.target.value || undefined })} /></label>
+              <label>Trigger<select value={selected.trigger} aria-label={`Event ${selectedIndex + 1} trigger`} onChange={(change) => patchSelected({ trigger: change.target.value as MapEventTrigger })}>
+                {!EVENT_TRIGGERS.includes(selected.trigger) && <option value={selected.trigger}>{selected.trigger}</option>}
+                {EVENT_TRIGGERS.map((name) => <option value={name} key={name}>{eventTriggerMeta(name).label}</option>)}
               </select></label>
-              <label className="event-lock-hint">Locked hint<input value={event.lockedHint ?? ""} placeholder="Why this action is unavailable" onChange={(change) => onChange((current) => ({
-              ...current,
-              events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, lockedHint: change.target.value || undefined } : candidate),
-              }))} /></label>
+              <label>Priority<input type="number" value={selected.order} onChange={(change) => patchSelected({ order: Number(change.target.value) })} /></label>
+              <label>Probability<input type="number" min="0" max="1" step="0.05" value={selected.chance ?? 1} onChange={(change) => patchSelected({ chance: Number(change.target.value) })} /></label>
             </div>
-            <ConditionBuilder
-              label="Event condition"
-              value={event.requires}
-              resources={resources}
-              switches={switches}
-              variables={variables}
-              onChange={(requires) => onChange((current) => ({
-                ...current,
-                events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, requires } : candidate),
-              }))}
-            />
+
+            <section className="event-command-list">
+              <header><span>COMMAND LIST</span><small>{selected.requires ? "2 commands" : "1 command"}</small></header>
+              <div className={`event-command-row condition-command${selected.requires ? " active" : ""}`}>
+                <span className="event-command-gutter">◆</span>
+                <div><strong>Conditional branch</strong><small>{selected.requires ? "Evaluate this page condition before activation" : "No condition · page is always eligible"}</small></div>
+              </div>
+              <ConditionBuilder
+                label="Page condition"
+                value={selected.requires}
+                resources={resources}
+                switches={switches}
+                variables={variables}
+                onChange={(requires) => patchSelected({ requires })}
+              />
+              <div className="event-command-row run-command">
+                <span className="event-command-gutter">▶</span>
+                <div><strong>Activate resource</strong><small>Transfer, run a script, or dispatch an action through the engine registry.</small></div>
+                <label>Type<select value={selected.run?.kind ?? ""} onChange={(change) => patchSelected({
+                  run: change.target.value ? {
+                    kind: change.target.value as ProjectResourceKind,
+                    id: resourceChoices(resources, change.target.value as ProjectResourceKind)[0]?.id ?? "",
+                  } : undefined,
+                })}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
+                <label>Project record<select value={selected.run?.id ?? ""} disabled={!selected.run} onChange={(change) => patchSelected({
+                  run: selected.run ? { ...selected.run, id: change.target.value } : undefined,
+                })}>
+                  {!selected.run ? <option value="">same as placement</option> : (
+                    <>
+                      {!resourceChoices(resources, selected.run.kind).some((choice) => choice.id === selected.run?.id) && <option value={selected.run.id}>{selected.run.id} · missing</option>}
+                      {resourceChoices(resources, selected.run.kind).map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
+                    </>
+                  )}
+                </select></label>
+              </div>
+              <label className="event-locked-feedback"><span>Unavailable message</span><input value={selected.lockedHint ?? ""} placeholder="Optional player-facing reason when the condition is locked" onChange={(change) => patchSelected({ lockedHint: change.target.value || undefined })} /></label>
+            </section>
           </article>
-        ))}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1706,6 +1785,24 @@ function parseConditionLiteral(value: string): string | number {
 const EVENT_TRIGGERS: MapEventTrigger[] = [
   "interact", "player_touch", "event_touch", "manual", "map_enter", "autorun", "parallel",
 ];
+
+const EVENT_TRIGGER_META: Record<string, { icon: string; label: string; description: string }> = {
+  interact: { icon: "◎", label: "Action Button", description: "Runs when the player deliberately interacts with this object." },
+  player_touch: { icon: "→", label: "Player Touch", description: "Runs when the player enters the object's trigger area." },
+  event_touch: { icon: "←", label: "Event Touch", description: "Runs when this event reaches or touches the player." },
+  manual: { icon: "◇", label: "Manual Call", description: "Only runs when another system explicitly dispatches this page." },
+  map_enter: { icon: "↳", label: "Map Enter", description: "Runs when this map becomes the active player location." },
+  autorun: { icon: "▶", label: "Autorun", description: "Runs automatically while its page condition is eligible." },
+  parallel: { icon: "∞", label: "Parallel Process", description: "Observes the map in parallel while its condition remains eligible." },
+};
+
+export function eventTriggerMeta(trigger: MapEventTrigger): { icon: string; label: string; description: string } {
+  return EVENT_TRIGGER_META[trigger] ?? {
+    icon: "⌁",
+    label: trigger.split(":").map((part) => part.replace(/[_-]+/g, " ")).join(" · "),
+    description: `Custom engine trigger: ${trigger}`,
+  };
+}
 
 const RUN_RESOURCE_KINDS: ProjectResourceKind[] = ["action", "script", "map"];
 
