@@ -3718,7 +3718,7 @@ const EVENT_TRIGGER_META: Record<string, { icon: string; label: string; descript
   interact: { icon: "◎", label: "Action Button", description: "Runs when the player deliberately interacts with this object." },
   player_touch: { icon: "→", label: "Player Touch", description: "Runs when the player enters the object's trigger area." },
   event_touch: { icon: "←", label: "Event Touch", description: "Runs when this event reaches or touches the player." },
-  manual: { icon: "◇", label: "Manual Call", description: "Only runs when another system explicitly dispatches this page." },
+  manual: { icon: "◇", label: "Action / Explicit Call", description: "Runs when the player or another system explicitly dispatches this page." },
   map_enter: { icon: "↳", label: "Map Enter", description: "Runs when this map becomes the active player location." },
   autorun: { icon: "▶", label: "Autorun", description: "Runs automatically while its page condition is eligible." },
   parallel: { icon: "∞", label: "Parallel Process", description: "Observes the map in parallel while its condition remains eligible." },

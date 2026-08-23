@@ -533,6 +533,11 @@ describe("Studio map event resource picker", () => {
       label: "Action Button",
       description: "Runs when the player deliberately interacts with this object.",
     });
+    expect(eventTriggerMeta("manual")).toEqual({
+      icon: "◇",
+      label: "Action / Explicit Call",
+      description: "Runs when the player or another system explicitly dispatches this page.",
+    });
     expect(eventTriggerMeta("quest:resolved")).toEqual({
       icon: "⌁",
       label: "quest · resolved",
