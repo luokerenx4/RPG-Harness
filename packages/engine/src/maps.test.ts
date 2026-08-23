@@ -1,6 +1,17 @@
 import { expect, test } from "bun:test";
 import type { MapDef, MapPlacementDef } from "./types";
-import { collectMapConnections, collectMapImageLayers, collectMapRoutes, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder, mapRouteActivityId, resolveMapRoute } from "./maps";
+import {
+  collectMapConnections,
+  collectMapImageLayers,
+  collectMapRoutes,
+  isMapPlacementLayerVisible,
+  mapLayerDisplayOrder,
+  mapPlacementDistance,
+  mapPlacementDisplayOrder,
+  mapPlayerDisplayOrder,
+  mapRouteActivityId,
+  resolveMapRoute,
+} from "./maps";
 
 test("collectMapConnections projects placement map events as ordinary exits", () => {
   const connections = collectMapConnections({
@@ -140,4 +151,20 @@ test("map display order respects authored layers before foot-Y sorting", () => {
       ],
     },
   }).map((layer) => layer.id)).toEqual(["mist"]);
+});
+
+test("map placement distance uses the nearest footprint cell", () => {
+  const placement: MapPlacementDef = {
+    id: "wide-object",
+    at: { x: 4, y: 5 },
+    z: 0,
+    footprint: { width: 3, height: 2 },
+    collision: "none",
+    visible: true,
+    events: [],
+  };
+  expect(mapPlacementDistance({ x: 1, y: 2 }, placement)).toBe(6);
+  expect(mapPlacementDistance({ x: 3, y: 5 }, placement)).toBe(1);
+  expect(mapPlacementDistance({ x: 6, y: 6 }, placement)).toBe(0);
+  expect(mapPlacementDistance({ x: 8, y: 7 }, placement)).toBe(3);
 });

@@ -39,6 +39,25 @@ export function mapPointBlocker(map: MapDef, point: MapPoint): string | undefine
   return collisionLayer ? `layer:${collisionLayer.id}` : undefined;
 }
 
+/** Manhattan distance from a grid point to the nearest cell in a footprint. */
+export function mapPlacementDistance(
+  point: MapPoint,
+  placement: MapPlacementDef,
+): number {
+  if (placement.footprint.width <= 0 || placement.footprint.height <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const maxX = placement.at.x + placement.footprint.width - 1;
+  const maxY = placement.at.y + placement.footprint.height - 1;
+  const dx = point.x < placement.at.x
+    ? placement.at.x - point.x
+    : point.x > maxX ? point.x - maxX : 0;
+  const dy = point.y < placement.at.y
+    ? placement.at.y - point.y
+    : point.y > maxY ? point.y - maxY : 0;
+  return dx + dy;
+}
+
 /**
  * Stable renderer order for a map layer. Large strides leave room for
  * entity foot-Y sorting without letting a tall sprite cross authored layers.

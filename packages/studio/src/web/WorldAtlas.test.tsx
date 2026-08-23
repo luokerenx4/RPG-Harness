@@ -177,7 +177,7 @@ describe("Studio World Atlas", () => {
     expect(html).toContain("AT");
     expect(html).toContain('data-route-key="map:branch/placement:north-door/event:move"');
     expect(html).toContain('title="Authored source: map:branch/placement:north-door/event:move"');
-    expect(html).toContain("Atlas integrity warning");
+    expect(html).toContain("Atlas diagnostics");
     expect(html).toContain("route-missing");
     expect(html).toContain('data-resource-key="map:entry"');
     expect(html).toContain('aria-label="Open Entry &lt;img onerror=boom&gt;, id entry');
@@ -231,6 +231,113 @@ describe("Studio World Atlas", () => {
     expect(html).toContain('src="/files/source-compressed/assets/backgrounds/painted"');
     expect(html).toContain('loading="lazy"');
     expect(html).toContain('decoding="async"');
+  });
+
+  test("surfaces advisory spatial warnings without invalidating authored maps", () => {
+    const blockedExit = {
+      ...placementExit("sealed-exit", "target", "Leave"),
+      collision: "block" as const,
+    };
+    const warningMaps = [
+      map("field", {
+        layout: {
+          width: 2,
+          height: 2,
+          tileWidth: 32,
+          tileHeight: 32,
+          playerStart: { x: 0, y: 0 },
+          layers: [],
+          regions: [],
+        },
+        placements: [blockedExit],
+      }),
+      map("target"),
+    ];
+    const model = buildWorldAtlasModel(warningMaps);
+    const field = model.chains[0]!.maps.find((node) => node.map.id === "field")!;
+
+    expect(model.warningCount).toBe(1);
+    expect(model.diagnostics[0]).toMatchObject({
+      mapId: "field",
+      placementId: "sealed-exit",
+      code: "player-touch-no-walkable-entry",
+      severity: "warning",
+    });
+    expect(field.connections[0]?.diagnostics).toHaveLength(1);
+    expect(field.diagnostics).toHaveLength(1);
+
+    const html = renderToStaticMarkup(<WorldAtlas
+      maps={warningMaps}
+      resources={warningMaps.map((candidate) => resource(candidate.id))}
+      assets={[]}
+      onOpenMap={() => {}}
+      onCreateMap={() => {}}
+    />);
+    expect(html).toContain("1 spatial playability warning");
+    expect(html).toContain("Maps remain authorable for Headless, custom renderers, and scripted scenes.");
+    expect(html).toContain("⚠ 1");
+    expect(html).toContain("<span>WARN</span><b>1</b>");
+    expect(html).toContain('aria-label="Open target via Leave, player-touch trigger, 1 spatial warning"');
+    expect(html).toContain('aria-label="Review 1 spatial warning in source map field"');
+    expect(html).toContain('data-warning-source-map="field"');
+  });
+
+  test("counts cross-chain arrival warnings in both affected and authored lanes", () => {
+    const warningMaps = [
+      map("source", {
+        name: "Source Gate",
+        chain: "alpha",
+        placements: [placementExit("door", "target", "Cross", {
+          arrival: { placementId: "blocked-entry" },
+        })],
+      }),
+      map("target", {
+        chain: "beta",
+        layout: {
+          width: 2,
+          height: 1,
+          tileWidth: 32,
+          tileHeight: 32,
+          playerStart: { x: 0, y: 0 },
+          layers: [],
+          regions: [],
+        },
+        placements: [{
+          id: "blocked-entry",
+          at: { x: 1, y: 0 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "block",
+          visible: true,
+          events: [],
+        }],
+      }),
+    ];
+    const model = buildWorldAtlasModel(warningMaps);
+    const alpha = model.chains.find((chain) => chain.key === "alpha")!;
+    const beta = model.chains.find((chain) => chain.key === "beta")!;
+
+    expect(model.warningCount).toBe(1);
+    expect(alpha.warningCount).toBe(1);
+    expect(beta.warningCount).toBe(1);
+    expect(alpha.maps[0]?.connections[0]?.diagnostics[0]).toMatchObject({
+      mapId: "target",
+      sourceMapId: "source",
+      placementId: "door",
+      eventId: "move",
+      code: "blocked-route-arrival",
+    });
+
+    const html = renderToStaticMarkup(<WorldAtlas
+      maps={warningMaps}
+      resources={warningMaps.map((candidate) => resource(candidate.id))}
+      assets={[]}
+      onOpenMap={() => {}}
+      onCreateMap={() => {}}
+    />);
+    expect(html).toContain('aria-label="Review 1 spatial warning in source map Source Gate"');
+    expect(html).toContain('data-warning-source-map="source"');
+    expect(html).toContain('data-warning-source-key="map:source/placement:door/event:move"');
   });
 
   test("renders an explicit creation target when the project has no maps", () => {

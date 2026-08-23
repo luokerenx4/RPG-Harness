@@ -4,6 +4,7 @@ import {
   isMapEventPlayerAction,
   isMapPlacementLayerVisible,
   mapLayerDisplayOrder,
+  mapPlacementDistance as engineMapPlacementDistance,
   mapPlacementDisplayOrder,
   mapPlacementEventKey,
   mapPlayerDisplayOrder,
@@ -52,6 +53,9 @@ export interface SpatialMoveFeedback {
 
 type SpatialResourceLabels = ReadonlyMap<string, string>;
 type SpatialResourceGraphics = ReadonlyMap<string, string>;
+
+/** Backward-compatible Web export backed by the engine's canonical geometry. */
+export const mapPlacementDistance = engineMapPlacementDistance;
 
 export function resolveSpatialPlacementOperations(
   map: MapDef,
@@ -545,18 +549,6 @@ function Placement({
       </span>
     </div>
   );
-}
-
-export function mapPlacementDistance(point: MapPoint, placement: MapPlacementDef): number {
-  const right = placement.at.x + placement.footprint.width - 1;
-  const bottom = placement.at.y + placement.footprint.height - 1;
-  const dx = point.x < placement.at.x
-    ? placement.at.x - point.x
-    : point.x > right ? point.x - right : 0;
-  const dy = point.y < placement.at.y
-    ? placement.at.y - point.y
-    : point.y > bottom ? point.y - bottom : 0;
-  return dx + dy;
 }
 
 function placementDisplayName(

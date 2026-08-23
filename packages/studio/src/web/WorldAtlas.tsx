@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import {
+  analyzeMapPlayability,
   collectMapRoutes,
   type MapArrivalDef,
   type MapDef,
   type MapEventTrigger,
+  type MapPlayabilityDiagnostic,
   type MapRouteSource,
   type ProjectResourceNode,
 } from "@rpg-harness/engine";
@@ -38,6 +40,7 @@ export interface WorldAtlasConnection {
   crossChain: boolean;
   selfLoop: boolean;
   conditional: boolean;
+  diagnostics: MapPlayabilityDiagnostic[];
 }
 
 export interface WorldAtlasMapNode {
@@ -46,6 +49,7 @@ export interface WorldAtlasMapNode {
   chainKey: string;
   incomingCount: number;
   connections: WorldAtlasConnection[];
+  diagnostics: MapPlayabilityDiagnostic[];
 }
 
 export interface WorldAtlasChain {
@@ -56,6 +60,7 @@ export interface WorldAtlasChain {
   entryCount: number;
   extractCount: number;
   connectionCount: number;
+  warningCount: number;
 }
 
 export interface WorldAtlasModel {
@@ -65,6 +70,8 @@ export interface WorldAtlasModel {
   connectionCount: number;
   missingTargetCount: number;
   duplicateIds: string[];
+  diagnostics: MapPlayabilityDiagnostic[];
+  warningCount: number;
 }
 
 function atlasChainKey(map: Pick<MapDef, "chain">): string {
@@ -164,6 +171,19 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
   }
 
   const mapsById = new Map(uniqueMaps.map((map) => [map.id, map]));
+  const diagnostics = analyzeMapPlayability(uniqueMaps);
+  const diagnosticsByMap = new Map<string, MapPlayabilityDiagnostic[]>();
+  const diagnosticsBySource = new Map<string, MapPlayabilityDiagnostic[]>();
+  for (const diagnostic of diagnostics) {
+    const mapRows = diagnosticsByMap.get(diagnostic.mapId) ?? [];
+    mapRows.push(diagnostic);
+    diagnosticsByMap.set(diagnostic.mapId, mapRows);
+    if (diagnostic.sourceKey) {
+      const sourceRows = diagnosticsBySource.get(diagnostic.sourceKey) ?? [];
+      sourceRows.push(diagnostic);
+      diagnosticsBySource.set(diagnostic.sourceKey, sourceRows);
+    }
+  }
   const connectionsByMap = new Map<string, WorldAtlasConnection[]>();
   let missingTargetCount = 0;
   for (const map of uniqueMaps) {
@@ -193,6 +213,7 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
         crossChain: Boolean(target && atlasChainKey(target) !== sourceChain),
         selfLoop: connection.target === map.id,
         conditional: Boolean(connection.requires),
+        diagnostics: diagnosticsBySource.get(connection.key) ?? [],
       };
     });
     connectionsByMap.set(map.id, connections);
@@ -216,6 +237,17 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
 
   const chains = [...groupMaps.entries()].map(([key, chainMaps]) => {
     const orderedMaps = orderAtlasChainMaps(chainMaps, connectionsByMap);
+    const chainDiagnostics = new Set<MapPlayabilityDiagnostic>();
+    for (const map of chainMaps) {
+      for (const diagnostic of diagnosticsByMap.get(map.id) ?? []) {
+        if (diagnostic.severity === "warning") chainDiagnostics.add(diagnostic);
+      }
+      for (const connection of connectionsByMap.get(map.id) ?? []) {
+        for (const diagnostic of connection.diagnostics) {
+          if (diagnostic.severity === "warning") chainDiagnostics.add(diagnostic);
+        }
+      }
+    }
     return {
       key,
       label: atlasChainLabel(key),
@@ -225,6 +257,7 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
         chainKey: key,
         incomingCount: incomingByMap.get(map.id) ?? 0,
         connections: connectionsByMap.get(map.id) ?? [],
+        diagnostics: diagnosticsByMap.get(map.id) ?? [],
       })),
       spatialCount: chainMaps.filter((map) => map.layout !== undefined).length,
       entryCount: chainMaps.filter((map) => map.isEntry).length,
@@ -233,6 +266,7 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
         (count, map) => count + (connectionsByMap.get(map.id)?.length ?? 0),
         0,
       ),
+      warningCount: chainDiagnostics.size,
     } satisfies WorldAtlasChain;
   }).sort((left, right) => {
     return compareMapCatalogChainKeys(left.key, right.key);
@@ -245,6 +279,8 @@ export function buildWorldAtlasModel(maps: MapDef[]): WorldAtlasModel {
     connectionCount: [...connectionsByMap.values()].reduce((count, rows) => count + rows.length, 0),
     missingTargetCount,
     duplicateIds,
+    diagnostics,
+    warningCount: diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length,
   };
 }
 
@@ -281,13 +317,14 @@ export function nextWorldAtlasCardIndex(
 }
 
 function mapCardAriaLabel(node: WorldAtlasMapNode): string {
-  const { map, connections } = node;
+  const { map, connections, diagnostics } = node;
   const kind = map.layout ? `${map.layout.width} by ${map.layout.height} 2D map` : "node map";
   const roles = [map.isEntry ? "entry" : "", map.isExtract ? "extract" : ""].filter(Boolean).join(", ");
   const routes = connections.length === 0
     ? "no outgoing routes"
     : `${connections.length} outgoing ${connections.length === 1 ? "route" : "routes"}: ${connections.map((connection) => connection.targetName).join(", ")}`;
-  return `Open ${map.name}, id ${map.id}, ${kind}${roles ? `, ${roles}` : ""}, ${routes}`;
+  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length;
+  return `Open ${map.name}, id ${map.id}, ${kind}${roles ? `, ${roles}` : ""}, ${routes}${warnings ? `, ${warnings} spatial ${warnings === 1 ? "warning" : "warnings"}` : ""}`;
 }
 
 function MapCardVisual({ map, backgroundUrl }: { map: MapDef; backgroundUrl?: string }) {
@@ -406,11 +443,12 @@ export function WorldAtlas({
         <button type="button" className="world-atlas-create" onClick={onCreateMap}>＋ New Map</button>
       </header>
 
-      {(model.duplicateIds.length > 0 || model.missingTargetCount > 0) && (
+      {(model.duplicateIds.length > 0 || model.missingTargetCount > 0 || model.warningCount > 0) && (
         <div className="world-atlas-warning" role="status">
-          <strong>Atlas integrity warning</strong>
+          <strong>Atlas diagnostics</strong>
           {model.duplicateIds.length > 0 && <span>Duplicate map IDs: {model.duplicateIds.join(", ")}</span>}
           {model.missingTargetCount > 0 && <span>{model.missingTargetCount} route target{model.missingTargetCount === 1 ? " is" : "s are"} missing or ambiguous.</span>}
+          {model.warningCount > 0 && <span>{model.warningCount} spatial playability warning{model.warningCount === 1 ? "" : "s"}. Maps remain authorable for Headless, custom renderers, and scripted scenes.</span>}
         </div>
       )}
 
@@ -432,6 +470,7 @@ export function WorldAtlas({
                 <div><dt>Entries</dt><dd>{chain.entryCount}</dd></div>
                 <div><dt>Extracts</dt><dd>{chain.extractCount}</dd></div>
                 <div><dt>Routes</dt><dd>{chain.connectionCount}</dd></div>
+                {chain.warningCount > 0 && <div className="warning"><dt>Warnings</dt><dd>{chain.warningCount}</dd></div>}
               </dl>
             </header>
             <ol className="world-atlas-map-flow">
@@ -445,7 +484,7 @@ export function WorldAtlas({
                     : sourceImageUrl(map.bg)
                   : undefined;
                 return <li key={node.resourceKey}>
-                  <article className={`world-atlas-map-card-shell${map.layout ? " spatial" : " node"}${map.isEntry ? " entry" : ""}${map.isExtract ? " extract" : ""}`}>
+                  <article className={`world-atlas-map-card-shell${map.layout ? " spatial" : " node"}${map.isEntry ? " entry" : ""}${map.isExtract ? " extract" : ""}${node.diagnostics.some((diagnostic) => diagnostic.severity === "warning") ? " warning" : ""}`}>
                     <button
                       type="button"
                       className="world-atlas-map-card"
@@ -461,6 +500,12 @@ export function WorldAtlas({
                         <strong>{map.name}</strong>
                         <code>{map.id}</code>
                         {map.isExtract && <b>EXTRACT</b>}
+                        {node.diagnostics.some((diagnostic) => diagnostic.severity === "warning") && (
+                          <span
+                            className="world-atlas-map-warning"
+                            title={node.diagnostics.map((diagnostic) => diagnostic.message).join("\n")}
+                          >⚠ {node.diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length}</span>
+                        )}
                       </span>
                       <MapCardVisual map={map} backgroundUrl={backgroundUrl} />
                       <span className="world-atlas-card-stats">
@@ -485,15 +530,21 @@ export function WorldAtlas({
                           ? targetAvailable ? "" : "missing project resource"
                           : connection.state;
                         const accessibleStatus = [routeQualifiers, availability].filter(Boolean).join(", ");
-                        return <li key={connection.key}>
+                        const warningCount = connection.diagnostics
+                          .filter((diagnostic) => diagnostic.severity === "warning").length;
+                        const routeStatus = [
+                          accessibleStatus,
+                          warningCount ? `${warningCount} spatial ${warningCount === 1 ? "warning" : "warnings"}` : "",
+                        ].filter(Boolean).join(", ");
+                        return <li className={`world-atlas-route-row${warningCount ? " warning" : ""}`} key={connection.key}>
                           <button
                             type="button"
                             className={`world-atlas-route route-${connection.state} activation-${connection.activation}${connection.crossChain ? " cross-chain" : ""}`}
                             data-route-key={connection.key}
                             title={`Authored source: ${connection.key}`}
                             aria-label={targetAvailable
-                              ? `Open ${connection.targetName} via ${connection.label}${accessibleStatus ? `, ${accessibleStatus}` : ""}`
-                              : `${connection.label} route target ${connection.targetId}, ${accessibleStatus}`}
+                              ? `Open ${connection.targetName} via ${connection.label}${routeStatus ? `, ${routeStatus}` : ""}`
+                              : `${connection.label} route target ${connection.targetId}, ${routeStatus}`}
                             disabled={!targetAvailable}
                             onClick={() => onOpenMap(connection.targetId)}
                           >
@@ -508,6 +559,17 @@ export function WorldAtlas({
                               {availability && <small className="issue">{availability.toUpperCase()}</small>}
                             </span>
                           </button>
+                          {warningCount > 0 && (
+                            <button
+                              type="button"
+                              className="world-atlas-route-diagnostic"
+                              data-warning-source-map={map.id}
+                              data-warning-source-key={connection.key}
+                              aria-label={`Review ${warningCount} spatial ${warningCount === 1 ? "warning" : "warnings"} in source map ${map.name}`}
+                              title={`${connection.diagnostics.map((diagnostic) => diagnostic.message).join("\n")}\n\nOpen authored source: ${connection.key}`}
+                              onClick={() => onOpenMap(map.id)}
+                            ><span>WARN</span><b>{warningCount}</b></button>
+                          )}
                         </li>;
                       })}
                     </ul>

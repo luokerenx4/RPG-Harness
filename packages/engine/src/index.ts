@@ -21,6 +21,7 @@ export {
   isMapEventPlayerAction,
   mapLegacyConnectionKey,
   mapLayerDisplayOrder,
+  mapPlacementDistance,
   mapPlacementDisplayOrder,
   mapPlayerDisplayOrder,
   mapPointBlocker,
@@ -28,6 +29,12 @@ export {
   resolveMapRoute,
 } from "./maps";
 export type { MapRoute, MapRouteSource } from "./maps";
+export { analyzeMapPlayability } from "./mapPlayability";
+export type {
+  MapPlayabilityDiagnostic,
+  MapPlayabilityDiagnosticCode,
+  MapPlayabilityDiagnosticSeverity,
+} from "./mapPlayability";
 export {
   buildProjectResourceRegistry,
   buildProjectResourceGraph,
