@@ -32,6 +32,7 @@
 import type {
   Condition,
   Game,
+  MapArrivalDef,
   Module,
   ProjectResourceRef,
   StateDelta,
@@ -362,6 +363,17 @@ export function validateGame(game: Game): void {
         if (event.run) {
           visitProjectResourceRef(event.run, `${eventWhere}.run`, reg, issues);
         }
+        if (event.arrival) {
+          const target = event.run ?? placement.resource;
+          if (target?.kind !== "map") {
+            issues.push({
+              path: `${eventWhere}.arrival`,
+              message: `arrival requires the event or placement resource to target a map`,
+            });
+          } else {
+            validateMapArrival(game, target.id, event.arrival, `${eventWhere}.arrival`, issues);
+          }
+        }
         if (event.requires) {
           visitCondition(event.requires, `${eventWhere}.requires`, reg, issues);
         }
@@ -387,6 +399,9 @@ export function validateGame(game: Game): void {
       }
       if (c.requires) {
         visitCondition(c.requires, `${where}[${c.target}].requires`, reg, issues);
+      }
+      if (c.arrival) {
+        validateMapArrival(game, c.target, c.arrival, `${where}[${c.target}].arrival`, issues);
       }
     }
     if (m.onEnter !== undefined && !reg.scripts.has(m.onEnter)) {
@@ -465,6 +480,51 @@ export function validateGame(game: Game): void {
         issues.length === 1 ? "" : "s"
       }):\n${lines.join("\n")}`,
     );
+  }
+}
+
+function validateMapArrival(
+  game: Game,
+  targetMapId: string,
+  arrival: MapArrivalDef,
+  path: string,
+  issues: Issue[],
+): void {
+  const hasPlacement = arrival.placementId !== undefined;
+  const hasPoint = arrival.at !== undefined;
+  if (hasPlacement === hasPoint) {
+    issues.push({ path, message: `must declare exactly one of placement or at` });
+    return;
+  }
+  const target = (game.maps ?? []).find((map) => map.id === targetMapId);
+  if (!target) return;
+  if (arrival.placementId !== undefined) {
+    if (!arrival.placementId || !(target.placements ?? []).some((placement) => placement.id === arrival.placementId)) {
+      const declared = new Set((target.placements ?? []).map((placement) => placement.id));
+      issues.push({
+        path: `${path}.placement`,
+        message: `undeclared placement "${arrival.placementId}" in map "${target.id}". Declared: ${listOrNone(declared)}`,
+      });
+    }
+    return;
+  }
+  const point = arrival.at!;
+  if (!Number.isInteger(point.x) || !Number.isInteger(point.y) || point.x < 0 || point.y < 0) {
+    issues.push({ path: `${path}.at`, message: `coordinates must be non-negative integers` });
+    return;
+  }
+  if (!target.layout) {
+    issues.push({
+      path: `${path}.at`,
+      message: `coordinate arrival requires target map "${target.id}" to declare a spatial layout`,
+    });
+    return;
+  }
+  if (point.x >= target.layout.width || point.y >= target.layout.height) {
+    issues.push({
+      path: `${path}.at`,
+      message: `coordinates must fit inside target map "${target.id}" ${target.layout.width}x${target.layout.height} layout`,
+    });
   }
 }
 

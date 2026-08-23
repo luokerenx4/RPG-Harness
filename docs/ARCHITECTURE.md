@@ -312,6 +312,45 @@ character, item, enemy, weapon, skill, action, script, asset, module, or custom
 resource. Placement and event IDs are stable diagnostic/replay coordinates;
 multiple placements may intentionally overlap.
 
+### Directed routes and arrival
+
+A map placement event whose effective resource is a map is one directed route.
+The destination map identity remains the resource reference: `event.run` when
+present, otherwise the containing placement's `resource`. `arrival` only
+describes where the spatial cursor starts inside that target; it never supplies
+or overrides the target map ID.
+
+```yaml
+placements:
+  - id: castle_gate
+    at: [3, 1]
+    resource: { kind: map, id: castle }
+    events:
+      - id: enter
+        trigger: player_touch
+        arrival: { placement: south_gate_entry }
+
+  - id: cellar_stairs
+    at: [12, 8]
+    events:
+      - id: descend
+        trigger: interact
+        run: { kind: map, id: cellar }
+        arrival: { at: [4, 7] }
+```
+
+`arrival: { placement: ... }` names a stable placement in the target map and
+uses that placement's `at` coordinate. `arrival: { at: [x, y] }` names an exact
+cell and therefore requires the target to declare a spatial `layout`; the cell
+must fit inside it. A layout-less node map may use a placement anchor but not an
+explicit coordinate anchor. Omitting `arrival` preserves the ordinary target
+entry behavior: `layout.player_start`, falling back to `[0,0]`.
+
+Headless observes the same route identity, gate, accepted input, and resulting
+`currentMapId`, but does not simulate or choose by the arrival coordinate. The
+coordinate exists for persisted spatial state and human renderers. Routes are
+directed runtime edges: authoring A → B does not infer B → A.
+
 Legacy `connections` and `on_enter` still parse during migration. `rpgh
 migrate-maps <game-dir> --apply` converts edges and entry scripts to placements
 at `[0,0]` without inventing a layout. New content should author placements
@@ -343,8 +382,16 @@ A game module that owns its own `onHubBuild` can call `collectMapActivities` and
 
 Two engine-owned entrypoints for transitioning:
 
-- **`enterMap(state, game, mapId)`** — primitive any preset/module can call. Validates the map exists, sets `currentMapId`, initializes the target's authoritative player position, and syncs `baseline.visuals.bg` to `map.bg` when present. Legacy `map.onEnter` remains transitional; new content uses a `map_enter` event placement.
-- **`kind: "moveToMap"`** — bundled action handler in the baseline module. Reads `payload.to` and calls `enterMap`. This is what the engine-synthesized `move:<target>` activities dispatch through.
+- **`enterMap(state, game, mapId, arrival?)`** — primitive any preset/module can
+  call. It validates and resolves the complete destination before changing
+  state, sets `currentMapId`, initializes the target's authoritative player
+  position from the optional route arrival or `player_start`, and syncs
+  `baseline.visuals.bg` to `map.bg` when present. Legacy `map.onEnter` remains
+  transitional; new content uses a `map_enter` event placement.
+- **`kind: "moveToMap"`** — bundled action handler in the baseline module. It
+  resolves the exact authored route from `payload.to` plus its stable route key,
+  rechecks the route gate, and passes that route's arrival to `enterMap`. This is
+  what engine-synthesized map activities dispatch through.
 
 Games with side-effects-on-move (raid turn count, companion passives, encounter rolls) provide their own action handler and observe via `onActionComplete` — the engine's `moveToMap` is the simple-game default, not a mandatory channel.
 
@@ -361,7 +408,9 @@ Read `state.baseline.currentMapId` directly. Read the static `MapDef` via `ctx.m
 - `dispatchActivity(ctx, id)` — route a `doActivity` to a script or an action; action goes through registered handler.
 - `applyActionResult(ctx, result)` — apply handler's `ActionResult` (deltas + narrations + scriptStart).
 - `mutateState(ctx, delta, source)` — `applyDelta` + `fireOnStateMutated` + `checkTriggers`. The one true write path.
-- `enterMap(state, game, mapId)` — transition the player into a map (writes `currentMapId`, syncs visuals, queues `onEnter` script).
+- `enterMap(state, game, mapId, arrival?)` — transition the player into a map,
+  optionally resolving a target placement or exact spatial cell (writes
+  `currentMapId`, syncs visuals, queues `onEnter` script).
 - `collectMapAvailableResources(ctx)` — query the current map's placement resources and semantic operations.
 - `moveMapPlayer(ctx, direction)` — update authoritative spatial position, enforce collision, and resolve player-touch to a semantic activity.
 - `buildMapHubSnapshot(ctx)` / `collectMapActivities(ctx)` — project the shared query into Hub activities.

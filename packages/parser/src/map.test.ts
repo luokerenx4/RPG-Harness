@@ -177,6 +177,48 @@ connections:
     }
   });
 
+  test("parses stable-placement and coordinate arrivals on both transfer shapes", () => {
+    const map = parseMap(`id: gate
+name: Gate
+connections:
+  - dir: Inner west door
+    target: inner
+    arrival: { placement: west_entry }
+placements:
+  - id: east_door
+    at: [1, 0]
+    resource: { kind: map, id: inner }
+    events:
+      - id: enter
+        trigger: interact
+        arrival: { at: [4, 2] }
+`);
+
+    expect(map.connections?.[0]?.arrival).toEqual({ placementId: "west_entry" });
+    expect(map.placements?.[0]?.events[0]?.arrival).toEqual({ at: { x: 4, y: 2 } });
+  });
+
+  test("rejects malformed arrival anchors before they reach validation", () => {
+    const parseConnectionArrival = (arrival: string) => parseMap(`id: gate
+name: Gate
+connections:
+  - dir: Inner
+    target: inner
+    arrival: ${arrival}
+`);
+
+    expect(() => parseConnectionArrival("{}"))
+      .toThrow(/exactly one of placement or at/);
+    expect(() => parseConnectionArrival("{ placement: west, at: [0, 0] }"))
+      .toThrow(/exactly one of placement or at/);
+    expect(() => parseConnectionArrival("{ placement: \"\" }"))
+      .toThrow(/placement must be a non-empty string/);
+    expect(() => parseConnectionArrival("{ at: [-1, 0] }"))
+      .toThrow(/non-negative integer/);
+    expect(() => parseConnectionArrival("{ placement: west, offset: [1, 0] }"))
+      .toThrow(/unknown field "offset"/);
+  });
+
   test("is_extract flag", () => {
     const m = parseMap(`id: shrine
 name: 社

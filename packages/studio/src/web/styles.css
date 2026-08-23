@@ -3922,6 +3922,10 @@ summary:focus-visible {
 .event-command-list > .condition-builder > header { justify-content: flex-end; min-height: 31px; }
 .run-command { grid-template-columns: 20px minmax(120px,1fr) 100px minmax(120px,1fr); border-radius: 5px; }
 .run-command .event-command-gutter { color: var(--studio-accent); }
+.event-route-arrival-missing { display: flex; margin-top: 7px; padding: 8px 9px; flex-direction: column; gap: 3px; color: #9d7d65; border: 1px solid rgba(224,111,121,.28); border-radius: 5px; background: rgba(77,35,40,.12); }
+.event-route-arrival-missing strong { color: #d7afb4; font-size: 8px; }
+.event-route-arrival-missing span { font-size: 7px; }
+.event-route-arrival-missing code { color: #c98e97; font: 7px/1.2 ui-monospace,monospace; }
 .event-locked-feedback { margin-top: 7px; padding: 7px 8px; border-left: 2px solid #303945; background: #0b0f15; }
 
 @media (max-width: 1280px) {

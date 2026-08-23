@@ -198,6 +198,7 @@ export type {
   HubSnapshot,
   Input,
   ItemDef,
+  MapArrivalDef,
   MapCollision,
   MapConnection,
   MapDef,

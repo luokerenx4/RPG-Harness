@@ -63,6 +63,38 @@ describe("serializeMapAuthoringPatch", () => {
     });
   });
 
+  test("round-trips both destination arrival anchors when rewriting event pages", () => {
+    const next = serializeMapAuthoringPatch("id: gate\nname: Gate\n", {
+      placements: [{
+        id: "doors",
+        at: { x: 0, y: 0 },
+        resource: { kind: "map", id: "inner" },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        events: [{
+          id: "west",
+          trigger: "interact",
+          arrival: { placementId: "west_entry" },
+          order: 0,
+        }, {
+          id: "east",
+          trigger: "interact",
+          arrival: { at: { x: 6, y: 2 } },
+          order: 1,
+        }],
+      }],
+    });
+
+    expect(next.map.placements?.[0]?.events.map((event) => event.arrival)).toEqual([
+      { placementId: "west_entry" },
+      { at: { x: 6, y: 2 } },
+    ]);
+    expect(next.content).toContain("placement: west_entry");
+    expect(next.content).toContain("at:");
+  });
+
   test("overlays exactly one target without mutating the input game", () => {
     const original = "id: town\nname: Town\ndescription: Saved\n";
     const map = parseMap(original, "maps/town.yaml");

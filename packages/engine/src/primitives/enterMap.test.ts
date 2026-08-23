@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { enterMap, EnterMapError } from "./enterMap";
+import { enterMap } from "./enterMap";
 import { createInitialState } from "../state";
 import { makeCharacter, makeGame, makeScript } from "../test-utils";
 import type { Game, MapDef } from "../types";
@@ -10,6 +10,16 @@ function gameWithMaps(maps: MapDef[], extra: Partial<Game> = {}): Game {
     maps,
     ...extra,
   });
+}
+
+function expectRejectedTransferToPreserveState(
+  state: ReturnType<typeof createInitialState>,
+  transfer: () => unknown,
+  message: RegExp,
+): void {
+  const before = structuredClone(state);
+  expect(transfer).toThrow(message);
+  expect(state).toEqual(before);
 }
 
 describe("enterMap", () => {
@@ -41,6 +51,98 @@ describe("enterMap", () => {
     enterMap(state, game, "field");
     expect(state.runtime.mapPosition).toEqual({ x: 3, y: 4 });
     expect(state.runtime.mapPositionLayoutKey).toBe("7x6@3,4");
+  });
+
+  test("resolves coordinate and stable-placement arrivals without changing the map contract", () => {
+    const game = gameWithMaps([{
+      id: "field",
+      name: "Field",
+      description: "",
+      layout: {
+        width: 7,
+        height: 6,
+        tileWidth: 32,
+        tileHeight: 32,
+        playerStart: { x: 3, y: 4 },
+        layers: [],
+        regions: [],
+      },
+      placements: [{
+        id: "west-gate",
+        at: { x: 1, y: 2 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        events: [{ id: "return", trigger: "interact", order: 0 }],
+      }],
+    }]);
+    const state = createInitialState(game);
+
+    enterMap(state, game, "field", { at: { x: 5, y: 1 } });
+    expect(state.runtime.mapPosition).toEqual({ x: 5, y: 1 });
+    expect(state.runtime.mapPositionLayoutKey).toBe("7x6@3,4");
+
+    enterMap(state, game, "field", { placementId: "west-gate" });
+    expect(state.runtime.mapPosition).toEqual({ x: 1, y: 2 });
+    expect(state.runtime.mapPositionLayoutKey).toBe("7x6@3,4");
+  });
+
+  test("rejects malformed, missing, and out-of-bounds arrivals at the runtime boundary", () => {
+    const game = gameWithMaps([{
+      id: "field",
+      name: "Field",
+      description: "",
+      layout: {
+        width: 2,
+        height: 2,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [],
+        regions: [],
+      },
+    }, { id: "node", name: "Node", description: "" }]);
+    const state = createInitialState(game);
+
+    state.baseline.currentMapId = "before";
+    state.runtime.mapPositionMapId = "before";
+    state.runtime.mapPosition = { x: 9, y: 8 };
+    state.runtime.mapPositionLayoutKey = "before-layout";
+    state.baseline.visuals.bg = "assets/backgrounds/before";
+
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "field", {}),
+      /exactly one/,
+    );
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "field", {
+        placementId: "",
+        at: { x: 0, y: 0 },
+      }),
+      /exactly one/,
+    );
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "field", { placementId: "" }),
+      /non-empty string/,
+    );
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "field", { placementId: "missing" }),
+      /no arrival placement/,
+    );
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "field", { at: { x: 2, y: 0 } }),
+      /must fit inside 2x2/,
+    );
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "node", { at: { x: 0, y: 0 } }),
+      /requires a spatial layout/,
+    );
   });
 
   test("syncs visuals.bg when map declares bg", () => {
@@ -92,7 +194,11 @@ describe("enterMap", () => {
       { id: "atrium", name: "玄関", description: "" },
     ]);
     const state = createInitialState(game);
-    expect(() => enterMap(state, game, "nowhere")).toThrow(EnterMapError);
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "nowhere"),
+      /undeclared map/,
+    );
   });
 
   test("rejects onEnter that references missing script", () => {
@@ -105,7 +211,12 @@ describe("enterMap", () => {
       },
     ]);
     const state = createInitialState(game);
-    expect(() => enterMap(state, game, "broken")).toThrow(
+    state.baseline.currentMapId = "before";
+    state.runtime.mapPosition = { x: 7, y: 3 };
+    state.baseline.visuals.bg = "assets/backgrounds/before";
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "broken"),
       /undeclared script "ghost_script"/,
     );
   });
@@ -126,7 +237,12 @@ describe("enterMap", () => {
     );
     const state = createInitialState(game);
     state.baseline.currentScriptId = "active";
-    expect(() => enterMap(state, game, "scene_b")).toThrow(
+    state.baseline.currentMapId = "before";
+    state.runtime.mapPosition = { x: 7, y: 3 };
+    state.baseline.visuals.bg = "assets/backgrounds/before";
+    expectRejectedTransferToPreserveState(
+      state,
+      () => enterMap(state, game, "scene_b"),
       /script is already active/,
     );
   });

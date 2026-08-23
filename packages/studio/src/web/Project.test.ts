@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   adjacentResourceKeys,
   conditionEditorMode,
@@ -7,12 +9,14 @@ import {
   duplicateMapPlacementDraft,
   createConditionDraft,
   eventTriggerMeta,
+  EventPagesEditor,
   filterPlacementPaletteResources,
   fillMapLayerTiles,
   groupMapTreeResources,
   groupedStacks,
   hasMapDraftChanges,
   mapEventCommandSummary,
+  mapEventArrivalSummary,
   mapPaletteResourceGraphicPath,
   mapPlacementEventSummary,
   mapPlacementGraphicPath,
@@ -29,6 +33,9 @@ import {
   patchResourceScalarFields,
   paintMapLayerTile,
   reconcileMapDraftAfterSave,
+  replaceMapEventArrival,
+  replaceMapEventRunTarget,
+  replaceMapPlacementResourceTarget,
   resourceChoices,
   resolveProjectReference,
   resizeMapLayout,
@@ -36,7 +43,7 @@ import {
   summarizeMapValidation,
   studioTileAtlasStyle,
 } from "./pages/Project";
-import type { MapDef, MapLayoutDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
+import type { MapDef, MapLayoutDef, MapPlacementDef, MapPlacementEventDef, ProjectResourceNode } from "@rpg-harness/engine";
 import type { ProjectAssetPreview } from "./api";
 
 describe("Studio database record fields", () => {
@@ -358,12 +365,139 @@ describe("Studio map event resource picker", () => {
       { id: "leave", trigger: "player_touch", order: 0 },
       placement,
       resources,
-    )).toBe("Transfer player → 三叉路 · placement resource");
+    )).toBe("Transfer player → 三叉路 · placement resource · arrive at map start");
+    expect(mapEventCommandSummary(
+      { id: "leave", trigger: "player_touch", arrival: { placementId: "south_gate" }, order: 0 },
+      placement,
+      resources,
+    )).toBe("Transfer player → 三叉路 · placement resource · arrive at placement:south_gate");
+    expect(mapEventCommandSummary(
+      { id: "leave", trigger: "player_touch", arrival: { at: { x: 4, y: 7 } }, order: 0 },
+      placement,
+      resources,
+    )).toBe("Transfer player → 三叉路 · placement resource · arrive at 4,7");
     expect(mapEventCommandSummary(
       { id: "memory", trigger: "interact", run: { kind: "script", id: "memory" }, order: 0 },
       placement,
       resources,
     )).toBe("Run script → 失われた記憶");
+    expect(mapEventArrivalSummary(undefined)).toBe("arrive at map start");
+  });
+
+  test("clears arrival only when the effective run target changes", () => {
+    const inherited: MapPlacementEventDef = {
+      id: "leave",
+      trigger: "player_touch",
+      arrival: { placementId: "south_gate" },
+      order: 0,
+    };
+    const explicit: MapPlacementEventDef = {
+      id: "memory",
+      trigger: "interact",
+      run: { kind: "script", id: "memory" },
+      arrival: { at: { x: 1, y: 2 } },
+      order: 1,
+    };
+    const placement: MapPlacementDef = {
+      id: "gate",
+      at: { x: 0, y: 0 },
+      resource: { kind: "map", id: "crossroads" },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      events: [inherited, explicit],
+    };
+
+    expect(replaceMapEventRunTarget(inherited, undefined)).toBe(inherited);
+    const moved = replaceMapEventRunTarget(inherited, { kind: "map", id: "harbour" });
+    expect(moved.run).toEqual({ kind: "map", id: "harbour" });
+    expect(moved).not.toHaveProperty("arrival");
+
+    const changedPlacement = replaceMapPlacementResourceTarget(placement, {
+      kind: "map",
+      id: "harbour",
+    });
+    expect(changedPlacement.events[0]).not.toHaveProperty("arrival");
+    expect(changedPlacement.events[1]).toEqual(explicit);
+    expect(replaceMapPlacementResourceTarget(changedPlacement, changedPlacement.resource)).toBe(changedPlacement);
+
+    expect(replaceMapEventArrival(inherited, undefined)).not.toHaveProperty("arrival");
+    expect(replaceMapEventArrival(inherited, { at: { x: 2, y: 3 } }).arrival).toEqual({
+      at: { x: 2, y: 3 },
+    });
+  });
+
+  test("renders arrival authoring only for the selected page's effective map target", () => {
+    const targetMap = {
+      id: "crossroads",
+      name: "Crossroads",
+      description: "",
+      layout: {
+        width: 8,
+        height: 6,
+        tileWidth: 32,
+        tileHeight: 32,
+        playerStart: { x: 2, y: 3 },
+        layers: [],
+        regions: [],
+      },
+      placements: [{
+        id: "south_gate",
+        at: { x: 4, y: 5 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger" as const,
+        visible: true,
+        events: [],
+      }],
+    } satisfies MapDef;
+    const resources = [
+      { key: "map:crossroads", kind: "map", id: "crossroads", label: "Crossroads", refs: [] },
+      { key: "script:memory", kind: "script", id: "memory", label: "Memory", refs: [] },
+    ] as ProjectResourceNode[];
+    const routePlacement = {
+      id: "gate",
+      at: { x: 0, y: 0 },
+      resource: { kind: "map", id: "crossroads" },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      events: [{
+        id: "leave",
+        trigger: "player_touch",
+        arrival: { placementId: "south_gate" },
+        order: 0,
+      }],
+    } satisfies MapPlacementDef;
+    const common = {
+      maps: [targetMap],
+      resources,
+      switches: [],
+      variables: [],
+      onChange: () => {},
+    };
+
+    const routeHtml = renderToStaticMarkup(React.createElement(EventPagesEditor, {
+      ...common,
+      placement: routePlacement,
+    }));
+    expect(routeHtml).toContain("Arrival point");
+    expect(routeHtml).toContain("map:crossroads");
+    expect(routeHtml).toContain("south_gate · 4,5 · trigger · event-only");
+
+    const scriptHtml = renderToStaticMarkup(React.createElement(EventPagesEditor, {
+      ...common,
+      placement: {
+        ...routePlacement,
+        events: [{
+          ...routePlacement.events[0]!,
+          run: { kind: "script", id: "memory" },
+        }],
+      },
+    }));
+    expect(scriptHtml).not.toContain("Arrival point");
   });
 
   test("tracks authoritative map properties and spatial draft changes", () => {

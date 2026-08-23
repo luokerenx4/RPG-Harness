@@ -3,6 +3,7 @@ import type {
   Action,
   CharacterSpawnRule,
   Condition,
+  MapArrivalDef,
   MapConnection,
   MapDef,
   MapEventTrigger,
@@ -373,6 +374,9 @@ function parsePlacementEvents(raw: unknown, source: string): MapPlacementEventDe
     };
     if (typeof obj.label === "string") event.label = obj.label;
     if (obj.run !== undefined) event.run = parseResourceRef(obj.run, `${where}.run`);
+    if (obj.arrival !== undefined) {
+      event.arrival = parseMapArrival(obj.arrival, `${where}.arrival`);
+    }
     if (obj.chance !== undefined) {
       if (typeof obj.chance !== "number" || obj.chance < 0 || obj.chance > 1) {
         throw new MapParseError(`${where}.chance must be a number in [0,1]`);
@@ -383,7 +387,7 @@ function parsePlacementEvents(raw: unknown, source: string): MapPlacementEventDe
     if (requires) event.requires = requires;
     if (typeof obj.locked_hint === "string") event.lockedHint = obj.locked_hint;
     const custom = extractCustom(obj, [
-      "id", "trigger", "label", "run", "chance", "requires", "locked_hint", "order",
+      "id", "trigger", "label", "run", "arrival", "chance", "requires", "locked_hint", "order",
     ]);
     if (custom) event.custom = custom;
     return event;
@@ -399,6 +403,26 @@ function parseResourceRef(raw: unknown, source: string): ProjectResourceRef {
     throw new MapParseError(`${source}.kind is not a standard project resource kind`);
   }
   return { kind, id: readString(obj, "id", source) };
+}
+
+function parseMapArrival(raw: unknown, source: string): MapArrivalDef {
+  const obj = readObject(raw, source);
+  const unknown = Object.keys(obj).filter((key) => key !== "placement" && key !== "at");
+  if (unknown.length > 0) {
+    throw new MapParseError(`${source} contains unknown field "${unknown[0]}"`);
+  }
+  const hasPlacement = obj.placement !== undefined;
+  const hasPoint = obj.at !== undefined;
+  if (hasPlacement === hasPoint) {
+    throw new MapParseError(`${source} must declare exactly one of placement or at`);
+  }
+  if (hasPlacement) {
+    if (typeof obj.placement !== "string" || obj.placement.length === 0) {
+      throw new MapParseError(`${source}.placement must be a non-empty string`);
+    }
+    return { placementId: obj.placement };
+  }
+  return { at: readPair(obj.at, `${source}.at`, false) };
 }
 
 function readPair(
@@ -477,6 +501,9 @@ function parseMapConnections(
       );
     }
     const conn: MapConnection = { dir: co.dir, target: co.target };
+    if (co.arrival !== undefined) {
+      conn.arrival = parseMapArrival(co.arrival, `${source}.connections[${i}].arrival`);
+    }
     if (co.requires !== undefined) {
       const requires = parseCondition(co.requires);
       if (requires) conn.requires = requires;

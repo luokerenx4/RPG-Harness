@@ -421,11 +421,30 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
               collision: "trigger",
               visible: true,
               resource: { kind: "map", id: "inner" },
-              events: [{ id: "enter", trigger: "interact", label: "開いた扉", order: 0 }],
+              events: [{
+                id: "enter",
+                trigger: "interact",
+                label: "開いた扉",
+                arrival: { at: { x: 4, y: 2 } },
+                order: 0,
+              }],
             },
           ],
         },
-        { id: "inner", name: "内側", description: "" },
+        {
+          id: "inner",
+          name: "内側",
+          description: "",
+          layout: {
+            width: 6,
+            height: 4,
+            tileWidth: 32,
+            tileHeight: 32,
+            playerStart: { x: 1, y: 1 },
+            layers: [],
+            regions: [],
+          },
+        },
       ],
     });
     const ctx = makeCtx(game);
@@ -439,6 +458,7 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
     ctx.state.runtime.lastHubActivities = activities;
     await drain(dispatchActivity(ctx, open.id));
     expect(ctx.state.baseline.currentMapId).toBe("inner");
+    expect(ctx.state.runtime.mapPosition).toEqual({ x: 4, y: 2 });
 
     ctx.state.baseline.currentMapId = "gate";
     ctx.state.runtime.lastHubActivities = activities;

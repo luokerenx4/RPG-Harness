@@ -303,6 +303,7 @@
 .node-map-event-command > i { position: absolute; left: 0; color: #cf9ff5; font-style: normal; }
 .node-map-event-command strong { color: #84929e; font: 700 8px/1.25 ui-monospace,monospace; }
 .node-map-event-command small { color: #596671; font-size: 6px; letter-spacing: .07em; }
+.node-map-event-command small.arrival { color: #92cbd2; letter-spacing: .035em; }
 .node-map-event-pages > li.route .node-map-event-command strong { color: #e0b9ff; }
 
 .node-map-event-pages-empty {

@@ -121,6 +121,7 @@ export function collectMapRoutes(map: MapDef): MapRoute[] {
         eventId: event.id,
         trigger: event.trigger,
         ...(event.chance !== undefined ? { chance: event.chance } : {}),
+        ...(event.arrival !== undefined ? { arrival: event.arrival } : {}),
         dir: event.label ?? ref.id,
         target: ref.id,
         ...(requires ? { requires } : {}),

@@ -19,11 +19,16 @@ test("collectMapConnections projects placement map events as ordinary exits", ()
         id: "move",
         trigger: "player_touch",
         label: "北へ進む",
+        arrival: { placementId: "south-gate" },
         order: 0,
       }],
     }],
   });
-  expect(connections).toEqual([{ dir: "北へ進む", target: "inner" }]);
+  expect(connections).toEqual([{
+    dir: "北へ進む",
+    target: "inner",
+    arrival: { placementId: "south-gate" },
+  }]);
 });
 
 test("map routes retain event-page identity across duplicate targets", () => {
@@ -31,7 +36,11 @@ test("map routes retain event-page identity across duplicate targets", () => {
     id: "gate",
     name: "Gate",
     description: "",
-    connections: [{ dir: "Old tunnel", target: "inner" }],
+    connections: [{
+      dir: "Old tunnel",
+      target: "inner",
+      arrival: { at: { x: 3, y: 1 } },
+    }],
     placements: [
       {
         id: "locked-door",
@@ -57,7 +66,13 @@ test("map routes retain event-page identity across duplicate targets", () => {
         collision: "trigger",
         visible: true,
         resource: { kind: "map", id: "inner" },
-        events: [{ id: "enter", trigger: "interact", label: "Open door", order: 0 }],
+        events: [{
+          id: "enter",
+          trigger: "interact",
+          label: "Open door",
+          arrival: { placementId: "west-door" },
+          order: 0,
+        }],
       },
     ],
   };
@@ -69,6 +84,8 @@ test("map routes retain event-page identity across duplicate targets", () => {
   ]);
   expect(new Set(routes.map((route) => mapRouteActivityId(routes, route))).size).toBe(3);
   expect(resolveMapRoute(map, "inner")).toBeUndefined();
+  expect(routes[0]?.arrival).toEqual({ at: { x: 3, y: 1 } });
+  expect(routes[2]?.arrival).toEqual({ placementId: "west-door" });
   expect(resolveMapRoute(map, "inner", routes[2]!.key)?.dir).toBe("Open door");
   expect(resolveMapRoute(map, "wrong", routes[2]!.key)).toBeUndefined();
 });

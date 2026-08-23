@@ -550,6 +550,146 @@ describe("validateGame — maps", () => {
     expect(() => validateGame(game)).toThrow(/footprint must fit inside 2x2/);
   });
 
+  test("accepts placement and coordinate arrivals that resolve inside their target map", () => {
+    const game = baseGame({
+      maps: [{
+        id: "gate",
+        name: "Gate",
+        description: "",
+        connections: [{
+          dir: "Inner courtyard",
+          target: "inner",
+          arrival: { at: { x: 3, y: 2 } },
+        }],
+        placements: [{
+          id: "west_door",
+          at: { x: 0, y: 0 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "trigger",
+          visible: true,
+          resource: { kind: "map", id: "inner" },
+          events: [{
+            id: "enter",
+            trigger: "interact",
+            arrival: { placementId: "east_entry" },
+            order: 0,
+          }],
+        }],
+      }, {
+        id: "inner",
+        name: "Inner",
+        description: "",
+        layout: {
+          width: 4,
+          height: 3,
+          tileWidth: 32,
+          tileHeight: 32,
+          layers: [],
+          regions: [],
+        },
+        placements: [{
+          id: "east_entry",
+          at: { x: 1, y: 1 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "none",
+          visible: false,
+          resource: { kind: "script", id: "001" },
+          events: [],
+        }],
+      }],
+    });
+
+    expect(() => validateGame(game)).not.toThrow();
+  });
+
+  test("rejects arrival on a non-map event resource", () => {
+    const game = baseGame({
+      maps: [{
+        id: "room",
+        name: "Room",
+        description: "",
+        placements: [{
+          id: "bell",
+          at: { x: 0, y: 0 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "none",
+          visible: true,
+          resource: { kind: "script", id: "001" },
+          events: [{
+            id: "ring",
+            trigger: "interact",
+            arrival: { at: { x: 0, y: 0 } },
+            order: 0,
+          }],
+        }],
+      }],
+    });
+
+    expect(() => validateGame(game)).toThrow(/arrival requires.*target a map/);
+  });
+
+  test("rejects a missing target placement", () => {
+    const game = baseGame({
+      maps: [{
+        id: "gate",
+        name: "Gate",
+        description: "",
+        connections: [{
+          dir: "Inner",
+          target: "inner",
+          arrival: { placementId: "missing_entry" },
+        }],
+      }, {
+        id: "inner",
+        name: "Inner",
+        description: "",
+      }],
+    });
+
+    expect(() => validateGame(game)).toThrow(/undeclared placement "missing_entry" in map "inner"/);
+  });
+
+  test("rejects coordinate arrivals into node maps or outside spatial bounds", () => {
+    const nodeArrival = baseGame({
+      maps: [{
+        id: "gate",
+        name: "Gate",
+        description: "",
+        connections: [{ dir: "Node", target: "node", arrival: { at: { x: 0, y: 0 } } }],
+      }, {
+        id: "node",
+        name: "Node",
+        description: "",
+      }],
+    });
+    expect(() => validateGame(nodeArrival)).toThrow(/coordinate arrival requires target map "node".*spatial layout/);
+
+    const outOfBounds = baseGame({
+      maps: [{
+        id: "gate",
+        name: "Gate",
+        description: "",
+        connections: [{ dir: "Field", target: "field", arrival: { at: { x: 2, y: 0 } } }],
+      }, {
+        id: "field",
+        name: "Field",
+        description: "",
+        layout: {
+          width: 2,
+          height: 2,
+          tileWidth: 32,
+          tileHeight: 32,
+          layers: [],
+          regions: [],
+        },
+      }],
+    });
+    expect(() => validateGame(outOfBounds)).toThrow(/coordinates must fit inside target map "field" 2x2 layout/);
+  });
+
   test("map-chain reachability follows map resource placements", () => {
     const game = baseGame({
       maps: [

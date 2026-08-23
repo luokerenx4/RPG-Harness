@@ -3161,7 +3161,7 @@ const moveHandler: ActionHandler = (ctx) => {
   // side effects (turn count, companion passives, encounter roll) on
   // top. The engine doesn't model raid-instance state in StateDelta —
   // these writes live in the module's own slice.
-  enterMap(ctx.state, ctx.game, target);
+  enterMap(ctx.state, ctx.game, target, conn.arrival);
   m.raid.turnsTaken += 1;
   const targetMap = currentMap(ctx)!;
 

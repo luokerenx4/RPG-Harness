@@ -1,4 +1,4 @@
-import type { ComposedState, Game, MapDef } from "../types";
+import type { ComposedState, Game, MapArrivalDef, MapDef, MapPoint } from "../types";
 import { mapPositionLayoutKey } from "../maps";
 
 export class EnterMapError extends Error {}
@@ -20,13 +20,16 @@ export class EnterMapError extends Error {}
 // first entry, etc.). The MapDef carries the rule list; how to read it
 // is the module's choice.
 //
-// Takes (state, game, mapId) rather than PresetContext so that
+// Takes (state, game, mapId, arrival?) rather than PresetContext so that
 // ActionHandler bodies — which only receive ActionContext — can call it
-// directly without re-plumbing the registries.
+// directly without re-plumbing the registries. All target and onEnter
+// preflight happens before the first state mutation, so a rejected transfer
+// cannot leave the player half-transitioned.
 export function enterMap(
   state: ComposedState,
   game: Game,
   mapId: string,
+  arrival?: MapArrivalDef,
 ): MapDef {
   const map = (game.maps ?? []).find((m) => m.id === mapId);
   if (!map) {
@@ -36,15 +39,9 @@ export function enterMap(
       }`,
     );
   }
-  state.baseline.currentMapId = mapId;
-  state.runtime.mapPositionMapId = mapId;
-  state.runtime.mapPosition = map.layout?.playerStart ?? { x: 0, y: 0 };
-  state.runtime.mapPositionLayoutKey = mapPositionLayoutKey(map);
-  if (map.bg) {
-    state.baseline.visuals.bg = map.bg;
-  }
+  const arrivalPoint = resolveArrivalPoint(map, arrival);
   if (map.onEnter !== undefined) {
-    const scriptExists = game.scripts.some((s) => s.id === map.onEnter);
+    const scriptExists = game.scripts.some((script) => script.id === map.onEnter);
     if (!scriptExists) {
       throw new EnterMapError(
         `enterMap: map "${mapId}".onEnter references undeclared script "${map.onEnter}"`,
@@ -57,8 +54,63 @@ export function enterMap(
           `clear it before transitioning.`,
       );
     }
+  }
+  state.baseline.currentMapId = mapId;
+  state.runtime.mapPositionMapId = mapId;
+  state.runtime.mapPosition = arrivalPoint;
+  state.runtime.mapPositionLayoutKey = mapPositionLayoutKey(map);
+  if (map.bg) {
+    state.baseline.visuals.bg = map.bg;
+  }
+  if (map.onEnter !== undefined) {
     state.baseline.currentScriptId = map.onEnter;
     state.baseline.beatIndex = 0;
   }
   return map;
+}
+
+function resolveArrivalPoint(map: MapDef, arrival?: MapArrivalDef): MapPoint {
+  if (arrival === undefined) {
+    const start = map.layout?.playerStart ?? { x: 0, y: 0 };
+    return { ...start };
+  }
+  const hasPlacement = arrival.placementId !== undefined;
+  const hasPoint = arrival.at !== undefined;
+  if (hasPlacement === hasPoint) {
+    throw new EnterMapError(
+      `enterMap: map "${map.id}" arrival must declare exactly one of placementId or at`,
+    );
+  }
+  if (hasPlacement) {
+    const placementId = arrival.placementId;
+    if (typeof placementId !== "string" || placementId.length === 0) {
+      throw new EnterMapError(
+        `enterMap: map "${map.id}" arrival placementId must be a non-empty string`,
+      );
+    }
+    const placement = (map.placements ?? []).find((candidate) => candidate.id === placementId);
+    if (!placement) {
+      throw new EnterMapError(
+        `enterMap: map "${map.id}" has no arrival placement "${placementId}"`,
+      );
+    }
+    return { ...placement.at };
+  }
+  const point = arrival.at;
+  if (!point || !Number.isInteger(point.x) || !Number.isInteger(point.y) || point.x < 0 || point.y < 0) {
+    throw new EnterMapError(
+      `enterMap: map "${map.id}" arrival coordinates must be non-negative integers`,
+    );
+  }
+  if (!map.layout) {
+    throw new EnterMapError(
+      `enterMap: map "${map.id}" coordinate arrival requires a spatial layout`,
+    );
+  }
+  if (point.x >= map.layout.width || point.y >= map.layout.height) {
+    throw new EnterMapError(
+      `enterMap: map "${map.id}" arrival ${point.x},${point.y} must fit inside ${map.layout.width}x${map.layout.height} layout`,
+    );
+  }
+  return { ...point };
 }

@@ -58,7 +58,42 @@ only sees CG or dialogue.
 layers, collision, regions, resource identity, trigger type, ordering, and
 conditions are formal fields and must not be encoded there.
 
-### 3. Surfaces are projections, not alternate game databases
+### 3. Route target and spatial arrival are separate contracts
+
+Every map transfer is a directed route. Its target identity remains an ordinary
+map resource reference: an event's explicit `run`, or the containing
+placement's `resource` when `run` is omitted. A route may additionally own one
+spatial `arrival`, but arrival data never replaces or changes that resource
+identity.
+
+```yaml
+# Stable anchor in the destination map.
+resource: { kind: map, id: edo_castle }
+events:
+  - id: return
+    trigger: player_touch
+    arrival: { placement: south_gate_entry }
+
+# Exact cell in a spatial destination selected by event.run.
+events:
+  - id: descend
+    trigger: interact
+    run: { kind: map, id: cellar }
+    arrival: { at: [4, 7] }
+```
+
+The placement form resolves the named placement's `at` in the target map. The
+coordinate form requires a target `layout` and must be within its bounds. A
+layout-less node map may use a placement anchor, but cannot use an exact
+coordinate anchor. If `arrival` is omitted, entry uses the target's
+`player_start`, or `[0,0]` when no start is authored.
+
+Headless consumes the same semantic route and resulting `currentMapId` while
+ignoring its spatial coordinate. Human spatial renderers consume the persisted
+cursor. Runtime never synthesizes the reverse edge; an authored A → B route is
+independent from any B → A route.
+
+### 4. Surfaces are projections, not alternate game databases
 
 The engine will expose one query for the current map's available semantic
 resources/operations. Every surface consumes that result:
@@ -82,7 +117,7 @@ semantic option list; entering a spatial map initializes `player_start` (or
 position-dependent outcomes are checkpointed and replayable rather than DOM
 state.
 
-### 4. Resource Registry is shared infrastructure
+### 5. Resource Registry is shared infrastructure
 
 The engine/loader will provide a uniform registry over characters, items,
 weapons, skills, enemies, maps, scripts, actions, visual assets, and modules.
@@ -94,7 +129,7 @@ Map-local identities are canonicalized as
 `map:<map-id>/placement:<placement-id>/event:<event-id>` for diagnostics,
 replays, coding issues, and Studio deep links.
 
-### 5. Project Studio is the authoring shell
+### 6. Project Studio is the authoring shell
 
 Studio becomes the primary project editor rather than an asset-only gallery. It
 will provide:
@@ -159,6 +194,16 @@ placements:
       - id: leave
         trigger: player_touch
         label: 返回江户城
+        arrival: { placement: south_gate_entry }
+
+  - id: cellar_stairs
+    at: [12, 8]
+    events:
+      - id: descend
+        trigger: interact
+        label: 前往地窖
+        run: { kind: map, id: shrine_cellar }
+        arrival: { at: [4, 7] }
 ```
 
 The schema intentionally permits event-only maps, invisible placements, empty
@@ -191,6 +236,9 @@ resource references and validation registry.
   integers as appropriate;
 - spatial placements and regions fit inside the declared layout;
 - referenced layers and project resources exist;
+- route arrival declares exactly one of a target placement or exact coordinate;
+- target placements exist in the route's target map, and exact coordinates
+  require and fit inside the target layout;
 - tile matrices, when authored inline, match map width and height;
 - event requirements use the common Condition DSL;
 - renderer code cannot create authoritative resources unavailable to Headless;

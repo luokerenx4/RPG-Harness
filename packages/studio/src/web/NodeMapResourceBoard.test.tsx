@@ -46,6 +46,7 @@ const populatedMap = map({
           label: "North passage",
           chance: 0.5,
           lockedHint: "The gate is shut.",
+          arrival: { placementId: "south-gate" },
           order: 20,
         },
         {
@@ -66,6 +67,7 @@ const populatedMap = map({
           trigger: "custom:depart",
           label: "Leave <unsafe>",
           run: { kind: "map", id: "harbour" },
+          arrival: { at: { x: 3, y: 4 } },
           requires: { switch: { name: "fare-paid" } },
           order: 0,
         },
@@ -98,6 +100,7 @@ describe("Studio folded node-map resource board", () => {
     expect(model.placements[0]?.pages[1]).toMatchObject({
       key: "placement:north-gate:event:touch-route",
       command: "Transfer → map:snow-field",
+      arrivalLabel: "ARRIVE · placement:south-gate",
       route: true,
       targetInherited: true,
       probabilistic: true,
@@ -105,6 +108,7 @@ describe("Studio folded node-map resource board", () => {
     });
     expect(model.placements[1]?.pages[0]).toMatchObject({
       command: "Transfer → map:harbour",
+      arrivalLabel: "ARRIVE · 3,4",
       route: true,
       targetInherited: false,
       conditional: true,
@@ -128,6 +132,8 @@ describe("Studio folded node-map resource board", () => {
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Transfer → map:snow-field");
     expect(html).toContain("Transfer → map:harbour");
+    expect(html).toContain("ARRIVE · placement:south-gate");
+    expect(html).toContain("ARRIVE · 3,4");
     expect(html).toContain("MAP ROUTE");
     expect(html).toContain("PLACEMENT TARGET");
     expect(html).toContain("No event pages on this placement.");

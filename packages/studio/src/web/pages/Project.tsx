@@ -46,6 +46,7 @@ import {
 import { MapAssetPicker } from "../MapAssetPicker";
 import { buildMapTopologyChains, MapTopologyDialog } from "../MapTopologyDialog";
 import { NodeMapResourceBoard } from "../NodeMapResourceBoard";
+import { RouteArrivalEditor } from "../RouteArrivalEditor";
 import { WorldAtlas } from "../WorldAtlas";
 import {
   compareMapCatalogChainKeys,
@@ -3302,6 +3303,7 @@ function MapOverview({
       {editing && selectedPlacement && (
         <PlacementEditor
           map={draft}
+          maps={maps}
           placement={selectedPlacement}
           layers={draft.layout?.layers ?? []}
           assets={assets}
@@ -3776,6 +3778,7 @@ export function MapSurfacePreviews({
 
 function PlacementEditor({
   map,
+  maps,
   placement,
   layers,
   assets,
@@ -3788,6 +3791,7 @@ function PlacementEditor({
   onClose,
 }: {
   map: MapDef;
+  maps: MapDef[];
   placement: MapPlacementDef;
   layers: MapLayerDef[];
   assets: ProjectAssetPreview[];
@@ -3861,15 +3865,17 @@ function PlacementEditor({
           <div className="placement-resource-fields">
             <label>Kind<select value={placementKind ?? ""} onChange={(event) => {
               const kind = event.target.value as ProjectResourceKind | "";
-              onChange((current) => ({
-                ...current,
-                resource: kind ? { kind, id: resourceChoices(resources, kind)[0]?.id ?? "" } : undefined,
-              }));
+              onChange((current) => replaceMapPlacementResourceTarget(
+                current,
+                kind ? { kind, id: resourceChoices(resources, kind)[0]?.id ?? "" } : undefined,
+              ));
             }}><option value="">event-only</option>{[...PLACEABLE_KINDS].map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-            <label>Project record<select value={placement.resource?.id ?? ""} disabled={!placementKind} onChange={(event) => onChange((current) => ({
-              ...current,
-              resource: current.resource ? { ...current.resource, id: event.target.value } : undefined,
-            }))}>
+            <label>Project record<select value={placement.resource?.id ?? ""} disabled={!placementKind} onChange={(event) => onChange((current) =>
+              replaceMapPlacementResourceTarget(
+                current,
+                current.resource ? { ...current.resource, id: event.target.value } : undefined,
+              )
+            )}>
               {placement.resource && !placementChoices.some((choice) => choice.id === placement.resource?.id) && (
                 <option value={placement.resource.id}>{placement.resource.id} · missing</option>
               )}
@@ -3925,6 +3931,9 @@ function PlacementEditor({
       {editorSection === "events" && <div role="tabpanel" aria-label="Object event pages">
         <EventPagesEditor
           placement={placement}
+          maps={maps.some((candidate) => candidate.id === map.id)
+            ? maps.map((candidate) => candidate.id === map.id ? map : candidate)
+            : [...maps, map]}
           resources={resources}
           switches={switches}
           variables={variables}
@@ -3935,14 +3944,16 @@ function PlacementEditor({
   );
 }
 
-function EventPagesEditor({
+export function EventPagesEditor({
   placement,
+  maps,
   resources,
   switches,
   variables,
   onChange,
 }: {
   placement: MapPlacementDef;
+  maps: MapDef[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
@@ -4000,6 +4011,20 @@ function EventPagesEditor({
     events: current.events.map((event, index) => index === selectedIndex ? { ...event, ...patch } : event),
   }));
 
+  const setSelectedRun = (run: MapPlacementEventDef["run"]) => onChange((current) => ({
+    ...current,
+    events: current.events.map((event, index) =>
+      index === selectedIndex ? replaceMapEventRunTarget(event, run) : event
+    ),
+  }));
+
+  const setSelectedArrival = (arrival: MapPlacementEventDef["arrival"]) => onChange((current) => ({
+    ...current,
+    events: current.events.map((event, index) =>
+      index === selectedIndex ? replaceMapEventArrival(event, arrival) : event
+    ),
+  }));
+
   const addPage = (source?: MapPlacementEventDef) => {
     const id = uniqueLocalId(source ? `${source.id}_copy` : "event", placement.events.map((event) => event.id));
     const next: MapPlacementEventDef = source
@@ -4033,6 +4058,10 @@ function EventPagesEditor({
   };
 
   const trigger = selected ? eventTriggerMeta(selected.trigger) : null;
+  const effectiveTarget = selected?.run ?? placement.resource;
+  const targetMap = effectiveTarget?.kind === "map"
+    ? maps.find((candidate) => candidate.id === effectiveTarget.id)
+    : undefined;
   const commandSummary = selected
     ? mapEventCommandSummary(selected, placement, resources)
     : "No target selected";
@@ -4121,15 +4150,15 @@ function EventPagesEditor({
               <div className="event-command-row run-command">
                 <span className="event-command-gutter">▶</span>
                 <div><strong>Activate resource</strong><small title={commandSummary}>{commandSummary}</small></div>
-                <label>Type<select value={selected.run?.kind ?? ""} onChange={(change) => patchSelected({
-                  run: change.target.value ? {
+                <label>Type<select value={selected.run?.kind ?? ""} onChange={(change) => setSelectedRun(
+                  change.target.value ? {
                     kind: change.target.value as ProjectResourceKind,
                     id: resourceChoices(resources, change.target.value as ProjectResourceKind)[0]?.id ?? "",
-                  } : undefined,
-                })}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-                <label>Project record<select value={selected.run?.id ?? ""} disabled={!selected.run} onChange={(change) => patchSelected({
-                  run: selected.run ? { ...selected.run, id: change.target.value } : undefined,
-                })}>
+                  } : undefined
+                )}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
+                <label>Project record<select value={selected.run?.id ?? ""} disabled={!selected.run} onChange={(change) => setSelectedRun(
+                  selected.run ? { ...selected.run, id: change.target.value } : undefined
+                )}>
                   {!selected.run ? <option value="">same as placement</option> : (
                     <>
                       {!resourceChoices(resources, selected.run.kind).some((choice) => choice.id === selected.run?.id) && <option value={selected.run.id}>{selected.run.id} · missing</option>}
@@ -4138,6 +4167,18 @@ function EventPagesEditor({
                   )}
                 </select></label>
               </div>
+              {effectiveTarget?.kind === "map" && (targetMap ? (
+                <RouteArrivalEditor
+                  targetMap={targetMap}
+                  value={selected.arrival}
+                  onChange={setSelectedArrival}
+                />
+              ) : (
+                <div className="event-route-arrival-missing" role="alert">
+                  <strong>Arrival editor unavailable</strong>
+                  <span>Destination map <code>map:{effectiveTarget.id}</code> is missing from the authoritative project.</span>
+                </div>
+              ))}
               <label className="event-locked-feedback"><span>Unavailable message</span><input value={selected.lockedHint ?? ""} placeholder="Optional player-facing reason when the condition is locked" onChange={(change) => patchSelected({ lockedHint: change.target.value || undefined })} /></label>
             </section>
           </article>
@@ -4535,6 +4576,61 @@ export function resolveProjectReference(
   return resources.find((resource) => resource.key === key) ?? null;
 }
 
+/** Change one event's explicit run target and discard arrival owned by the old target. */
+export function replaceMapEventRunTarget(
+  event: MapPlacementEventDef,
+  run: MapPlacementEventDef["run"],
+): MapPlacementEventDef {
+  if (sameProjectResourceRef(event.run, run)) return event;
+  const next = { ...event };
+  if (run) next.run = run;
+  else delete next.run;
+  delete next.arrival;
+  return next;
+}
+
+/** Store a concrete destination, or remove the optional field for map start. */
+export function replaceMapEventArrival(
+  event: MapPlacementEventDef,
+  arrival: MapPlacementEventDef["arrival"],
+): MapPlacementEventDef {
+  const next = { ...event };
+  if (arrival !== undefined) next.arrival = arrival;
+  else delete next.arrival;
+  return next;
+}
+
+/**
+ * Change a placement resource without carrying inherited-event arrivals to a
+ * different effective map. Pages with an explicit run target remain intact.
+ */
+export function replaceMapPlacementResourceTarget(
+  placement: MapPlacementDef,
+  resource: MapPlacementDef["resource"],
+): MapPlacementDef {
+  if (sameProjectResourceRef(placement.resource, resource)) return placement;
+  const next: MapPlacementDef = {
+    ...placement,
+    events: placement.events.map((event) => {
+      if (event.run !== undefined || event.arrival === undefined) return event;
+      const updated = { ...event };
+      delete updated.arrival;
+      return updated;
+    }),
+  };
+  if (resource) next.resource = resource;
+  else delete next.resource;
+  return next;
+}
+
+export function mapEventArrivalSummary(
+  arrival: MapPlacementEventDef["arrival"],
+): string {
+  if (arrival?.placementId) return `arrive at placement:${arrival.placementId}`;
+  if (arrival?.at) return `arrive at ${arrival.at.x},${arrival.at.y}`;
+  return "arrive at map start";
+}
+
 export function mapEventCommandSummary(
   event: MapPlacementEventDef,
   placement: MapPlacementDef,
@@ -4550,7 +4646,15 @@ export function mapEventCommandSummary(
       : target.kind === "action"
         ? "Dispatch action"
         : "Activate resource";
-  return `${operation} → ${label}${event.run ? "" : " · placement resource"}`;
+  const arrival = target.kind === "map" ? ` · ${mapEventArrivalSummary(event.arrival)}` : "";
+  return `${operation} → ${label}${event.run ? "" : " · placement resource"}${arrival}`;
+}
+
+function sameProjectResourceRef(
+  left: MapPlacementEventDef["run"],
+  right: MapPlacementEventDef["run"],
+): boolean {
+  return left?.kind === right?.kind && left?.id === right?.id;
 }
 
 function cloneMap(map: MapDef): MapDef {

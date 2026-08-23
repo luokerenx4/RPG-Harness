@@ -49,6 +49,27 @@ describe("migrateMapToPlacements", () => {
     });
   });
 
+  test("preserves placement and coordinate arrivals while migrating connections", () => {
+    const result = migrateMapToPlacements(`id: town
+name: Town
+connections:
+  - dir: West gate
+    target: lab
+    arrival: { placement: west_entry }
+  - dir: Courtyard
+    target: keep
+    arrival: { at: [7, 3] }
+`);
+
+    expect(result.migratedConnections).toBe(2);
+    expect(parseMap(result.content).placements?.map((placement) =>
+      placement.events[0]?.arrival
+    )).toEqual([
+      { placementId: "west_entry" },
+      { at: { x: 7, y: 3 } },
+    ]);
+  });
+
   test("moves on_enter into an invisible map-enter script placement", () => {
     const result = migrateMapToPlacements(
       "id: town\nname: Town\non_enter: arrive\n",

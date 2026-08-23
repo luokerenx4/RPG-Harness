@@ -222,7 +222,7 @@ const moveToMapHandler: ActionHandler = ({ state, action, game }) => {
       };
     }
   }
-  enterMap(state, game, to);
+  enterMap(state, game, to, connection.arrival);
   return {};
 };
 

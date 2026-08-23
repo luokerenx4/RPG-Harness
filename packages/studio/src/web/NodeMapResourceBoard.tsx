@@ -23,6 +23,7 @@ export interface NodeMapEventPageRow {
   triggerLabel: string;
   label: string;
   command: string;
+  arrivalLabel: string | null;
   target: ProjectResourceRef | null;
   targetInherited: boolean;
   route: boolean;
@@ -72,6 +73,7 @@ export function buildNodeMapResourceBoardModel(
         triggerLabel: nodeMapTriggerLabel(event.trigger),
         label: event.label || nodeMapTriggerLabel(event.trigger),
         command: nodeMapEventCommand(target),
+        arrivalLabel: route ? nodeMapArrivalLabel(event.arrival) : null,
         target,
         targetInherited: event.run === undefined && placement.resource !== undefined,
         route,
@@ -186,6 +188,7 @@ export function NodeMapResourceBoard({
                         <span className="node-map-event-command">
                           {page.route && <i aria-hidden="true">→</i>}
                           <strong>{page.command}</strong>
+                          {page.arrivalLabel && <small className="arrival">{page.arrivalLabel}</small>}
                           {page.targetInherited && <small>PLACEMENT TARGET</small>}
                         </span>
                         <span className="node-map-event-flags">
@@ -221,6 +224,12 @@ function nodeMapEventCommand(target: ProjectResourceRef | null): string {
   if (target.kind === "script") return `Run → script:${target.id}`;
   if (target.kind === "action") return `Dispatch → action:${target.id}`;
   return `Activate → ${target.kind}:${target.id}`;
+}
+
+function nodeMapArrivalLabel(arrival: MapPlacementEventDef["arrival"]): string {
+  if (arrival?.placementId) return `ARRIVE · placement:${arrival.placementId}`;
+  if (arrival?.at) return `ARRIVE · ${arrival.at.x},${arrival.at.y}`;
+  return "ARRIVE · MAP START";
 }
 
 function nodeMapTriggerLabel(trigger: MapEventTrigger): string {

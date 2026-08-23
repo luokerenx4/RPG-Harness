@@ -1,4 +1,5 @@
 import { parseDocument } from "yaml";
+import type { MapArrivalDef } from "@rpg-harness/engine";
 import { parseMap } from "./map";
 
 export interface MapV2MigrationResult {
@@ -51,6 +52,7 @@ export function migrateMapToPlacements(
         id: "move",
         trigger: "manual",
         label: connection.dir,
+        ...(connection.arrival ? { arrival: encodeMapArrival(connection.arrival) } : {}),
         ...(connection.requires ? { requires: connection.requires } : {}),
         ...(connection.lockedHint ? { locked_hint: connection.lockedHint } : {}),
         order: index,
@@ -79,6 +81,12 @@ export function migrateMapToPlacements(
     migratedConnections: connections.length,
     migratedOnEnter: map.onEnter !== undefined,
   };
+}
+
+function encodeMapArrival(arrival: MapArrivalDef): Record<string, unknown> {
+  if (arrival.placementId !== undefined) return { placement: arrival.placementId };
+  if (arrival.at !== undefined) return { at: [arrival.at.x, arrival.at.y] };
+  return {};
 }
 
 function stableSegment(value: string): string {

@@ -488,6 +488,20 @@ export type MapEventTrigger =
   | "manual"
   | `${string}:${string}`;
 
+/**
+ * Optional spatial arrival owned by a map transfer.
+ *
+ * The destination map remains the event's map resource. Authors may either
+ * anchor the player to one stable placement in that map or provide an exact
+ * grid coordinate. Omitting this contract preserves the target map's ordinary
+ * playerStart behavior. Parser and validator enforce that exactly one field is
+ * present when an arrival is authored.
+ */
+export interface MapArrivalDef {
+  placementId?: string;
+  at?: MapPoint;
+}
+
 export interface MapPlacementEventDef {
   /** Stable within the containing placement. */
   id: string;
@@ -495,6 +509,8 @@ export interface MapPlacementEventDef {
   label?: string;
   /** If omitted, the placement's own resource is activated. */
   run?: ProjectResourceRef;
+  /** Spatial arrival when the effective resource is another map. */
+  arrival?: MapArrivalDef;
   /** Optional deterministic-RNG probability gate, inclusive range 0..1. */
   chance?: number;
   requires?: Condition;
@@ -602,6 +618,9 @@ export interface MapConnection {
   dir: string;
   // Target map id. Validated against game.maps at parse time.
   target: string;
+  // Optional spatial arrival in the target map. Transitional flat edges use
+  // the same contract as placement-backed map event pages.
+  arrival?: MapArrivalDef;
   // Optional gate. When present and false, the engine surfaces the
   // connection as a locked entry (with `lockedHint` as the reason) so
   // the player can see where they could go.

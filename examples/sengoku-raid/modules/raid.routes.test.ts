@@ -11,6 +11,7 @@ import {
   type Game,
   type HubActivity,
   type Input,
+  type MapArrivalDef,
   type StepResult,
 } from "@rpg-harness/engine";
 import { loadGame } from "@rpg-harness/cli";
@@ -42,6 +43,28 @@ describe("sengoku-raid map routes", () => {
 
     expect(moved.inputResult?.accepted).toBe(true);
     expect(moved.state.baseline.currentMapId).toBe(TARGET_ID);
+    expect(raidState(moved.state).raid).toMatchObject({
+      turnsTaken: 1,
+      visited: {
+        [ENTRY_ID]: { visited: true },
+        [TARGET_ID]: { visited: true },
+      },
+    });
+  });
+
+  test("carries the authored route arrival through the raid-owned move pipeline", async () => {
+    const game = await gameWithKuroRouteArrival({ at: { x: 2, y: 3 } });
+    const raidHub = await enterKuroSwampRaid(game);
+    const move = findActivity(raidHub, `move:${TARGET_ID}`);
+
+    const moved = await step(game, raidHub.state, {
+      type: "doActivity",
+      id: move.id,
+    });
+
+    expect(moved.inputResult?.accepted).toBe(true);
+    expect(moved.state.baseline.currentMapId).toBe(TARGET_ID);
+    expect(moved.state.runtime.mapPosition).toEqual({ x: 2, y: 3 });
     expect(raidState(moved.state).raid).toMatchObject({
       turnsTaken: 1,
       visited: {
@@ -123,6 +146,21 @@ async function gameWithLockedKuroRoute(): Promise<Game> {
     maps,
   };
   return game;
+}
+
+async function gameWithKuroRouteArrival(
+  arrival: MapArrivalDef,
+): Promise<Game> {
+  const loaded = await loadGame(GAME_DIR);
+  const maps = (loaded.maps ?? []).map((map) =>
+    map.id === ENTRY_ID ? structuredClone(map) : map
+  );
+  const event = maps.find((map) => map.id === ENTRY_ID)?.placements?.find(
+    (placement) => placement.id === "exit_kuro_swamp_crossroads",
+  )?.events.find((candidate) => candidate.id === "move");
+  if (!event) throw new Error("real kuro swamp route fixture is missing");
+  event.arrival = arrival;
+  return { ...loaded, maps };
 }
 
 async function enterKuroSwampRaid(game: Game): Promise<StepResult> {

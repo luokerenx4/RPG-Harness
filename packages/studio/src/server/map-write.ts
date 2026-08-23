@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { isMap, isNode, isScalar, parseDocument, stringify } from "yaml";
 import type {
   Game,
+  MapArrivalDef,
   MapDef,
   MapLayoutDef,
   MapPlacementDef,
@@ -398,10 +399,17 @@ function encodePlacement(placement: MapPlacementDef): Record<string, unknown> {
       trigger: event.trigger,
       ...(event.label ? { label: event.label } : {}),
       ...(event.run ? { run: event.run } : {}),
+      ...(event.arrival ? { arrival: encodeMapArrival(event.arrival) } : {}),
       ...(event.chance !== undefined ? { chance: event.chance } : {}),
       ...(event.requires ? { requires: event.requires } : {}),
       ...(event.lockedHint ? { locked_hint: event.lockedHint } : {}),
       order: event.order,
     })),
   };
+}
+
+function encodeMapArrival(arrival: MapArrivalDef): Record<string, unknown> {
+  if (arrival.placementId !== undefined) return { placement: arrival.placementId };
+  if (arrival.at !== undefined) return { at: [arrival.at.x, arrival.at.y] };
+  return {};
 }
