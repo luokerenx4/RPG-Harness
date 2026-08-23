@@ -4,6 +4,7 @@ import {
   createConditionDraft,
   eventTriggerMeta,
   hasMapDraftChanges,
+  mapEventCommandSummary,
   mapPlacementResourceLabel,
   parseResourceScalarFields,
   patchResourceScalarFields,
@@ -89,6 +90,27 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(mapPlacementResourceLabel(placement, resources)).toBe("魂石の欠片");
     expect(placement.id).toBe("altar_shard");
+  });
+
+  test("summarizes event-page commands as player-facing RPG operations", () => {
+    const resources = [
+      { key: "map:crossroads", kind: "map", id: "crossroads", label: "三叉路", refs: [] },
+      { key: "script:memory", kind: "script", id: "memory", label: "失われた記憶", refs: [] },
+    ] as ProjectResourceNode[];
+    const placement = {
+      id: "gate",
+      resource: { kind: "map", id: "crossroads" },
+    } as MapPlacementDef;
+    expect(mapEventCommandSummary(
+      { id: "leave", trigger: "player_touch", order: 0 },
+      placement,
+      resources,
+    )).toBe("Transfer player → 三叉路 · placement resource");
+    expect(mapEventCommandSummary(
+      { id: "memory", trigger: "interact", run: { kind: "script", id: "memory" }, order: 0 },
+      placement,
+      resources,
+    )).toBe("Run script → 失われた記憶");
   });
 
   test("tracks only authoritative spatial map draft changes", () => {

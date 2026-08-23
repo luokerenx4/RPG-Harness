@@ -1720,6 +1720,9 @@ function EventPagesEditor({
   };
 
   const trigger = selected ? eventTriggerMeta(selected.trigger) : null;
+  const commandSummary = selected
+    ? mapEventCommandSummary(selected, placement, resources)
+    : "No target selected";
   return (
     <section className="placement-events event-pages-workbench">
       <header>
@@ -1788,7 +1791,7 @@ function EventPagesEditor({
               />
               <div className="event-command-row run-command">
                 <span className="event-command-gutter">▶</span>
-                <div><strong>Activate resource</strong><small>Transfer, run a script, or dispatch an action through the engine registry.</small></div>
+                <div><strong>Activate resource</strong><small title={commandSummary}>{commandSummary}</small></div>
                 <label>Type<select value={selected.run?.kind ?? ""} onChange={(change) => patchSelected({
                   run: change.target.value ? {
                     kind: change.target.value as ProjectResourceKind,
@@ -2098,6 +2101,24 @@ export function mapPlacementResourceLabel(
   if (!placement.resource) return placement.id;
   const key = `${placement.resource.kind}:${placement.resource.id}`;
   return resources.find((resource) => resource.key === key)?.label ?? placement.resource.id;
+}
+
+export function mapEventCommandSummary(
+  event: MapPlacementEventDef,
+  placement: MapPlacementDef,
+  resources: ProjectResourceNode[],
+): string {
+  const target = event.run ?? placement.resource;
+  if (!target) return "No target selected";
+  const label = resources.find((resource) => resource.key === `${target.kind}:${target.id}`)?.label ?? target.id;
+  const operation = target.kind === "map"
+    ? "Transfer player"
+    : target.kind === "script"
+      ? "Run script"
+      : target.kind === "action"
+        ? "Dispatch action"
+        : "Activate resource";
+  return `${operation} → ${label}${event.run ? "" : " · placement resource"}`;
 }
 
 function cloneMap(map: MapDef): MapDef {
