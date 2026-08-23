@@ -1112,6 +1112,7 @@ function MapOverview({
         <PlacementEditor
           placement={selectedPlacement}
           layers={draft.layout?.layers.map((layer) => layer.id) ?? []}
+          resources={resources}
           onChange={(update) => mutatePlacement(selectedPlacement.id, update)}
           onDelete={() => {
             setDraft((current) => ({
@@ -1287,12 +1288,14 @@ function MapSurfacePreviews({ map }: { map: MapDef }) {
 function PlacementEditor({
   placement,
   layers,
+  resources,
   onChange,
   onDelete,
   onClose,
 }: {
   placement: MapPlacementDef;
   layers: string[];
+  resources: ProjectResourceNode[];
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -1301,6 +1304,8 @@ function PlacementEditor({
     ...current,
     at: { ...current.at, [axis]: value },
   }));
+  const placementKind = placement.resource?.kind;
+  const placementChoices = resourceChoices(resources, placementKind);
   return (
     <section className="placement-editor">
       <header className="placement-editor-heading">
@@ -1308,6 +1313,28 @@ function PlacementEditor({
         <div className="placement-heading-actions"><button type="button" className="danger" onClick={onDelete}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       <div className="placement-editor-grid">
+        <section className="placement-panel placement-resource-panel">
+          <header><h3>Resource</h3><span>{placement.resource ? placement.resource.kind : "event-only"}</span></header>
+          <div className="placement-resource-fields">
+            <label>Kind<select value={placementKind ?? ""} onChange={(event) => {
+              const kind = event.target.value as ProjectResourceKind | "";
+              onChange((current) => ({
+                ...current,
+                resource: kind ? { kind, id: resourceChoices(resources, kind)[0]?.id ?? "" } : undefined,
+              }));
+            }}><option value="">event-only</option>{[...PLACEABLE_KINDS].map((kind) => <option key={kind}>{kind}</option>)}</select></label>
+            <label>Project record<select value={placement.resource?.id ?? ""} disabled={!placementKind} onChange={(event) => onChange((current) => ({
+              ...current,
+              resource: current.resource ? { ...current.resource, id: event.target.value } : undefined,
+            }))}>
+              {placement.resource && !placementChoices.some((choice) => choice.id === placement.resource?.id) && (
+                <option value={placement.resource.id}>{placement.resource.id} · missing</option>
+              )}
+              {placementChoices.map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
+            </select></label>
+          </div>
+          <p>Choose from the project database. The stable resource ID is written into the map source.</p>
+        </section>
         <section className="placement-panel">
           <header><h3>Transform</h3><span>{placement.at.x}, {placement.at.y}</span></header>
           <div className="placement-fields">
@@ -1374,13 +1401,25 @@ function PlacementEditor({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? {
                 ...candidate,
-                run: change.target.value ? { kind: change.target.value as ProjectResourceKind, id: candidate.run?.id ?? "" } : undefined,
+                run: change.target.value ? {
+                  kind: change.target.value as ProjectResourceKind,
+                  id: resourceChoices(resources, change.target.value as ProjectResourceKind)[0]?.id ?? "",
+                } : undefined,
               } : candidate),
               }))}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
-              <label>Resource ID<input value={event.run?.id ?? ""} placeholder="same as placement" disabled={!event.run} onChange={(change) => onChange((current) => ({
+              <label>Project record<select value={event.run?.id ?? ""} disabled={!event.run} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index && candidate.run ? { ...candidate, run: { ...candidate.run, id: change.target.value } } : candidate),
-              }))} /></label>
+              }))}>
+                {!event.run ? <option value="">same as placement</option> : (
+                  <>
+                    {!resourceChoices(resources, event.run.kind).some((choice) => choice.id === event.run?.id) && (
+                      <option value={event.run.id}>{event.run.id} · missing</option>
+                    )}
+                    {resourceChoices(resources, event.run.kind).map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
+                  </>
+                )}
+              </select></label>
               <label className="event-lock-hint">Locked hint<input value={event.lockedHint ?? ""} placeholder="Why this action is unavailable" onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, lockedHint: change.target.value || undefined } : candidate),
@@ -1447,6 +1486,16 @@ const EVENT_TRIGGERS: MapEventTrigger[] = [
 ];
 
 const RUN_RESOURCE_KINDS: ProjectResourceKind[] = ["action", "script", "map"];
+
+export function resourceChoices(
+  resources: ProjectResourceNode[],
+  kind: ProjectResourceKind | undefined,
+): ProjectResourceNode[] {
+  if (!kind) return [];
+  return resources
+    .filter((resource) => resource.kind === kind)
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
 
 function cloneMap(map: MapDef): MapDef {
   return structuredClone(map);

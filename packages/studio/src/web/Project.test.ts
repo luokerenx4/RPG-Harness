@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   parseResourceScalarFields,
   patchResourceScalarFields,
+  resourceChoices,
 } from "./pages/Project";
+import type { ProjectResourceNode } from "@rpg-harness/engine";
 
 describe("Studio database record fields", () => {
   const source = [
@@ -51,5 +53,17 @@ describe("Studio database record fields", () => {
       "Body remains untouched.",
       "",
     ].join("\n"));
+  });
+});
+
+describe("Studio map event resource picker", () => {
+  test("filters and alphabetizes records for the selected resource kind", () => {
+    const resources = [
+      { key: "script:z", kind: "script", id: "z", label: "Zulu", refs: [] },
+      { key: "map:a", kind: "map", id: "a", label: "Alpha map", refs: [] },
+      { key: "script:a", kind: "script", id: "a", label: "Alpha", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(resourceChoices(resources, "script").map((resource) => resource.id)).toEqual(["a", "z"]);
+    expect(resourceChoices(resources, undefined)).toEqual([]);
   });
 });

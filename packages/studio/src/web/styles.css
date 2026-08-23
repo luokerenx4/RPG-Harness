@@ -2270,6 +2270,11 @@ summary:focus-visible {
 .placement-panel > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .placement-panel h3 { margin: 0; color: #818a97; font-size: 8px; letter-spacing: .1em; text-transform: uppercase; }
 .placement-panel > header span { color: #515b68; font: 8px/1 ui-monospace, monospace; }
+.placement-resource-panel { grid-column: 1 / -1; }
+.placement-resource-fields { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 6px; }
+.placement-resource-fields label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: #68717f; font-size: 8px; font-weight: 650; letter-spacing: .05em; }
+.placement-resource-fields select { width: 100%; min-width: 0; height: 29px; padding: 4px 6px; color: #c7cdd5; border: 1px solid var(--studio-line); border-radius: 4px; background: #0d1117; font-size: 9px; }
+.placement-resource-panel p { margin: 7px 1px 0; color: #505a67; font-size: 8px; }
 .placement-fields { display: grid; grid-template-columns: repeat(3,minmax(50px,1fr)); gap: 6px; margin: 0; padding: 0; border: 0; background: transparent; }
 .placement-fields label { min-width: 0; }
 .placement-fields input,
