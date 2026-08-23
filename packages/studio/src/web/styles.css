@@ -3698,6 +3698,7 @@ summary:focus-visible {
 }
 .map-canvas.grid-hidden { background-image: none; }
 .map-canvas.editing { border-color: rgba(80,199,217,.65); box-shadow: 0 10px 30px rgba(0,0,0,.42), 0 0 0 1px rgba(80,199,217,.16); }
+.map-canvas.editing.tool-objects { border-color: rgba(80,199,217,.78); cursor: cell; }
 .map-canvas.editing.tool-terrain { border-color: rgba(80,199,217,.82); cursor: crosshair; }
 .map-canvas.editing.tool-collision { border-color: rgba(231,168,106,.82); cursor: crosshair; }
 .map-canvas.editing.tool-regions { border-color: rgba(172,133,245,.85); cursor: cell; }
@@ -3707,6 +3708,11 @@ summary:focus-visible {
 .map-canvas-paint-grid button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; background: rgba(80,199,217,.16); }
 .map-canvas-paint-grid.kind-collision button:hover,
 .map-canvas-paint-grid.kind-collision button:focus-visible { outline-color: var(--studio-orange); background: rgba(231,168,106,.14); }
+.map-object-cell-cursor { position: absolute; z-index: 2147470000; pointer-events: none; border: 2px solid rgba(125,230,244,.92); background: rgba(80,199,217,.13); box-shadow: inset 0 0 0 1px rgba(6,15,21,.75),0 0 18px rgba(80,199,217,.2); font-style: normal; }
+.map-object-cell-cursor > span,
+.map-object-cell-cursor > small { position: absolute; padding: 2px 3px; color: #dffbff; border: 1px solid rgba(80,199,217,.36); border-radius: 2px; background: rgba(6,14,20,.88); box-shadow: 0 2px 5px rgba(0,0,0,.48); font: 700 6px/1 ui-monospace,monospace; white-space: nowrap; }
+.map-object-cell-cursor > span { top: 2px; left: 2px; }
+.map-object-cell-cursor > small { right: 2px; bottom: 2px; color: #91dce6; letter-spacing: .04em; }
 .map-region-move-grid { position: absolute; inset: 0; z-index: 1000; display: grid; grid-template-columns: repeat(var(--map-cols), 1fr); grid-template-rows: repeat(var(--map-rows), 1fr); }
 .map-region-move-grid button { min-width: 0; min-height: 0; padding: 0; border: 0; background: transparent; cursor: cell; }
 .map-region-move-grid button:hover,

@@ -2480,6 +2480,53 @@ function ResourceReference({
 
 type MapEditorTool = "objects" | "terrain" | "collision" | "regions";
 
+export type MapCanvasInteractionSurfaceProps = Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "onPointerMove" | "onPointerLeave" | "onDoubleClick"
+> & {
+  cellInteractionEnabled: boolean;
+  layout: Pick<MapLayoutDef, "width" | "height">;
+  onCellHover: (cell: MapPoint | null) => void;
+  onCellDoubleClick: (cell: MapPoint) => void;
+};
+
+export function MapCanvasInteractionSurface({
+  cellInteractionEnabled,
+  layout,
+  onCellHover,
+  onCellDoubleClick,
+  ...props
+}: MapCanvasInteractionSurfaceProps) {
+  return <div
+    {...props}
+    onPointerMove={(event) => {
+      if (!cellInteractionEnabled || event.target !== event.currentTarget) {
+        onCellHover(null);
+        return;
+      }
+      onCellHover(mapCanvasCellFromPointer(
+        layout,
+        event,
+        event.currentTarget.getBoundingClientRect(),
+      ));
+    }}
+    onPointerLeave={() => onCellHover(null)}
+    onDoubleClick={(event) => {
+      if (
+        !cellInteractionEnabled ||
+        event.button !== 0 ||
+        event.target !== event.currentTarget
+      ) return;
+      event.preventDefault();
+      onCellDoubleClick(mapCanvasCellFromPointer(
+        layout,
+        event,
+        event.currentTarget.getBoundingClientRect(),
+      ));
+    }}
+  />;
+}
+
 export interface MapDraftHistory {
   past: MapDef[];
   present: MapDef;
@@ -2694,6 +2741,7 @@ function MapOverview({
   const [mapTool, setMapTool] = useState<MapEditorTool>("objects");
   const [paintLayerId, setPaintLayerId] = useState("");
   const [objectLayerId, setObjectLayerId] = useState("");
+  const [objectHoverCell, setObjectHoverCell] = useState<MapPoint | null>(null);
   const [paintBrush, setPaintBrush] = useState(1);
   const [canvasPainting, setCanvasPainting] = useState<"paint" | "erase" | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState("");
@@ -2765,6 +2813,7 @@ function MapOverview({
     setMapTool("objects");
     setPaintLayerId("");
     setObjectLayerId("");
+    setObjectHoverCell(null);
     setPaintBrush(1);
     setCanvasPainting(null);
     setSelectedRegionId("");
@@ -2805,6 +2854,10 @@ function MapOverview({
     setTopologyReturnFocusPending(false);
     requestAnimationFrame(() => editButtonRef.current?.focus());
   }, [editing, topologyOpen, reciprocalRouteOpen, topologyReturnFocusPending]);
+
+  useEffect(() => {
+    if (!editing || mapTool !== "objects") setObjectHoverCell(null);
+  }, [editing, mapTool]);
 
   const width = draft.layout?.width ?? 1;
   const height = draft.layout?.height ?? 1;
@@ -3073,6 +3126,8 @@ function MapOverview({
   const selectMapTool = (tool: MapEditorTool) => {
     setMapTool(tool);
     setSelectedPlacementId(null);
+    setFocusedPlacementEventId(null);
+    setObjectHoverCell(null);
     setCanvasPainting(null);
     if (tool === "terrain") {
       setPaintLayerId(terrainLayers[0]?.id ?? "");
@@ -3773,7 +3828,7 @@ function MapOverview({
         )}
         <div className="map-canvas-scroll">
       {draft.layout ? (
-        <div
+        <MapCanvasInteractionSurface
           className={`map-canvas ${editing ? `editing tool-${mapTool}` : ""} ${showGrid ? "" : "grid-hidden"}`}
           style={{
             aspectRatio: `${width} / ${height}`,
@@ -3782,6 +3837,32 @@ function MapOverview({
             "--map-rows": height,
           } as React.CSSProperties}
           aria-label={`${map.name} spatial preview`}
+          cellInteractionEnabled={editing && mapTool === "objects"}
+          layout={draft.layout}
+          onCellHover={(cell) => {
+            setObjectHoverCell((current) =>
+              current === cell || (current && cell && current.x === cell.x && current.y === cell.y)
+                ? current
+                : cell
+            );
+          }}
+          onCellDoubleClick={(at) => {
+            const placement = createMapPlacementDraft(
+              undefined,
+              draft.placements ?? [],
+              at,
+              activeObjectLayer?.id,
+            );
+            setDraft((current) => ({
+              ...current,
+              placements: [...(current.placements ?? []), placement],
+            }));
+            setSelectedPlacementId(placement.id);
+            setFocusedPlacementEventId(placement.events[0]?.id ?? null);
+            setFocusedPlayabilityKey(null);
+            setObjectHoverCell(at);
+            if (placement.layer) setObjectLayerId(placement.layer);
+          }}
           onClick={() => { if (mapTool === "objects") setSelectedPlacementId(null); }}
           onDragOver={(event) => {
             if (!editing || mapTool !== "objects") return;
@@ -3792,8 +3873,7 @@ function MapOverview({
             if (!editing || mapTool !== "objects") return;
             event.preventDefault();
             const rect = event.currentTarget.getBoundingClientRect();
-            const x = clamp(Math.floor((event.clientX - rect.left) / rect.width * width), 0, width - 1);
-            const y = clamp(Math.floor((event.clientY - rect.top) / rect.height * height), 0, height - 1);
+            const { x, y } = mapCanvasCellFromPointer(draft.layout!, event, rect);
             if (event.dataTransfer.getData("application/x-autogal-player-start")) {
               setDraft((current) => ({
                 ...current,
@@ -3844,6 +3924,18 @@ function MapOverview({
             />
             );
           })}
+          {editing && mapTool === "objects" && objectHoverCell && (
+            <i
+              aria-hidden="true"
+              className="map-object-cell-cursor"
+              style={{
+                left: `${objectHoverCell.x / width * 100}%`,
+                top: `${objectHoverCell.y / height * 100}%`,
+                width: `${100 / width}%`,
+                height: `${100 / height}%`,
+              }}
+            ><span>{objectHoverCell.x},{objectHoverCell.y}</span><small>DOUBLE-CLICK · EVENT</small></i>
+          )}
           {editing && paintLayer && mapTool !== "objects" && (
             <div
               className={`map-canvas-paint-grid kind-${paintLayer.kind}`}
@@ -3989,6 +4081,14 @@ function MapOverview({
                 event.dataTransfer.effectAllowed = "move";
               }}
               onClick={(event) => { event.stopPropagation(); setSelectedPlacementId(placement.id); if (placement.layer) setObjectLayerId(placement.layer); }}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                if (!editing || mapTool !== "objects") return;
+                setSelectedPlacementId(placement.id);
+                setFocusedPlacementEventId(placement.events[0]?.id ?? null);
+                setFocusedPlayabilityKey(null);
+                if (placement.layer) setObjectLayerId(placement.layer);
+              }}
               title={`${resourceLabel} · ${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
               style={{
                 left: `${(placement.at.x / width) * 100}%`,
@@ -4025,7 +4125,7 @@ function MapOverview({
               }}
             ><strong>×{stack.ids.length}</strong><small>{selectedIndex >= 0 ? `${selectedIndex + 1}/${stack.ids.length}` : "STACK"}</small></button>;
           })}
-        </div>
+        </MapCanvasInteractionSurface>
       ) : (
         <NodeMapResourceBoard
           map={draft}
@@ -4040,7 +4140,7 @@ function MapOverview({
             ? !draft.layout
               ? "Select a resource card to edit its RPG event pages · map records become routes"
               : mapTool === "objects"
-              ? "Drag project resources onto the canvas · drag objects to move"
+              ? "Double-click a cell for an event · drag resources to place · drag objects to move"
               : mapTool === "regions"
                 ? `Positioning ${selectedRegion?.name ?? selectedRegion?.id ?? "region"} · click a cell to move`
                 : `Painting ${paintLayer?.name ?? paintLayer?.id ?? "layer"} · drag to paint · right-click to erase`
@@ -5854,6 +5954,21 @@ export function nextAvailableMapCell(
     }
   }
   return start;
+}
+
+export function mapCanvasCellFromPointer(
+  layout: Pick<MapLayoutDef, "width" | "height">,
+  pointer: Pick<MouseEvent, "clientX" | "clientY">,
+  rect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+): MapPoint {
+  const width = Math.max(1, Math.floor(layout.width));
+  const height = Math.max(1, Math.floor(layout.height));
+  const relativeX = rect.width > 0 ? (pointer.clientX - rect.left) / rect.width : 0;
+  const relativeY = rect.height > 0 ? (pointer.clientY - rect.top) / rect.height : 0;
+  return {
+    x: clamp(Number.isFinite(relativeX) ? Math.floor(relativeX * width) : 0, 0, width - 1),
+    y: clamp(Number.isFinite(relativeY) ? Math.floor(relativeY * height) : 0, 0, height - 1),
+  };
 }
 
 export function createMapPlacementDraft(

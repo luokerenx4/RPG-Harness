@@ -23,6 +23,8 @@ import {
   mapPlacementDeleteBlockers,
   mapPlacementEventSummary,
   mapPlayabilityAffectedFocusIntent,
+  mapCanvasCellFromPointer,
+  MapCanvasInteractionSurface,
   mapCanvasFocusIntent,
   mapPlayabilitySourceFocusIntent,
   legacyConnectionSourceRange,
@@ -504,6 +506,121 @@ describe("Studio map event resource picker", () => {
       events: [{ id: "page_1", trigger: "interact", label: "Event", order: 0 }],
     });
     expect(createMapPlacementDraft(script, [], { x: 3, y: 2 }, "actors").layer).toBe("actors");
+  });
+
+  test("maps canvas pointers to clamped RPG grid cells", () => {
+    const layout = { width: 4, height: 3 };
+    const rect = { left: 100, top: 50, width: 400, height: 300 };
+    expect(mapCanvasCellFromPointer(layout, { clientX: 250, clientY: 200 }, rect)).toEqual({ x: 1, y: 1 });
+    expect(mapCanvasCellFromPointer(layout, { clientX: 100, clientY: 50 }, rect)).toEqual({ x: 0, y: 0 });
+    expect(mapCanvasCellFromPointer(layout, { clientX: 500, clientY: 350 }, rect)).toEqual({ x: 3, y: 2 });
+    expect(mapCanvasCellFromPointer(layout, { clientX: 10, clientY: 900 }, rect)).toEqual({ x: 0, y: 2 });
+    expect(mapCanvasCellFromPointer(layout, { clientX: 400, clientY: 300 }, {
+      ...rect,
+      width: 0,
+      height: 0,
+    })).toEqual({ x: 0, y: 0 });
+  });
+
+  test("creates once for a canvas double-click and rejects bubbled object targets", () => {
+    const created: Array<{ x: number; y: number }> = [];
+    const hovered: Array<{ x: number; y: number } | null> = [];
+    let blankClicks = 0;
+    let prevented = 0;
+    const canvas = {
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }),
+    } as unknown as HTMLDivElement;
+    const child = {} as EventTarget;
+    const surface = MapCanvasInteractionSurface({
+      cellInteractionEnabled: true,
+      layout: { width: 4, height: 3 },
+      onCellHover: (cell) => hovered.push(cell),
+      onCellDoubleClick: (cell) => created.push(cell),
+      onClick: () => { blankClicks += 1; },
+    });
+
+    surface.props.onClick?.({} as React.MouseEvent<HTMLDivElement>);
+    surface.props.onClick?.({} as React.MouseEvent<HTMLDivElement>);
+    surface.props.onDoubleClick?.({
+      button: 0,
+      clientX: 250,
+      clientY: 150,
+      currentTarget: canvas,
+      target: canvas,
+      preventDefault: () => { prevented += 1; },
+    } as unknown as React.MouseEvent<HTMLDivElement>);
+
+    expect(blankClicks).toBe(2);
+    expect(created).toEqual([{ x: 2, y: 1 }]);
+    expect(prevented).toBe(1);
+
+    surface.props.onDoubleClick?.({
+      button: 0,
+      clientX: 250,
+      clientY: 150,
+      currentTarget: canvas,
+      target: child,
+      preventDefault: () => { prevented += 1; },
+    } as unknown as React.MouseEvent<HTMLDivElement>);
+    expect(created).toHaveLength(1);
+    expect(prevented).toBe(1);
+
+    surface.props.onPointerMove?.({
+      clientX: 250,
+      clientY: 150,
+      currentTarget: canvas,
+      target: canvas,
+    } as unknown as React.PointerEvent<HTMLDivElement>);
+    surface.props.onPointerMove?.({
+      clientX: 250,
+      clientY: 150,
+      currentTarget: canvas,
+      target: child,
+    } as unknown as React.PointerEvent<HTMLDivElement>);
+    expect(hovered).toEqual([{ x: 2, y: 1 }, null]);
+  });
+
+  test("creates a cell-first event as one undoable map history step", () => {
+    const base = {
+      id: "crossroads",
+      name: "Crossroads",
+      description: "",
+      placements: [],
+      layout: {
+        width: 6,
+        height: 4,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [{ id: "events", kind: "object", z: 1, visible: true }],
+        regions: [],
+      },
+    } as MapDef;
+    const placement = createMapPlacementDraft(undefined, base.placements ?? [], { x: 4, y: 2 }, "events");
+    let history = createMapDraftHistory(base);
+    history = mapDraftHistoryReducer(history, {
+      type: "change",
+      update: (current) => ({
+        ...current,
+        placements: [...(current.placements ?? []), placement],
+      }),
+    });
+
+    expect(history.past).toHaveLength(1);
+    expect(history.present.placements).toEqual([{
+      id: "event",
+      at: { x: 4, y: 2 },
+      layer: "events",
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      events: [{ id: "page_1", trigger: "interact", label: "Event", order: 0 }],
+    }]);
+
+    history = mapDraftHistoryReducer(history, { type: "undo" });
+    expect(history.present.placements).toEqual([]);
+    history = mapDraftHistoryReducer(history, { type: "redo" });
+    expect(history.present.placements?.[0]).toMatchObject({ id: "event", at: { x: 4, y: 2 }, layer: "events" });
   });
 
   test("duplicates a complete RPG event object beside its source with a stable identity", () => {
