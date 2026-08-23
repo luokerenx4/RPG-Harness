@@ -2590,7 +2590,12 @@ function MapTilePainter({
     <section className="map-tile-painter" aria-label="Tile layer painter">
       <header>
         <div><span>TILE PAINTER</span><strong>Paint terrain and collision</strong><small>Tile 0 is empty. Any non-zero collision tile blocks Web movement.</small></div>
-        <label>Layer<select value={layer.id} onChange={(event) => setLayerId(event.target.value)}>{paintable.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name ?? candidate.id} · {candidate.kind}</option>)}</select></label>
+        <label>Layer<select value={layer.id} onChange={(event) => {
+          const nextLayer = paintable.find((candidate) => candidate.id === event.target.value);
+          setLayerId(event.target.value);
+          if (nextLayer?.kind === "collision") setBrush(1);
+          else if (nextLayer?.kind === "tile" && tileset?.tileGrid) setBrush(tileset.tileGrid.firstId);
+        }}>{paintable.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name ?? candidate.id} · {candidate.kind}</option>)}</select></label>
         <label>Brush<input type="number" min="0" step="1" value={brush} onChange={(event) => setBrush(Math.max(0, Math.floor(Number(event.target.value) || 0)))} /></label>
       </header>
       <div className="map-tile-painter-actions">
@@ -2598,54 +2603,73 @@ function MapTilePainter({
         <button type="button" onClick={() => fillLayer(0)}>Clear layer</button>
         <span>Hold and drag to paint continuously</span>
       </div>
-      {tileset?.tileGrid && (
-        <div className="map-tileset-palette" aria-label="Tileset brush palette">
-          <span>ATLAS · {tileset.tileGrid.columns} × {tileset.tileGrid.rows}</span>
-          {Array.from({ length: tileset.tileGrid.columns * tileset.tileGrid.rows }, (_, index) => tileset.tileGrid!.firstId + index).map((tile) => (
-            <button
-              type="button"
-              className={brush === tile ? "selected" : ""}
-              aria-label={`Use tile ${tile}`}
-              key={tile}
-              style={studioTileAtlasStyle(tile, tileset)}
-              onClick={() => setBrush(tile)}
-            ><small>{tile}</small></button>
-          ))}
+      <div className={`map-tile-painter-workspace ${tileset?.tileGrid && layer.kind === "tile" || layer.kind === "collision" ? "has-sidebar" : ""}`}>
+        {tileset?.tileGrid && layer.kind === "tile" && (
+          <aside className="map-tileset-palette" aria-label="Tileset brush palette">
+            <header><span>ATLAS</span><strong>{tileset.tileGrid.columns} × {tileset.tileGrid.rows}</strong></header>
+            <div>
+              {Array.from({ length: tileset.tileGrid.columns * tileset.tileGrid.rows }, (_, index) => tileset.tileGrid!.firstId + index).map((tile) => (
+                <button
+                  type="button"
+                  className={brush === tile ? "selected" : ""}
+                  aria-label={`Use tile ${tile}`}
+                  key={tile}
+                  style={studioTileAtlasStyle(tile, tileset)}
+                  onClick={() => setBrush(tile)}
+                ><small>{tile}</small></button>
+              ))}
+            </div>
+            <footer><span>SELECTED</span><strong>{brush}</strong><small>Pick a tile, then paint on the canvas.</small></footer>
+          </aside>
+        )}
+        {layer.kind === "collision" && (
+          <aside className="map-collision-palette" aria-label="Collision brush palette">
+            <header><span>PASSABILITY</span><strong>Web + AI</strong></header>
+            <button type="button" className={brush !== 0 ? "selected" : ""} onClick={() => setBrush(1)}><i className="blocked" /><span><strong>Blocked</strong><small>tile 1 · stops movement</small></span></button>
+            <button type="button" className={brush === 0 ? "selected" : ""} onClick={() => setBrush(0)}><i className="passable" /><span><strong>Passable</strong><small>tile 0 · erase blocker</small></span></button>
+            <footer>Collision is semantic: any non-zero cell blocks every runtime surface.</footer>
+          </aside>
+        )}
+        <div className="map-tile-painter-canvas">
+          <header><span>CANVAS · {layout.width} × {layout.height}</span><strong>{layer.name ?? layer.id}</strong><small>{layer.kind === "collision" ? "Hatched cells block Web movement" : "Atlas tiles render exactly as they will in game"}</small></header>
+          <div
+            className={`map-tile-painter-grid kind-${layer.kind}`}
+            style={{ "--map-cols": layout.width, "--map-rows": layout.height } as React.CSSProperties}
+          >
+            {tiles.flatMap((row, y) => row.map((tile, x) => {
+              const atlasStyle = layer.kind === "tile" ? studioTileAtlasStyle(tile, tileset) : undefined;
+              return (
+              <button
+                type="button"
+                className={`${tile === 0 ? "empty" : "painted"}${atlasStyle ? " atlas" : ""}`}
+                aria-label={`${layer.name ?? layer.id} tile ${x}, ${y}: ${tile}`}
+                key={`${x}:${y}`}
+                title={`${x},${y} · tile ${tile}`}
+                style={{ "--tile-id": tile, ...atlasStyle } as React.CSSProperties}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  const mode = tile === brush ? "erase" : "paint";
+                  setPainting(mode);
+                  applyTile(x, y, mode === "paint" ? brush : 0);
+                }}
+                onPointerEnter={() => {
+                  if (!painting) return;
+                  applyTile(x, y, painting === "paint" ? brush : 0);
+                }}
+                onClick={(event) => {
+                  if (event.detail !== 0) return;
+                  applyTile(x, y, tile === brush ? 0 : brush);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onChange(paintMapLayerTile(layout, layer.id, x, y, 0));
+                }}
+              ><span>{tile || ""}</span></button>
+              );
+            }))}
+          </div>
         </div>
-      )}
-      <div
-        className={`map-tile-painter-grid kind-${layer.kind}`}
-        style={{ "--map-cols": layout.width, "--map-rows": layout.height } as React.CSSProperties}
-      >
-        {tiles.flatMap((row, y) => row.map((tile, x) => (
-          <button
-            type="button"
-            className={tile === 0 ? "empty" : "painted"}
-            aria-label={`${layer.name ?? layer.id} tile ${x}, ${y}: ${tile}`}
-            key={`${x}:${y}`}
-            title={`${x},${y} · tile ${tile}`}
-            style={{ "--tile-id": tile } as React.CSSProperties}
-            onPointerDown={(event) => {
-              if (event.button !== 0) return;
-              event.preventDefault();
-              const mode = tile === brush ? "erase" : "paint";
-              setPainting(mode);
-              applyTile(x, y, mode === "paint" ? brush : 0);
-            }}
-            onPointerEnter={() => {
-              if (!painting) return;
-              applyTile(x, y, painting === "paint" ? brush : 0);
-            }}
-            onClick={(event) => {
-              if (event.detail !== 0) return;
-              applyTile(x, y, tile === brush ? 0 : brush);
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              onChange(paintMapLayerTile(layout, layer.id, x, y, 0));
-            }}
-          ><span>{tile || ""}</span></button>
-        )))}
       </div>
       <footer><span>Click to paint · click the active brush again or right-click to erase</span><strong>{tiles.flat().filter((tile) => tile !== 0).length} painted cells</strong></footer>
     </section>

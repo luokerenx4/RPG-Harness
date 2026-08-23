@@ -540,17 +540,32 @@ code, pre, .mono {
 .map-tile-painter-actions button { padding: 4px 7px; color: #9fa9b4; border: 1px solid #313a47; border-radius: 4px; background: #171d26; cursor: pointer; font-size: 8px; }
 .map-tile-painter-actions button:hover { color: #ecf2f4; border-color: #4a5666; }
 .map-tile-painter-actions span { margin-left: auto; color: var(--studio-faint); font-size: 7px; }
-.map-tileset-palette {
+.map-tile-painter-workspace {
   display: grid;
-  grid-template-columns: 62px repeat(auto-fit, minmax(34px, 1fr));
-  align-items: stretch;
-  gap: 3px;
-  margin-bottom: 7px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #303946;
+  border-radius: 4px;
+  background: #090d13;
 }
-.map-tileset-palette > span { display: flex; align-items: center; color: #687582; font: 700 7px/1.3 ui-monospace, monospace; letter-spacing: .08em; }
+.map-tile-painter-workspace.has-sidebar { grid-template-columns: minmax(146px, 184px) minmax(0, 1fr); }
+.map-tileset-palette {
+  display: flex;
+  min-width: 0;
+  padding: 8px;
+  flex-direction: column;
+  gap: 7px;
+  border-right: 1px solid #303946;
+  background: linear-gradient(180deg, #121923, #0d1219);
+}
+.map-tileset-palette > header { display: flex; align-items: baseline; justify-content: space-between; }
+.map-tileset-palette > header span,
+.map-tileset-palette > footer span { color: var(--studio-accent); font: 700 7px/1 ui-monospace, monospace; letter-spacing: .12em; }
+.map-tileset-palette > header strong { color: #83909e; font: 700 8px/1 ui-monospace, monospace; }
+.map-tileset-palette > div { display: grid; grid-template-columns: repeat(4, minmax(26px, 1fr)); gap: 3px; }
 .map-tileset-palette button {
   position: relative;
-  min-width: 34px;
+  min-width: 0;
   aspect-ratio: 1;
   padding: 0;
   overflow: hidden;
@@ -562,13 +577,35 @@ code, pre, .mono {
 .map-tileset-palette button:hover,
 .map-tileset-palette button.selected { border-color: var(--studio-accent); box-shadow: 0 0 0 2px rgba(80,199,217,.18); }
 .map-tileset-palette button small { position: absolute; right: 2px; bottom: 2px; padding: 2px 3px; color: #e5f4f6; border-radius: 2px; background: rgba(5,10,14,.76); font: 7px/1 ui-monospace, monospace; }
+.map-tileset-palette > footer { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3px 6px; margin-top: auto; padding-top: 7px; border-top: 1px solid #27303b; }
+.map-tileset-palette > footer strong { color: #effcfd; font: 700 13px/1 ui-monospace, monospace; text-align: right; }
+.map-tileset-palette > footer small { grid-column: 1 / -1; color: #64707d; font-size: 7px; line-height: 1.35; }
+.map-collision-palette { display: flex; min-width: 0; padding: 8px; flex-direction: column; gap: 6px; border-right: 1px solid #303946; background: linear-gradient(180deg, #1b1712, #0e1116); }
+.map-collision-palette > header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1px; }
+.map-collision-palette > header span { color: var(--studio-orange); font: 700 7px/1 ui-monospace, monospace; letter-spacing: .12em; }
+.map-collision-palette > header strong { color: #877969; font: 700 7px/1 ui-monospace, monospace; }
+.map-collision-palette > button { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 7px; min-width: 0; padding: 6px; color: #9b948b; border: 1px solid #36312b; border-radius: 4px; background: #15130f; cursor: pointer; text-align: left; }
+.map-collision-palette > button:hover,
+.map-collision-palette > button.selected { color: #f4dfbe; border-color: var(--studio-orange); box-shadow: 0 0 0 2px rgba(231,168,106,.12); }
+.map-collision-palette > button > i { width: 30px; aspect-ratio: 1; border: 1px solid #4d453b; border-radius: 3px; }
+.map-collision-palette > button > i.blocked { background: repeating-linear-gradient(135deg, rgba(224,158,75,.72) 0 4px, rgba(70,42,20,.82) 4px 8px); }
+.map-collision-palette > button > i.passable { background-color: #0b1016; background-image: linear-gradient(rgba(100,119,138,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(100,119,138,.16) 1px, transparent 1px); background-size: 10px 10px; }
+.map-collision-palette > button > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.map-collision-palette > button strong { font-size: 9px; }
+.map-collision-palette > button small { color: #6f6961; font-size: 7px; }
+.map-collision-palette > footer { margin-top: auto; padding-top: 8px; color: #756b5e; border-top: 1px solid #302a23; font-size: 7px; line-height: 1.45; }
+.map-tile-painter-canvas { display: flex; min-width: 0; padding: 8px; flex-direction: column; gap: 7px; }
+.map-tile-painter-canvas > header { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 3px 8px; }
+.map-tile-painter-canvas > header span { color: #6e7b89; font: 700 7px/1 ui-monospace, monospace; letter-spacing: .08em; }
+.map-tile-painter-canvas > header strong { color: #c4cbd3; font-size: 9px; }
+.map-tile-painter-canvas > header small { grid-column: 1 / -1; color: #596572; font-size: 7px; }
 .map-tile-painter-grid {
   display: grid;
   grid-template-columns: repeat(var(--map-cols), minmax(16px, 1fr));
   aspect-ratio: var(--map-cols) / var(--map-rows);
   max-height: 260px;
   overflow: hidden;
-  border: 1px solid #303946;
+  border: 1px solid #28313d;
   background: #0a0e14;
 }
 .map-tile-painter-grid button {
@@ -586,6 +623,7 @@ code, pre, .mono {
 .map-tile-painter-grid button:hover,
 .map-tile-painter-grid button:focus-visible { z-index: 2; outline: 1px solid var(--studio-accent); outline-offset: -1px; }
 .map-tile-painter-grid button.painted { background: hsl(calc(var(--tile-id, 1) * 43deg) 28% 32% / .72); }
+.map-tile-painter-grid button.atlas { background-color: #101720; }
 .map-tile-painter-grid.kind-collision button.painted {
   color: #f1c98b;
   background: repeating-linear-gradient(135deg, rgba(224,158,75,.52) 0 3px, rgba(70,42,20,.72) 3px 6px);
@@ -593,6 +631,12 @@ code, pre, .mono {
 .map-tile-painter-grid button span { font: 7px/1 ui-monospace, monospace; }
 .map-tile-painter > footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--studio-faint); font-size: 7px; }
 .map-tile-painter > footer strong { color: var(--studio-muted); font-weight: 600; }
+@media (max-width: 900px) {
+  .map-tile-painter-workspace.has-sidebar { grid-template-columns: 1fr; }
+  .map-tileset-palette,
+  .map-collision-palette { border-right: 0; border-bottom: 1px solid #303946; }
+  .map-tileset-palette > div { grid-template-columns: repeat(8, minmax(26px, 1fr)); }
+}
 .map-structure-editor header,
 .placement-events > header {
   display: flex;
