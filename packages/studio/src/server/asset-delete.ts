@@ -167,7 +167,7 @@ async function collectAssetTrashSidecars(directory: string): Promise<string[]> {
 }
 
 function isAssetKind(value: unknown): value is AssetKind {
-  return value === "portrait" || value === "bg" || value === "cg" || value === "sheet" || value === "tileset";
+  return value === "portrait" || value === "bg" || value === "cg" || value === "sheet" || value === "sprite" || value === "tileset";
 }
 
 function safeProjectPath(gameDir: string, relative: string): string {

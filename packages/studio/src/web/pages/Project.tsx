@@ -3047,7 +3047,8 @@ function PlacementEditor({
             <span className={`placement-graphic-preview${placement.asset ? " authored" : ""}`} style={placement.asset ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(placement.asset))})` } : undefined} aria-hidden="true">{placement.asset ? "" : "◇"}</span>
             <label>Map graphic<select value={placement.asset ?? ""} onChange={(event) => onChange((current) => ({ ...current, asset: event.target.value || undefined }))}>
               <option value="">System marker</option>
-              {assets.map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}
+              {assets.some((asset) => asset.kind === "sprite") && <optgroup label="Map sprites">{assets.filter((asset) => asset.kind === "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder}</option>)}</optgroup>}
+              <optgroup label="Scene and design assets">{assets.filter((asset) => asset.kind !== "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}</optgroup>
             </select></label>
             <small>{placement.asset ?? "Renderer-owned marker · Headless ignores the visual"}</small>
           </div>

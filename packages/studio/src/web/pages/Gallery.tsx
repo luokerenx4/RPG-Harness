@@ -152,6 +152,7 @@ export function Gallery() {
     bg: assets.filter((a) => a.kind === "bg").length,
     cg: assets.filter((a) => a.kind === "cg").length,
     sheet: assets.filter((a) => a.kind === "sheet").length,
+    sprite: assets.filter((a) => a.kind === "sprite").length,
     tileset: assets.filter((a) => a.kind === "tileset").length,
     missing: assets.filter((a) => !a.renderings.tuiTxt && !a.renderings.tuiAns)
       .length,
@@ -201,7 +202,7 @@ export function Gallery() {
           <form className="asset-create-dialog" onSubmit={(event) => { event.preventDefault(); void submitAsset(); }}>
             <header><div><span>ASSET DATABASE</span><h2 id="new-asset-title">Create visual resource</h2><p>Creates an authoritative spec.yaml, then opens its asset record.</p></div><button type="button" aria-label="Close asset creator" onClick={() => setCreating(false)}>×</button></header>
             <div className="asset-create-grid">
-              <label>Kind<select value={createDraft.kind} onChange={(event) => setCreateDraft({ ...createDraft, kind: event.target.value as AssetKind })}><option value="portrait">portrait</option><option value="bg">background</option><option value="cg">CG</option><option value="sheet">sheet</option><option value="tileset">tileset</option></select></label>
+              <label>Kind<select value={createDraft.kind} onChange={(event) => setCreateDraft({ ...createDraft, kind: event.target.value as AssetKind })}><option value="portrait">portrait</option><option value="bg">background</option><option value="cg">CG</option><option value="sheet">sheet</option><option value="sprite">map sprite</option><option value="tileset">tileset</option></select></label>
               <label>Slug<input autoFocus required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="flooded-shrine" value={createDraft.id} onChange={(event) => setCreateDraft({ ...createDraft, id: event.target.value })} /><small>lowercase kebab-case · becomes the resource path</small></label>
               <label className="wide">Player / AI label<input required placeholder="Flooded shrine terrain atlas" value={createDraft.placeholder} onChange={(event) => setCreateDraft({ ...createDraft, placeholder: event.target.value })} /></label>
               <label className="wide">Description<textarea required rows={2} value={createDraft.description} onChange={(event) => setCreateDraft({ ...createDraft, description: event.target.value })} /></label>
@@ -243,6 +244,11 @@ export function Gallery() {
           label={`sheet (${counts.sheet})`}
           active={filter === "sheet"}
           onClick={() => setFilter("sheet")}
+        />
+        <FilterChip
+          label={`sprite (${counts.sprite})`}
+          active={filter === "sprite"}
+          onClick={() => setFilter("sprite")}
         />
         <FilterChip
           label={`tileset (${counts.tileset})`}
@@ -375,6 +381,7 @@ function kindFromPath(p: string): AssetKind | string {
   if (seg === "backgrounds") return "bg";
   if (seg === "cgs") return "cg";
   if (seg === "sheets") return "sheet";
+  if (seg === "sprites") return "sprite";
   if (seg === "tilesets") return "tileset";
   return seg || "?";
 }
@@ -398,7 +405,7 @@ export function missingAssetDraft(assetPath: string, referencedBy: string[]): Ne
 }
 
 function isAssetKind(value: string): value is AssetKind {
-  return value === "portrait" || value === "bg" || value === "cg" || value === "sheet" || value === "tileset";
+  return value === "portrait" || value === "bg" || value === "cg" || value === "sheet" || value === "sprite" || value === "tileset";
 }
 
 function matchesTextQuery(values: Array<string | undefined>, query: string): boolean {

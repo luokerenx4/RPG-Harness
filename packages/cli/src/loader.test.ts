@@ -14,6 +14,27 @@ afterEach(async () => {
 });
 
 describe("project code loading", () => {
+  test("discovers first-class map sprites from the canonical asset directory", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "rpgh-loader-sprite-"));
+    temporaryDirectories.push(dir);
+    const spriteDir = path.join(dir, "assets", "sprites", "shrine-keeper");
+    await mkdir(spriteDir, { recursive: true });
+    await writeFile(path.join(dir, "game.yaml"), "title: Sprite registry\n", "utf-8");
+    await writeFile(path.join(spriteDir, "spec.yaml"), [
+      "kind: sprite",
+      "description: A map-scale shrine keeper.",
+      "prompt: Paint a transparent RPG map sprite.",
+      "placeholder: Shrine keeper map sprite",
+      "",
+    ].join("\n"), "utf-8");
+
+    const loaded = await loadGame(dir);
+    expect(loaded.assets).toEqual([expect.objectContaining({
+      path: "assets/sprites/shrine-keeper",
+      kind: "sprite",
+    })]);
+  });
+
   test("reloads an edited module and ejected preset in the same process", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "rpgh-loader-revision-"));
     temporaryDirectories.push(dir);

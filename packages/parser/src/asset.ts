@@ -39,6 +39,7 @@ const VALID_KINDS: ReadonlyArray<AssetKind> = [
   "bg",
   "cg",
   "sheet",
+  "sprite",
   "tileset",
 ];
 

@@ -262,6 +262,7 @@ const ASSET_KIND_DIRS: ReadonlyArray<{ name: string; kind: AssetKind }> = [
   { name: "backgrounds", kind: "bg" },
   { name: "cgs", kind: "cg" },
   { name: "sheets", kind: "sheet" },
+  { name: "sprites", kind: "sprite" },
   { name: "tilesets", kind: "tileset" },
 ];
 

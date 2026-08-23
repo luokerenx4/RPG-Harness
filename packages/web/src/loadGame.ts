@@ -214,6 +214,7 @@ const ASSET_KIND_DIRS = [
   "backgrounds",
   "cgs",
   "sheets",
+  "sprites",
   "tilesets",
 ] as const;
 

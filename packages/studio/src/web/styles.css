@@ -19,6 +19,7 @@
   --bg-kind: #8fb56f;
   --cg-kind: #c878d5;
   --sheet-kind: #6fa8e8;
+  --sprite-kind: #7fc6a4;
   --tileset-kind: #d0c06f;
   --warn: #e8b76b;
   --error: #e07070;
@@ -860,6 +861,7 @@ code, pre, .mono {
 .kind-badge.bg { color: var(--bg-kind); border-color: var(--bg-kind); }
 .kind-badge.cg { color: var(--cg-kind); border-color: var(--cg-kind); }
 .kind-badge.sheet { color: var(--sheet-kind); border-color: var(--sheet-kind); }
+.kind-badge.sprite { color: var(--sprite-kind); border-color: var(--sprite-kind); }
 .kind-badge.tileset { color: var(--tileset-kind); border-color: var(--tileset-kind); }
 
 /* Ghost cards — references that resolve to nothing. Red-tinted so a

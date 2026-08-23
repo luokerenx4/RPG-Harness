@@ -30,7 +30,7 @@ export interface GameSummary {
   gameDir: string;
 }
 
-export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "tileset";
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "sprite" | "tileset";
 
 export interface TuiRenderPrefs {
   symbols?: string;

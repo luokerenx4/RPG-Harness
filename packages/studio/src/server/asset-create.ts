@@ -17,6 +17,7 @@ const ASSET_DIRS: Record<AssetKind, string> = {
   bg: "backgrounds",
   cg: "cgs",
   sheet: "sheets",
+  sprite: "sprites",
   tileset: "tilesets",
 };
 
@@ -32,7 +33,7 @@ export function validateAssetCreateInput(raw: unknown): AssetCreateInput {
   }
   const input = raw as Record<string, unknown>;
   if (typeof input.kind !== "string" || !(input.kind in ASSET_DIRS)) {
-    throw new AssetCreateError("kind must be portrait, bg, cg, sheet, or tileset");
+    throw new AssetCreateError("kind must be portrait, bg, cg, sheet, sprite, or tileset");
   }
   if (typeof input.id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.id)) {
     throw new AssetCreateError("id must be a lowercase kebab-case slug");

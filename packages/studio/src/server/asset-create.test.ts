@@ -86,6 +86,22 @@ describe("asset creation", () => {
     }
   });
 
+  test("creates map sprites as their own first-class asset kind", async () => {
+    const input = validateAssetCreateInput({
+      kind: "sprite",
+      id: "shrine-keeper",
+      description: "A map-scale shrine keeper.",
+      prompt: "Paint a transparent RPG map sprite.",
+      placeholder: "Shrine keeper map sprite",
+    });
+    const assetPath = await createAssetSpec(gameDir, input);
+    expect(assetPath).toBe("assets/sprites/shrine-keeper");
+    expect(parse(await readFile(path.join(gameDir, assetPath, "spec.yaml"), "utf8"))).toMatchObject({
+      kind: "sprite",
+      placeholder: "Shrine keeper map sprite",
+    });
+  });
+
   test("rolls the new directory back when authoritative reload fails", async () => {
     const input = validateAssetCreateInput({
       kind: "portrait",

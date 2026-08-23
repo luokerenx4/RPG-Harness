@@ -44,5 +44,9 @@ describe("Studio asset library navigation", () => {
       description: "Missing cg record referenced by script ending :cg.",
     }));
     expect(missingAssetDraft("assets/cgs/not_valid", ["script ending :cg"])).toBeNull();
+    expect(missingAssetDraft("assets/sprites/shrine-keeper", ["map shrine placement keeper"])).toEqual(expect.objectContaining({
+      kind: "sprite",
+      id: "shrine-keeper",
+    }));
   });
 });

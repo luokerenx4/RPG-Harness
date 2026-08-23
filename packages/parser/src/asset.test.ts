@@ -32,7 +32,7 @@ describe("parseAssetSpec — minimal", () => {
 
 describe("parseAssetSpec — kind", () => {
   test("stage, authoring, and map asset kinds are accepted", () => {
-    for (const kind of ["portrait", "bg", "cg", "sheet", "tileset"] as const) {
+    for (const kind of ["portrait", "bg", "cg", "sheet", "sprite", "tileset"] as const) {
       const spec = parseAssetSpec(
         `kind: ${kind}\ndescription: x\nprompt: y\nplaceholder: z\n`,
         `assets/x/y`,
@@ -44,7 +44,7 @@ describe("parseAssetSpec — kind", () => {
   test("unknown kind throws", () => {
     expect(() =>
       parseAssetSpec(
-        "kind: sprite\ndescription: x\nprompt: y\nplaceholder: z\n",
+        "kind: animation\ndescription: x\nprompt: y\nplaceholder: z\n",
         "assets/x/y",
       ),
     ).toThrow(/kind.*portrait.*bg.*cg/);

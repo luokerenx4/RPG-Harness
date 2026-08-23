@@ -618,7 +618,7 @@ export interface CharacterSpawnRule {
 }
 
 // Visual asset registry. An asset is a directory under
-// <gameDir>/assets/{portraits,backgrounds,cgs,sheets,tilesets}/<slug>/ containing a
+// <gameDir>/assets/{portraits,backgrounds,cgs,sheets,sprites,tilesets}/<slug>/ containing a
 // spec.yaml plus any number of pre-rendered files (source.quality.png /
 // source.compressed.{webp,png,jpg,jpeg}, tui.txt, tui.ans, web.webp).
 // The engine never decodes images; it
@@ -634,7 +634,7 @@ export interface CharacterSpawnRule {
 // they exist for authors and generators — the identity source that
 // portraits and CGs are derived from.
 // `tileset` is canonical map-layer art consumed by spatial renderers.
-export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "tileset";
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "sprite" | "tileset";
 
 export interface AssetSpec {
   // Logical id = the asset directory's forward-slash relative path
