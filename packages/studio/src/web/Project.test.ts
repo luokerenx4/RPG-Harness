@@ -6,6 +6,7 @@ import {
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPlacementResourceLabel,
+  nextProjectTreeIndex,
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
@@ -64,6 +65,14 @@ describe("Studio database record fields", () => {
 });
 
 describe("Studio map event resource picker", () => {
+  test("wraps RPG-style keyboard navigation across long project trees", () => {
+    expect(nextProjectTreeIndex(0, 5, -1)).toBe(4);
+    expect(nextProjectTreeIndex(4, 5, 1)).toBe(0);
+    expect(nextProjectTreeIndex(-1, 5, 1)).toBe(0);
+    expect(nextProjectTreeIndex(-1, 5, -1)).toBe(4);
+    expect(nextProjectTreeIndex(0, 0, 1)).toBe(-1);
+  });
+
   test("filters and alphabetizes records for the selected resource kind", () => {
     const resources = [
       { key: "script:z", kind: "script", id: "z", label: "Zulu", refs: [] },

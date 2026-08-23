@@ -1654,7 +1654,8 @@ summary:focus-visible {
   text-align: left;
 }
 
-.resource-group-heading:hover { background: #181c25; }
+.resource-group-heading:hover,
+.resource-group-heading:focus-visible { background: #181c25; }
 .resource-group-heading strong { font-size: 10px; font-weight: 650; }
 .resource-group-heading small { color: #555e6b; font-size: 9px; }
 .tree-chevron { color: #5f6875; font-size: 15px; line-height: 1; }
@@ -1671,11 +1672,12 @@ summary:focus-visible {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  cursor: default;
+  cursor: pointer;
   text-align: left;
 }
 
-.resource-row:hover { color: #eef0f4; background: #181d27; }
+.resource-row:hover,
+.resource-row:focus-visible { color: #eef0f4; background: #181d27; }
 .resource-row.selected {
   color: #f3f5f7;
   border: 0;

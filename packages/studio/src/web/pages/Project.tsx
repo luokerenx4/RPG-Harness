@@ -109,6 +109,7 @@ export function Project({
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const resourceTreeRef = useRef<HTMLDivElement | null>(null);
   const draftGuardRef = useRef<StudioDraftGuard | null>(null);
 
   const handleDraftGuardChange = useCallback((guard: StudioDraftGuard | null) => {
@@ -189,6 +190,48 @@ export function Project({
     commitSelectResource(key);
   };
 
+  const focusFirstResource = () => {
+    resourceTreeRef.current?.querySelector<HTMLButtonElement>(".resource-row")?.focus();
+  };
+
+  const navigateResourceTree = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) return;
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(
+      ".resource-group-heading, .resource-row",
+    ));
+    const target = event.target instanceof HTMLButtonElement ? event.target : null;
+    if (!target || !buttons.includes(target)) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      target.click();
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      const expanded = target.getAttribute("aria-expanded");
+      if (expanded !== null) {
+        const shouldExpand = event.key === "ArrowRight";
+        if ((expanded === "true") !== shouldExpand) {
+          event.preventDefault();
+          target.click();
+        }
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        target.closest(".resource-group")?.querySelector<HTMLButtonElement>(".resource-group-heading")?.focus();
+      }
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = buttons.indexOf(target);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? buttons.length - 1
+        : nextProjectTreeIndex(currentIndex, buttons.length, event.key === "ArrowDown" ? 1 : -1);
+    buttons[nextIndex]?.focus();
+  };
+
   const commitCloseTab = (key: string) => {
     setOpenKeys((current) => {
       const next = current.filter((candidate) => candidate !== key);
@@ -240,12 +283,17 @@ export function Project({
             ref={searchRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown") return;
+              event.preventDefault();
+              focusFirstResource();
+            }}
             placeholder="Find anything"
             aria-label="Search project resources"
           />
           {query ? <button type="button" aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>⌘K</kbd>}
         </label>
-        <div className="resource-tree-scroll">
+        <div ref={resourceTreeRef} className="resource-tree-scroll" role="tree" aria-label="Project resources" onKeyDown={navigateResourceTree}>
           {groups.length === 0 && <div className="tree-empty">No matching resources</div>}
           {groups.map(({ kind, rows }) => {
             const meta = KIND_META[kind] ?? { icon: "·", label: kind };
@@ -255,6 +303,7 @@ export function Project({
                 <button
                   type="button"
                   className="resource-group-heading"
+                  role="treeitem"
                   aria-expanded={!collapsed}
                   onClick={() => setCollapsedKinds((current) => {
                     const next = new Set(current);
@@ -270,9 +319,11 @@ export function Project({
                 {!collapsed && rows.map((resource) => (
                   <button
                     type="button"
+                    role="treeitem"
                     draggable={PLACEABLE_KINDS.has(resource.kind)}
                     className={`resource-row ${selectedKey === resource.key ? "selected" : ""}`}
                     key={resource.key}
+                    aria-selected={selectedKey === resource.key}
                     onClick={() => selectResource(resource.key)}
                     onDragStart={(event) => {
                       if (!PLACEABLE_KINDS.has(resource.kind)) {
@@ -294,7 +345,7 @@ export function Project({
         </div>
         <footer className="explorer-footer">
           <span>{groups.reduce((total, group) => total + group.rows.length, 0)} shown</span>
-          <span>Drag resources onto maps</span>
+          <span>↑↓ Navigate · Enter Open</span>
         </footer>
       </aside>
 
@@ -2176,6 +2227,12 @@ export function mapPlacementResourceLabel(
   if (!placement.resource) return placement.id;
   const key = `${placement.resource.kind}:${placement.resource.id}`;
   return resources.find((resource) => resource.key === key)?.label ?? placement.resource.id;
+}
+
+export function nextProjectTreeIndex(currentIndex: number, total: number, delta: 1 | -1): number {
+  if (total <= 0) return -1;
+  if (currentIndex < 0 || currentIndex >= total) return delta > 0 ? 0 : total - 1;
+  return (currentIndex + delta + total) % total;
 }
 
 export function mapEventCommandSummary(
