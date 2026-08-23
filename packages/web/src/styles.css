@@ -455,6 +455,12 @@ body {
   border: 1px dashed rgba(242, 193, 93, 0.62);
   background: rgba(242, 193, 93, 0.08);
 }
+.spatial-map-region.current {
+  border-style: solid;
+  border-color: rgba(108, 211, 225, .72);
+  background: rgba(70, 174, 192, .12);
+  box-shadow: inset 0 0 0 1px rgba(172, 235, 243, .12), inset 0 0 24px rgba(54, 151, 168, .12);
+}
 .spatial-map-region > span {
   position: absolute;
   top: 4px;
@@ -467,6 +473,12 @@ body {
   letter-spacing: .08em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.spatial-map-region.current > span {
+  padding: 3px 5px;
+  color: rgba(213, 244, 247, .9);
+  border-radius: 2px;
+  background: rgba(8, 30, 36, .72);
 }
 .spatial-map-step-cell {
   position: absolute;
@@ -721,6 +733,8 @@ body {
 }
 .spatial-map-awareness-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
 .spatial-map-awareness small { color: #4d5965; font: 7px/1 ui-monospace, monospace; letter-spacing: .12em; }
+.spatial-map-awareness-copy .spatial-map-area { color: #667981; }
+.spatial-map-awareness-copy .spatial-map-area.current { color: #86c7d1; }
 .spatial-map-awareness-copy strong { overflow: hidden; color: #c5d6d9; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .spatial-map-awareness-copy strong b { margin-left: 3px; color: #e9c66e; font: 700 7px/1 ui-monospace,monospace; }
 .spatial-map-awareness-copy em { overflow: hidden; color: #67757e; font-size: 7px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }

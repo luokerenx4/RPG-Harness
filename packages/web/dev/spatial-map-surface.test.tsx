@@ -14,6 +14,7 @@ import {
   mapMoveAvailability,
   mapPlacementDistance,
   resolveAcceptedSpatialActivityFeedback,
+  resolveSpatialRegionAtPoint,
   resolveSpatialPlacementOperations,
   spatialMoveBlockedMessage,
   spatialOperationUnavailableReason,
@@ -91,6 +92,52 @@ describe("SpatialMapSurface", () => {
       { direction: "north", point: { x: 0, y: 4 }, available: true, label: "向北", arrow: "↑" },
       { direction: "east", point: { x: 1, y: 5 }, available: true, label: "向东", arrow: "→" },
     ]);
+  });
+
+  test("resolves authored regions with half-open rectangle bounds", () => {
+    const regions = [{ id: "reed_bank", name: "葦原への浅瀬", x: 4, y: 7, width: 5, height: 3 }];
+
+    expect(resolveSpatialRegionAtPoint(regions, { x: 4, y: 7 })?.id).toBe("reed_bank");
+    expect(resolveSpatialRegionAtPoint(regions, { x: 8, y: 9 })?.id).toBe("reed_bank");
+    expect(resolveSpatialRegionAtPoint(regions, { x: 9, y: 8 })).toBeUndefined();
+    expect(resolveSpatialRegionAtPoint(regions, { x: 8, y: 10 })).toBeUndefined();
+    expect(resolveSpatialRegionAtPoint(regions)).toBeUndefined();
+  });
+
+  test("marks and names only the region containing the confirmed player point", () => {
+    const regionalMap: MapDef = {
+      ...map,
+      layout: {
+        ...map.layout!,
+        regions: [{ id: "reed_bank", name: "葦原への浅瀬", x: 4, y: 3, width: 3, height: 3 }],
+      },
+    };
+    const current = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={regionalMap}
+        activities={[move]}
+        playerPosition={{ x: 5, y: 4 }}
+        moveFeedback={{ direction: "east", sequence: 1 }}
+        onInput={() => {}}
+      />,
+    );
+    const outside = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={regionalMap}
+        activities={[move]}
+        playerPosition={{ x: 0, y: 0 }}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(current).toContain('class="spatial-map-region current"');
+    expect(current).toContain('aria-current="location"');
+    expect(current).toContain("AREA · 葦原への浅瀬 · 座標 5, 4");
+    expect(current).toContain("东侧无法通行");
+    expect(outside).toContain('class="spatial-map-region"');
+    expect(outside).not.toContain('class="spatial-map-region current"');
+    expect(outside).not.toContain('aria-current="location"');
+    expect(outside).toContain("AREA · — · 座標 0, 0");
   });
 
   test("replays directional blocked feedback for every sequence", () => {

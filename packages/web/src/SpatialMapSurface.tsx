@@ -19,6 +19,7 @@ import type {
   MapPlacementDef,
   MapPlacementEventDef,
   MapPoint,
+  MapRegionDef,
   ProjectResourceRef,
 } from "@rpg-harness/engine";
 
@@ -160,6 +161,24 @@ export function spatialMoveBlockedMessage(direction: MapFacing): string {
   return `${({ north: "北", east: "东", south: "南", west: "西" } as const)[direction]}侧无法通行`;
 }
 
+/**
+ * Resolve the first authored region containing the engine-owned player point.
+ * Region bounds are half-open so adjacent rectangles never both claim a shared
+ * right or bottom edge.
+ */
+export function resolveSpatialRegionAtPoint(
+  regions: MapRegionDef[],
+  point?: MapPoint,
+): MapRegionDef | undefined {
+  if (!point) return undefined;
+  return regions.find((region) => (
+    point.x >= region.x
+    && point.x < region.x + region.width
+    && point.y >= region.y
+    && point.y < region.y + region.height
+  ));
+}
+
 export function SpatialMapSurface({
   map,
   activities,
@@ -204,6 +223,10 @@ export function SpatialMapSurface({
   const stepTargets = collectSpatialStepTargets(map, playerPosition);
   const visibleTiles = collectSpatialTiles(map);
   const imageLayers = collectMapImageLayers(map);
+  const currentRegion = resolveSpatialRegionAtPoint(layout.regions, playerPosition);
+  const currentRegionName = currentRegion
+    ? currentRegion.name ?? formatResourceName(currentRegion.id)
+    : undefined;
   const blockedMoveMessage = moveFeedback
     ? spatialMoveBlockedMessage(moveFeedback.direction)
     : undefined;
@@ -301,10 +324,11 @@ export function SpatialMapSurface({
         })}
         {layout.regions.map((region) => (
           <div
-            className="spatial-map-region"
+            className={`spatial-map-region${currentRegion?.id === region.id ? " current" : ""}`}
             key={region.id}
             role="img"
             aria-label={`区域 ${region.name ?? formatResourceName(region.id)}`}
+            aria-current={currentRegion?.id === region.id ? "location" : undefined}
             style={{
               left: `${region.x / layout.width * 100}%`,
               top: `${region.y / layout.height * 100}%`,
@@ -371,7 +395,7 @@ export function SpatialMapSurface({
             {nearestLandmark?.placement.resource?.kind === "map" ? "↗" : nearestLandmark ? "◇" : "·"}
           </span>
           <span className="spatial-map-awareness-copy">
-            <small>NEARBY · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
+            <small className={`spatial-map-area${currentRegion ? " current" : ""}`}>AREA · {currentRegionName ?? "—"} · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
             <strong>{nearestName ?? "可见地标なし"}{nearbyLandmarks.length > 1 && <b> +{nearbyLandmarks.length - 1}</b>}</strong>
             <em className={blockedMoveMessage ? "spatial-map-blocked-message" : undefined}>{blockedMoveMessage ?? (nearbyLandmarks.length > 1
                 ? `${nearbyLandmarks.length} 个对象在行动范围内 · ${contextOperations.length} 个事件`
