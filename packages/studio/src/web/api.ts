@@ -173,6 +173,24 @@ export async function createProjectResource(
   return response.json();
 }
 
+export async function duplicateProjectResource(
+  kind: ProjectResourceKind,
+  id: string,
+  newId: string,
+  label: string,
+): Promise<CreateProjectResourceResponse> {
+  const response = await fetch("/api/resources/duplicate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, id, newId, label }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 export interface TrashProjectResourceResponse {
   resource: ProjectResourceNode;
   sourcePath: string;

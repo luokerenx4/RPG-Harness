@@ -16,6 +16,7 @@ import {
   fetchMapPreview,
   fetchResourceSource,
   createProjectResource,
+  duplicateProjectResource,
   fetchStudioTrash,
   planResourceRename,
   renameProjectResource,
@@ -357,6 +358,18 @@ export function Project({
     });
   };
 
+  const handleResourceDuplicated = (duplicated: Awaited<ReturnType<typeof duplicateProjectResource>>) => {
+    setProject(duplicated.project);
+    setSelectedKey(duplicated.resource.key);
+    setOpenKeys((current) => current.includes(duplicated.resource.key)
+      ? current
+      : [...current.slice(-6), duplicated.resource.key]);
+    setLifecycleReceipt({
+      title: `${duplicated.resource.label} duplicated`,
+      path: duplicated.source.path,
+    });
+  };
+
   return (
     <div className="project-workbench">
       <nav className="project-activitybar" aria-label="Project sections">
@@ -505,6 +518,7 @@ export function Project({
               onSelectResource={selectResource}
               onResourceTrashed={handleResourceTrashed}
               onResourceRenamed={handleResourceRenamed}
+              onResourceDuplicated={handleResourceDuplicated}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
@@ -739,6 +753,7 @@ function ResourceDetail({
   onSelectResource,
   onResourceTrashed,
   onResourceRenamed,
+  onResourceDuplicated,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -755,18 +770,22 @@ function ResourceDetail({
   onSelectResource: (key: string) => void;
   onResourceTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
   onResourceRenamed: (renamed: Awaited<ReturnType<typeof renameProjectResource>>) => void;
+  onResourceDuplicated: (duplicated: Awaited<ReturnType<typeof duplicateProjectResource>>) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(() => map === undefined);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const deleteButtonRef = useRef<HTMLButtonElement>(null);
-  const renameButtonRef = useRef<HTMLButtonElement>(null);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const actionsButtonRef = useRef<HTMLButtonElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
   const adjacent = adjacentResourceKeys(resources, node.key);
+  const resourceActionsAvailable = REMOVABLE_KINDS.has(node.kind) && Boolean(node.source) && node.editable !== false;
 
   useEffect(() => {
     setInspectorOpen(map === undefined);
@@ -778,12 +797,39 @@ function ResourceDetail({
   useEffect(() => {
     setDeleteOpen(false);
     setRenameOpen(false);
+    setDuplicateOpen(false);
+    setActionsOpen(false);
   }, [node.key]);
 
   useEffect(() => {
+    if (!actionsOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && !actionsMenuRef.current?.contains(target)) setActionsOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOutside);
+    return () => window.removeEventListener("pointerdown", closeOutside);
+  }, [actionsOpen]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "d" &&
+        resourceActionsAvailable &&
+        !draftActive &&
+        !deleteOpen &&
+        !renameOpen &&
+        !duplicateOpen &&
+        !target?.matches("input, textarea, select, [contenteditable='true']")
+      ) {
+        event.preventDefault();
+        setActionsOpen(false);
+        setDuplicateOpen(true);
+        return;
+      }
+      if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       const key = event.key === "ArrowLeft" ? adjacent.previous?.key : adjacent.next?.key;
       if (!key) return;
@@ -792,7 +838,31 @@ function ResourceDetail({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [adjacent.previous?.key, adjacent.next?.key, onSelectResource]);
+  }, [adjacent.previous?.key, adjacent.next?.key, deleteOpen, draftActive, duplicateOpen, onSelectResource, renameOpen, resourceActionsAvailable]);
+
+  const openActionsMenu = () => {
+    setActionsOpen(true);
+    requestAnimationFrame(() => actionsMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus());
+  };
+  const closeResourceDialog = (setter: (open: boolean) => void) => {
+    setter(false);
+    requestAnimationFrame(() => actionsButtonRef.current?.focus());
+  };
+  const navigateActionsMenu = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!actionsOpen || !["ArrowDown", "ArrowUp", "Home", "End", "Escape"].includes(event.key)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setActionsOpen(false);
+      actionsButtonRef.current?.focus();
+      return;
+    }
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+    if (buttons.length === 0) return;
+    event.preventDefault();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : nextProjectTreeIndex(current, buttons.length, event.key === "ArrowDown" ? 1 : -1);
+    buttons[next]?.focus();
+  };
 
   return (
     <div ref={workspaceRef} className={`resource-workspace${inspectorOpen ? "" : " inspector-collapsed"}`}>
@@ -818,25 +888,33 @@ function ResourceDetail({
                 onClick={() => adjacent.next && onSelectResource(adjacent.next.key)}
               >›</button>
             </nav>
-            {REMOVABLE_KINDS.has(node.kind) && node.source && node.editable !== false && (
-              <button
-                ref={renameButtonRef}
-                type="button"
-                className="resource-rename-trigger"
-                disabled={draftActive}
-                title={draftActive ? "Save or discard the current draft first" : "Rename stable ID and rewrite references"}
-                onClick={() => setRenameOpen(true)}
-              ><span aria-hidden="true">⌘</span>Rename</button>
-            )}
-            {REMOVABLE_KINDS.has(node.kind) && node.source && node.editable !== false && (
-              <button
-                ref={deleteButtonRef}
-                type="button"
-                className="resource-delete-trigger"
-                disabled={draftActive}
-                title={draftActive ? "Save or discard the current draft first" : "Move resource to Studio Trash"}
-                onClick={() => setDeleteOpen(true)}
-              ><span aria-hidden="true">⌫</span>Delete</button>
+            {resourceActionsAvailable && (
+              <div ref={actionsMenuRef} className="resource-actions-menu" onKeyDown={navigateActionsMenu}>
+                <button
+                  ref={actionsButtonRef}
+                  type="button"
+                  className="resource-actions-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={actionsOpen}
+                  disabled={draftActive}
+                  title={draftActive ? "Save or discard the current draft first" : "Resource actions"}
+                  onClick={() => actionsOpen ? setActionsOpen(false) : openActionsMenu()}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown") return;
+                    event.preventDefault();
+                    openActionsMenu();
+                  }}
+                ><span aria-hidden="true">•••</span>Actions</button>
+                {actionsOpen && (
+                  <div className="resource-actions-popover" role="menu" aria-label={`${node.label} actions`}>
+                    <header><span>RECORD</span><strong>{node.id}</strong></header>
+                    <button type="button" role="menuitem" onClick={() => { setActionsOpen(false); setDuplicateOpen(true); }}><i aria-hidden="true">⧉</i><span><strong>Duplicate</strong><small>Copy as a new record</small></span><kbd>⌘D</kbd></button>
+                    <button type="button" role="menuitem" onClick={() => { setActionsOpen(false); setRenameOpen(true); }}><i aria-hidden="true">⌘</i><span><strong>Rename ID</strong><small>Rewrite semantic references</small></span></button>
+                    <hr />
+                    <button type="button" role="menuitem" className="danger" onClick={() => { setActionsOpen(false); setDeleteOpen(true); }}><i aria-hidden="true">⌫</i><span><strong>Move to Trash</strong><small>Recoverable project move</small></span></button>
+                  </div>
+                )}
+              </div>
             )}
             <button
               type="button"
@@ -907,8 +985,7 @@ function ResourceDetail({
           blockers={backlinks}
           resources={resources}
           onClose={() => {
-            setDeleteOpen(false);
-            requestAnimationFrame(() => deleteButtonRef.current?.focus());
+            closeResourceDialog(setDeleteOpen);
           }}
           onTrashed={(trashed) => {
             setDeleteOpen(false);
@@ -924,8 +1001,7 @@ function ResourceDetail({
         <RenameResourceDialog
           node={node}
           onClose={() => {
-            setRenameOpen(false);
-            requestAnimationFrame(() => renameButtonRef.current?.focus());
+            closeResourceDialog(setRenameOpen);
           }}
           onRenamed={(renamed) => {
             setRenameOpen(false);
@@ -933,6 +1009,85 @@ function ResourceDetail({
           }}
         />
       )}
+      {duplicateOpen && (
+        <DuplicateResourceDialog
+          node={node}
+          onClose={() => closeResourceDialog(setDuplicateOpen)}
+          onDuplicated={(duplicated) => {
+            setDuplicateOpen(false);
+            onResourceDuplicated(duplicated);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DuplicateResourceDialog({
+  node,
+  onClose,
+  onDuplicated,
+}: {
+  node: ProjectResourceNode;
+  onClose: () => void;
+  onDuplicated: (duplicated: Awaited<ReturnType<typeof duplicateProjectResource>>) => void;
+}) {
+  const [newId, setNewId] = useState(`${node.id}_copy`.slice(0, 80));
+  const [label, setLabel] = useState(`${node.label} Copy`.slice(0, 160));
+  const [duplicating, setDuplicating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idValid = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(newId) && newId !== node.id;
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!idValid || !label.trim() || duplicating) return;
+    setDuplicating(true);
+    setError(null);
+    try {
+      onDuplicated(await duplicateProjectResource(node.kind, node.id, newId, label));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setDuplicating(false);
+    }
+  };
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="duplicate-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="duplicate-resource-title" onClick={duplicating ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !duplicating) onClose();
+    }}>
+      <form ref={dialogRef} className="duplicate-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header><div><span>DATABASE COPY</span><strong id="duplicate-resource-title">Duplicate project resource</strong><small>Copy the authoritative record, assign a new identity, update self-references, and validate it as part of the complete game.</small></div><button type="button" aria-label="Close duplicate resource dialog" disabled={duplicating} onClick={onClose}>×</button></header>
+        <div className="duplicate-resource-body">
+          <div className="duplicate-resource-origin"><i aria-hidden="true">⧉</i><div><span>{node.kind.toUpperCase()}</span><strong>{node.label}</strong><code>{node.key}</code><small>{node.source}</small></div></div>
+          <label><span>New stable ID</span><input ref={inputRef} value={newId} maxLength={80} aria-invalid={!idValid} autoComplete="off" onChange={(event) => setNewId(event.target.value)} /><small>The copy becomes authoritative immediately and keeps the original activation conditions.</small></label>
+          <label><span>Display name</span><input value={label} maxLength={160} onChange={(event) => setLabel(event.target.value)} /></label>
+          {error && <div className="duplicate-resource-error" role="alert"><strong>Duplicate failed</strong><span>{error}</span><small>No partial source file was kept.</small></div>}
+        </div>
+        <footer><span>COPY SOURCE · RETARGET SELF REFERENCES · VALIDATED RELOAD</span><div><button type="button" disabled={duplicating} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!idValid || !label.trim() || duplicating}>{duplicating ? "Validating…" : "Duplicate record"}</button></div></footer>
+      </form>
     </div>
   );
 }

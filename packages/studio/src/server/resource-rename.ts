@@ -227,6 +227,24 @@ export function transformResourceSource(
   throw new ResourceRenameError(`Studio cannot safely rewrite ${sourceKind} source`);
 }
 
+export function replaceResourceDefinitionLabel(
+  sourceKind: CreatableResourceKind,
+  source: string,
+  label: string,
+): string {
+  const field = sourceKind === "script" || sourceKind === "action" ? "title" : "name";
+  if (["character", "item", "weapon", "skill", "enemy", "script"].includes(sourceKind)) {
+    const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/);
+    if (!match || match.index !== 0 || match[1] === undefined) {
+      throw new ResourceRenameError("Markdown resource has no parseable YAML frontmatter");
+    }
+    const header = replaceYamlRootScalar(match[1], field, label);
+    const headerOffset = match[0].indexOf(match[1]);
+    return `${match[0].slice(0, headerOffset)}${header}${match[0].slice(headerOffset + match[1].length)}${source.slice(match[0].length)}`;
+  }
+  return replaceYamlRootScalar(source, field, label);
+}
+
 function transformMarkdownSource(
   sourceKind: string,
   source: string,
@@ -409,6 +427,20 @@ function sourceReplacement(source: string, start: number, end: number, newId: st
       ? `'${newId}'`
       : newId;
   return { start, end, text };
+}
+
+function replaceYamlRootScalar(source: string, field: string, value: string): string {
+  const doc = parseDocument(source, { keepSourceTokens: true });
+  if (doc.errors.length > 0) throw new ResourceRenameError(doc.errors[0]?.message ?? "Invalid YAML source");
+  const node = doc.getIn([field], true);
+  if (!isScalar(node) || !node.range) {
+    throw new ResourceRenameError(`resource definition does not declare ${field}`);
+  }
+  const original = source.slice(node.range[0], node.range[1]);
+  const replacement = original.startsWith("'")
+    ? `'${value.replace(/'/g, "''")}'`
+    : JSON.stringify(value);
+  return `${source.slice(0, node.range[0])}${replacement}${source.slice(node.range[1])}`;
 }
 
 function renamedDefinitionPath(sourcePath: string, oldId: string, newId: string): string {

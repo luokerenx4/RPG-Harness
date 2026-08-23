@@ -33,6 +33,7 @@ import {
   renameProjectResource,
   ResourceRenameError,
 } from "./resource-rename";
+import { duplicateProjectResource } from "./resource-duplicate";
 
 interface Ctx {
   gameDir: string;
@@ -78,6 +79,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   if (method === "POST") {
     if (pathname === "/api/resources") return postProjectResource(ctx, req);
+    if (pathname === "/api/resources/duplicate") return postDuplicateProjectResource(ctx, req);
     if (pathname === "/api/resources/rename-plan") return postResourceRenamePlan(ctx, req);
     if (pathname === "/api/trash/restore") return postRestoreStudioTrash(ctx, req);
     // /api/assets/<asset-path>/source       — upload source.quality.png
@@ -104,6 +106,48 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function postDuplicateProjectResource(ctx: Ctx, req: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const input = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  if (
+    typeof input.kind !== "string" ||
+    typeof input.id !== "string" ||
+    typeof input.newId !== "string" ||
+    typeof input.label !== "string"
+  ) {
+    return json({ error: "kind, id, newId, and label must be strings" }, 400);
+  }
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const duplicated = await duplicateProjectResource(
+      ctx.gameDir,
+      game,
+      input.kind as CreatableResourceKind,
+      input.id,
+      input.newId,
+      input.label,
+      () => loadGame(ctx.gameDir),
+    );
+    return json({
+      resource: duplicated.resource,
+      source: { path: duplicated.path, source: duplicated.source },
+      project: await projectGame(ctx, duplicated.game),
+    }, 201);
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof ResourceCreateError ? error.status : 400,
+    );
+  }
 }
 
 async function postResourceRenamePlan(ctx: Ctx, req: Request): Promise<Response> {

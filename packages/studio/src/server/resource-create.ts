@@ -108,7 +108,7 @@ export function projectResourceTemplate(
   return `---\n${stringifyYaml(meta)}---\n\n${body}`;
 }
 
-function assertCreatableResourceInput(
+export function assertCreatableResourceInput(
   kind: string,
   id: string,
   label: string,
