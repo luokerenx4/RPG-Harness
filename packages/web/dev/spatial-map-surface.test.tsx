@@ -200,7 +200,8 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain('aria-keyshortcuts="E Enter Digit1"');
     expect(html).toContain('aria-label="附近地标雷达"');
     expect(html).not.toContain('class="spatial-map-interact" type="button" disabled');
-    expect(html.match(/<button/g)).toHaveLength(5);
+    expect(html).toContain('aria-label="展开地图"');
+    expect(html.match(/<button/g)).toHaveLength(6);
     expect([...collectSpatialPlacementActivityIds(
       inspectMap,
       new Map([[inspectActivity.id, inspectActivity]]),

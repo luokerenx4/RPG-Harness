@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { isMapEventPlayerAction, mapPlacementEventKey, mapPointBlocker } from "@rpg-harness/engine";
 import type {
   AssetSpec,
@@ -121,6 +121,7 @@ export function SpatialMapSurface({
   resourceLabels?: SpatialResourceLabels;
   onInput: (input: Input) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const layout = map.layout;
   if (!layout) return null;
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
@@ -151,16 +152,31 @@ export function SpatialMapSurface({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [contextOperations, onInput]);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [expanded]);
+
   return (
-    <section className="spatial-map-surface" aria-label={`${map.name} 二维地图`}>
+    <section className={`spatial-map-surface${expanded ? " expanded" : ""}`} aria-label={`${map.name} 二维地图`}>
       <header className="spatial-map-head">
         <div>
           <span className="spatial-map-kicker">MAP · {layout.width} × {layout.height}</span>
           <strong>{map.name}</strong>
         </div>
-        <div className="spatial-map-meta">
-          <span>{visiblePlacements.length} LANDMARKS</span>
-          <small>{playerPosition ? `POSITION ${playerPosition.x},${playerPosition.y}` : "POSITION —"}</small>
+        <div className="spatial-map-head-actions">
+          <div className="spatial-map-meta">
+            <span>{visiblePlacements.length} LANDMARKS</span>
+            <small>{playerPosition ? `POSITION ${playerPosition.x},${playerPosition.y}` : "POSITION —"}</small>
+          </div>
+          <button type="button" className="spatial-map-expand" aria-label={expanded ? "收起地图" : "展开地图"} aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><span aria-hidden="true">{expanded ? "↙" : "↗"}</span><small>{expanded ? "CLOSE" : "EXPAND"}</small></button>
         </div>
       </header>
       <div
