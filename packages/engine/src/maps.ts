@@ -1,4 +1,5 @@
 import type { Condition, MapConnection, MapDef, MapEventTrigger, MapLayerDef, MapPlacementDef, MapPoint } from "./types";
+import { mapPlacementEventKey } from "./resources";
 
 const MAP_LAYER_ORDER_STRIDE = 10_000;
 const MAP_ENTITY_ORDER_OFFSET = 1_000;
@@ -78,19 +79,48 @@ export function collectMapImageLayers(map: MapDef): MapLayerDef[] {
   return (map.layout?.layers ?? []).filter((layer) => layer.kind === "image" && layer.visible && layer.asset);
 }
 
+export type MapRouteSource = "legacy-connection" | "placement-event";
+
 /**
- * Canonical outgoing-map projection during Map v2 migration. Placement-backed
- * exits and legacy `connections` share one runtime contract, so modules do not
- * need to know which authoring shape produced an edge.
+ * One resolved outgoing route with the stable authored source that owns it.
+ *
+ * A target map is not enough to identify a route: RPG Maker-style maps may
+ * deliberately place multiple doors to the same destination, each with its
+ * own event page, condition and player-facing label. Runtime dispatch carries
+ * this key so it never resolves one door through another door's gate.
  */
-export function collectMapConnections(map: MapDef): MapConnection[] {
-  const connections = [...(map.connections ?? [])];
+export interface MapRoute extends MapConnection {
+  key: string;
+  source: MapRouteSource;
+  placementId?: string;
+  eventId?: string;
+  trigger?: MapEventTrigger;
+  chance?: number;
+}
+
+export function mapLegacyConnectionKey(mapId: string, index: number): string {
+  return `map:${mapId}/legacy-connection:${index}`;
+}
+
+/** Resolve both canonical placement events and transitional flat edges. */
+export function collectMapRoutes(map: MapDef): MapRoute[] {
+  const routes: MapRoute[] = (map.connections ?? []).map((connection, index) => ({
+    ...connection,
+    key: mapLegacyConnectionKey(map.id, index),
+    source: "legacy-connection",
+  }));
   for (const placement of map.placements ?? []) {
     for (const event of placement.events) {
       const ref = event.run ?? placement.resource;
       if (ref?.kind !== "map") continue;
       const requires = combineConditions(placement.requires, event.requires);
-      connections.push({
+      routes.push({
+        key: mapPlacementEventKey(map.id, placement.id, event.id),
+        source: "placement-event",
+        placementId: placement.id,
+        eventId: event.id,
+        trigger: event.trigger,
+        ...(event.chance !== undefined ? { chance: event.chance } : {}),
         dir: event.label ?? ref.id,
         target: ref.id,
         ...(requires ? { requires } : {}),
@@ -98,7 +128,48 @@ export function collectMapConnections(map: MapDef): MapConnection[] {
       });
     }
   }
-  return connections;
+  return routes;
+}
+
+/**
+ * Compatibility projection for callers that only need graph edges. New
+ * dispatch code must use `collectMapRoutes` so event-page identity survives.
+ */
+export function collectMapConnections(map: MapDef): MapConnection[] {
+  return collectMapRoutes(map).map(({
+    key: _key,
+    source: _source,
+    placementId: _placementId,
+    eventId: _eventId,
+    trigger: _trigger,
+    chance: _chance,
+    ...connection
+  }) => connection);
+}
+
+/** Preserve the historic `move:<target>` id unless it would be ambiguous. */
+export function mapRouteActivityId(routes: readonly MapRoute[], route: MapRoute): string {
+  const base = `move:${route.target}`;
+  return routes.filter((candidate) => candidate.target === route.target).length === 1
+    ? base
+    : `${base}#${route.key}`;
+}
+
+/**
+ * Resolve a dispatched route fail-closed. Older activities without a route
+ * key remain compatible only when their target identifies exactly one edge.
+ */
+export function resolveMapRoute(
+  map: MapDef,
+  target: string,
+  routeKey?: string,
+): MapRoute | undefined {
+  const routes = collectMapRoutes(map);
+  if (routeKey !== undefined) {
+    return routes.find((route) => route.key === routeKey && route.target === target);
+  }
+  const matches = routes.filter((route) => route.target === target);
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function combineConditions(

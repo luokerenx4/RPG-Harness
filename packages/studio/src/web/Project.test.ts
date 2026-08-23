@@ -283,6 +283,11 @@ describe("Studio map event resource picker", () => {
     expect(duplicate.events).not.toBe(source.events);
     expect(duplicate.requires).not.toBe(source.requires);
     expect(duplicateMapPlacementDraft(layout, [source, duplicate], source).id).toBe("gate_copy_2");
+    expect(duplicateMapPlacementDraft(undefined, [source], source)).toEqual({
+      ...source,
+      id: "gate_copy",
+      at: { x: 0, y: 0 },
+    });
   });
 
   test("cycles every object authored on one map cell", () => {

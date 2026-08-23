@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { MapDef, MapPlacementDef } from "./types";
-import { collectMapConnections, collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "./maps";
+import { collectMapConnections, collectMapImageLayers, collectMapRoutes, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder, mapRouteActivityId, resolveMapRoute } from "./maps";
 
 test("collectMapConnections projects placement map events as ordinary exits", () => {
   const connections = collectMapConnections({
@@ -24,6 +24,53 @@ test("collectMapConnections projects placement map events as ordinary exits", ()
     }],
   });
   expect(connections).toEqual([{ dir: "北へ進む", target: "inner" }]);
+});
+
+test("map routes retain event-page identity across duplicate targets", () => {
+  const map: MapDef = {
+    id: "gate",
+    name: "Gate",
+    description: "",
+    connections: [{ dir: "Old tunnel", target: "inner" }],
+    placements: [
+      {
+        id: "locked-door",
+        at: { x: 1, y: 0 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        resource: { kind: "map", id: "inner" },
+        events: [{
+          id: "enter",
+          trigger: "interact",
+          label: "Sealed door",
+          requires: { switch: { name: "sealed", eq: false } },
+          order: 0,
+        }],
+      },
+      {
+        id: "open-door",
+        at: { x: 2, y: 0 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "trigger",
+        visible: true,
+        resource: { kind: "map", id: "inner" },
+        events: [{ id: "enter", trigger: "interact", label: "Open door", order: 0 }],
+      },
+    ],
+  };
+  const routes = collectMapRoutes(map);
+  expect(routes.map(({ key, source }) => [key, source])).toEqual([
+    ["map:gate/legacy-connection:0", "legacy-connection"],
+    ["map:gate/placement:locked-door/event:enter", "placement-event"],
+    ["map:gate/placement:open-door/event:enter", "placement-event"],
+  ]);
+  expect(new Set(routes.map((route) => mapRouteActivityId(routes, route))).size).toBe(3);
+  expect(resolveMapRoute(map, "inner")).toBeUndefined();
+  expect(resolveMapRoute(map, "inner", routes[2]!.key)?.dir).toBe("Open door");
+  expect(resolveMapRoute(map, "wrong", routes[2]!.key)).toBeUndefined();
 });
 
 test("map display order respects authored layers before foot-Y sorting", () => {

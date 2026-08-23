@@ -15,7 +15,7 @@ import type {
 } from "../types";
 import { emptyVisualState } from "../types";
 import { enterMap } from "../primitives/enterMap";
-import { collectMapConnections } from "../maps";
+import { resolveMapRoute } from "../maps";
 import { evaluateCondition } from "../condition";
 
 export const BASELINE_NAMESPACE = "baseline";
@@ -196,18 +196,19 @@ export function createBaselineState(
 
 // Built-in handler for the engine-synthesized "move" activity that
 // `buildMapHubSnapshot` / `collectMapActivities` emit for each
-// MapConnection. Payload shape: { to: <mapId> }. Delegates to the
-// enterMap primitive — same code path as a module/preset calling
-// enterMap directly.
+// MapConnection. Payload shape: { to: <mapId>, routeKey?: <event source> }.
+// The key distinguishes multiple authored doors to one target; legacy callers
+// without it remain valid only when the target identifies one route. Delegates
+// to enterMap through the same path as a module/preset caller.
 const moveToMapHandler: ActionHandler = ({ state, action, game }) => {
-  const to = (action.payload as { to?: unknown } | undefined)?.to;
+  const payload = action.payload as { to?: unknown; routeKey?: unknown } | undefined;
+  const to = payload?.to;
   if (typeof to !== "string") return {};
+  const routeKey = typeof payload?.routeKey === "string" ? payload.routeKey : undefined;
   const from = state.baseline.currentMapId === null
     ? undefined
     : (game.maps ?? []).find((map) => map.id === state.baseline.currentMapId);
-  const connection = from
-    ? collectMapConnections(from).find((edge) => edge.target === to)
-    : undefined;
+  const connection = from ? resolveMapRoute(from, to, routeKey) : undefined;
   if (!connection) {
     return {
       narrations: [`今いる場所から ${to} へ続く道はない。`],

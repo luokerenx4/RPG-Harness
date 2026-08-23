@@ -1,4 +1,5 @@
 import { evaluateCondition, explainCondition } from "../condition";
+import { collectMapRoutes, mapRouteActivityId } from "../maps";
 import { mapPlacementEventKey, mapPlacementKey } from "../resources";
 import type {
   Action,
@@ -29,21 +30,23 @@ export function collectMapAvailableResources(
 
     // Transitional projection for existing content. Migration moves these
     // fields to placements; consumers already use the Map v2 query contract.
-    for (const connection of map.connections ?? []) {
+    const routes = collectMapRoutes(map);
+    for (const route of routes.filter((candidate) => candidate.source === "legacy-connection")) {
+      const connection = route;
       const target = ctx.mapMap.get(connection.target);
       const ref: ProjectResourceRef = { kind: "map", id: connection.target };
-      const key = `${mapPlacementKey(map.id, `legacy-connection-${connection.target}`)}`;
+      const key = route.key;
       const title = target
         ? `→ ${target.name}（${connection.dir}）`
         : `→ ${connection.dir}`;
       const condition = resolveAvailability(ctx, connection.requires, connection.lockedHint);
       const activity: HubActivity = {
-        id: `move:${connection.target}`,
+        id: mapRouteActivityId(routes, route),
         kind: "action",
         resource: ref,
         sourceKey: key,
         actionKind: "moveToMap",
-        payload: { to: connection.target },
+        payload: { to: connection.target, routeKey: route.key },
         title,
         category: "move",
         cost: 0,
@@ -180,7 +183,7 @@ function activityForPlacementResource(
       resource,
       sourceKey: key,
       actionKind: "moveToMap",
-      payload: { to: resource.id },
+      payload: { to: resource.id, routeKey: key },
       title: label,
       category: "move",
       cost: 0,

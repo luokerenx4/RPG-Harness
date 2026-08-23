@@ -63,7 +63,11 @@ export function resolveSpatialPlacementOperations(
     const resource = event.run ?? placement.resource;
     const stableId = mapPlacementEventKey(map.id, placement.id, event.id);
     const activity = resource?.kind === "map"
-      ? activities.get(`move:${resource.id}`) ?? activities.get(stableId)
+      ? activities.get(stableId) ??
+        [...activities.values()].find((candidate) =>
+          candidate.sourceKey === stableId || candidate.payload?.routeKey === stableId
+        ) ??
+        activities.get(`move:${resource.id}`)
       : activities.get(stableId);
     return [{ event, resource, activity }];
   });

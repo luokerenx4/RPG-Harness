@@ -75,6 +75,42 @@ describe("SpatialMapSurface", () => {
     )).toEqual([{ event: placement.events[0], resource: placement.resource, activity: move }]);
   });
 
+  test("binds same-target doors by stable route source instead of target id", () => {
+    const first = map.placements![0]!;
+    const second: MapPlacementDef = {
+      ...structuredClone(first),
+      id: "side-gate",
+      at: { x: 5, y: 5 },
+      events: [{ id: "leave", trigger: "interact", label: "Side gate", order: 0 }],
+    };
+    const duplicateMap: MapDef = { ...map, placements: [first, second] };
+    const firstKey = mapPlacementEventKey(map.id, first.id, "leave");
+    const secondKey = mapPlacementEventKey(map.id, second.id, "leave");
+    const firstActivity: HubActivity = {
+      ...move,
+      id: `move:town#${firstKey}`,
+      sourceKey: firstKey,
+      payload: { to: "town", routeKey: firstKey },
+      available: false,
+    };
+    const secondActivity: HubActivity = {
+      ...move,
+      id: `move:town#${secondKey}`,
+      sourceKey: secondKey,
+      payload: { to: "town", routeKey: secondKey },
+      title: "Side gate",
+    };
+    const activities = new Map([
+      [firstActivity.id, firstActivity],
+      [secondActivity.id, secondActivity],
+    ]);
+
+    expect(resolveSpatialPlacementOperations(duplicateMap, first, activities)[0]?.activity)
+      .toBe(firstActivity);
+    expect(resolveSpatialPlacementOperations(duplicateMap, second, activities)[0]?.activity)
+      .toBe(secondActivity);
+  });
+
   test("describes bounded RPG field movement without changing semantic inputs", () => {
     expect(mapMoveAvailability(map, { x: 0, y: 5 })).toEqual({
       north: true,

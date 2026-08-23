@@ -4104,6 +4104,11 @@ summary:focus-visible {
 
 @media (max-width: 1080px) {
   .project-workbench { grid-template-columns: 54px 240px minmax(0,1fr); }
+  .map-editor-toolbar { flex-wrap: wrap; }
+  .map-editor-context { flex: 1 1 220px; }
+  .map-view-tools { margin-left: auto; }
+  .map-stats { order: 3; }
+  .map-editor-actions { order: 4; margin-left: auto; }
   .event-fields { grid-template-columns: repeat(3,minmax(80px,1fr)); }
   .placement-editor { right: 18px; width: min(700px, calc(100vw - 340px)); }
 }

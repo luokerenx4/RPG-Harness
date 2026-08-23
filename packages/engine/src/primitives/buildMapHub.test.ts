@@ -41,7 +41,10 @@ describe("buildMapHubSnapshot", () => {
       const first = out.snapshot.activities[0]!;
       expect(first.kind).toBe("action");
       expect(first.actionKind).toBe("moveToMap");
-      expect(first.payload).toEqual({ to: "swamp" });
+      expect(first.payload).toEqual({
+        to: "swamp",
+        routeKey: "map:city/legacy-connection:0",
+      });
       expect(first.title).toContain("黒沼");
     }
   });

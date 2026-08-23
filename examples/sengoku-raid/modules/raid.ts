@@ -31,10 +31,13 @@
 import {
   collectMapAvailableResources,
   collectMapConnections,
+  collectMapRoutes,
   enterMap,
   evaluateCondition,
   explainCondition,
   isMapEventPlayerAction,
+  mapRouteActivityId,
+  resolveMapRoute,
 } from "@rpg-harness/engine";
 import type {
   AiPersonaDecision,
@@ -1966,7 +1969,10 @@ function buildRaidMenu(ctx: PresetContext): Output {
         available: true,
       });
     }
-    for (const conn of collectMapConnections(map)) {
+    const routes = collectMapRoutes(map).filter((route) =>
+      route.trigger === undefined || isMapEventPlayerAction(route.trigger)
+    );
+    for (const conn of routes) {
       const targetMap = getMap(ctx, conn.target);
       const targetInst = m.raid.visited[conn.target];
       const guaranteedEncounterAhead = hasGuaranteedUnclearedEncounter(
@@ -1978,15 +1984,23 @@ function buildRaidMenu(ctx: PresetContext): Output {
       const direction = /[るうくぐすつぬぶむ]$/.test(conn.dir)
         ? conn.dir
         : `${conn.dir}へ進む`;
+      const availability = conn.requires === undefined
+        ? { ok: true as const }
+        : evaluateCondition(conn.requires, ctx.state);
       activities.push({
-        id: `move:${conn.target}`,
+        id: mapRouteActivityId(routes, conn),
         kind: "action",
+        sourceKey: conn.key,
         actionKind: "move",
-        payload: { mapId: conn.target },
+        payload: { mapId: conn.target, routeKey: conn.key },
         title: `${direction} — ${targetMap?.name ?? conn.target}${visitedNote}${extractNote}`,
         category: "raid",
         cost: 0,
-        available: true,
+        available: availability.ok,
+        ...(conn.requires ? { requires: conn.requires } : {}),
+        ...(availability.ok
+          ? {}
+          : { lockedReason: conn.lockedHint ?? explainCondition(conn.requires!, ctx.state, ctx.game) }),
         ...(guaranteedEncounterAhead
           ? {
               forecast: {
@@ -3126,13 +3140,22 @@ const moveHandler: ActionHandler = (ctx) => {
   if (blocker) return denial(blocker);
   const target = ctx.action.payload?.mapId as string | undefined;
   if (!target) return denial("行き先が指定されていない。");
+  const routeKey = typeof ctx.action.payload?.routeKey === "string"
+    ? ctx.action.payload.routeKey
+    : undefined;
 
   const m = moduleState(ctx);
   if (!m.raid) return {};
   const cur = currentMap(ctx);
   if (!cur) return denial("現在地が不明だ。");
-  const conn = collectMapConnections(cur).find((c) => c.target === target);
+  const conn = resolveMapRoute(cur, target, routeKey);
   if (!conn) return denial(`${cur.name}からそちらへ通じる道はない。`);
+  if (conn.requires !== undefined) {
+    const availability = evaluateCondition(conn.requires, ctx.state);
+    if (!availability.ok) {
+      return denial(conn.lockedHint ?? explainCondition(conn.requires, ctx.state, ctx.game));
+    }
+  }
 
   // enterMap writes currentMapId + visuals.bg; we layer raid-specific
   // side effects (turn count, companion passives, encounter roll) on

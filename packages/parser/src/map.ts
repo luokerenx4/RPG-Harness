@@ -478,7 +478,8 @@ function parseMapConnections(
     }
     const conn: MapConnection = { dir: co.dir, target: co.target };
     if (co.requires !== undefined) {
-      conn.requires = co.requires as Condition;
+      const requires = parseCondition(co.requires);
+      if (requires) conn.requires = requires;
     }
     if (typeof co.locked_hint === "string") {
       conn.lockedHint = co.locked_hint;

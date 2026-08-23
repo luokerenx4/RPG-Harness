@@ -45,6 +45,7 @@ import {
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
 import { buildMapTopologyChains, MapTopologyDialog } from "../MapTopologyDialog";
+import { NodeMapResourceBoard } from "../NodeMapResourceBoard";
 import { WorldAtlas } from "../WorldAtlas";
 import {
   compareMapCatalogChainKeys,
@@ -2454,7 +2455,7 @@ function MapOverview({
   };
 
   const addPalettePlacement = () => {
-    if (!draft.layout || !paletteResourceKey) return;
+    if (!paletteResourceKey) return;
     const resource = paletteResourceKey === "event-only"
       ? undefined
       : resources.find((candidate) => candidate.key === paletteResourceKey);
@@ -2462,8 +2463,10 @@ function MapOverview({
     const placement = createMapPlacementDraft(
       resource,
       draft.placements ?? [],
-      nextAvailableMapCell(draft.layout, draft.placements ?? []),
-      activeObjectLayer?.id,
+      draft.layout
+        ? nextAvailableMapCell(draft.layout, draft.placements ?? [])
+        : { x: 0, y: 0 },
+      draft.layout ? activeObjectLayer?.id : undefined,
     );
     setDraft((current) => ({
       ...current,
@@ -2958,12 +2961,14 @@ function MapOverview({
           </div>
         </section>
       )}
-      {editing && draft.layout && mapTool === "objects" && (
+      {editing && (!draft.layout || mapTool === "objects") && (
         <section className="map-object-palette" aria-label="Map object palette">
           <div className="map-object-palette-heading">
-            <span>OBJECT PALETTE</span>
-            <strong>Place a project resource</strong>
-            <small>Creates an editable object at the first open map cell.</small>
+            <span>{draft.layout ? "OBJECT PALETTE" : "NODE RESOURCE PALETTE"}</span>
+            <strong>{draft.layout ? "Place a project resource" : "Bind a resource or event page"}</strong>
+            <small>{draft.layout
+              ? "Creates an editable object at the first open map cell."
+              : "Node resources share folded slot 0,0 while retaining the same runtime events."}</small>
           </div>
           <div className="map-object-palette-controls">
             <label>
@@ -3016,7 +3021,7 @@ function MapOverview({
             {paletteRows.length > 24 && <span className="map-object-palette-more">24 of {paletteRows.length} shown · refine search</span>}
           </div>
           <button type="button" disabled={!paletteResourceKey} onClick={addPalettePlacement}>
-            <span>＋</span><strong>Add to map</strong><small>select &amp; edit</small>
+            <span>＋</span><strong>{paletteResourceKey.startsWith("map:") ? "Add route" : "Add to map"}</strong><small>{draft.layout ? "place &amp; edit" : "bind &amp; edit"}</small>
           </button>
         </section>
       )}
@@ -3271,23 +3276,27 @@ function MapOverview({
           })}
         </div>
       ) : (
-        <div className="node-map-preview">
-          <span className="node-map-symbol">◇</span>
-          <strong>Node map</strong>
-          <p>This map currently folds into Hub, TUI and Headless navigation.</p>
-          {editing && <small>Add a spatial layout to turn it into a 2D scene.</small>}
-        </div>
+        <NodeMapResourceBoard
+          map={draft}
+          selectedPlacementId={selectedPlacementId}
+          interactive={editing}
+          onSelectPlacement={setSelectedPlacementId}
+        />
       )}
         </div>
         <footer className="map-stage-footer">
           <span>{editing
-            ? mapTool === "objects"
+            ? !draft.layout
+              ? "Select a resource card to edit its RPG event pages · map records become routes"
+              : mapTool === "objects"
               ? "Drag project resources onto the canvas · drag objects to move"
               : mapTool === "regions"
                 ? `Positioning ${selectedRegion?.name ?? selectedRegion?.id ?? "region"} · click a cell to move`
                 : `Painting ${paintLayer?.name ?? paintLayer?.id ?? "layer"} · drag to paint · right-click to erase`
             : "Preview is read-only"}</span>
-          <span>{draft.layout ? `${width * height} cells` : "semantic node"}</span>
+          <span>{draft.layout
+            ? `${width * height} cells`
+            : `${draft.placements?.length ?? 0} folded resources · semantic node`}</span>
         </footer>
       </div>
       {editing && selectedPlacement && (
@@ -3301,7 +3310,6 @@ function MapOverview({
           variables={variables}
           onChange={(update) => mutatePlacement(selectedPlacement.id, update)}
           onDuplicate={() => {
-            if (!draft.layout) return;
             const duplicate = duplicateMapPlacementDraft(
               draft.layout,
               draft.placements ?? [],
@@ -4824,7 +4832,7 @@ export function createMapPlacementDraft(
 }
 
 export function duplicateMapPlacementDraft(
-  layout: MapLayoutDef,
+  layout: MapLayoutDef | undefined,
   placements: MapPlacementDef[],
   source: MapPlacementDef,
 ): MapPlacementDef {
@@ -4832,7 +4840,9 @@ export function duplicateMapPlacementDraft(
   return {
     ...duplicate,
     id: uniquePlacementId(`${source.id}_copy`, placements),
-    at: nearestAvailablePlacementPoint(layout, placements, source.at, source.footprint),
+    at: layout
+      ? nearestAvailablePlacementPoint(layout, placements, source.at, source.footprint)
+      : { x: 0, y: 0 },
   };
 }
 

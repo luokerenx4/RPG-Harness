@@ -8,6 +8,7 @@ import {
   trackerModule,
 } from "../test-utils";
 import type { Module } from "../types";
+import { collectMapActivities } from "./buildMapHub";
 import { dispatchActivity } from "./dispatchActivity";
 
 // Helper: drain the activity generator. Returns the final return value
@@ -385,6 +386,67 @@ describe("dispatchActivity — dynamic activity resolution via lastHubActivities
 });
 
 describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
+  test("dispatches the selected event page when two routes share one target", async () => {
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      switches: [{ id: "sealed_door_open", initial: false }],
+      maps: [
+        {
+          id: "gate",
+          name: "門",
+          description: "",
+          placements: [
+            {
+              id: "sealed-door",
+              at: { x: 0, y: 0 },
+              z: 0,
+              footprint: { width: 1, height: 1 },
+              collision: "trigger",
+              visible: true,
+              resource: { kind: "map", id: "inner" },
+              events: [{
+                id: "enter",
+                trigger: "interact",
+                label: "封じた扉",
+                requires: { switch: { name: "sealed_door_open", eq: true } },
+                lockedHint: "この扉は閉ざされている。",
+                order: 0,
+              }],
+            },
+            {
+              id: "open-door",
+              at: { x: 1, y: 0 },
+              z: 0,
+              footprint: { width: 1, height: 1 },
+              collision: "trigger",
+              visible: true,
+              resource: { kind: "map", id: "inner" },
+              events: [{ id: "enter", trigger: "interact", label: "開いた扉", order: 0 }],
+            },
+          ],
+        },
+        { id: "inner", name: "内側", description: "" },
+      ],
+    });
+    const ctx = makeCtx(game);
+    ctx.state.baseline.currentMapId = "gate";
+    const activities = collectMapActivities(ctx);
+    const sealed = activities.find((activity) => activity.title === "封じた扉")!;
+    const open = activities.find((activity) => activity.title === "開いた扉")!;
+    expect(sealed.id).not.toBe(open.id);
+    expect(sealed.payload?.routeKey).not.toBe(open.payload?.routeKey);
+
+    ctx.state.runtime.lastHubActivities = activities;
+    await drain(dispatchActivity(ctx, open.id));
+    expect(ctx.state.baseline.currentMapId).toBe("inner");
+
+    ctx.state.baseline.currentMapId = "gate";
+    ctx.state.runtime.lastHubActivities = activities;
+    await drain(dispatchActivity(ctx, sealed.id));
+    expect(ctx.state.baseline.currentMapId).toBe("gate");
+    expect(ctx.state.runtime.pendingNarrations).toContain("この扉は閉ざされている。");
+  });
+
   test("synthesized move activity transitions currentMapId", async () => {
     const game = makeGame({
       characters: [makeCharacter("alice")],

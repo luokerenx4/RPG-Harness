@@ -148,6 +148,35 @@ actions:
     expect(m.actions?.[0]?.id).toBe("work_cafe");
   });
 
+  test("parses legacy connection gates through the canonical condition DSL", () => {
+    const map = parseMap(`id: gate
+name: Gate
+connections:
+  - dir: Inner
+    target: inner
+    requires: { switch: { name: gate_open, eq: true } }
+    locked_hint: The gate is sealed.
+`);
+    expect(map.connections?.[0]).toEqual({
+      dir: "Inner",
+      target: "inner",
+      requires: { switch: { name: "gate_open", eq: true } },
+      lockedHint: "The gate is sealed.",
+    });
+  });
+
+  test("rejects malformed legacy connection conditions while parsing", () => {
+    for (const requires of ["true", "[]", "{ bogus: 1 }"]) {
+      expect(() => parseMap(`id: gate
+name: Gate
+connections:
+  - dir: Inner
+    target: inner
+    requires: ${requires}
+`)).toThrow();
+    }
+  });
+
   test("is_extract flag", () => {
     const m = parseMap(`id: shrine
 name: 社

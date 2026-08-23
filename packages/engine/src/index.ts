@@ -15,14 +15,19 @@ export type { InputExpectation, InputRejectionCode, InputResult } from "./input"
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export {
   collectMapConnections,
+  collectMapRoutes,
   collectMapImageLayers,
   isMapPlacementLayerVisible,
   isMapEventPlayerAction,
+  mapLegacyConnectionKey,
   mapLayerDisplayOrder,
   mapPlacementDisplayOrder,
   mapPlayerDisplayOrder,
   mapPointBlocker,
+  mapRouteActivityId,
+  resolveMapRoute,
 } from "./maps";
+export type { MapRoute, MapRouteSource } from "./maps";
 export {
   buildProjectResourceRegistry,
   buildProjectResourceGraph,
