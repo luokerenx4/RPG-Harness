@@ -2035,6 +2035,7 @@ function MapOverview({
   const [zoom, setZoom] = useState(100);
   const [paletteResourceKey, setPaletteResourceKey] = useState("");
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteKind, setPaletteKind] = useState<ProjectResourceKind | "all">("all");
   const [mapTool, setMapTool] = useState<MapEditorTool>("objects");
   const [paintLayerId, setPaintLayerId] = useState("");
   const [paintBrush, setPaintBrush] = useState(1);
@@ -2057,6 +2058,7 @@ function MapOverview({
     setZoom(100);
     setPaletteResourceKey("");
     setPaletteQuery("");
+    setPaletteKind("all");
     setMapTool("objects");
     setPaintLayerId("");
     setPaintBrush(1);
@@ -2084,14 +2086,22 @@ function MapOverview({
     : [];
   const selectedRegion = draft.layout?.regions.find((region) => region.id === selectedRegionId)
     ?? draft.layout?.regions[0];
+  const paletteMatches = useMemo(
+    () => filterPlacementPaletteResources(resources, paletteQuery),
+    [resources, paletteQuery],
+  );
   const paletteGroups = useMemo(() => {
-    const filtered = filterPlacementPaletteResources(resources, paletteQuery);
     return KIND_ORDER.flatMap((kind) => {
       if (!PLACEABLE_KINDS.has(kind)) return [];
-      const rows = filtered.filter((resource) => resource.kind === kind);
+      if (paletteKind !== "all" && paletteKind !== kind) return [];
+      const rows = paletteMatches.filter((resource) => resource.kind === kind);
       return rows.length > 0 ? [{ kind, rows }] : [];
     });
-  }, [resources, paletteQuery]);
+  }, [paletteMatches, paletteKind]);
+  const paletteRows = paletteGroups.flatMap(({ rows }) => rows);
+  const paletteKindCounts = useMemo(() => new Map(
+    KIND_ORDER.map((kind) => [kind, paletteMatches.filter((resource) => resource.kind === kind).length]),
+  ), [paletteMatches]);
 
   const mutatePlacement = (
     id: string,
@@ -2505,26 +2515,41 @@ function MapOverview({
               />
               {paletteQuery && <button type="button" aria-label="Clear object filter" onClick={() => setPaletteQuery("")}>×</button>}
             </label>
-            <select
-              aria-label="Project resource to place"
-              value={paletteResourceKey}
-              onChange={(event) => setPaletteResourceKey(event.target.value)}
-            >
-              <option value="">Choose a project record…</option>
-              {(paletteQuery.length === 0 || "event-only blank event pages".includes(paletteQuery.toLowerCase())) && (
-                <option value="event-only">◇ Event-only object · blank event pages</option>
-              )}
-              {paletteGroups.map(({ kind, rows }) => (
-                <optgroup label={(KIND_META[kind] ?? { label: kind }).label} key={kind}>
-                  {rows.map((resource) => (
-                    <option value={resource.key} key={resource.key}>
-                      {resource.label} · {resource.id}
-                    </option>
-                  ))}
-                </optgroup>
+            <nav className="map-object-kind-tabs" aria-label="Map object resource kinds">
+              <button type="button" className={paletteKind === "all" ? "selected" : ""} aria-pressed={paletteKind === "all"} onClick={() => { setPaletteKind("all"); setPaletteResourceKey(""); }}>All <small>{paletteMatches.length}</small></button>
+              {KIND_ORDER.filter((kind) => PLACEABLE_KINDS.has(kind) && (paletteKindCounts.get(kind) ?? 0) > 0).map((kind) => (
+                <button type="button" className={paletteKind === kind ? "selected" : ""} aria-pressed={paletteKind === kind} key={kind} onClick={() => { setPaletteKind(kind); setPaletteResourceKey(""); }}>
+                  <span aria-hidden="true">{KIND_META[kind]?.icon ?? "◇"}</span>{KIND_META[kind]?.label ?? kind}<small>{paletteKindCounts.get(kind)}</small>
+                </button>
               ))}
-              {paletteGroups.length === 0 && paletteQuery && <option disabled>No matching project records</option>}
-            </select>
+            </nav>
+          </div>
+          <div className="map-object-palette-results" role="listbox" aria-label="Project resource to place">
+            {paletteKind === "all" && (paletteQuery.length === 0 || "event-only blank event pages".includes(paletteQuery.toLowerCase())) && (
+              <button type="button" role="option" aria-selected={paletteResourceKey === "event-only"} className={paletteResourceKey === "event-only" ? "selected" : ""} onClick={() => setPaletteResourceKey("event-only")}>
+                <span className="palette-resource-art fallback" aria-hidden="true">◇</span><span><strong>Event-only object</strong><small>blank event pages</small></span>
+              </button>
+            )}
+            {paletteRows.slice(0, 24).map((resource) => {
+              const graphicPath = mapPaletteResourceGraphicPath(resource, assets);
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={paletteResourceKey === resource.key}
+                  className={paletteResourceKey === resource.key ? "selected" : ""}
+                  key={resource.key}
+                  draggable
+                  onDragStart={(event) => { event.dataTransfer.setData("application/x-autogal-resource", resource.key); event.dataTransfer.effectAllowed = "copy"; }}
+                  onClick={() => setPaletteResourceKey(resource.key)}
+                >
+                  <span className={`palette-resource-art${graphicPath ? " authored" : " fallback"}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} aria-hidden="true">{graphicPath ? "" : KIND_META[resource.kind]?.icon ?? "◇"}</span>
+                  <span><strong>{resource.label}</strong><small>{resource.kind} · {resource.id}</small></span>
+                </button>
+              );
+            })}
+            {paletteRows.length === 0 && <span className="map-object-palette-empty">No matching project records</span>}
+            {paletteRows.length > 24 && <span className="map-object-palette-more">24 of {paletteRows.length} shown · refine search</span>}
           </div>
           <button type="button" disabled={!paletteResourceKey} onClick={addPalettePlacement}>
             <span>＋</span><strong>Add to map</strong><small>select &amp; edit</small>
@@ -3633,6 +3658,20 @@ export function mapPlacementGraphicPath(
   return assets.find((asset) =>
     asset.kind === "sprite" && character?.refs.includes(`asset:${asset.path}`)
   )?.path;
+}
+
+export function mapPaletteResourceGraphicPath(
+  resource: ProjectResourceNode,
+  assets: ProjectAssetPreview[],
+): string | undefined {
+  const referencedPaths = resource.refs
+    .filter((ref) => ref.startsWith("asset:"))
+    .map((ref) => ref.slice("asset:".length));
+  if (resource.kind === "asset") referencedPaths.unshift(resource.id);
+  const kindPriority: Record<string, number> = { sprite: 0, bg: 1, portrait: 2, cg: 3, sheet: 4, tileset: 5 };
+  return assets
+    .filter((asset) => referencedPaths.includes(asset.path))
+    .sort((left, right) => (kindPriority[left.kind] ?? 9) - (kindPriority[right.kind] ?? 9))[0]?.path;
 }
 
 export function nextProjectTreeIndex(currentIndex: number, total: number, delta: 1 | -1): number {

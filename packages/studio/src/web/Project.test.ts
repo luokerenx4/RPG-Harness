@@ -11,6 +11,7 @@ import {
   fillMapLayerTiles,
   hasMapDraftChanges,
   mapEventCommandSummary,
+  mapPaletteResourceGraphicPath,
   mapPlacementGraphicPath,
   mapDraftHistoryReducer,
   mapPlacementResourceLabel,
@@ -193,6 +194,23 @@ describe("Studio map event resource picker", () => {
     expect(mapPlacementGraphicPath(placement, resources, assets)).toBe("assets/sprites/keeper");
     expect(mapPlacementGraphicPath({ ...placement, asset: "assets/sprites/disguise" }, resources, assets))
       .toBe("assets/sprites/disguise");
+  });
+
+  test("prefers map sprites when the object palette can preview several asset references", () => {
+    const resource = {
+      key: "character:keeper",
+      kind: "character",
+      id: "keeper",
+      label: "Keeper",
+      refs: ["asset:assets/portraits/keeper", "asset:assets/sprites/keeper"],
+    } as ProjectResourceNode;
+    const assets = [
+      { path: "assets/portraits/keeper", kind: "portrait", placeholder: "Portrait", renderings: {} },
+      { path: "assets/sprites/keeper", kind: "sprite", placeholder: "Sprite", renderings: {} },
+    ] as ProjectAssetPreview[];
+    expect(mapPaletteResourceGraphicPath(resource, assets)).toBe("assets/sprites/keeper");
+    expect(mapPaletteResourceGraphicPath({ ...resource, kind: "asset", id: "assets/portraits/keeper", refs: [] }, assets))
+      .toBe("assets/portraits/keeper");
   });
 
   test("creates accessible object-palette placements with RPG Maker event defaults", () => {
