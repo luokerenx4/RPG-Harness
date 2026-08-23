@@ -5,6 +5,13 @@ export function isMapEventPlayerAction(trigger: MapEventTrigger): boolean {
     trigger === "event_touch" || trigger === "manual";
 }
 
+/** Stable ownership key for save-compatible spatial cursor reconciliation. */
+export function mapPositionLayoutKey(map: MapDef): string | null {
+  if (!map.layout) return null;
+  const start = map.layout.playerStart ?? { x: 0, y: 0 };
+  return `${map.layout.width}x${map.layout.height}@${start.x},${start.y}`;
+}
+
 /**
  * Canonical outgoing-map projection during Map v2 migration. Placement-backed
  * exits and legacy `connections` share one runtime contract, so modules do not

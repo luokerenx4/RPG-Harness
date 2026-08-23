@@ -215,6 +215,8 @@ export interface RuntimeState {
   mapPosition?: MapPoint;
   /** Map owning mapPosition; prevents stale coordinates after transitions. */
   mapPositionMapId?: string | null;
+  /** Layout contract owning mapPosition; absent legacy saves rebase to playerStart. */
+  mapPositionLayoutKey?: string | null;
   // Per-action title markers. Hub builders prepend the marker string to
   // an activity's title when it appears here. Modules populate / clear
   // this map to signal "this option has new content today" — the

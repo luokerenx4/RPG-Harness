@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { makeCtx } from "../test-utils";
-import type { Game, MapDef } from "../types";
-import { moveMapPlayer } from "./moveMapPlayer";
+import type { Game, MapDef, RuntimeState } from "../types";
+import { moveMapPlayer, reconcileMapPlayerPosition } from "./moveMapPlayer";
 
 const shrine: MapDef = {
   id: "shrine",
@@ -70,6 +70,21 @@ describe("moveMapPlayer", () => {
       moved: true,
       position: { x: 2, y: 3 },
       activityId: "move:town",
+    });
+  });
+
+  test("rebases a legacy cursor when a hot edit adds a spatial layout", () => {
+    const ctx = makeCtx(game);
+    ctx.state.baseline.currentMapId = "shrine";
+    ctx.state.runtime.mapPositionMapId = "shrine";
+    ctx.state.runtime.mapPosition = { x: 0, y: 0 };
+    delete ctx.state.runtime.mapPositionLayoutKey;
+
+    expect(reconcileMapPlayerPosition(ctx)).toEqual({ x: 2, y: 2 });
+    expect((ctx.state.runtime as RuntimeState).mapPositionLayoutKey).toBe("5x4@2,2");
+    expect(moveMapPlayer(ctx, "west")).toMatchObject({
+      moved: true,
+      position: { x: 1, y: 2 },
     });
   });
 });

@@ -22,6 +22,27 @@ describe("enterMap", () => {
     expect(state.baseline.currentMapId).toBe("atrium");
   });
 
+  test("records the spatial layout contract beside the entry position", () => {
+    const game = gameWithMaps([{
+      id: "field",
+      name: "Field",
+      description: "",
+      layout: {
+        width: 7,
+        height: 6,
+        tileWidth: 32,
+        tileHeight: 32,
+        playerStart: { x: 3, y: 4 },
+        layers: [],
+        regions: [],
+      },
+    }]);
+    const state = createInitialState(game);
+    enterMap(state, game, "field");
+    expect(state.runtime.mapPosition).toEqual({ x: 3, y: 4 });
+    expect(state.runtime.mapPositionLayoutKey).toBe("7x6@3,4");
+  });
+
   test("syncs visuals.bg when map declares bg", () => {
     const game = gameWithMaps([
       {

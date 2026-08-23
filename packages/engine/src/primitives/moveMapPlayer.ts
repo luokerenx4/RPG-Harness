@@ -1,4 +1,5 @@
 import { collectMapAvailableResources } from "./collectMapResources";
+import { mapPositionLayoutKey } from "../maps";
 import type {
   MapFacing,
   MapPoint,
@@ -26,14 +27,12 @@ export function moveMapPlayer(
   if (!map?.layout) return { moved: false };
 
   const runtime = ctx.state.runtime;
-  if (runtime.mapPositionMapId !== mapId || !runtime.mapPosition) {
-    runtime.mapPositionMapId = mapId;
-    runtime.mapPosition = map.layout.playerStart ?? { x: 0, y: 0 };
-  }
+  const position = reconcileMapPlayerPosition(ctx);
+  if (!position) return { moved: false };
   const delta = DIRECTION_DELTAS[direction];
   const next = {
-    x: runtime.mapPosition.x + delta.x,
-    y: runtime.mapPosition.y + delta.y,
+    x: position.x + delta.x,
+    y: position.y + delta.y,
   };
   if (
     next.x < 0 || next.y < 0 ||
@@ -71,6 +70,32 @@ export function moveMapPlayer(
     position: next,
     activityId: published?.id ?? touched.activity.id,
   };
+}
+
+/**
+ * Rebase an old or hot-reloaded save when the current map gains or changes a
+ * layout. Position ownership is explicit so a legitimate player at (0,0) is
+ * never mistaken for an uninitialized cursor.
+ */
+export function reconcileMapPlayerPosition(ctx: PresetContext): MapPoint | undefined {
+  const mapId = ctx.state.baseline.currentMapId;
+  const map = mapId ? ctx.mapMap.get(mapId) : undefined;
+  if (!map?.layout) return undefined;
+  const runtime = ctx.state.runtime;
+  const layoutKey = mapPositionLayoutKey(map);
+  const position = runtime.mapPosition;
+  const inBounds = position !== undefined && position.x >= 0 && position.y >= 0 &&
+    position.x < map.layout.width && position.y < map.layout.height;
+  if (
+    runtime.mapPositionMapId !== mapId ||
+    runtime.mapPositionLayoutKey !== layoutKey ||
+    !inBounds
+  ) {
+    runtime.mapPositionMapId = mapId;
+    runtime.mapPositionLayoutKey = layoutKey;
+    runtime.mapPosition = map.layout.playerStart ?? { x: 0, y: 0 };
+  }
+  return runtime.mapPosition;
 }
 
 const DIRECTION_DELTAS: Record<MapFacing, MapPoint> = {

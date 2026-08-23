@@ -27,6 +27,7 @@ export function createRuntimeState(
     pendingMapEvents: [],
     firedMapEvents: [],
     mapPositionMapId: null,
+    mapPositionLayoutKey: null,
   };
 }
 

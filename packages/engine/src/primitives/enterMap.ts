@@ -1,4 +1,5 @@
 import type { ComposedState, Game, MapDef } from "../types";
+import { mapPositionLayoutKey } from "../maps";
 
 export class EnterMapError extends Error {}
 
@@ -38,6 +39,7 @@ export function enterMap(
   state.baseline.currentMapId = mapId;
   state.runtime.mapPositionMapId = mapId;
   state.runtime.mapPosition = map.layout?.playerStart ?? { x: 0, y: 0 };
+  state.runtime.mapPositionLayoutKey = mapPositionLayoutKey(map);
   if (map.bg) {
     state.baseline.visuals.bg = map.bg;
   }

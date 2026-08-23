@@ -13,6 +13,7 @@ import type {
   StateDelta,
   StateMutationSource,
 } from "../types";
+import { reconcileMapPlayerPosition } from "./moveMapPlayer";
 
 /** Preserves the exact project module and stable hook symbol across runLoop. */
 export class ModuleHookExecutionError extends Error {
@@ -293,6 +294,7 @@ export function fireOnHubBuild(ctx: PresetContext): Output | undefined {
   const currentMapId = ctx.state.baseline.currentMapId;
   const currentMap = currentMapId ? ctx.mapMap.get(currentMapId) : undefined;
   if (currentMap?.bg) ctx.state.baseline.visuals.bg = currentMap.bg;
+  if (currentMap?.layout) reconcileMapPlayerPosition(ctx);
 
   let winner: Output | undefined;
   for (const mod of ctx.modules) {
