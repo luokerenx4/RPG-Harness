@@ -1213,6 +1213,7 @@ function MapOverview({
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
+  const [paletteResourceKey, setPaletteResourceKey] = useState("");
   const mapIdRef = useRef(map.id);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
@@ -1226,6 +1227,7 @@ function MapOverview({
     setSaveError(null);
     setConfirmDiscard(false);
     setZoom(100);
+    setPaletteResourceKey("");
   }, [map]);
 
   const width = draft.layout?.width ?? 1;
@@ -1235,6 +1237,13 @@ function MapOverview({
   );
   const stacks = groupedStacks(draft.placements ?? []);
   const dirty = hasMapDraftChanges(map, draft);
+  const paletteGroups = useMemo(() => KIND_ORDER.flatMap((kind) => {
+    if (!PLACEABLE_KINDS.has(kind)) return [];
+    const rows = resources
+      .filter((resource) => resource.kind === kind)
+      .sort((left, right) => left.label.localeCompare(right.label));
+    return rows.length > 0 ? [{ kind, rows }] : [];
+  }), [resources]);
 
   const mutatePlacement = (
     id: string,
@@ -1246,6 +1255,24 @@ function MapOverview({
         placement.id === id ? update(placement) : placement
       ),
     }));
+  };
+
+  const addPalettePlacement = () => {
+    if (!draft.layout || !paletteResourceKey) return;
+    const resource = paletteResourceKey === "event-only"
+      ? undefined
+      : resources.find((candidate) => candidate.key === paletteResourceKey);
+    if (paletteResourceKey !== "event-only" && !resource) return;
+    const placement = createMapPlacementDraft(
+      resource,
+      draft.placements ?? [],
+      nextAvailableMapCell(draft.layout, draft.placements ?? []),
+    );
+    setDraft((current) => ({
+      ...current,
+      placements: [...(current.placements ?? []), placement],
+    }));
+    setSelectedPlacementId(placement.id);
   };
 
   const save = async () => {
@@ -1442,6 +1469,35 @@ function MapOverview({
           />
         </details>
       )}
+      {editing && draft.layout && (
+        <section className="map-object-palette" aria-label="Map object palette">
+          <div className="map-object-palette-heading">
+            <span>OBJECT PALETTE</span>
+            <strong>Place a project resource</strong>
+            <small>Creates an editable object at the first open map cell.</small>
+          </div>
+          <select
+            aria-label="Project resource to place"
+            value={paletteResourceKey}
+            onChange={(event) => setPaletteResourceKey(event.target.value)}
+          >
+            <option value="">Choose a project record…</option>
+            <option value="event-only">◇ Event-only object · blank event pages</option>
+            {paletteGroups.map(({ kind, rows }) => (
+              <optgroup label={(KIND_META[kind] ?? { label: kind }).label} key={kind}>
+                {rows.map((resource) => (
+                  <option value={resource.key} key={resource.key}>
+                    {resource.label} · {resource.id}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <button type="button" disabled={!paletteResourceKey} onClick={addPalettePlacement}>
+            <span>＋</span><strong>Add to map</strong><small>select &amp; edit</small>
+          </button>
+        </section>
+      )}
       <div className="map-stage">
         {draft.layout && (draft.placements ?? []).length > 0 && (
           <div className="map-object-strip" aria-label="Map objects">
@@ -1495,24 +1551,12 @@ function MapOverview({
             const resourceKey = event.dataTransfer.getData("application/x-autogal-resource");
             const resource = resources.find((candidate) => candidate.key === resourceKey);
             if (!resource || !PLACEABLE_KINDS.has(resource.kind)) return;
-            const id = uniquePlacementId(resource.id, draft.placements ?? []);
-            const placement: MapPlacementDef = {
-              id,
-              at: { x, y },
-              resource: { kind: resource.kind, id: resource.id },
-              z: 0,
-              footprint: { width: 1, height: 1 },
-              collision: resource.kind === "map" ? "trigger" : "none",
-              visible: true,
-              events: resource.kind === "map" || resource.kind === "script" || resource.kind === "action"
-                ? [{ id: "activate", trigger: "interact", label: resource.label, order: 0 }]
-                : [],
-            };
+            const placement = createMapPlacementDraft(resource, draft.placements ?? [], { x, y });
             setDraft((current) => ({
               ...current,
               placements: [...(current.placements ?? []), placement],
             }));
-            setSelectedPlacementId(id);
+            setSelectedPlacementId(placement.id);
           }}
         >
           {draft.layout.regions.map((region) => (
@@ -2441,6 +2485,56 @@ export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements"
   const events = placements.reduce((total, placement) => total + placement.events.length, 0);
   const grid = map.layout ? `${map.layout.width} × ${map.layout.height} grid` : "semantic node map";
   return `${grid} · ${placements.length} placement${placements.length === 1 ? "" : "s"} · ${events} event page${events === 1 ? "" : "s"}`;
+}
+
+export function nextAvailableMapCell(
+  layout: MapLayoutDef,
+  placements: MapPlacementDef[],
+): { x: number; y: number } {
+  const width = Math.max(1, layout.width);
+  const height = Math.max(1, layout.height);
+  const start = {
+    x: clamp(layout.playerStart?.x ?? 0, 0, width - 1),
+    y: clamp(layout.playerStart?.y ?? 0, 0, height - 1),
+  };
+  const occupied = (x: number, y: number) => placements.some((placement) =>
+    x >= placement.at.x &&
+    x < placement.at.x + placement.footprint.width &&
+    y >= placement.at.y &&
+    y < placement.at.y + placement.footprint.height
+  );
+  if (!occupied(start.x, start.y)) return start;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!occupied(x, y)) return { x, y };
+    }
+  }
+  return start;
+}
+
+export function createMapPlacementDraft(
+  resource: ProjectResourceNode | undefined,
+  placements: MapPlacementDef[],
+  at: { x: number; y: number },
+): MapPlacementDef {
+  const eventDriven = !resource || resource.kind === "map" || resource.kind === "script" || resource.kind === "action";
+  return {
+    id: uniquePlacementId(resource?.id ?? "event", placements),
+    at,
+    ...(resource ? { resource: { kind: resource.kind, id: resource.id } } : {}),
+    z: 0,
+    footprint: { width: 1, height: 1 },
+    collision: !resource || resource.kind === "map" ? "trigger" : "none",
+    visible: true,
+    events: eventDriven
+      ? [{
+          id: resource ? "activate" : "page_1",
+          trigger: "interact",
+          label: resource?.label ?? "Event",
+          order: 0,
+        }]
+      : [],
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {

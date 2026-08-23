@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
   adjacentResourceKeys,
   conditionEditorMode,
+  createMapPlacementDraft,
   createConditionDraft,
   eventTriggerMeta,
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPlacementResourceLabel,
+  nextAvailableMapCell,
   nextProjectTreeIndex,
   parseResourceScalarFields,
   patchResourceScalarFields,
@@ -130,6 +132,60 @@ describe("Studio map event resource picker", () => {
     ] as ProjectResourceNode[];
     expect(mapPlacementResourceLabel(placement, resources)).toBe("魂石の欠片");
     expect(placement.id).toBe("altar_shard");
+  });
+
+  test("creates accessible object-palette placements with RPG Maker event defaults", () => {
+    const script = {
+      key: "script:memory",
+      kind: "script",
+      id: "memory",
+      label: "失われた記憶",
+      refs: [],
+    } as ProjectResourceNode;
+    expect(createMapPlacementDraft(script, [], { x: 3, y: 2 })).toEqual({
+      id: "memory",
+      at: { x: 3, y: 2 },
+      resource: { kind: "script", id: "memory" },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "none",
+      visible: true,
+      events: [{ id: "activate", trigger: "interact", label: "失われた記憶", order: 0 }],
+    });
+    expect(createMapPlacementDraft(undefined, [{
+      id: "event",
+      at: { x: 0, y: 0 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: true,
+      events: [],
+    }], { x: 1, y: 0 })).toMatchObject({
+      id: "event_2",
+      at: { x: 1, y: 0 },
+      collision: "trigger",
+      events: [{ id: "page_1", trigger: "interact", label: "Event", order: 0 }],
+    });
+  });
+
+  test("places palette objects on the first cell outside existing footprints", () => {
+    expect(nextAvailableMapCell({
+      width: 3,
+      height: 2,
+      tileWidth: 32,
+      tileHeight: 32,
+      playerStart: { x: 0, y: 0 },
+      layers: [],
+      regions: [],
+    }, [{
+      id: "counter",
+      at: { x: 0, y: 0 },
+      z: 0,
+      footprint: { width: 2, height: 1 },
+      collision: "block",
+      visible: true,
+      events: [],
+    }])).toEqual({ x: 2, y: 0 });
   });
 
   test("summarizes event-page commands as player-facing RPG operations", () => {
