@@ -1,0 +1,18 @@
+kind: sprite
+description: |
+  霞的地图用全身图形。麻色衣裤与若草护具构成暖色块，大弓和箭筒
+  保持猟师轮廓，用于二维地图对象和角色放置。
+prompt: |
+  Use case: stylized-concept
+  Asset type: transparent RPG field-map character sprite
+  Subject: Kasumi, a small late-Sengoku huntress with short flaxen hair,
+    hemp clothing, young-grass-green guards, Japanese longbow and quiver.
+  Style: compact painterly anime game sprite with a strong readable silhouette.
+  Composition: single full-body character, alert idle pose, transparent background.
+  Constraints: preserve the portrait identity and palette; no text, frame, scenery or watermark.
+placeholder: "[霞・地图图形] 麻色与若草的年轻弓手"
+refs:
+  characters: [kasumi]
+size_hint:
+  web: { aspect: "2:3" }
+tags: [main-cast, map-sprite]

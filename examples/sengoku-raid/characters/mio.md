@@ -1,6 +1,7 @@
 ---
 id: mio
 name: 澪
+map_sprite: assets/sprites/mio-field
 stats:
   affection: { initial: 0, label: 親密度 }
 portraits:

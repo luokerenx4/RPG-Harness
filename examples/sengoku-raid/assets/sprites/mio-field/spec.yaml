@@ -1,0 +1,18 @@
+kind: sprite
+description: |
+  澪的地图用全身图形。白色小袖、藏蓝打掛和水纹形成安静的垂直
+  轮廓，家传脇差留在腰间，用于二维地图对象和角色放置。
+prompt: |
+  Use case: stylized-concept
+  Asset type: transparent RPG field-map character sprite
+  Subject: Mio, a late-Sengoku court inspector with an immaculate indigo updo,
+    white kosode, deep-indigo water-patterned uchikake and heirloom wakizashi.
+  Style: compact painterly anime game sprite with a strong readable silhouette.
+  Composition: single full-body character, still idle pose, transparent background.
+  Constraints: preserve the portrait identity and palette; no text, frame, scenery or watermark.
+placeholder: "[澪・地图图形] 白与藏蓝的水纹监察使"
+refs:
+  characters: [mio]
+size_hint:
+  web: { aspect: "2:3" }
+tags: [main-cast, map-sprite]

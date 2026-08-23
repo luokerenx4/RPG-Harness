@@ -2725,7 +2725,7 @@ function MapOverview({
             const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
             return (
               <div
-              className={`map-placement collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}`}
+              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}`}
               key={placement.id}
               draggable={editing && mapTool === "objects"}
               onDragStart={(event) => {

@@ -497,7 +497,7 @@ function FilterChip({
 function AssetCard({ asset }: { asset: AssetRow }) {
   const atlasSummary = assetAtlasSummary(asset);
   return (
-    <Link to={`/asset/${asset.path}`} className={`card${asset.kind === "tileset" ? " tileset-card" : ""}`} aria-label={`${asset.kind} · ${asset.placeholder} · ${asset.path}${atlasSummary ? ` · ${atlasSummary}` : ""}`}>
+    <Link to={`/asset/${asset.path}`} className={`card ${asset.kind}-card`} aria-label={`${asset.kind} · ${asset.placeholder} · ${asset.path}${atlasSummary ? ` · ${atlasSummary}` : ""}`}>
       <div className="thumb">
         {asset.renderings.source ? (
           <img src={sourceImageUrl(asset.path)} alt={asset.placeholder} />

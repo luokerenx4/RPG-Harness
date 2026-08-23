@@ -1,6 +1,7 @@
 ---
 id: kagari
 name: 篝
+map_sprite: assets/sprites/kagari-field
 stats:
   affection: { initial: 0, label: 親密度 }
 portraits:

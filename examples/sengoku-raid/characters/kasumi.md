@@ -1,6 +1,7 @@
 ---
 id: kasumi
 name: 霞
+map_sprite: assets/sprites/kasumi-field
 stats:
   affection: { initial: 0, label: 親密度 }
 portraits:

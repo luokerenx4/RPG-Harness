@@ -554,7 +554,7 @@ export function AssetDetail({
       event.preventDefault();
       setPendingLeave("back");
     }}>
-      <header className="asset-record-hero">
+      <header className={`asset-record-hero ${asset.kind}-asset`}>
         <div className="asset-record-preview">
           {asset.renderings.source ? (
             <img

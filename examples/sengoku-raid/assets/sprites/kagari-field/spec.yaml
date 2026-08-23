@@ -1,0 +1,18 @@
+kind: sprite
+description: |
+  篝的地图用全身图形。黑与深绯构成清晰轮廓，朱柄长枪贴身竖持，
+  用于二维地图对象；缩小后仍以高马尾、长枪和红色羽织辨识。
+prompt: |
+  Use case: stylized-concept
+  Asset type: transparent RPG field-map character sprite
+  Subject: Kagari, a late-Sengoku spearwoman with an ink-black high ponytail,
+    black kosode, deep crimson haori, tasuki cords and vermillion-shafted spear.
+  Style: compact painterly anime game sprite with a strong readable silhouette.
+  Composition: single full-body character, neutral idle pose, transparent background.
+  Constraints: preserve the portrait identity and palette; no text, frame, scenery or watermark.
+placeholder: "[篝・地图图形] 黑与绯的女枪使，朱柄长枪竖持"
+refs:
+  characters: [kagari]
+size_hint:
+  web: { aspect: "2:3" }
+tags: [main-cast, map-sprite]
