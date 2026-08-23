@@ -527,6 +527,9 @@ export function WebPlayScreen({
     : model.stage.kind === "dialogue"
       ? `dialogue:${model.stage.speakerName}:${model.stage.text}`
       : null;
+  const endingFocusKey = model.stage.kind === "ended"
+    ? `ending:${model.stage.endingId ?? "unknown"}:${exploration?.next?.key ?? "settled"}`
+    : null;
 
   useEffect(() => {
     if (!optionFocusKey) return;
@@ -543,6 +546,16 @@ export function WebPlayScreen({
     });
     return () => cancelAnimationFrame(frame);
   }, [storyFocusKey]);
+
+  useEffect(() => {
+    if (!endingFocusKey) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(".ended-exploration-btn:not(:disabled)")
+        ?? document.querySelector<HTMLElement>(".ended-panel");
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [endingFocusKey]);
 
   // Keyboard: classic RPG field movement, Hub cursor navigation, confirm and cancel.
   useEffect(() => {
@@ -1518,28 +1531,41 @@ export function StageView({
         ? undefined
         : game.scripts.find((script) => script.id === stage.endingId)?.title;
       return (
-        <div className="ended-panel">
-          <div className="ended-title">― 終 ―</div>
-          {endingTitle && <div className="ended-ending-title">{endingTitle}</div>}
-          {stage.endingId && <code className="ended-ending-id">{stage.endingId}</code>}
-          {stage.reason && <div className="ended-reason">{stage.reason}</div>}
+        <div className="ended-panel" tabIndex={-1} aria-label={`物語完了${endingTitle ? `：${endingTitle}` : ""}`}>
+          <span className="visually-hidden">― 終 ―</span>
+          <header className="ended-heading">
+            <span>STORY RESULT</span>
+            <small>CLEAR DATA · SAVED</small>
+          </header>
+          <div className="ended-summary">
+            <div className="ended-seal" aria-hidden="true"><span>終</span><small>END</small></div>
+            <div className="ended-copy">
+              <div className="ended-title">物語完了</div>
+              <div className="ended-ending-title">{endingTitle ?? "名もなき結末"}</div>
+              {stage.endingId && <code className="ended-ending-id">ENDING · {stage.endingId}</code>}
+              {stage.reason && <div className="ended-reason">{stage.reason}</div>}
+            </div>
+          </div>
           {exploration?.next && (
             <div className="ended-exploration">
-              <div className="ended-exploration-kicker">AI BRANCH · {exploration.pendingOptions} PATHS</div>
-              <div className="ended-exploration-title">別の選択から、物語を続ける</div>
-              <div className="ended-exploration-next">次: {exploration.next.optionText}</div>
+              <div className="ended-exploration-copy">
+                <div className="ended-exploration-kicker">AI BRANCH · {exploration.pendingOptions} PATHS REMAIN</div>
+                <div className="ended-exploration-title">別の選択から、物語を続ける</div>
+                <div className="ended-exploration-next"><span>NEXT</span>{exploration.next.optionText}</div>
+                <div className="ended-exploration-note">この結末は残したまま、checkpoint から独立した共有セッションを作ります。</div>
+              </div>
               <button
                 className="ended-exploration-btn"
                 disabled={exploring}
                 onClick={onExplore}
               >
-                {exploring ? "AI が分岐を探索中…" : "AI に別の分岐を探索させる"}
+                <span>{exploring ? "AI が分岐を探索中…" : "AI に別の分岐を探索させる"}</span>
+                <i aria-hidden="true">›</i>
               </button>
-              <div className="ended-exploration-note">この結末は残したまま、checkpoint から独立した共有セッションを作ります。</div>
             </div>
           )}
           {exploration && !exploration.next && (
-            <div className="ended-exploration-complete">この lineage の選択分岐はすべて探索済みです。</div>
+            <div className="ended-exploration-complete"><span>QUEST COMPLETE</span>この lineage の選択分岐はすべて探索済みです。</div>
           )}
           {explorationError && <div className="ended-exploration-error" role="alert">{explorationError}</div>}
         </div>
