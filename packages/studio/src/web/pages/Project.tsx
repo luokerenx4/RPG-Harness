@@ -511,9 +511,11 @@ function ResourceDetail({
             node={node}
             icon={meta.icon}
             kindLabel={meta.label}
+            resources={resources}
             onProjectSaved={onProjectSaved}
             onDraftGuardChange={onDraftGuardChange}
             draftBlocked={draftActive}
+            onSelectResource={onSelectResource}
             onEditSource={node.source && node.editable !== false
               ? () => setSourceEditKey(node.key)
               : undefined}
@@ -553,8 +555,8 @@ function ResourceDetail({
             <span>Nothing in the registry points here. Roots and module-discovered resources may be intentional.</span>
           </section>
         )}
-        <ReferenceList title="References" values={node.refs} />
-        <ReferenceList title="Used by" values={backlinks} />
+        <ReferenceList title="References" values={node.refs} resources={resources} onSelectResource={onSelectResource} />
+        <ReferenceList title="Used by" values={backlinks} resources={resources} onSelectResource={onSelectResource} />
       </aside>
     </div>
   );
@@ -564,17 +566,21 @@ function ResourceRecordEditor({
   node,
   icon,
   kindLabel,
+  resources,
   onProjectSaved,
   onDraftGuardChange,
   draftBlocked,
+  onSelectResource,
   onEditSource,
 }: {
   node: ProjectResourceNode;
   icon: string;
   kindLabel: string;
+  resources: ProjectResourceNode[];
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
   draftBlocked: boolean;
+  onSelectResource: (key: string) => void;
   onEditSource?: () => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
@@ -753,7 +759,15 @@ function ResourceRecordEditor({
           {node.refs.length > 0 && (
             <section className="record-section">
               <header><span>LINKED RESOURCES</span><small>{node.refs.length}</small></header>
-              <div className="record-links">{node.refs.map((ref) => <code key={ref}>{ref}</code>)}</div>
+              <div className="record-links">{node.refs.map((ref) => (
+                <ResourceReference
+                  compact
+                  key={ref}
+                  value={ref}
+                  resources={resources}
+                  onSelectResource={onSelectResource}
+                />
+              ))}</div>
             </section>
           )}
         </div>
@@ -1094,14 +1108,60 @@ function ResourceSourceEditor({
   );
 }
 
-function ReferenceList({ title, values }: { title: string; values: string[] }) {
+function ReferenceList({
+  title,
+  values,
+  resources,
+  onSelectResource,
+}: {
+  title: string;
+  values: string[];
+  resources: ProjectResourceNode[];
+  onSelectResource: (key: string) => void;
+}) {
   return (
     <section className="detail-section reference-list">
       <h2>{title} · {values.length}</h2>
       {values.length === 0
         ? <span className="muted">none</span>
-        : values.map((value) => <code key={value}>{value}</code>)}
+        : <div className="reference-list-items">{values.map((value) => (
+          <ResourceReference
+            key={value}
+            value={value}
+            resources={resources}
+            onSelectResource={onSelectResource}
+          />
+        ))}</div>}
     </section>
+  );
+}
+
+function ResourceReference({
+  value,
+  resources,
+  onSelectResource,
+  compact = false,
+}: {
+  value: string;
+  resources: ProjectResourceNode[];
+  onSelectResource: (key: string) => void;
+  compact?: boolean;
+}) {
+  const resource = resolveProjectReference(resources, value);
+  if (!resource) return <code className="resource-reference-missing">{value}</code>;
+  const meta = KIND_META[resource.kind] ?? { icon: "·", label: resource.kind };
+  return (
+    <button
+      type="button"
+      className={`resource-reference${compact ? " compact" : ""}`}
+      aria-label={`Open ${singularResourceLabel(meta.label)}: ${resource.label}`}
+      onClick={() => onSelectResource(resource.key)}
+    >
+      <span className={`resource-reference-icon kind-${resource.kind}`} aria-hidden="true">{meta.icon}</span>
+      <span className="resource-reference-copy"><strong>{resource.label}</strong><code>{resource.key}</code></span>
+      {!compact && <small>{resource.kind}</small>}
+      <i aria-hidden="true">›</i>
+    </button>
   );
 }
 
@@ -2316,6 +2376,13 @@ export function adjacentResourceKeys(
     position,
     total: siblings.length,
   };
+}
+
+export function resolveProjectReference(
+  resources: ProjectResourceNode[],
+  key: string,
+): ProjectResourceNode | null {
+  return resources.find((resource) => resource.key === key) ?? null;
 }
 
 export function mapEventCommandSummary(

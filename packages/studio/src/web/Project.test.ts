@@ -11,6 +11,7 @@ import {
   parseResourceScalarFields,
   patchResourceScalarFields,
   resourceChoices,
+  resolveProjectReference,
   summarizeMapValidation,
 } from "./pages/Project";
 import type { MapDef, MapPlacementDef, ProjectResourceNode } from "@rpg-harness/engine";
@@ -85,6 +86,14 @@ describe("Studio map event resource picker", () => {
       position: 0,
       total: 1,
     });
+  });
+
+  test("resolves inspector relationships against the authoritative project registry", () => {
+    const resources = [
+      { key: "asset:portraits/kagari", kind: "asset", id: "portraits/kagari", label: "篝 portrait", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(resolveProjectReference(resources, "asset:portraits/kagari")).toBe(resources[0]!);
+    expect(resolveProjectReference(resources, "asset:missing")).toBeNull();
   });
 
   test("wraps RPG-style keyboard navigation across long project trees", () => {
