@@ -26,6 +26,10 @@ import {
   type WebFeedbackFeed,
 } from "./session";
 import { WebPlayScreen } from "./WebPlayScreen";
+import {
+  pickerSaveSummary,
+  type PickerSaveSummary,
+} from "./pickerSaveSummary";
 
 interface Loaded {
   id: string;
@@ -52,6 +56,9 @@ interface Loaded {
 export function App() {
   const games = useMemo(() => listGames(), []);
   const [savedGames, setSavedGames] = useState<Set<string> | null>(null);
+  const [saveSummaries, setSaveSummaries] = useState<Map<string, PickerSaveSummary>>(
+    () => new Map(),
+  );
   const [sessionInfo, setSessionInfo] = useState<WebSessionInfo | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,12 +76,23 @@ export function App() {
     try {
       const info = await getSessionInfo();
       const statuses = await Promise.all(
-        games.map(async (game) => [game.id, await hasSave(game.id)] as const),
+        games.map(async (gameInfo) => {
+          const saved = await hasSave(gameInfo.id);
+          if (!saved) return { id: gameInfo.id, saved, summary: null };
+          const state = await loadState(gameInfo.id).catch(() => null);
+          const summary = state
+            ? pickerSaveSummary(loadWebGame(gameInfo.id).game, state)
+            : null;
+          return { id: gameInfo.id, saved, summary };
+        }),
       );
       setSessionInfo(info);
       setSavedGames(
-        new Set(statuses.filter(([, saved]) => saved).map(([id]) => id)),
+        new Set(statuses.filter((status) => status.saved).map((status) => status.id)),
       );
+      setSaveSummaries(new Map(statuses.flatMap((status) =>
+        status.summary ? [[status.id, status.summary] as const] : []
+      )));
     } catch (err) {
       setError(err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err));
     }
@@ -448,6 +466,7 @@ export function App() {
         <ul ref={pickerListRef} className="picker-list">
           {games.map((g, index) => {
             const saved = savedGames?.has(g.id) ?? false;
+            const summary = saveSummaries.get(g.id);
             return (
               <li key={g.id} className="picker-row">
                 <button
@@ -456,7 +475,16 @@ export function App() {
                   onClick={() => void start(g.id, !saved)}
                 >
                   <span className="picker-index">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="picker-game-copy"><strong>{g.title}</strong><small>{g.id}</small></span>
+                  <span className="picker-game-copy">
+                    <strong>{g.title}</strong><small>{g.id}</small>
+                    {saved && summary && (
+                      <span className="picker-save-meta">
+                        <b>{summary.location}</b>
+                        <i>{summary.activity}</i>
+                        <em>{summary.records} RECORDS</em>
+                      </span>
+                    )}
+                  </span>
                   <span className="picker-action">{saved ? "続きから" : "はじめる"}<i>›</i></span>
                 </button>
                 {saved && (

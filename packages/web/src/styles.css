@@ -1784,6 +1784,20 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.picker-save-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  color: #76736d;
+  font: 7px/1.2 ui-monospace, monospace;
+}
+.picker-save-meta b,
+.picker-save-meta i,
+.picker-save-meta em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-save-meta b { max-width: 110px; color: #9e8b60; font-weight: 700; }
+.picker-save-meta i { min-width: 0; color: #706f70; font-style: normal; }
+.picker-save-meta em { flex: 0 0 auto; color: #54555a; font-style: normal; letter-spacing: .05em; }
 .picker-game-copy strong {
   color: #e8e4dd;
   font-family: "Yu Mincho", "Hiragino Mincho ProN", ui-serif, serif;
