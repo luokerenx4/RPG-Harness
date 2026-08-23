@@ -10,6 +10,7 @@ import {
   mapEventCommandSummary,
   mapPlacementResourceLabel,
   nextAvailableMapCell,
+  nudgeMapPlayerStart,
   nextProjectTreeIndex,
   parseResourceScalarFields,
   patchResourceScalarFields,
@@ -202,6 +203,20 @@ describe("Studio map event resource picker", () => {
       visible: true,
       events: [],
     }])).toEqual({ x: 2, y: 0 });
+  });
+
+  test("nudges the player start on the grid while clamping every edge", () => {
+    const layout = {
+      width: 3,
+      height: 2,
+      tileWidth: 32,
+      tileHeight: 32,
+      layers: [],
+      regions: [],
+    };
+    expect(nudgeMapPlayerStart(layout, { x: 1, y: 1 }, "ArrowRight")).toEqual({ x: 2, y: 1 });
+    expect(nudgeMapPlayerStart(layout, { x: 2, y: 1 }, "ArrowRight")).toEqual({ x: 2, y: 1 });
+    expect(nudgeMapPlayerStart(layout, { x: 0, y: 0 }, "ArrowUp")).toEqual({ x: 0, y: 0 });
   });
 
   test("summarizes event-page commands as player-facing RPG operations", () => {

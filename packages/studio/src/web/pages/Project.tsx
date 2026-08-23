@@ -2272,6 +2272,14 @@ function MapOverview({
             const rect = event.currentTarget.getBoundingClientRect();
             const x = clamp(Math.floor((event.clientX - rect.left) / rect.width * width), 0, width - 1);
             const y = clamp(Math.floor((event.clientY - rect.top) / rect.height * height), 0, height - 1);
+            if (event.dataTransfer.getData("application/x-autogal-player-start")) {
+              setDraft((current) => ({
+                ...current,
+                layout: current.layout ? { ...current.layout, playerStart: { x, y } } : undefined,
+              }));
+              setSelectedPlacementId(null);
+              return;
+            }
             const placementId = event.dataTransfer.getData("application/x-autogal-placement");
             if (placementId) {
               mutatePlacement(placementId, (placement) => ({ ...placement, at: { x, y } }));
@@ -2304,15 +2312,37 @@ function MapOverview({
           ))}
           {draft.layout.playerStart && (
             <div
-              className="map-player-start"
-              title={`Player start · ${draft.layout.playerStart.x},${draft.layout.playerStart.y}`}
+              className={`map-player-start${editing ? " editable" : ""}`}
+              title={editing
+                ? `Player start · ${draft.layout.playerStart.x},${draft.layout.playerStart.y} · drag or use arrow keys`
+                : `Player start · ${draft.layout.playerStart.x},${draft.layout.playerStart.y}`}
+              role={editing ? "button" : undefined}
+              tabIndex={editing ? 0 : -1}
+              aria-label={editing ? `Player start at ${draft.layout.playerStart.x}, ${draft.layout.playerStart.y}. Drag or use arrow keys to move.` : undefined}
+              draggable={editing}
+              onDragStart={(event) => {
+                event.dataTransfer.setData("application/x-autogal-player-start", "true");
+                event.dataTransfer.effectAllowed = "move";
+              }}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (!editing || !["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(event.key)) return;
+                event.preventDefault();
+                setDraft((current) => ({
+                  ...current,
+                  layout: current.layout ? {
+                    ...current.layout,
+                    playerStart: nudgeMapPlayerStart(current.layout, current.layout.playerStart, event.key),
+                  } : undefined,
+                }));
+              }}
               style={{
                 left: `${draft.layout.playerStart.x / width * 100}%`,
                 top: `${draft.layout.playerStart.y / height * 100}%`,
                 width: `${100 / width}%`,
                 height: `${100 / height}%`,
               }}
-            >◆</div>
+            ><span>◆</span><small>START</small></div>
           )}
           {(draft.placements ?? []).map((placement) => {
             const resourceLabel = mapPlacementResourceLabel(placement, resources);
@@ -3231,6 +3261,24 @@ export function summarizeMapValidation(map: Pick<MapDef, "layout" | "placements"
   const events = placements.reduce((total, placement) => total + placement.events.length, 0);
   const grid = map.layout ? `${map.layout.width} × ${map.layout.height} grid` : "semantic node map";
   return `${grid} · ${placements.length} placement${placements.length === 1 ? "" : "s"} · ${events} event page${events === 1 ? "" : "s"}`;
+}
+
+export function nudgeMapPlayerStart(
+  layout: MapLayoutDef,
+  current: { x: number; y: number } | undefined,
+  key: string,
+): { x: number; y: number } {
+  const delta = ({
+    ArrowUp: { x: 0, y: -1 },
+    ArrowRight: { x: 1, y: 0 },
+    ArrowDown: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 },
+  } as Record<string, { x: number; y: number }>)[key] ?? { x: 0, y: 0 };
+  const start = current ?? { x: 0, y: 0 };
+  return {
+    x: clamp(start.x + delta.x, 0, Math.max(0, layout.width - 1)),
+    y: clamp(start.y + delta.y, 0, Math.max(0, layout.height - 1)),
+  };
 }
 
 export function nextAvailableMapCell(
