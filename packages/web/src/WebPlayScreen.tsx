@@ -1054,6 +1054,7 @@ export function FeedbackOverlay({
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<WebFeedbackReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const target = currentTarget ?? (
     branchContext?.playerControl ? undefined : branchContext?.handoff?.target
   );
@@ -1077,86 +1078,133 @@ export function FeedbackOverlay({
       setSubmitting(false);
     }
   };
+  const keepFocusInReport = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
   return (
     <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="AIへのフィードバック" onClick={onClose}>
-      <div className="backlog-inner feedback-inner" onClick={(event) => event.stopPropagation()}>
+      <div
+        ref={panelRef}
+        className="backlog-inner feedback-inner"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={keepFocusInReport}
+      >
         <div className="backlog-head">
           <div>
+            <span>FIELD REPORT · LIVE CHECKPOINT</span>
             <strong>AIへフィードバック</strong>
             <div className="feedback-subtitle">今の画面・ログ・セーブを再現可能な coding issue にします。</div>
           </div>
           <button className="hud-btn" onClick={onClose}>閉じる</button>
         </div>
-        {receipt ? (
-          <div className="feedback-success" role="status">
-            <strong>受け取りました · {receipt.id}</strong>
-            <p>log {receipt.evidence.logEntry ?? "—"} · script {receipt.evidence.currentScriptId ?? "—"}</p>
-            <p>{receipt.evidence.checkpoint ? "再現 checkpoint 付き。AI の worklist に追加済みです。" : "証拠の一部を取得できませんでした。issue 詳細を確認してください。"}</p>
-            <button className="hud-btn" onClick={onClose}>ゲームへ戻る</button>
-          </div>
-        ) : (
-          <form className="feedback-form" onSubmit={(event) => void submit(event)}>
-            <div className="feedback-row">
-              <label>領域
-                <select value={area} onChange={(event) => setArea(event.target.value as WebFeedbackArea)}>
-                  <option value="narrative">物語・台詞</option>
-                  <option value="gameplay">遊び・バランス</option>
-                  <option value="engine">エンジン</option>
-                  <option value="ui">UI</option>
-                  <option value="tooling">AI開発ツール</option>
-                </select>
-              </label>
-              <label>重さ
-                <select value={severity} onChange={(event) => setSeverity(event.target.value as WebFeedbackInput["severity"])}>
-                  <option value="note">メモ</option>
-                  <option value="minor">軽微</option>
-                  <option value="major">重大</option>
-                  <option value="blocker">進行不能</option>
-                </select>
-              </label>
-            </div>
-            <label>何が気になった？
-              <input autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：この返答は少し説明的すぎる" />
-            </label>
-            <label>補足（任意）
-              <textarea rows={5} maxLength={2000} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="期待した感触や、直してほしい方向を書けます。" />
-            </label>
-            {targetApplies && (
-              <div className="feedback-target">
-                {target ? `Target: ${target}` : "Routing: live checkpoint / current runtime"}
+        <div className="feedback-scroll">
+          {receipt ? (
+            <div className="feedback-success" role="status">
+              <span className="feedback-success-seal" aria-hidden="true">✓</span>
+              <div>
+                <small>REPORT ACCEPTED</small>
+                <strong>受け取りました · {receipt.id}</strong>
+                <p>log {receipt.evidence.logEntry ?? "—"} · script {receipt.evidence.currentScriptId ?? "—"}</p>
+                <p>{receipt.evidence.checkpoint ? "再現 checkpoint 付き。AI の worklist に追加済みです。" : "証拠の一部を取得できませんでした。issue 詳細を確認してください。"}</p>
+                <button className="hud-btn" onClick={onClose}>ゲームへ戻る</button>
               </div>
-            )}
-            {error && <div className="feedback-error" role="alert">{error}</div>}
-            <button className="feedback-submit" disabled={!title.trim() || submitting} type="submit">
-              {submitting ? "記録中…" : "この瞬間を issue にする"}
-            </button>
-          </form>
-        )}
-        {feedbackFeed && feedbackFeed.items.length > 0 && (
-          <div className="feedback-history">
-            <strong>このセッションのフィードバック</strong>
-            {feedbackFeed.items.map((item) => (
-              <article className={`feedback-history-item ${item.status}`} key={item.id}>
-                <div className="feedback-history-title">
-                  <span>{item.title}</span>
-                  <span>{item.status === "open" ? "AI対応中" : item.status === "resolved" ? "対応済み" : "見送り"}</span>
+            </div>
+          ) : (
+            <form className="feedback-form" onSubmit={(event) => void submit(event)}>
+              <div className="feedback-checkpoint">
+                <span className="feedback-checkpoint-mark" aria-hidden="true">⌖</span>
+                <div>
+                  <small>CAPTURED CHECKPOINT</small>
+                  <strong>{targetApplies ? target ?? "CURRENT RUNTIME" : "GLOBAL ENGINE SURFACE"}</strong>
+                  <p>現在の画面・共有ログ・セーブ状態を証拠として添付します。</p>
                 </div>
-                <div className="feedback-history-meta">
-                  {item.area} · {item.severity} · log {item.evidence.logEntry ?? "—"} · {item.evidence.currentScriptId ?? "—"}
+                <span className="feedback-live"><i aria-hidden="true" /> LIVE</span>
+              </div>
+              <div className="feedback-row">
+                <label><span className="feedback-field-label"><b>01</b> 領域</span>
+                  <select value={area} onChange={(event) => setArea(event.target.value as WebFeedbackArea)}>
+                    <option value="narrative">物語・台詞</option>
+                    <option value="gameplay">遊び・バランス</option>
+                    <option value="engine">エンジン</option>
+                    <option value="ui">UI</option>
+                    <option value="tooling">AI開発ツール</option>
+                  </select>
+                </label>
+                <label><span className="feedback-field-label"><b>02</b> 重さ</span>
+                  <select value={severity} onChange={(event) => setSeverity(event.target.value as WebFeedbackInput["severity"])}>
+                    <option value="note">メモ</option>
+                    <option value="minor">軽微</option>
+                    <option value="major">重大</option>
+                    <option value="blocker">進行不能</option>
+                  </select>
+                </label>
+              </div>
+              <label><span className="feedback-field-label"><b>03</b> 何が気になった？</span>
+                <input autoFocus required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：この返答は少し説明的すぎる" />
+              </label>
+              <label><span className="feedback-field-label"><b>04</b> 補足（任意）</span>
+                <textarea rows={5} maxLength={2000} value={details} onChange={(event) => setDetails(event.target.value)} placeholder="期待した感触や、直してほしい方向を書けます。" />
+              </label>
+              {targetApplies && (
+                <div className="feedback-target">
+                  {target ? `Target: ${target}` : "Routing: live checkpoint / current runtime"}
                 </div>
-                {item.resolution && <p><strong>AI:</strong> {item.resolution}</p>}
-                {item.supersededReason && <p><strong>AI:</strong> {item.supersededReason}</p>}
-                {item.verification && (
-                  <div className="feedback-proof">
-                    <strong>検証済み</strong>
-                    <span>project {shortRevision(item.verification.originalInputRevision)} → {shortRevision(item.verification.fixedInputRevision)}</span>
-                    <span>certificate {shortRevision(item.verification.certificateRevision)}</span>
+              )}
+              {error && <div className="feedback-error" role="alert">{error}</div>}
+              <button className="feedback-submit" disabled={!title.trim() || submitting} type="submit">
+                <span>{submitting ? "記録中…" : "この瞬間を issue にする"}</span>
+                <small>{submitting ? "CAPTURING EVIDENCE" : "ADD TO AI WORKLIST"}</small>
+                <i aria-hidden="true">›</i>
+              </button>
+            </form>
+          )}
+          {feedbackFeed && feedbackFeed.items.length > 0 && (
+            <div className="feedback-history">
+              <div className="feedback-history-head">
+                <strong>このセッションのフィードバック</strong>
+                <span>{feedbackFeed.items.length} REPORTS</span>
+              </div>
+              {feedbackFeed.items.map((item) => (
+                <article className={`feedback-history-item ${item.status}`} key={item.id}>
+                  <div className="feedback-history-title">
+                    <span>{item.title}</span>
+                    <span>{item.status === "open" ? "AI対応中" : item.status === "resolved" ? "対応済み" : "見送り"}</span>
                   </div>
-                )}
-              </article>
-            ))}
-          </div>
-        )}
+                  <div className="feedback-history-meta">
+                    {item.area} · {item.severity} · log {item.evidence.logEntry ?? "—"} · {item.evidence.currentScriptId ?? "—"}
+                  </div>
+                  {item.resolution && <p><strong>AI:</strong> {item.resolution}</p>}
+                  {item.supersededReason && <p><strong>AI:</strong> {item.supersededReason}</p>}
+                  {item.verification && (
+                    <div className="feedback-proof">
+                      <strong>検証済み</strong>
+                      <span>project {shortRevision(item.verification.originalInputRevision)} → {shortRevision(item.verification.fixedInputRevision)}</span>
+                      <span>certificate {shortRevision(item.verification.certificateRevision)}</span>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+        <footer className="backlog-footer">
+          <span>FIELD REPORT · EVIDENCE ATTACHED</span>
+          <span>Esc · ゲームへ戻る</span>
+        </footer>
       </div>
     </div>
   );

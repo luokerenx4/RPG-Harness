@@ -624,6 +624,10 @@ describe("Web terminal handoff", () => {
     );
     expect(html).toContain("AIへフィードバック");
     expect(html).toContain("今の画面・ログ・セーブを再現可能な coding issue にします。");
+    expect(html).toContain("FIELD REPORT · LIVE CHECKPOINT");
+    expect(html).toContain("CAPTURED CHECKPOINT");
+    expect(html).toContain("ADD TO AI WORKLIST");
+    expect(html).toContain("Esc · ゲームへ戻る");
     expect(html).toContain("この瞬間を issue にする");
     expect(html).toContain("Target: scripts/scene.md");
     expect(html).toContain("このセッションのフィードバック");
