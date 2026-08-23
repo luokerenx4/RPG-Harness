@@ -71,6 +71,11 @@ export interface AssetRow {
   sourceCompressedBytes?: number;
 }
 
+export type ProjectAssetPreview = Pick<
+  AssetRow,
+  "path" | "kind" | "placeholder" | "renderings"
+>;
+
 // Subset of AssetRow the studio is allowed to mutate via PATCH.
 // Sent as the body of patchSpec; server rejects any other keys
 // (kind / path / renderings) with a 400.
@@ -96,6 +101,7 @@ export interface ProjectResponse {
   maps: MapDef[];
   switches: SwitchDef[];
   variables: VariableDef[];
+  assets: ProjectAssetPreview[];
 }
 
 export async function fetchProject(): Promise<ProjectResponse> {

@@ -17,6 +17,8 @@ import {
   fetchResourceSource,
   saveMapSpatial,
   saveResourceSource,
+  sourceImageUrl,
+  type ProjectAssetPreview,
   type ProjectResponse,
   type MapPreviewResponse,
 } from "../api";
@@ -173,6 +175,9 @@ export function Project({
   const selected = project.graph.resources.find((row) => row.key === selectedKey);
   const map = selected?.kind === "map"
     ? project.maps.find((candidate) => candidate.id === selected.id)
+    : undefined;
+  const asset = selected?.kind === "asset"
+    ? project.assets.find((candidate) => candidate.path === selected.id)
     : undefined;
 
   const commitSelectResource = (key: string) => {
@@ -371,6 +376,7 @@ export function Project({
             <ResourceDetail
               node={selected}
               map={map}
+              asset={asset}
               resources={project.graph.resources}
               switches={project.switches}
               variables={project.variables}
@@ -419,6 +425,7 @@ export function Project({
 function ResourceDetail({
   node,
   map,
+  asset,
   resources,
   switches,
   variables,
@@ -432,6 +439,7 @@ function ResourceDetail({
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
+  asset?: ProjectAssetPreview;
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
@@ -511,6 +519,7 @@ function ResourceDetail({
             node={node}
             icon={meta.icon}
             kindLabel={meta.label}
+            asset={asset}
             resources={resources}
             onProjectSaved={onProjectSaved}
             onDraftGuardChange={onDraftGuardChange}
@@ -566,6 +575,7 @@ function ResourceRecordEditor({
   node,
   icon,
   kindLabel,
+  asset,
   resources,
   onProjectSaved,
   onDraftGuardChange,
@@ -576,6 +586,7 @@ function ResourceRecordEditor({
   node: ProjectResourceNode;
   icon: string;
   kindLabel: string;
+  asset?: ProjectAssetPreview;
   resources: ProjectResourceNode[];
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
@@ -702,8 +713,21 @@ function ResourceRecordEditor({
         </div>
       </header>
       <div className="record-hero">
-        <div className="record-hero-icon">{icon}</div>
-        <div><span>{node.kind}</span><h2>{node.label}</h2><code>{node.id}</code></div>
+        <div className={`record-hero-icon${asset ? " has-asset-preview" : ""}`}>
+          {asset?.renderings.source
+            ? <img src={sourceImageUrl(asset.path)} alt={asset.placeholder} loading="lazy" />
+            : icon}
+        </div>
+        <div>
+          <span>{node.kind}</span><h2>{node.label}</h2><code>{node.id}</code>
+          {asset && (
+            <div className="record-rendering-flags" aria-label="Asset rendering availability">
+              <span className={asset.renderings.source ? "present" : ""}>SRC</span>
+              <span className={asset.renderings.tuiAns || asset.renderings.tuiTxt ? "present" : ""}>TUI</span>
+              <span className={asset.renderings.web ? "present" : ""}>WEB</span>
+            </div>
+          )}
+        </div>
         <span className="record-authority"><i /> AUTHORITATIVE</span>
       </div>
       {!node.source ? (

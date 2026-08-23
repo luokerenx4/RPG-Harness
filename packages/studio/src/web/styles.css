@@ -2070,10 +2070,29 @@ summary:focus-visible {
   box-shadow: 0 10px 28px rgba(0,0,0,.25);
   font-size: 27px;
 }
+.record-hero-icon.has-asset-preview {
+  flex-basis: 112px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #090d12;
+}
+.record-hero-icon.has-asset-preview img { width: 100%; height: 100%; object-fit: cover; }
 .record-hero > div:nth-child(2) { min-width: 0; }
 .record-hero > div:nth-child(2) > span { color: #536170; font-size: 7px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
 .record-hero h2 { margin: 3px 0 4px; overflow: hidden; color: #eef1f5; font-size: 22px; text-overflow: ellipsis; white-space: nowrap; }
 .record-hero code { color: #6b7582; font-size: 9px; }
+.record-rendering-flags { display: flex; gap: 4px; margin-top: 9px; }
+.record-rendering-flags span {
+  padding: 3px 5px;
+  color: #3f4854;
+  border: 1px solid #252d37;
+  border-radius: 3px;
+  background: #10151b;
+  font: 6px/1 ui-monospace, monospace;
+  letter-spacing: .08em;
+}
+.record-rendering-flags span.present { color: #75bf8e; border-color: rgba(112,204,145,.3); background: rgba(112,204,145,.06); }
 .record-authority {
   position: relative;
   z-index: 1;

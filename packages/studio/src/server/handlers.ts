@@ -228,6 +228,23 @@ async function projectGame(ctx: Ctx, game: Awaited<ReturnType<typeof loadGame>>)
     maps: game.maps ?? [],
     switches: game.switches ?? [],
     variables: game.variables ?? [],
+    assets: (game.assets ?? []).map(projectAssetPreview),
+  };
+}
+
+export function projectAssetPreview(asset: AssetSpec) {
+  return {
+    path: asset.path,
+    kind: asset.kind,
+    placeholder: asset.placeholder,
+    renderings: {
+      source: asset.renderings.source !== undefined,
+      sourceQuality: asset.renderings.sourceQuality !== undefined,
+      sourceCompressed: asset.renderings.sourceCompressed !== undefined,
+      tuiTxt: asset.renderings.tuiTxt !== undefined,
+      tuiAns: asset.renderings.tuiAns !== undefined,
+      web: asset.renderings.web !== undefined,
+    },
   };
 }
 

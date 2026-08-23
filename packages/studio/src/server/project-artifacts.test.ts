@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { scanProjectArtifacts } from "./handlers";
+import type { AssetSpec } from "@rpg-harness/engine";
+import { projectAssetPreview, scanProjectArtifacts } from "./handlers";
 
 const created: string[] = [];
 
@@ -11,6 +12,33 @@ afterEach(async () => {
 });
 
 describe("Studio project artifacts", () => {
+  test("projects lightweight asset previews without exposing filesystem paths", () => {
+    expect(projectAssetPreview({
+      path: "assets/portraits/kagari",
+      kind: "portrait",
+      description: "Kagari portrait",
+      prompt: "portrait",
+      placeholder: "[篝] 朱柄の槍",
+      renderings: {
+        source: "/private/source.png",
+        sourceQuality: "/private/source.quality.png",
+        tuiAns: "/private/tui.ans",
+      },
+    } as AssetSpec)).toEqual({
+      path: "assets/portraits/kagari",
+      kind: "portrait",
+      placeholder: "[篝] 朱柄の槍",
+      renderings: {
+        source: true,
+        sourceQuality: true,
+        sourceCompressed: false,
+        tuiTxt: false,
+        tuiAns: true,
+        web: false,
+      },
+    });
+  });
+
   test("indexes tests and session-scoped issues with stable resource refs", async () => {
     const gameDir = await mkdtemp(path.join(os.tmpdir(), "autogal-artifacts-"));
     created.push(gameDir);
