@@ -11,6 +11,10 @@ import {
 } from "@rpg-harness/session-store";
 import { loadGame } from "../loader";
 import { loadSession, saveSession, sessionDir } from "../session";
+import {
+  searchCheckpointRelativeFile,
+  type SearchCheckpointReference,
+} from "./search-checkpoints";
 
 export interface ForkArgs {
   gameDir: string;
@@ -65,6 +69,11 @@ export interface DevelopmentBranchHandoff {
   premiere?: {
     prompt?: string;
     optionText: string;
+  };
+  /** Durable full-search lineage; independent from the playable fork ancestry. */
+  search?: {
+    checkpoint?: SearchCheckpointReference;
+    consumedCheckpointRevision?: string;
   };
 }
 
@@ -257,6 +266,25 @@ export async function loadDevelopmentBranchHandoff(
           (typeof handoff.premiere.prompt !== "string" || !handoff.premiere.prompt.trim()))
       )
     ) throw new Error(`Invalid premiere handoff for session: ${session}`);
+    if (handoff.search !== undefined) {
+      const checkpoint = handoff.search.checkpoint;
+      const consumed = handoff.search.consumedCheckpointRevision;
+      if (
+        (!checkpoint && !consumed) ||
+        (checkpoint && (
+          checkpoint.schemaVersion !== 1 ||
+          !/^[a-f0-9]{64}$/.test(checkpoint.revision) ||
+          !/^[a-f0-9]{64}$/.test(checkpoint.inputRevision) ||
+          typeof checkpoint.file !== "string" ||
+          checkpoint.file !== searchCheckpointRelativeFile(checkpoint.revision) ||
+          !Number.isInteger(checkpoint.queueNodes) ||
+          checkpoint.queueNodes < 1 ||
+          !Number.isInteger(checkpoint.totalExploredNodes) ||
+          checkpoint.totalExploredNodes < 0
+        )) ||
+        (consumed !== undefined && !/^[a-f0-9]{64}$/.test(consumed))
+      ) throw new Error(`Invalid search checkpoint handoff for session: ${session}`);
+    }
     return handoff;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;

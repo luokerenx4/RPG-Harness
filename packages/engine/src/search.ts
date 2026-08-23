@@ -23,6 +23,8 @@ export interface ScriptSearchTarget {
 export interface ChoiceSearchOptions {
   maxNodes?: number;
   maxSteps?: number;
+  /** Resume the complete bounded queue instead of restarting from one state. */
+  checkpoint?: ChoiceSearchCheckpoint;
   /** Emit bounded progress without coupling the engine to a renderer. */
   onProgress?: (progress: ChoiceSearchProgress) => void;
   progressEvery?: number;
@@ -48,6 +50,8 @@ export interface ChoiceSearchResult {
   closest: ChoiceSearchClosest;
   /** Best still-expandable node at a bounded cutoff; safe to resume exactly. */
   frontier?: ChoiceSearchFrontier;
+  /** Complete serializable queue/visited state for cumulative bounded search. */
+  checkpoint?: ChoiceSearchCheckpoint;
 }
 
 export interface ChoiceSearchFrontier {
@@ -55,6 +59,33 @@ export interface ChoiceSearchFrontier {
   output: Output | null;
   state: ComposedState;
   closest: ChoiceSearchClosest;
+}
+
+export type ChoiceSearchCheckpointTarget =
+  | { kind: "choice"; scriptId: string; choiceId: string }
+  | { kind: "script"; scriptId: string; revision: string };
+
+export interface ChoiceSearchCheckpointNode {
+  state: ComposedState;
+  inputs: Input[];
+  guidanceGates: Array<[string, Condition]>;
+  satisfiedGuidanceLeaves: string[];
+}
+
+/**
+ * Renderer-neutral, JSON-serializable continuation of the full best-first
+ * search. Unlike `frontier`, this retains sibling nodes and deduplication state.
+ */
+export interface ChoiceSearchCheckpoint {
+  schemaVersion: 1;
+  target: ChoiceSearchCheckpointTarget;
+  maxSteps: number;
+  initialState: ComposedState;
+  queue: ChoiceSearchCheckpointNode[];
+  visited: string[];
+  totalExploredNodes: number;
+  deepestSteps: number;
+  closestNode: ChoiceSearchCheckpointNode;
 }
 
 export interface ChoiceSearchRequirement {
@@ -176,36 +207,45 @@ async function searchForTarget(
     throw new Error("choice search progressEvery must be a positive integer");
   }
 
-  const startingState = cloneState(initialState);
-  if (isScriptTarget(target)) {
-    const prior = startingState.baseline.scripts[target.scriptId];
-    if (prior?.completed === true && prior.completedRevision !== target.revision) {
-      prior.completed = false;
-      startingState.baseline.completionOrder = startingState.baseline.completionOrder
-        .filter((scriptId) => scriptId !== target.scriptId);
-    }
+  const startingState = prepareSearchInitialState(initialState, target);
+  let queue: SearchNode[];
+  let visited: Set<string>;
+  let totalExploredNodes: number;
+  let deepestSteps: number;
+  let closestNode: SearchNode;
+  if (options.checkpoint) {
+    validateSearchCheckpoint(options.checkpoint, target, startingState, maxSteps);
+    queue = await Promise.all(options.checkpoint.queue.map((node) =>
+      restoreCheckpointNode(game, node)
+    ));
+    visited = new Set(options.checkpoint.visited);
+    totalExploredNodes = options.checkpoint.totalExploredNodes;
+    deepestSteps = options.checkpoint.deepestSteps;
+    closestNode = await restoreCheckpointNode(game, options.checkpoint.closestNode);
+  } else {
+    const start = await settleForced(
+      game,
+      startingState,
+      [],
+      target,
+      maxSteps,
+    );
+    rememberGuidanceGates(game, start.output, target, start.guidanceGates);
+    rememberSatisfiedGuidanceLeaves(start, target);
+    queue = [start];
+    visited = new Set();
+    totalExploredNodes = 0;
+    deepestSteps = start.inputs.length;
+    closestNode = start;
   }
-  const start = await settleForced(
-    game,
-    startingState,
-    [],
-    target,
-    maxSteps,
-  );
-  const queue: SearchNode[] = [start];
-  rememberGuidanceGates(game, start.output, target, start.guidanceGates);
-  rememberSatisfiedGuidanceLeaves(start, target);
-  const visited = new Set<string>();
   let exploredNodes = 0;
-  let deepestSteps = start.inputs.length;
-  let closest = assessNode(game, target, start, initialState);
-  let closestNode = start;
+  let closest = assessNode(game, target, closestNode, startingState);
 
   while (queue.length > 0) {
     queue.sort((left, right) =>
       compareChoiceSearchAssessment(
-        assessNode(game, target, right, initialState),
-        assessNode(game, target, left, initialState),
+        assessNode(game, target, right, startingState),
+        assessNode(game, target, left, startingState),
         isScriptTarget(target),
       )
     );
@@ -213,9 +253,7 @@ async function searchForTarget(
     deepestSteps = Math.max(deepestSteps, node.inputs.length);
     const fingerprint = stateFingerprint(node, target);
     if (visited.has(fingerprint)) continue;
-    visited.add(fingerprint);
-    exploredNodes += 1;
-    const assessment = assessNode(game, target, node, initialState);
+    const assessment = assessNode(game, target, node, startingState);
     if (compareChoiceSearchAssessment(
       assessment,
       closest,
@@ -224,17 +262,12 @@ async function searchForTarget(
       closest = assessment;
       closestNode = node;
     }
-    if (options.onProgress && exploredNodes % progressEvery === 0) {
-      options.onProgress({
-        exploredNodes,
-        visitedStates: visited.size,
-        frontierNodes: queue.length,
-        deepestSteps,
-        closest,
-      });
-    }
-
     if (isTargetReached(node, target)) {
+      if (exploredNodes < maxNodes) {
+        visited.add(fingerprint);
+        exploredNodes += 1;
+        totalExploredNodes += 1;
+      }
       return {
         found: true,
         reason: "found",
@@ -248,16 +281,56 @@ async function searchForTarget(
       };
     }
     if (exploredNodes >= maxNodes) {
+      const pending = [node, ...queue].filter((candidate) =>
+        !visited.has(stateFingerprint(candidate, target))
+      );
+      for (const candidate of pending) {
+        const candidateAssessment = assessNode(game, target, candidate, startingState);
+        if (compareChoiceSearchAssessment(
+          candidateAssessment,
+          closest,
+          isScriptTarget(target),
+        ) > 0) {
+          closest = candidateAssessment;
+          closestNode = candidate;
+        }
+      }
       const frontier = selectSearchFrontier(
         game,
         target,
-        initialState,
-        [node, ...queue],
+        startingState,
+        pending,
         maxSteps,
       );
+      if (!frontier) {
+        return {
+          found: false,
+          reason: "exhausted",
+          inputs: [],
+          exploredNodes,
+          visitedStates: visited.size,
+          deepestSteps,
+          output: closestNode.output,
+          state: closestNode.state,
+          closest,
+        };
+      }
+      const expandable = pending.filter((candidate) =>
+        isSearchNodeExpandable(candidate, target, maxSteps)
+      );
+      const checkpoint = createSearchCheckpoint({
+        target,
+        maxSteps,
+        initialState: startingState,
+        queue: expandable,
+        visited,
+        totalExploredNodes,
+        deepestSteps,
+        closestNode,
+      });
       return {
         found: false,
-        reason: frontier ? "max-nodes" : "exhausted",
+        reason: "max-nodes",
         inputs: [],
         exploredNodes,
         visitedStates: visited.size,
@@ -265,8 +338,21 @@ async function searchForTarget(
         output: closestNode.output,
         state: closestNode.state,
         closest,
-        ...(frontier ? { frontier } : {}),
+        frontier,
+        checkpoint,
       };
+    }
+    visited.add(fingerprint);
+    exploredNodes += 1;
+    totalExploredNodes += 1;
+    if (options.onProgress && exploredNodes % progressEvery === 0) {
+      options.onProgress({
+        exploredNodes,
+        visitedStates: visited.size,
+        frontierNodes: queue.length,
+        deepestSteps,
+        closest,
+      });
     }
     if (node.done || node.output === null || node.inputs.length >= maxSteps) {
       continue;
@@ -317,6 +403,125 @@ async function searchForTarget(
   };
 }
 
+function prepareSearchInitialState(
+  initialState: ComposedState,
+  target: SearchTarget,
+): ComposedState {
+  const startingState = cloneState(initialState);
+  if (isScriptTarget(target)) {
+    const prior = startingState.baseline.scripts[target.scriptId];
+    if (prior?.completed === true && prior.completedRevision !== target.revision) {
+      prior.completed = false;
+      startingState.baseline.completionOrder = startingState.baseline.completionOrder
+        .filter((scriptId) => scriptId !== target.scriptId);
+    }
+  }
+  return startingState;
+}
+
+function checkpointTarget(target: SearchTarget): ChoiceSearchCheckpointTarget {
+  return isScriptTarget(target)
+    ? { kind: "script", scriptId: target.scriptId, revision: target.revision }
+    : { kind: "choice", scriptId: target.scriptId, choiceId: target.choiceId };
+}
+
+function validateSearchCheckpoint(
+  checkpoint: ChoiceSearchCheckpoint,
+  target: SearchTarget,
+  initialState: ComposedState,
+  maxSteps: number,
+): void {
+  if (
+    checkpoint.schemaVersion !== 1 ||
+    JSON.stringify(checkpoint.target) !== JSON.stringify(checkpointTarget(target)) ||
+    checkpoint.maxSteps !== maxSteps ||
+    JSON.stringify(checkpoint.initialState) !== JSON.stringify(initialState) ||
+    !Array.isArray(checkpoint.queue) ||
+    checkpoint.queue.length === 0 ||
+    !Array.isArray(checkpoint.visited) ||
+    checkpoint.visited.some((value) => typeof value !== "string") ||
+    !Number.isInteger(checkpoint.totalExploredNodes) ||
+    checkpoint.totalExploredNodes < 0 ||
+    !Number.isInteger(checkpoint.deepestSteps) ||
+    checkpoint.deepestSteps < 0
+  ) {
+    throw new Error("choice search checkpoint does not match this target/source/options");
+  }
+}
+
+async function restoreCheckpointNode(
+  game: Game,
+  node: ChoiceSearchCheckpointNode,
+): Promise<SearchNode> {
+  if (
+    !node ||
+    !Array.isArray(node.inputs) ||
+    !Array.isArray(node.guidanceGates) ||
+    !Array.isArray(node.satisfiedGuidanceLeaves)
+  ) throw new Error("invalid choice search checkpoint node");
+  const current = await peek(game, cloneState(node.state));
+  return {
+    state: current.state,
+    output: current.output,
+    done: current.done,
+    inputs: structuredClone(node.inputs),
+    guidanceGates: new Map(structuredClone(node.guidanceGates)),
+    satisfiedGuidanceLeaves: new Set(node.satisfiedGuidanceLeaves),
+  };
+}
+
+function checkpointNode(node: SearchNode): ChoiceSearchCheckpointNode {
+  return {
+    state: cloneState(node.state),
+    inputs: structuredClone(node.inputs),
+    guidanceGates: structuredClone([...node.guidanceGates.entries()]),
+    satisfiedGuidanceLeaves: [...node.satisfiedGuidanceLeaves],
+  };
+}
+
+function createSearchCheckpoint(args: {
+  target: SearchTarget;
+  maxSteps: number;
+  initialState: ComposedState;
+  queue: SearchNode[];
+  visited: ReadonlySet<string>;
+  totalExploredNodes: number;
+  deepestSteps: number;
+  closestNode: SearchNode;
+}): ChoiceSearchCheckpoint {
+  const seen = new Set<string>();
+  const queue = args.queue.filter((node) => {
+    const fingerprint = stateFingerprint(node, args.target);
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
+  return {
+    schemaVersion: 1,
+    target: checkpointTarget(args.target),
+    maxSteps: args.maxSteps,
+    initialState: cloneState(args.initialState),
+    queue: queue.map(checkpointNode),
+    visited: [...args.visited],
+    totalExploredNodes: args.totalExploredNodes,
+    deepestSteps: args.deepestSteps,
+    closestNode: checkpointNode(args.closestNode),
+  };
+}
+
+function isSearchNodeExpandable(
+  node: SearchNode,
+  target: SearchTarget,
+  maxSteps: number,
+): boolean {
+  return isTargetReached(node, target) || (
+    !node.done &&
+    node.output !== null &&
+    node.inputs.length < maxSteps &&
+    candidateInputs(node.output, target).length > 0
+  );
+}
+
 function selectSearchFrontier(
   game: Game,
   target: SearchTarget,
@@ -325,13 +530,7 @@ function selectSearchFrontier(
   maxSteps: number,
 ): ChoiceSearchFrontier | undefined {
   const expandable = candidates.filter((node) =>
-    isTargetReached(node, target) ||
-    (
-      !node.done &&
-      node.output !== null &&
-      node.inputs.length < maxSteps &&
-      candidateInputs(node.output, target).length > 0
-    )
+    isSearchNodeExpandable(node, target, maxSteps)
   );
   if (expandable.length === 0) return undefined;
   const node = expandable.reduce((best, candidate) =>

@@ -149,8 +149,8 @@ COMMANDS
       items still receive their own slice. A regular sweep is scoped to
       SOURCE's fork lineage.
       --until-clean deliberately switches to the whole-project queue, using
-      SOURCE only as a safe fork/search root; it also follows closest-state
-      search continuations and freezes later generations under shared caps,
+      SOURCE only as a safe fork/search root; it also resumes complete
+      content-addressed search checkpoints and freezes later generations under shared caps,
       then runs game.yaml ai_audit as the final project acceptance gate.
       Every author-declared ai_audit seed must pass both strategy and seeded
       fuzz-survival lanes. --audit-seed supplies the
@@ -238,11 +238,14 @@ COMMANDS
 
   reach    <game-dir> --from-session NAME --session AI [--from-at N]
            [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N]
+           [--search-checkpoint SHA256]
            [--report-on-miss] [--report-on-quality] [--pretty]
       Search the public Headless state space for an unseen stable authored
       choice, then replay the discovered inputs into a GUI-compatible AI fork.
       Unless --from-at is explicit, a terminal source automatically retries
       its recoverable historical choice checkpoints within one node budget.
+      --search-checkpoint resumes a previously returned full queue + visited
+      set and rejects it if authored or runtime inputs have changed.
       Search is read-only; a found path is accepted only when replay reaches
       the same stable choice and produces the identical persisted state.
       --report-on-miss persists only the closest state and files a structured
@@ -252,11 +255,14 @@ COMMANDS
       contains a repeated navigation cycle. Automated work/sweep enables it.
 
   reach-script <game-dir> --script ID --from-session NAME --session AI
-               [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]
+               [--from-at N] [--search-checkpoint SHA256]
+               [--max-nodes N] [--max-steps N] [--pretty]
       Search public Headless inputs until an authored script completes, then
       replay the exact path into a GUI-compatible AI fork. Without --from-at,
       recoverable decision checkpoints across the fork ancestry share the
       search budget.
+      --search-checkpoint resumes the exact complete search instead of
+      rebuilding it from the playable GUI frontier.
       A miss is read-only and exits non-zero.
 
   report   <game-dir> --title TEXT [--session NAME] [--area AREA]
@@ -1140,6 +1146,7 @@ async function runReachChoice(args: string[]): Promise<void> {
     options: {
       "from-session": { type: "string" },
       "from-at": { type: "string" },
+      "search-checkpoint": { type: "string" },
       session: { type: "string" },
       key: { type: "string" },
       "max-nodes": { type: "string", default: "5000" },
@@ -1152,7 +1159,7 @@ async function runReachChoice(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh reach <game-dir> --from-session NAME --session AI [--from-at N] [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--report-on-miss] [--report-on-quality] [--pretty]",
+    "rpgh reach <game-dir> --from-session NAME --session AI [--from-at N] [--search-checkpoint SHA256] [--key SCRIPT/CHOICE] [--max-nodes N] [--max-steps N] [--report-on-miss] [--report-on-quality] [--pretty]",
   );
   if (!values["from-session"] || !values.session) {
     process.stderr.write(
@@ -1165,6 +1172,9 @@ async function runReachChoice(args: string[]): Promise<void> {
     fromSession: values["from-session"],
     ...(values["from-at"] !== undefined
       ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
+    ...(values["search-checkpoint"] !== undefined
+      ? { searchCheckpointRevision: values["search-checkpoint"] }
       : {}),
     session: values.session,
     ...(values.key !== undefined ? { key: values.key } : {}),
@@ -1183,6 +1193,7 @@ async function runReachScript(args: string[]): Promise<void> {
       script: { type: "string" },
       "from-session": { type: "string" },
       "from-at": { type: "string" },
+      "search-checkpoint": { type: "string" },
       session: { type: "string" },
       "max-nodes": { type: "string", default: "5000" },
       "max-steps": { type: "string", default: "250" },
@@ -1192,7 +1203,7 @@ async function runReachScript(args: string[]): Promise<void> {
   });
   const gameDir = requirePositional(
     positionals,
-    "rpgh reach-script <game-dir> --script ID --from-session NAME --session AI [--from-at N] [--max-nodes N] [--max-steps N] [--pretty]",
+    "rpgh reach-script <game-dir> --script ID --from-session NAME --session AI [--from-at N] [--search-checkpoint SHA256] [--max-nodes N] [--max-steps N] [--pretty]",
   );
   if (!values.script || !values["from-session"] || !values.session) {
     process.stderr.write(
@@ -1206,6 +1217,9 @@ async function runReachScript(args: string[]): Promise<void> {
     fromSession: values["from-session"],
     ...(values["from-at"] !== undefined
       ? { fromLogEntry: Number(values["from-at"]) }
+      : {}),
+    ...(values["search-checkpoint"] !== undefined
+      ? { searchCheckpointRevision: values["search-checkpoint"] }
       : {}),
     session: values.session,
     maxNodes: Number(values["max-nodes"] ?? "5000"),

@@ -212,6 +212,9 @@ export async function executeDevelopmentWorkItem(
         ...(operation.args.fromLogEntry !== undefined
           ? { fromLogEntry: operation.args.fromLogEntry }
           : {}),
+        ...(operation.args.searchCheckpointRevision
+          ? { searchCheckpointRevision: operation.args.searchCheckpointRevision }
+          : {}),
         session: target,
         key: operation.args.key,
         maxNodes: args.maxNodes ?? 5000,
@@ -231,6 +234,14 @@ export async function executeDevelopmentWorkItem(
               : result.status === "paused"
                 ? "frontier"
                 : "closest",
+            {
+              ...(result.continuation?.checkpoint
+                ? { checkpoint: result.continuation.checkpoint }
+                : {}),
+              ...(operation.args.searchCheckpointRevision
+                ? { consumedCheckpointRevision: operation.args.searchCheckpointRevision }
+                : {}),
+            },
           )
         : undefined;
       const compact = {
@@ -276,6 +287,9 @@ export async function executeDevelopmentWorkItem(
         ...(operation.args.fromLogEntry !== undefined
           ? { fromLogEntry: operation.args.fromLogEntry }
           : {}),
+        ...(operation.args.searchCheckpointRevision
+          ? { searchCheckpointRevision: operation.args.searchCheckpointRevision }
+          : {}),
         session: target,
         scriptId: operation.args.scriptId,
         maxNodes: args.maxNodes ?? 5000,
@@ -286,11 +300,19 @@ export async function executeDevelopmentWorkItem(
         args,
         item,
         result.session ?? target,
-        result.found
+          result.found
           ? "covered"
           : result.status === "paused"
             ? "frontier"
             : "closest",
+        {
+          ...(result.continuation?.checkpoint
+            ? { checkpoint: result.continuation.checkpoint }
+            : {}),
+          ...(operation.args.searchCheckpointRevision
+            ? { consumedCheckpointRevision: operation.args.searchCheckpointRevision }
+            : {}),
+        },
       );
       const compact = { ...compactReachScriptResult(result), handoff };
       return result.found
@@ -354,6 +376,7 @@ async function attachWorkHandoff(
   item: DevelopmentWorkItem,
   session: string,
   state: DevelopmentBranchHandoff["state"],
+  search: NonNullable<DevelopmentBranchHandoff["search"]> = {},
 ): Promise<DevelopmentBranchHandoff> {
   const coordinates = workHandoffCoordinates(item);
   return attachDevelopmentBranchHandoff(args.gameDir, session, {
@@ -367,6 +390,7 @@ async function attachWorkHandoff(
     preparedAt: new Date().toISOString(),
     ...(item.target ? { target: item.target } : {}),
     ...(coordinates ? { coordinates } : {}),
+    ...(search.checkpoint || search.consumedCheckpointRevision ? { search } : {}),
   });
 }
 

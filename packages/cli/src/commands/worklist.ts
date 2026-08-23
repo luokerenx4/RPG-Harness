@@ -28,6 +28,10 @@ import {
   type DevelopmentBranchHandoff,
 } from "./fork";
 import { currentQualityAuditInputRevision } from "./quality-certificate";
+import {
+  currentSearchInputRevision,
+  searchCheckpointIsUsable,
+} from "./search-checkpoints";
 
 export type DevelopmentWorkPriority = "P0" | "P1" | "P2" | "P3";
 export type DevelopmentWorkKind =
@@ -85,6 +89,8 @@ export type DevelopmentOperation =
         fromSession: string;
         /** Pin an exact continuation checkpoint and disable lineage rewind. */
         fromLogEntry?: number;
+        /** Resume the complete content-addressed search queue. */
+        searchCheckpointRevision?: string;
         session: "<new-session>";
       };
     }
@@ -95,6 +101,8 @@ export type DevelopmentOperation =
         fromSession: string;
         /** Pin an exact continuation checkpoint and disable lineage rewind. */
         fromLogEntry?: number;
+        /** Resume the complete content-addressed search queue. */
+        searchCheckpointRevision?: string;
         session: "<new-session>";
       };
     }
@@ -396,7 +404,10 @@ export function analyzeDevelopmentWorklist(input: {
           scriptId: script.id,
           fromSession: sourceSession,
           ...(continuationSelected
-            ? { fromLogEntry: continuation.logEntry }
+            ? {
+                fromLogEntry: continuation.logEntry,
+                searchCheckpointRevision: continuation.checkpointRevision,
+              }
             : {}),
           session: "<new-session>",
         },
@@ -590,7 +601,12 @@ function authoringItem(
           // that the containing script completed somewhere else.
           fromSession: continuation?.session ?? completedEvidenceSession ??
             sourceSession ?? "<source-session>",
-          ...(continuation ? { fromLogEntry: continuation.logEntry } : {}),
+          ...(continuation
+            ? {
+                fromLogEntry: continuation.logEntry,
+                searchCheckpointRevision: continuation.checkpointRevision,
+              }
+            : {}),
           session: "<new-session>",
         },
       },
@@ -620,6 +636,7 @@ interface SearchContinuationCandidate {
   handoff: DevelopmentBranchHandoff;
   depth: number;
   logEntry: number;
+  checkpointRevision: string;
 }
 
 interface SearchHandoffObservation {
@@ -632,20 +649,23 @@ interface SearchHandoffObservation {
 interface SearchContinuationSource {
   session: string;
   logEntry: number;
+  checkpointRevision: string;
 }
 
 /**
- * Recover target-specific search frontiers from prior isolated work branches.
- * Coverage already bounds `sessions` to the selected lineage (or the whole
- * project). Exact work keys keep progress for different scripts/choices from
- * bleeding together, and unchanged frontier saves are rejected because replaying
- * them would deterministically spend the same search slice again.
+ * Recover target-specific complete-search checkpoints from prior isolated work
+ * branches. Coverage already bounds `sessions` to the selected lineage (or the
+ * whole project). Exact work keys keep different scripts/choices separate;
+ * content and input revisions prevent a stale queue from becoming executable.
+ * The associated log coordinate exists only to open the best playable frontier
+ * in GUI. Headless scheduling resumes the checkpoint's full queue and visited set.
  */
 async function collectSearchContinuationSources(
   gameDir: string,
   sessions: string[],
 ): Promise<ReadonlyMap<string, SearchContinuationSource>> {
   const depthMemo = new Map<string, number>();
+  const inputRevision = await currentSearchInputRevision(gameDir);
   const observations = (await Promise.all(sessions.map(async (session) => {
     const handoff = await loadDevelopmentBranchHandoff(gameDir, session);
     if (!isSearchWorkHandoff(handoff)) return null;
@@ -655,7 +675,15 @@ async function collectSearchContinuationSources(
       session,
       handoff,
       provenance,
-      logEntry: handoff.state === "frontier"
+      logEntry: handoff.state === "frontier" &&
+          handoff.search?.checkpoint &&
+          await searchCheckpointIsUsable({
+            gameDir,
+            reference: handoff.search.checkpoint,
+            operation: handoff.operation === "reach" ? "reach" : "reach-script",
+            workKey: handoff.workKey,
+            inputRevision,
+          })
         ? await changedBranchLogEntry(gameDir, session)
         : null,
     } satisfies SearchHandoffObservation;
@@ -663,25 +691,22 @@ async function collectSearchContinuationSources(
     observation !== null
   );
 
-  // A completed child attempt consumes the exact parent frontier coordinate,
-  // even when that child proves the branch exhausted. Without this tombstone
-  // relation the worklist would offer the already-searched parent forever.
-  const consumed = new Set(observations.map((observation) =>
-    continuationCoordinate(
-      observation.provenance!.fromSession,
-      observation.provenance!.sourceLogEntry,
-      observation.handoff.workKey,
-    )
+  // Every child attempt consumes the exact parent checkpoint revision, even
+  // when that child proves its best playable frontier exhausted. Without this
+  // tombstone relation the worklist would offer the old full queue forever.
+  const consumed = new Set(observations.flatMap((observation) =>
+    observation.handoff.search?.consumedCheckpointRevision
+      ? [observation.handoff.search.consumedCheckpointRevision]
+      : []
   ));
   const candidates = (await Promise.all(observations.map(async (observation) => {
+    const checkpoint = observation.handoff.search?.checkpoint;
     if (
       observation.handoff.state !== "frontier" ||
       observation.logEntry === null ||
-      consumed.has(continuationCoordinate(
-        observation.session,
-        observation.logEntry,
-        observation.handoff.workKey,
-      ))
+      !checkpoint ||
+      checkpoint.inputRevision !== inputRevision ||
+      consumed.has(checkpoint.revision)
     ) return null;
     return {
       session: observation.session,
@@ -693,6 +718,7 @@ async function collectSearchContinuationSources(
         new Set(),
       ),
       logEntry: observation.logEntry,
+      checkpointRevision: checkpoint.revision,
     } satisfies SearchContinuationCandidate;
   }))).filter((candidate): candidate is SearchContinuationCandidate =>
     candidate !== null
@@ -709,6 +735,7 @@ async function collectSearchContinuationSources(
     [...selected].map(([workKey, candidate]) => [workKey, {
       session: candidate.session,
       logEntry: candidate.logEntry,
+      checkpointRevision: candidate.checkpointRevision,
     }]),
   );
 }
@@ -735,14 +762,6 @@ function isSearchWorkHandoff(
       handoff.workKey === `choice-authoring/${scriptId}/${choiceId}`;
   }
   return false;
-}
-
-function continuationCoordinate(
-  session: string,
-  logEntry: number,
-  workKey: string,
-): string {
-  return `${session}\u0000${logEntry}\u0000${workKey}`;
 }
 
 async function changedBranchLogEntry(

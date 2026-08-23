@@ -369,7 +369,7 @@ describe("structured development work execution", () => {
         replayVerified: true,
         session: "ai-unreachable",
         closest: {
-          path: { inputs: 0, decisions: 0, forcedAdvances: 0 },
+          path: { inputs: 2, decisions: 1, forcedAdvances: 1 },
         },
       },
     });
@@ -413,7 +413,8 @@ describe("structured development work execution", () => {
             command: "reach",
             args: {
               fromSession: "ai-paused",
-              fromLogEntry: 2,
+              fromLogEntry: 3,
+              searchCheckpointRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
               session: "<new-session>",
               maxNodes: 1,
               maxSteps: 10,
@@ -479,7 +480,7 @@ async function temporaryImpossibleReachGame(): Promise<string> {
     "- Leave {id: leave, ai: independent}",
     "",
   ].join("\n"), "utf-8");
-  for (const id of ["detour-a", "detour-b"]) {
+  for (const id of ["detour-a", "detour-b", "detour-c"]) {
     await writeFile(path.join(dir, "scripts", `${id}.md`), [
       "---",
       `id: ${id}`,

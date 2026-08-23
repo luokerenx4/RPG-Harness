@@ -28,11 +28,18 @@ import {
   type ForkSource,
 } from "./fork";
 import { summarizeReachPath, type ReachChoicePathSummary } from "./reach-choice";
+import {
+  currentSearchInputRevision,
+  loadSearchCheckpoint,
+  persistSearchCheckpoint,
+  type SearchCheckpointReference,
+} from "./search-checkpoints";
 
 export interface ReachScriptArgs {
   gameDir: string;
   fromSession: string;
   fromLogEntry?: number;
+  searchCheckpointRevision?: string;
   session: string;
   scriptId: string;
   maxNodes: number;
@@ -76,12 +83,14 @@ export interface ReachScriptContinuation {
   sourceSession: string;
   webPath: string;
   frontier: ChoiceSearchClosest;
+  checkpoint: SearchCheckpointReference;
   next: {
     command: "reach-script";
     args: {
       scriptId: string;
       fromSession: string;
       fromLogEntry: number;
+      searchCheckpointRevision: string;
       session: "<new-session>";
       maxNodes: number;
       maxSteps: number;
@@ -131,7 +140,16 @@ export async function runReachScript(
     throw new Error(`Script is already completed in ${args.fromSession}: ${args.scriptId}`);
   }
 
-  const primarySource = await loadForkSource(
+  const workKey = `story/${args.scriptId}`;
+  const resumedCheckpoint = args.searchCheckpointRevision
+    ? await loadSearchCheckpoint({
+        gameDir: args.gameDir,
+        revision: args.searchCheckpointRevision,
+        operation: "reach-script",
+        workKey,
+      })
+    : undefined;
+  const primarySource = resumedCheckpoint?.source ?? await loadForkSource(
     args.gameDir,
     args.fromSession,
     args.fromLogEntry,
@@ -144,12 +162,17 @@ export async function runReachScript(
   const sourceErrors: Array<{ session: string; logEntry: number; error: string }> = [];
   let attemptedSources = 0;
   let remainingNodes = args.maxNodes;
-  const runAttempt = async (session: string, source: ForkSource) => {
+  const runAttempt = async (
+    session: string,
+    source: ForkSource,
+    checkpoint = resumedCheckpoint?.checkpoint,
+  ) => {
     attemptedSources += 1;
     try {
       const search = await searchForScript(game, source.state, { scriptId: args.scriptId }, {
         maxNodes: remainingNodes,
         maxSteps: args.maxSteps,
+        ...(checkpoint ? { checkpoint } : {}),
         progressEvery: 100,
         ...(args.onProgress ? { onProgress: args.onProgress } : {}),
       });
@@ -166,7 +189,8 @@ export async function runReachScript(
     }
   };
 
-  const activeCheckpoint = row.status === "stale" && args.fromLogEntry === undefined
+  const activeCheckpoint = !resumedCheckpoint && row.status === "stale" &&
+      args.fromLogEntry === undefined
     ? await historicalActiveScriptCheckpoint(
         args.gameDir,
         args.fromSession,
@@ -185,9 +209,18 @@ export async function runReachScript(
     );
   }
   if (!attempts.some((attempt) => attempt.search.found) && remainingNodes > 0) {
-    await runAttempt(args.fromSession, primarySource);
+    await runAttempt(
+      resumedCheckpoint?.sourceSession ?? args.fromSession,
+      primarySource,
+      resumedCheckpoint?.checkpoint,
+    );
   }
-  if (!attempts.some((attempt) => attempt.search.found) && args.fromLogEntry === undefined && remainingNodes > 0) {
+  if (
+    !resumedCheckpoint &&
+    !attempts.some((attempt) => attempt.search.found) &&
+    args.fromLogEntry === undefined &&
+    remainingNodes > 0
+  ) {
     for (const coordinate of await historicalSessionCheckpoints(
       args.gameDir,
       args.fromSession,
@@ -279,18 +312,33 @@ export async function runReachScript(
     replayVerified = true;
   }
 
-  const continuation: ReachScriptContinuation | undefined = reason === "max-nodes"
+  const searchCheckpoint = reason === "max-nodes" && selectedSearch.checkpoint
+    ? await persistSearchCheckpoint({
+        gameDir: args.gameDir,
+        operation: "reach-script",
+        workKey,
+        sourceSession,
+        source,
+        checkpoint: selectedSearch.checkpoint,
+        inputRevision: await currentSearchInputRevision(args.gameDir),
+      })
+    : undefined;
+
+  const continuation: ReachScriptContinuation | undefined =
+    reason === "max-nodes" && searchCheckpoint
     ? {
         kind: "search-budget-exhausted",
         sourceSession: args.session,
         webPath: `/?session=${encodeURIComponent(args.session)}`,
         frontier: selectedSearch.frontier!.closest,
+        checkpoint: searchCheckpoint,
         next: {
           command: "reach-script",
           args: {
             scriptId: args.scriptId,
             fromSession: args.session,
             fromLogEntry: materialized.logEntry,
+            searchCheckpointRevision: searchCheckpoint.revision,
             session: "<new-session>",
             maxNodes: args.maxNodes,
             maxSteps: args.maxSteps,
@@ -324,8 +372,10 @@ export async function runReachScript(
       session: sourceSession,
       logEntry: source.selectedEntry,
       mode: source.mode,
-      historyFallback: sourceSession !== args.fromSession ||
-        source.selectedEntry !== primarySource.selectedEntry,
+      historyFallback: resumedCheckpoint
+        ? false
+        : sourceSession !== args.fromSession ||
+          source.selectedEntry !== primarySource.selectedEntry,
     },
     ...(fork ? { session: args.session, webPath: `/?session=${encodeURIComponent(args.session)}`, fork } : {}),
     output,

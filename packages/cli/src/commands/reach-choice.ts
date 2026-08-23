@@ -36,11 +36,18 @@ import {
   loadForkSource,
   type ForkSource,
 } from "./fork";
+import {
+  currentSearchInputRevision,
+  loadSearchCheckpoint,
+  persistSearchCheckpoint,
+  type SearchCheckpointReference,
+} from "./search-checkpoints";
 
 export interface ReachChoiceArgs {
   gameDir: string;
   fromSession: string;
   fromLogEntry?: number;
+  searchCheckpointRevision?: string;
   session: string;
   key?: string;
   maxNodes: number;
@@ -85,12 +92,14 @@ export interface ReachChoiceContinuation {
   sourceSession: string;
   webPath: string;
   frontier: ChoiceSearchClosest;
+  checkpoint: SearchCheckpointReference;
   next: {
     command: "reach";
     args: {
       key: string;
       fromSession: string;
       fromLogEntry: number;
+      searchCheckpointRevision: string;
       session: "<new-session>";
       maxNodes: number;
       maxSteps: number;
@@ -154,7 +163,15 @@ export async function runReachChoice(
   );
   const target = selectTarget(targets, args.key);
   const game = await loadGame(args.gameDir);
-  const primarySource = await loadForkSource(
+  const resumedCheckpoint = args.searchCheckpointRevision
+    ? await loadSearchCheckpoint({
+        gameDir: args.gameDir,
+        revision: args.searchCheckpointRevision,
+        operation: "reach",
+        workKey: `choice-authoring/${target.key}`,
+      })
+    : undefined;
+  const primarySource = resumedCheckpoint?.source ?? await loadForkSource(
     args.gameDir,
     args.fromSession,
     args.fromLogEntry,
@@ -169,12 +186,17 @@ export async function runReachChoice(
   let attemptedSources = 0;
   let remainingNodes = args.maxNodes;
 
-  const runAttempt = async (session: string, source: ForkSource) => {
+  const runAttempt = async (
+    session: string,
+    source: ForkSource,
+    checkpoint = resumedCheckpoint?.checkpoint,
+  ) => {
     attemptedSources += 1;
     try {
       const search = await searchForChoice(game, source.state, targetCoordinates, {
         maxNodes: remainingNodes,
         maxSteps: args.maxSteps,
+        ...(checkpoint ? { checkpoint } : {}),
         progressEvery: 100,
         ...(args.onProgress ? { onProgress: args.onProgress } : {}),
       });
@@ -192,9 +214,12 @@ export async function runReachChoice(
   };
 
   const sourceCandidates: ReachChoiceSourceCandidate[] = [
-    { session: args.fromSession, source: primarySource },
+    {
+      session: resumedCheckpoint?.sourceSession ?? args.fromSession,
+      source: primarySource,
+    },
   ];
-  if (args.fromLogEntry === undefined) {
+  if (!resumedCheckpoint && args.fromLogEntry === undefined) {
     const activeCheckpoint = await historicalActiveScriptCheckpoint(
       args.gameDir,
       args.fromSession,
@@ -243,7 +268,13 @@ export async function runReachChoice(
       });
       continue;
     }
-    if (await runAttempt(candidate.session, candidate.source)) break;
+    if (await runAttempt(
+      candidate.session,
+      candidate.source,
+      candidate.session === resumedCheckpoint?.sourceSession
+        ? resumedCheckpoint.checkpoint
+        : undefined,
+    )) break;
   }
 
   if (attempts.length === 0) {
@@ -309,6 +340,17 @@ export async function runReachChoice(
   let output = materialized.replay.output;
   const fork = materialized.fork;
   let report: PlaytestReport | undefined;
+  const searchCheckpoint = search.reason === "max-nodes" && selectedSearch.checkpoint
+    ? await persistSearchCheckpoint({
+        gameDir: args.gameDir,
+        operation: "reach",
+        workKey: `choice-authoring/${target.key}`,
+        sourceSession,
+        source,
+        checkpoint: selectedSearch.checkpoint,
+        inputRevision: await currentSearchInputRevision(args.gameDir),
+      })
+    : undefined;
   if (search.found) {
     if (!isTarget(output, target)) {
       throw new Error(
@@ -363,18 +405,21 @@ export async function runReachChoice(
     });
   }
 
-  const continuation: ReachChoiceContinuation | undefined = search.reason === "max-nodes"
+  const continuation: ReachChoiceContinuation | undefined =
+    search.reason === "max-nodes" && searchCheckpoint
     ? {
         kind: "search-budget-exhausted",
         sourceSession: args.session,
         webPath: `/?session=${encodeURIComponent(args.session)}`,
         frontier: selectedSearch.frontier!.closest,
+        checkpoint: searchCheckpoint,
         next: {
           command: "reach",
           args: {
             key: target.key,
             fromSession: args.session,
             fromLogEntry: materialized.logEntry,
+            searchCheckpointRevision: searchCheckpoint.revision,
             session: "<new-session>",
             maxNodes: args.maxNodes,
             maxSteps: args.maxSteps,
@@ -398,8 +443,10 @@ export async function runReachChoice(
       session: sourceSession,
       logEntry: source.selectedEntry,
       mode: source.mode,
-      historyFallback: sourceSession !== args.fromSession ||
-        source.selectedEntry !== primarySource.selectedEntry,
+      historyFallback: resumedCheckpoint
+        ? false
+        : sourceSession !== args.fromSession ||
+          source.selectedEntry !== primarySource.selectedEntry,
     },
     attemptedSources,
     ...(sourceErrors.length > 0 ? { sourceErrors } : {}),

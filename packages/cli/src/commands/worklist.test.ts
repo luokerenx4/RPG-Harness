@@ -480,12 +480,21 @@ describe("AI development worklist", () => {
       choices: choiceReport(),
       reports: [],
       continuationSources: new Map([
-        ["story/unseen", { session: "ai-story-closest", logEntry: 17 }],
+        ["story/unseen", {
+          session: "ai-story-closest",
+          logEntry: 17,
+          checkpointRevision: "a".repeat(64),
+        }],
         ["choice-authoring/ending/unseen-choice", {
           session: "ai-choice-closest",
           logEntry: 23,
+          checkpointRevision: "b".repeat(64),
         }],
-        ["story/not-this-item", { session: "ai-wrong-target", logEntry: 99 }],
+        ["story/not-this-item", {
+          session: "ai-wrong-target",
+          logEntry: 99,
+          checkpointRevision: "c".repeat(64),
+        }],
       ]),
     });
 
@@ -496,6 +505,7 @@ describe("AI development worklist", () => {
           scriptId: "unseen",
           fromSession: "ai-story-closest",
           fromLogEntry: 17,
+          searchCheckpointRevision: "a".repeat(64),
           session: "<new-session>",
         },
       });
@@ -507,6 +517,7 @@ describe("AI development worklist", () => {
         key: "ending/unseen-choice",
         fromSession: "ai-choice-closest",
         fromLogEntry: 23,
+        searchCheckpointRevision: "b".repeat(64),
         session: "<new-session>",
       },
     });

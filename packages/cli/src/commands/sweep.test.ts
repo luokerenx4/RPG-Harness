@@ -12,6 +12,10 @@ import {
 } from "./fork";
 import { runDevelopmentConvergence, runDevelopmentSweep } from "./sweep";
 import { collectDevelopmentWorklist } from "./worklist";
+import {
+  currentSearchInputRevision,
+  persistSearchCheckpoint,
+} from "./search-checkpoints";
 
 const temporaryDirectories: string[] = [];
 
@@ -150,7 +154,8 @@ describe("bounded development sweep", () => {
           args: {
             scriptId: "scene-a",
             fromSession: "per-item-budget-001",
-            fromLogEntry: 2,
+            fromLogEntry: 3,
+            searchCheckpointRevision: expect.stringMatching(/^[a-f0-9]{64}$/),
             session: "<new-session>",
             maxNodes: 1,
             maxSteps: 20,
@@ -235,6 +240,12 @@ describe("bounded development sweep", () => {
       source: "test",
       output: { type: "search-progress" },
     }, firstClosest);
+    const firstSearchCheckpoint = await persistTestSearchCheckpoint(
+      gameDir,
+      "closest-001",
+      "story/scene-a",
+      1,
+    );
     await attachDevelopmentBranchHandoff(gameDir, "closest-001", {
       schemaVersion: 1,
       workKey: "story/scene-a",
@@ -245,6 +256,7 @@ describe("bounded development sweep", () => {
       state: "frontier",
       preparedAt: "2026-08-14T01:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
+      search: { checkpoint: firstSearchCheckpoint },
     });
 
     await createForkFromSource({
@@ -261,6 +273,12 @@ describe("bounded development sweep", () => {
       source: "test",
       output: { type: "search-progress" },
     }, secondClosest);
+    const secondSearchCheckpoint = await persistTestSearchCheckpoint(
+      gameDir,
+      "closest-002",
+      "story/scene-a",
+      2,
+    );
     await attachDevelopmentBranchHandoff(gameDir, "closest-002", {
       schemaVersion: 1,
       workKey: "story/scene-a",
@@ -271,6 +289,10 @@ describe("bounded development sweep", () => {
       state: "frontier",
       preparedAt: "2026-08-14T00:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
+      search: {
+        checkpoint: secondSearchCheckpoint,
+        consumedCheckpointRevision: firstSearchCheckpoint.revision,
+      },
     });
 
     // A zero-progress frontier must not create an endless cross-batch chain.
@@ -306,7 +328,11 @@ describe("bounded development sweep", () => {
     expect(worklist.items.find((item) => item.key === "story/scene-a")?.operation)
       .toMatchObject({
         command: "reach-script",
-        args: { fromSession: "closest-002", fromLogEntry: 2 },
+        args: {
+          fromSession: "closest-002",
+          fromLogEntry: 2,
+          searchCheckpointRevision: secondSearchCheckpoint.revision,
+        },
       });
     expect(worklist.items.find((item) => item.key === "story/scene-b")?.operation)
       .toMatchObject({
@@ -349,6 +375,12 @@ describe("bounded development sweep", () => {
       source: "test",
       output: { type: "search-progress" },
     }, frontierState);
+    const parentSearchCheckpoint = await persistTestSearchCheckpoint(
+      gameDir,
+      "frontier-parent",
+      "story/scene-a",
+      1,
+    );
     await attachDevelopmentBranchHandoff(gameDir, "frontier-parent", {
       schemaVersion: 1,
       workKey: "story/scene-a",
@@ -359,6 +391,7 @@ describe("bounded development sweep", () => {
       state: "frontier",
       preparedAt: "2026-08-14T01:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
+      search: { checkpoint: parentSearchCheckpoint },
     });
 
     await createForkFromSource({
@@ -378,6 +411,7 @@ describe("bounded development sweep", () => {
       state: "closest",
       preparedAt: "2026-08-14T02:00:00.000Z",
       coordinates: { scriptId: "scene-a" },
+      search: { consumedCheckpointRevision: parentSearchCheckpoint.revision },
     });
 
     const worklist = await collectDevelopmentWorklist(gameDir, "player");
@@ -485,7 +519,7 @@ describe("bounded development sweep", () => {
       .rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("until-clean rotates searches and refuses deterministic zero-progress retries", async () => {
+  test("until-clean rotates and resumes complete search checkpoints", async () => {
     const gameDir = await temporarySweepGame();
     const result = await runDevelopmentConvergence({
       gameDir,
@@ -500,30 +534,26 @@ describe("bounded development sweep", () => {
       pretty: false,
     });
 
-    expect(result.status).toBe("stopped");
-    expect(result.reason).toBe("search-stalled");
+    expect(result.status).toBe("clean");
+    expect(result.reason).toBe("clean");
     expect(result.generations).toHaveLength(1);
-    expect(result.generations[0]?.result.runs).toHaveLength(2);
+    expect(result.generations[0]?.result.runs).toHaveLength(4);
     expect(result.generations[0]?.result.runs.map((run) => run.key)).toEqual([
       "story/scene-a",
       "story/scene-b",
+      "story/scene-a",
+      "story/scene-b",
     ]);
-    expect(result.budgets.nodes).toEqual({ limit: 5, used: 2, remaining: 3 });
-    expect(result.safety.searchStalls).toEqual([{
-      generation: 1,
-      key: "story/scene-a",
-      targetSession: "continued-g01-001",
-      attempt: 1,
-      reason: "no-state-progress",
-    }, {
-      generation: 1,
-      key: "story/scene-b",
-      targetSession: "continued-g01-002",
-      attempt: 1,
-      reason: "no-state-progress",
-    }]);
-    expect(result.liveWorklist.totalItems).toBeGreaterThan(0);
-    expect(result.resume?.next?.args.fromSession).toBe("continued-g01-001");
+    expect(result.generations[0]?.result.runs.map((run) => run.status)).toEqual([
+      "paused",
+      "paused",
+      "executed",
+      "executed",
+    ]);
+    expect(result.budgets.nodes).toEqual({ limit: 5, used: 4, remaining: 1 });
+    expect(result.safety.searchStalls).toEqual([]);
+    expect(result.liveWorklist.totalItems).toBe(0);
+    expect(result.resume).toBeNull();
   });
 
   test("until-clean freezes newly exposed choice work as a later generation", async () => {
@@ -1208,14 +1238,33 @@ async function temporarySweepGame(): Promise<string> {
   await mkdir(path.join(dir, "scripts"), { recursive: true });
   await writeFile(path.join(dir, "game.yaml"), "title: Sweep test\n", "utf-8");
   for (const id of ["scene-a", "scene-b"]) {
+    const prerequisite = `prep-${id.at(-1)}`;
     await writeFile(path.join(dir, "scripts", `${id}.md`), [
       "---",
       `id: ${id}`,
       `title: ${id}`,
       "characters: []",
+      `requires: { scriptCompleted: ${prerequisite} }`,
       "---",
       "",
       `Play ${id}.`,
+      "",
+      "[end]",
+      "",
+    ].join("\n"), "utf-8");
+  }
+  for (const id of ["prep-a", "prep-b"]) {
+    await writeFile(path.join(dir, "scripts", `${id}.md`), [
+      "---",
+      `id: ${id}`,
+      `title: ${id}`,
+      "characters: []",
+      "coverage:",
+      "  ignore: true",
+      "  reason: Search fixture prerequisite",
+      "---",
+      "",
+      `Prepare ${id}.`,
       "",
       "[end]",
       "",
@@ -1475,6 +1524,47 @@ async function temporaryFuzzFailureQualityGame(): Promise<string> {
     "",
   ].join("\n"), "utf-8");
   return dir;
+}
+
+async function persistTestSearchCheckpoint(
+  gameDir: string,
+  sourceSession: string,
+  workKey: `story/${string}`,
+  totalExploredNodes: number,
+) {
+  const game = await loadGame(gameDir);
+  const scriptId = workKey.slice("story/".length);
+  const script = game.scripts.find((candidate) => candidate.id === scriptId)!;
+  const source = await loadForkSource(gameDir, sourceSession);
+  const node = {
+    state: structuredClone(source.state),
+    inputs: [],
+    guidanceGates: [],
+    satisfiedGuidanceLeaves: [],
+  };
+  return persistSearchCheckpoint({
+    gameDir,
+    operation: "reach-script",
+    workKey,
+    sourceSession,
+    source,
+    inputRevision: await currentSearchInputRevision(gameDir),
+    checkpoint: {
+      schemaVersion: 1,
+      target: {
+        kind: "script",
+        scriptId,
+        revision: scriptRevision(script),
+      },
+      maxSteps: 20,
+      initialState: structuredClone(source.state),
+      queue: [node],
+      visited: [],
+      totalExploredNodes,
+      deepestSteps: 0,
+      closestNode: node,
+    },
+  });
 }
 
 

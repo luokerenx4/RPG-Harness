@@ -629,7 +629,7 @@ describe("choice state-space search", () => {
       game,
       makeState(game),
       { scriptId: "target", choiceId: "promise" },
-      { maxNodes: 4, maxSteps: 20 },
+      { maxNodes: 3, maxSteps: 20 },
     );
     expect(first).toMatchObject({
       found: false,
@@ -652,6 +652,11 @@ describe("choice state-space search", () => {
       closest: { outputType: "hubMenu" },
       state: { baseline: { variables: { phase: 3 } } },
     });
+    expect(first.checkpoint).toMatchObject({
+      schemaVersion: 1,
+      totalExploredNodes: 3,
+      queue: [expect.any(Object)],
+    });
 
     const resumed = await searchForChoice(
       game,
@@ -661,6 +666,106 @@ describe("choice state-space search", () => {
     );
     expect(resumed.found).toBe(true);
     expect(resumed.inputs).toEqual([{ type: "doActivity", id: "cross" }]);
+  });
+
+  test("resumes sibling search branches after the best playable frontier is exhausted", async () => {
+    const game = makeGame({
+      variables: [
+        { id: "phase", type: "number", initial: 0 },
+        { id: "progress", type: "number", initial: 0 },
+      ],
+      scripts: [makeScript("target", {
+        requires: { variable: { name: "progress", min: 1 } },
+      })],
+      runFn: async function* (ctx) {
+        while (true) {
+          const phase = Number(ctx.state.baseline.variables.phase ?? 0);
+          if (phase === 99) {
+            yield { type: "gameEnd" as const, reason: "dead branch" };
+            return;
+          }
+          if (phase === 21) {
+            yield {
+              type: "choice" as const,
+              scriptId: "target",
+              choiceId: "answer",
+              prompt: "Answer?",
+              options: [{ id: "yes", text: "Yes", available: true }],
+            };
+            continue;
+          }
+          const activities = phase === 0
+            ? ["promising", "winning"]
+            : phase === 10
+              ? ["dead-a", "dead-b"]
+              : ["advance", "idle"];
+          const input = yield {
+            type: "hubMenu" as const,
+            snapshot: {
+              day: 1,
+              maxDay: 1,
+              slot: 0,
+              slotName: "day",
+              slotsPerDay: 1,
+              stats: [],
+              affections: [],
+              activities: activities.map((id) => ({
+                id,
+                kind: "action" as const,
+                title: id,
+                cost: 0,
+                available: true,
+              })),
+            },
+          };
+          if (input.type !== "doActivity") continue;
+          if (input.id === "promising") {
+            ctx.state.baseline.variables.progress = 1;
+            ctx.state.baseline.variables.phase = 10;
+          } else if (input.id === "winning") {
+            ctx.state.baseline.variables.phase = 20;
+          } else if (input.id.startsWith("dead-")) {
+            ctx.state.baseline.variables.phase = 99;
+          } else if (input.id === "advance") {
+            ctx.state.baseline.variables.progress = 1;
+            ctx.state.baseline.variables.phase = 21;
+          }
+        }
+      },
+    });
+    const source = makeState(game);
+    const target = { scriptId: "target", choiceId: "answer" };
+    const first = await searchForChoice(game, source, target, {
+      maxNodes: 1,
+      maxSteps: 20,
+    });
+    expect(first).toMatchObject({
+      found: false,
+      reason: "max-nodes",
+      frontier: {
+        inputs: [{ type: "doActivity", id: "promising" }],
+        closest: { satisfiedRequirements: 1 },
+      },
+      checkpoint: { totalExploredNodes: 1 },
+    });
+
+    const singleBranch = await searchForChoice(game, first.frontier!.state, target, {
+      maxNodes: 20,
+      maxSteps: 20,
+    });
+    expect(singleBranch).toMatchObject({ found: false, reason: "exhausted" });
+
+    const serialized = JSON.parse(JSON.stringify(first.checkpoint));
+    const resumed = await searchForChoice(game, source, target, {
+      checkpoint: serialized,
+      maxNodes: 20,
+      maxSteps: 20,
+    });
+    expect(resumed).toMatchObject({ found: true, reason: "found" });
+    expect(resumed.inputs).toEqual([
+      { type: "doActivity", id: "winning" },
+      { type: "doActivity", id: "advance" },
+    ]);
   });
 
   test("separates a terminal diagnostic closest state from an expandable frontier", async () => {

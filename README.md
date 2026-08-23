@@ -348,24 +348,28 @@ If search exhausts the declared state space without reaching its target, `work`
 returns `status: "failed"` but preserves the replay-verified closest state in
 the requested isolated branch for GUI/Headless diagnosis. If only the node
 budget is exhausted, it returns `status: "paused"` plus an executable
-continuation rooted at a still-expandable frontier instead of repeating the
-same search from the original checkpoint.
-The search result keeps two distinct bounded artifacts: `closest` is the best
-diagnostic state even when it is a terminal dead end, while `frontier` is the
-best still-expandable node and is the only state advertised as executable
-continuation. That frontier handoff is durable across commands: when a later
-`worklist` or frozen `sweep` sees the same exact work key in the same evidence
-family, it selects the deepest changed frontier as the next search root.
-Zero-state-progress branches, diagnostic-only closest states, and handoffs for
-another target are ignored, so repeated bounded batches accumulate exploration
-instead of rebuilding the same frontier.
-When a child attempt consumes an exact frontier and proves it exhausted, that
-child handoff retires the parent coordinate; the worklist will not schedule the
-already-searched parent again.
-The generated operation pins that branch's current log entry. An exact
-continuation never spends its next node slice on an older lineage checkpoint;
-ordinary `reach` / `reach-script` calls without `--from-at` retain historical
-rewind for terminal player saves and alternate-route recovery.
+continuation instead of repeating the same search from its original root.
+The search result keeps three distinct artifacts. `closest` is the best
+diagnostic state even when it is a terminal dead end. `frontier` is the best
+still-expandable state materialized as a normal GUI/Headless session so a human
+can immediately inspect and play it. The content-addressed search `checkpoint`
+is the executable AI continuation: it freezes the original source, every
+pending sibling node, the visited-state set, cumulative explored count, and
+target/options. It is gzip-compressed under `.rpg-harness/evidence/search/` and
+bound to the current authored game plus Headless/GUI runtime input revision.
+`worklist`, `work`, and frozen `sweep` pass its SHA-256 revision back into
+`reach` / `reach-script`; edited or corrupt artifacts are never silently used.
+This separation lets GUI show one understandable frontier while Headless resumes
+the complete best-first search rather than discarding siblings or rebuilding
+the root path. Handoffs for another target, diagnostic-only closest states, and
+checkpoints from an older source revision are ignored. Every child attempt
+records the parent checkpoint revision it consumed; a new paused child publishes
+the next cumulative checkpoint, while a found or exhausted child retires the
+old one without falling back to it.
+The generated operation also pins the playable frontier's current log entry for
+GUI provenance. Ordinary `reach` / `reach-script` calls without a search
+checkpoint retain historical rewind for terminal player saves and
+alternate-route recovery.
 Successful branch work is deliberately compact: it reports stable coordinates,
 path counts/revision, search evidence, ending, and the GUI-compatible session,
 without embedding the full save, every pending branch, or the raw replay path.
@@ -377,8 +381,9 @@ It preflights every generated branch before its first write, shares one total
 search-node budget across the batch, and gives every later frozen item a turn
 when an earlier search exhausts only its own slice. The batch then pauses with
 the first unresolved item as `nextKey`; `resume.next` is its executable
-continuation rooted at the materialized frontier branch. The result carries the
-frozen SHA-256 revision and exact next work key. After finishing that continuation,
+continuation carrying both the materialized GUI frontier and full-search
+checkpoint revision. The result carries the frozen SHA-256 revision and exact
+next work key. After finishing that continuation,
 resume the batch with both `--from-key` and `--snapshot-revision`; the frozen
 revision prevents a changed queue from silently continuing at the wrong item.
 Diagnostics and
@@ -398,8 +403,9 @@ envelope and its live-worklist summary report `scope: "project"` so an agent doe
 not mistake global coverage for an empty player-specific queue. The item limit
 and total search-node limit become shared budgets across several immutable
 generations. A search that reaches its own
-node slice automatically resumes from the replay-verified frontier branch, and
-a completed generation freezes the newly exposed queue before continuing.
+node slice automatically resumes from the content-addressed full queue while
+keeping its replay-verified frontier playable; a completed generation freezes
+the newly exposed queue before continuing.
 Paused searches rotate behind the other frozen items before receiving another
 slice, so one difficult route cannot monopolize the project budget.
 `--max-generations` (default 5) is a third hard bound. The convergence envelope
