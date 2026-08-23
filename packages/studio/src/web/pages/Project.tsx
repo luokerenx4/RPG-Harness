@@ -357,7 +357,7 @@ export function Project({
             const meta = KIND_META[resource.kind] ?? { icon: "·", label: resource.kind };
             return (
               <div className={`document-tab ${selectedKey === key ? "active" : ""}`} key={key}>
-                <button type="button" onClick={() => setSelectedKey(key)}>
+                <button type="button" onClick={() => selectResource(key)}>
                   <span>{meta.icon}</span><strong>{resource.label}</strong>
                 </button>
                 <button type="button" className="document-tab-close" aria-label={`Close ${resource.label}`} onClick={() => closeTab(key)}>×</button>
@@ -380,6 +380,7 @@ export function Project({
               onProjectSaved={setProject}
               onDraftGuardChange={handleDraftGuardChange}
               draftActive={draftActive}
+              onSelectResource={selectResource}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
@@ -427,6 +428,7 @@ function ResourceDetail({
   onProjectSaved,
   onDraftGuardChange,
   draftActive,
+  onSelectResource,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -439,6 +441,7 @@ function ResourceDetail({
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
   draftActive: boolean;
+  onSelectResource: (key: string) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
@@ -446,6 +449,7 @@ function ResourceDetail({
   const workspaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
+  const adjacent = adjacentResourceKeys(resources, node.key);
 
   useEffect(() => {
     setInspectorOpen(map === undefined);
@@ -454,18 +458,51 @@ function ResourceDetail({
     inspectorRef.current?.scrollTo({ top: 0, left: 0 });
   }, [node.key, map === undefined]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
+      const key = event.key === "ArrowLeft" ? adjacent.previous?.key : adjacent.next?.key;
+      if (!key) return;
+      event.preventDefault();
+      onSelectResource(key);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [adjacent.previous?.key, adjacent.next?.key, onSelectResource]);
+
   return (
     <div ref={workspaceRef} className={`resource-workspace${inspectorOpen ? "" : " inspector-collapsed"}`}>
       <main ref={editorRef} className="resource-editor-pane">
         <header className="resource-editor-heading">
           <div className={`resource-editor-icon kind-${node.kind}`}>{meta.icon}</div>
           <div><span>{meta.label}</span><h1>{node.label}</h1><code>{node.key}</code></div>
-          <button
-            type="button"
-            className="editor-inspector-toggle"
-            aria-pressed={inspectorOpen}
-            onClick={() => setInspectorOpen((current) => !current)}
-          ><span aria-hidden="true">◫</span>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
+          <div className="resource-editor-heading-actions">
+            <nav className="resource-sibling-nav" aria-label={`${meta.label} records`}>
+              <button
+                type="button"
+                disabled={!adjacent.previous}
+                aria-label={`Previous ${singularResourceLabel(meta.label)}${adjacent.previous ? `: ${adjacent.previous.label}` : ""}`}
+                aria-keyshortcuts="Alt+ArrowLeft"
+                onClick={() => adjacent.previous && onSelectResource(adjacent.previous.key)}
+              >‹</button>
+              <span>{adjacent.position + 1} / {adjacent.total}</span>
+              <button
+                type="button"
+                disabled={!adjacent.next}
+                aria-label={`Next ${singularResourceLabel(meta.label)}${adjacent.next ? `: ${adjacent.next.label}` : ""}`}
+                aria-keyshortcuts="Alt+ArrowRight"
+                onClick={() => adjacent.next && onSelectResource(adjacent.next.key)}
+              >›</button>
+            </nav>
+            <button
+              type="button"
+              className="editor-inspector-toggle"
+              aria-pressed={inspectorOpen}
+              onClick={() => setInspectorOpen((current) => !current)}
+            ><span aria-hidden="true">◫</span>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
+          </div>
         </header>
         {map ? (
           <MapOverview map={map} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
@@ -2258,6 +2295,27 @@ export function nextProjectTreeIndex(currentIndex: number, total: number, delta:
   if (total <= 0) return -1;
   if (currentIndex < 0 || currentIndex >= total) return delta > 0 ? 0 : total - 1;
   return (currentIndex + delta + total) % total;
+}
+
+export function adjacentResourceKeys(
+  resources: ProjectResourceNode[],
+  selectedKey: string,
+): {
+  previous: ProjectResourceNode | null;
+  next: ProjectResourceNode | null;
+  position: number;
+  total: number;
+} {
+  const selected = resources.find((resource) => resource.key === selectedKey);
+  if (!selected) return { previous: null, next: null, position: -1, total: 0 };
+  const siblings = resources.filter((resource) => resource.kind === selected.kind);
+  const position = siblings.findIndex((resource) => resource.key === selectedKey);
+  return {
+    previous: position > 0 ? siblings[position - 1]! : null,
+    next: position >= 0 && position < siblings.length - 1 ? siblings[position + 1]! : null,
+    position,
+    total: siblings.length,
+  };
 }
 
 export function mapEventCommandSummary(

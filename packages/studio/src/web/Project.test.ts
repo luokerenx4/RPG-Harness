@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  adjacentResourceKeys,
   conditionEditorMode,
   createConditionDraft,
   eventTriggerMeta,
@@ -65,6 +66,27 @@ describe("Studio database record fields", () => {
 });
 
 describe("Studio map event resource picker", () => {
+  test("moves between records of the same database kind without crossing groups", () => {
+    const resources = [
+      { key: "character:kagari", kind: "character", id: "kagari", label: "Kagari", refs: [] },
+      { key: "map:swamp", kind: "map", id: "swamp", label: "Swamp", refs: [] },
+      { key: "character:kasumi", kind: "character", id: "kasumi", label: "Kasumi", refs: [] },
+      { key: "character:mio", kind: "character", id: "mio", label: "Mio", refs: [] },
+    ] as ProjectResourceNode[];
+    expect(adjacentResourceKeys(resources, "character:kasumi")).toEqual({
+      previous: resources[0]!,
+      next: resources[3]!,
+      position: 1,
+      total: 3,
+    });
+    expect(adjacentResourceKeys(resources, "map:swamp")).toEqual({
+      previous: null,
+      next: null,
+      position: 0,
+      total: 1,
+    });
+  });
+
   test("wraps RPG-style keyboard navigation across long project trees", () => {
     expect(nextProjectTreeIndex(0, 5, -1)).toBe(4);
     expect(nextProjectTreeIndex(4, 5, 1)).toBe(0);

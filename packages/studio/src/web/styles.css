@@ -1807,12 +1807,53 @@ summary:focus-visible {
 .resource-editor-heading span { color: var(--studio-faint); font-size: 8px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
 .resource-editor-heading h1 { margin: 0; overflow: hidden; color: #f1f3f7; font-size: 20px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .resource-editor-heading code { color: #697381; font-size: 9px; }
+.resource-editor-heading-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-left: auto;
+}
+.resource-sibling-nav {
+  display: grid;
+  grid-template-columns: 28px auto 28px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: #11161d;
+}
+.resource-sibling-nav button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 27px;
+  padding: 0;
+  color: #8f99a5;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 18px/1 ui-serif, serif;
+}
+.resource-sibling-nav button:first-child { border-right: 1px solid var(--studio-line); }
+.resource-sibling-nav button:last-child { border-left: 1px solid var(--studio-line); }
+.resource-sibling-nav button:hover:not(:disabled),
+.resource-sibling-nav button:focus-visible { color: #071216; outline: none; background: var(--studio-accent); }
+.resource-sibling-nav button:disabled { color: #323944; cursor: default; }
+.resource-sibling-nav > span {
+  min-width: 48px;
+  padding: 0 7px;
+  color: #697482;
+  font: 7px/1 ui-monospace, monospace;
+  letter-spacing: .05em;
+  text-align: center;
+}
 .editor-inspector-toggle {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
   gap: 5px;
-  margin-left: auto;
+  margin-left: 0;
   padding: 5px 7px;
   color: #717b88;
   border: 1px solid var(--studio-line);
@@ -2632,7 +2673,15 @@ summary:focus-visible {
 }
 
 @media (max-width: 1120px) {
-  .resource-workspace { grid-template-columns: minmax(0,1fr); overflow: auto; }
+  .project-detail { overflow: auto; scrollbar-color: #303744 transparent; scrollbar-width: thin; }
+  .resource-workspace {
+    grid-template-columns: minmax(0,1fr);
+    grid-template-rows: auto auto;
+    align-content: start;
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
   .resource-editor-pane { overflow: visible; }
   .resource-inspector { min-height: 320px; overflow: visible; border-top: 1px solid var(--studio-line); border-left: 0; }
   .resource-data-sheet { grid-template-columns: 1fr; }
@@ -2647,6 +2696,10 @@ summary:focus-visible {
   .project-workbench { grid-template-columns: 48px 210px minmax(360px,1fr); overflow-x: auto; }
   .project-activitybar { padding-inline: 3px; }
   .project-activitybar button { width: 41px; }
+  .resource-editor-heading-actions { gap: 4px; }
+  .resource-sibling-nav > span { min-width: 40px; padding-inline: 4px; }
+  .editor-inspector-toggle { width: 29px; height: 29px; justify-content: center; padding: 0; font-size: 0; }
+  .editor-inspector-toggle span { font-size: 11px; }
   .map-stats { display: none; }
   .map-editor-context p { display: none; }
   .map-canvas-scroll { min-height: 300px; padding: 10px; }
