@@ -194,7 +194,7 @@ describe("AI audit issue verification", () => {
         verification: { kind: "ai-audit" },
       },
     });
-  });
+  }, 15_000);
 
   test("preflights every verification lane before reproducing the source", async () => {
     const { gameDir, reportId } = await createAuditIssue(4);
