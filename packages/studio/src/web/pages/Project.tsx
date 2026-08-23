@@ -16,6 +16,8 @@ import {
   fetchMapPreview,
   fetchResourceSource,
   createProjectResource,
+  fetchStudioTrash,
+  restoreStudioTrashEntry,
   trashProjectResource,
   saveMapSpatial,
   saveResourceSource,
@@ -23,6 +25,7 @@ import {
   type ProjectAssetPreview,
   type ProjectResponse,
   type MapPreviewResponse,
+  type StudioTrashEntry,
 } from "../api";
 import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
 
@@ -131,15 +134,23 @@ export function Project({
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [trashReceipt, setTrashReceipt] = useState<{ label: string; path: string } | null>(null);
+  const [trashDialogOpen, setTrashDialogOpen] = useState(false);
+  const [trashEntries, setTrashEntries] = useState<StudioTrashEntry[]>([]);
+  const [lifecycleReceipt, setLifecycleReceipt] = useState<{ title: string; path: string } | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resourceTreeRef = useRef<HTMLDivElement | null>(null);
   const draftGuardRef = useRef<StudioDraftGuard | null>(null);
   const createResourceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const trashButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const closeCreateDialog = () => {
     setCreateDialogOpen(false);
     requestAnimationFrame(() => createResourceButtonRef.current?.focus());
+  };
+
+  const closeTrashDialog = () => {
+    setTrashDialogOpen(false);
+    requestAnimationFrame(() => trashButtonRef.current?.focus());
   };
 
   const handleDraftGuardChange = useCallback((guard: StudioDraftGuard | null) => {
@@ -164,6 +175,10 @@ export function Project({
         setOpenKeys(initial ? [initial] : []);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
+  }, []);
+
+  useEffect(() => {
+    void fetchStudioTrash().then(setTrashEntries).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -309,7 +324,23 @@ export function Project({
       const remaining = current.filter((key) => key !== trashed.resource.key);
       return next && !remaining.includes(next.key) ? [...remaining.slice(-6), next.key] : remaining;
     });
-    setTrashReceipt({ label: trashed.resource.label, path: trashed.trashPath });
+    setLifecycleReceipt({ title: `${trashed.resource.label} moved to Studio Trash`, path: trashed.trashPath });
+    void fetchStudioTrash().then(setTrashEntries).catch(() => {});
+  };
+
+  const handleResourceRestored = (restored: Awaited<ReturnType<typeof restoreStudioTrashEntry>>) => {
+    setProject(restored.project);
+    setTrashEntries((current) => current.filter((entry) => entry.trashPath !== restored.entry.trashPath));
+    setSelectedKey(restored.resource.key);
+    setOpenKeys((current) => current.includes(restored.resource.key)
+      ? current
+      : [...current.slice(-6), restored.resource.key]);
+    const restoredSection = SECTION_META.find((candidate) =>
+      SECTION_KINDS[candidate.id].includes(restored.resource.kind)
+    )?.id;
+    if (restoredSection) setSection(restoredSection);
+    setQuery("");
+    setLifecycleReceipt({ title: `${restored.resource.label} restored`, path: restored.entry.sourcePath });
   };
 
   return (
@@ -332,6 +363,15 @@ export function Project({
           <div><span>PROJECT</span><strong>{SECTION_META.find((item) => item.id === section)?.label}</strong></div>
           <div className="explorer-heading-actions">
             <small>{project.graph.resources.length}</small>
+            <button
+              ref={trashButtonRef}
+              type="button"
+              className="explorer-trash-button"
+              aria-label={`Open Studio Trash${trashEntries.length > 0 ? `, ${trashEntries.length} entries` : ", empty"}`}
+              title={draftActive ? "Save or discard the current draft first" : "Studio Trash"}
+              disabled={draftActive}
+              onClick={() => setTrashDialogOpen(true)}
+            ><span aria-hidden="true">♲</span>{trashEntries.length > 0 && <i>{trashEntries.length}</i>}</button>
             {CREATABLE_SECTION_KINDS[section].length > 0 && (
               <button
                 ref={createResourceButtonRef}
@@ -492,15 +532,107 @@ export function Project({
           }}
         />
       )}
-      {trashReceipt && (
+      {trashDialogOpen && (
+        <StudioTrashDialog
+          entries={trashEntries}
+          onClose={closeTrashDialog}
+          onRestored={handleResourceRestored}
+        />
+      )}
+      {lifecycleReceipt && (
         <div className="resource-trash-receipt" role="status">
           <span aria-hidden="true">↶</span>
-          <div><strong>{trashReceipt.label} moved to Studio Trash</strong><code>{trashReceipt.path}</code></div>
-          <button type="button" aria-label="Dismiss trash receipt" onClick={() => setTrashReceipt(null)}>×</button>
+          <div><strong>{lifecycleReceipt.title}</strong><code>{lifecycleReceipt.path}</code></div>
+          <button type="button" aria-label="Dismiss lifecycle receipt" onClick={() => setLifecycleReceipt(null)}>×</button>
         </div>
       )}
     </div>
   );
+}
+
+function StudioTrashDialog({
+  entries,
+  onClose,
+  onRestored,
+}: {
+  entries: StudioTrashEntry[];
+  onClose: () => void;
+  onRestored: (restored: Awaited<ReturnType<typeof restoreStudioTrashEntry>>) => void;
+}) {
+  const [restoringPath, setRestoringPath] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const firstRestoreButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    (firstRestoreButtonRef.current ?? closeButtonRef.current)?.focus();
+  }, []);
+
+  const restore = async (entry: StudioTrashEntry) => {
+    setRestoringPath(entry.trashPath);
+    setError(null);
+    try {
+      onRestored(await restoreStudioTrashEntry(entry.trashPath));
+      setRestoringPath(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setRestoringPath(null);
+    }
+  };
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="studio-trash-overlay" role="dialog" aria-modal="true" aria-labelledby="studio-trash-title" onClick={restoringPath ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !restoringPath) onClose();
+    }}>
+      <div ref={dialogRef} className="studio-trash-dialog" onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header><div><span>RECOVERY SHELF</span><strong id="studio-trash-title">Studio Trash</strong><small>Restore source files to their original project location, then validate the complete game before accepting them.</small></div><button ref={closeButtonRef} type="button" aria-label="Close Studio Trash" disabled={Boolean(restoringPath)} onClick={onClose}>×</button></header>
+        <div className="studio-trash-body">
+          {entries.length === 0 ? (
+            <div className="studio-trash-empty"><i aria-hidden="true">♲</i><strong>Studio Trash is empty</strong><span>Resources moved from the Database or World editor will wait here for recovery.</span></div>
+          ) : entries.map((entry, index) => {
+            const meta = KIND_META[entry.kind] ?? { icon: "·", label: entry.kind };
+            return (
+              <article className="studio-trash-entry" key={entry.trashPath}>
+                <i className={`kind-${entry.kind}`} aria-hidden="true">{meta.icon}</i>
+                <div><span>{meta.label}</span><strong>{entry.label}</strong><code>{entry.sourcePath}</code><small>Moved {formatTrashDate(entry.deletedAt)}</small></div>
+                <button ref={index === 0 ? firstRestoreButtonRef : undefined} type="button" disabled={Boolean(restoringPath)} onClick={() => void restore(entry)}>{restoringPath === entry.trashPath ? "Validating…" : "Restore"}</button>
+              </article>
+            );
+          })}
+          {error && <div className="studio-trash-error" role="alert"><strong>Restore failed</strong><span>{error}</span><small>The entry remains in Studio Trash.</small></div>}
+        </div>
+        <footer><span>{entries.length} RECOVERABLE {entries.length === 1 ? "RESOURCE" : "RESOURCES"}</span><button type="button" disabled={Boolean(restoringPath)} onClick={onClose}>Done</button></footer>
+      </div>
+    </div>
+  );
+}
+
+function formatTrashDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function CreateResourceDialog({

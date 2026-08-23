@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Game } from "@rpg-harness/engine";
-import { ResourceDeleteError, trashProjectResource } from "./resource-delete";
+import {
+  readStudioTrash,
+  ResourceDeleteError,
+  restoreStudioTrashEntry,
+  trashProjectResource,
+} from "./resource-delete";
 
 const created: string[] = [];
 
@@ -88,5 +93,58 @@ describe("Studio resource trash", () => {
       async () => { throw new Error("project validation failed"); },
     )).rejects.toThrow("project validation failed");
     expect(await readFile(path.join(directory, "characters/guide.md"), "utf-8")).toBe(source);
+  });
+
+  test("lists metadata and restores a trashed resource through a validated reload", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "autogal-trash-"));
+    created.push(directory);
+    await mkdir(path.join(directory, "characters"));
+    const source = "---\nid: guide\nname: Guide\n---\n";
+    await writeFile(path.join(directory, "characters/guide.md"), source);
+    const trashed = await trashProjectResource(
+      directory,
+      project([{ id: "guide", name: "Guide" }]),
+      "character",
+      "guide",
+      async () => project([]),
+      () => new Date("2026-08-23T01:02:03.456Z"),
+    );
+
+    expect(await readStudioTrash(directory)).toEqual([{
+      trashPath: trashed.trashPath,
+      sourcePath: "characters/guide.md",
+      deletedAt: "2026-08-23T01:02:03.456Z",
+      kind: "character",
+      id: "guide",
+      key: "character:guide",
+      label: "Guide",
+    }]);
+    const restored = await restoreStudioTrashEntry(directory, trashed.trashPath, async () =>
+      project([{ id: "guide", name: "Guide" }])
+    );
+    expect(restored.resource.key).toBe("character:guide");
+    expect(await readFile(path.join(directory, "characters/guide.md"), "utf-8")).toBe(source);
+    expect(await readStudioTrash(directory)).toEqual([]);
+  });
+
+  test("keeps the trash entry when its authoritative source path has been reused", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "autogal-trash-"));
+    created.push(directory);
+    await mkdir(path.join(directory, "characters"));
+    await writeFile(path.join(directory, "characters/guide.md"), "old");
+    const trashed = await trashProjectResource(
+      directory,
+      project([{ id: "guide", name: "Guide" }]),
+      "character",
+      "guide",
+      async () => project([]),
+    );
+    await writeFile(path.join(directory, "characters/guide.md"), "new");
+
+    await expect(restoreStudioTrashEntry(directory, trashed.trashPath, async () =>
+      project([{ id: "guide", name: "Guide" }])
+    )).rejects.toMatchObject({ status: 409 });
+    expect(await readFile(path.join(directory, "characters/guide.md"), "utf-8")).toBe("new");
+    expect(await readStudioTrash(directory)).toHaveLength(1);
   });
 });

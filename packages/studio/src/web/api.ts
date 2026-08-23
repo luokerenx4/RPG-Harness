@@ -180,6 +180,44 @@ export interface TrashProjectResourceResponse {
   project: ProjectResponse;
 }
 
+export interface StudioTrashEntry {
+  trashPath: string;
+  sourcePath: string;
+  deletedAt: string;
+  kind: ProjectResourceKind;
+  id: string;
+  key: string;
+  label: string;
+}
+
+export async function fetchStudioTrash(): Promise<StudioTrashEntry[]> {
+  const response = await fetch("/api/trash");
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const body = await response.json() as { entries?: StudioTrashEntry[] };
+  return body.entries ?? [];
+}
+
+export interface RestoreStudioTrashResponse {
+  entry: StudioTrashEntry;
+  resource: ProjectResourceNode;
+  project: ProjectResponse;
+}
+
+export async function restoreStudioTrashEntry(
+  trashPath: string,
+): Promise<RestoreStudioTrashResponse> {
+  const response = await fetch("/api/trash/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trashPath }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function trashProjectResource(
   kind: ProjectResourceKind,
   id: string,

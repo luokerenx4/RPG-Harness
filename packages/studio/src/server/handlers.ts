@@ -22,7 +22,12 @@ import {
   ResourceCreateError,
   type CreatableResourceKind,
 } from "./resource-create";
-import { ResourceDeleteError, trashProjectResource } from "./resource-delete";
+import {
+  readStudioTrash,
+  ResourceDeleteError,
+  restoreStudioTrashEntry,
+  trashProjectResource,
+} from "./resource-delete";
 
 interface Ctx {
   gameDir: string;
@@ -41,6 +46,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
     if (pathname === "/api/game") return getGame(ctx);
     if (pathname === "/api/project") return getProject(ctx);
     if (pathname === "/api/resource-source") return getResourceSource(ctx, url);
+    if (pathname === "/api/trash") return getStudioTrash(ctx);
     if (pathname === "/api/assets") return getAssets(ctx);
 
     const mapPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/preview$/);
@@ -67,6 +73,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   if (method === "POST") {
     if (pathname === "/api/resources") return postProjectResource(ctx, req);
+    if (pathname === "/api/trash/restore") return postRestoreStudioTrash(ctx, req);
     // /api/assets/<asset-path>/source       — upload source.quality.png
     // /api/assets/<asset-path>/render-tui   — invoke chafa
     const m = pathname.match(/^\/api\/assets\/(.+)\/(source|render-tui)$/);
@@ -90,6 +97,40 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function getStudioTrash(ctx: Ctx): Promise<Response> {
+  return json({ entries: await readStudioTrash(ctx.gameDir) });
+}
+
+async function postRestoreStudioTrash(ctx: Ctx, req: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const trashPath = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>).trashPath
+    : undefined;
+  if (typeof trashPath !== "string") return json({ error: "trashPath must be a string" }, 400);
+  try {
+    const restored = await restoreStudioTrashEntry(
+      ctx.gameDir,
+      trashPath,
+      () => loadGame(ctx.gameDir),
+    );
+    return json({
+      entry: restored.entry,
+      resource: restored.resource,
+      project: await projectGame(ctx, restored.game),
+    });
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof ResourceDeleteError ? error.status : 400,
+    );
+  }
 }
 
 async function deleteProjectResource(ctx: Ctx, url: URL): Promise<Response> {
