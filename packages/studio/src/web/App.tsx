@@ -46,6 +46,16 @@ export function App() {
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
 
+  useEffect(() => {
+    if (!draftActive) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [draftActive]);
+
   return (
     <div className="studio-app">
       <header className="studio-titlebar">
@@ -92,7 +102,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<Project onDraftGuardChange={handleDraftGuardChange} />} />
             <Route path="/assets" element={<Gallery />} />
-            <Route path="/asset/*" element={<AssetDetail />} />
+            <Route path="/asset/*" element={<AssetDetail onDraftGuardChange={handleDraftGuardChange} />} />
           </Routes>
         )}
       </main>

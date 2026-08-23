@@ -2553,6 +2553,12 @@ summary:focus-visible {
 .asset-detail-page .back-link span { font-size: 20px; line-height: 10px; }
 .asset-detail-page .detail-section { border-color: var(--studio-line); border-radius: 8px; background: var(--studio-panel); }
 .asset-detail-page .btn { border-color: var(--studio-line-strong); border-radius: 5px; background: #1a1f28; }
+.asset-dirty-state { display: inline-flex; align-items: center; gap: 5px; color: #59636f; font-size: 7px; font-weight: 750; letter-spacing: .1em; }
+.asset-dirty-state i { width: 5px; height: 5px; border-radius: 50%; background: var(--studio-green); }
+.asset-dirty-state.dirty { color: var(--studio-orange); }
+.asset-dirty-state.dirty i { background: var(--studio-orange); box-shadow: 0 0 7px rgba(231,168,106,.45); }
+.asset-save-error { display: flex; gap: 8px; margin-bottom: 10px; padding: 8px 9px; color: #9ca5af; border: 1px solid rgba(224,111,121,.34); border-radius: 5px; background: rgba(224,111,121,.055); font-size: 8px; }
+.asset-save-error strong { flex: 0 0 auto; color: var(--studio-red); }
 
 @media (min-width: 1500px) {
   .project-workbench { grid-template-columns: 60px 310px minmax(0,1fr); }

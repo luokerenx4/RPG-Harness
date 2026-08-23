@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AnsiToHtml from "ansi-to-html";
 import type {
   AssetRow,
@@ -21,6 +21,7 @@ import {
   uploadSource,
 } from "../api";
 import type { PatchableSpecFields } from "../api";
+import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
 
 // Server's whitelist (mirrored here for the dropdown). Each entry
 // carries a one-line `hint` shown next to the dropdown when that
@@ -113,6 +114,18 @@ interface DitherOpt {
   label: string;
   hint: string;
 }
+
+interface AssetEditBuffer {
+  description: string;
+  prompt: string;
+  placeholder: string;
+  tagsCsv: string;
+  sizeTuiCols: string;
+  sizeTuiRows: string;
+  sizeWebAspect: string;
+  refsCharactersCsv: string;
+  refsEmotion: string;
+}
 const DITHER_OPTIONS: DitherOpt[] = [
   {
     value: "none",
@@ -148,8 +161,13 @@ function formatBytes(n: number): string {
 // React Router's splat (`/asset/*`) preserves that, accessible via
 // useLocation since `useParams` only gives the splat as a single
 // param — same effect via location.pathname.slice.
-export function AssetDetail() {
+export function AssetDetail({
+  onDraftGuardChange,
+}: {
+  onDraftGuardChange?: (guard: StudioDraftGuard | null) => void;
+}) {
   const loc = useLocation();
+  const navigate = useNavigate();
   const assetPath = loc.pathname.replace(/^\/asset\//, "");
 
   const [asset, setAsset] = useState<AssetRow | null>(null);
@@ -185,18 +203,10 @@ export function AssetDetail() {
   // YAML round-trip stays minimal (untouched keys keep their author-
   // formatted layout). On discard, we drop the buffer.
   const [editing, setEditing] = useState(false);
-  const [editBuf, setEditBuf] = useState<{
-    description: string;
-    prompt: string;
-    placeholder: string;
-    tagsCsv: string;
-    sizeTuiCols: string;
-    sizeTuiRows: string;
-    sizeWebAspect: string;
-    refsCharactersCsv: string;
-    refsEmotion: string;
-  } | null>(null);
+  const [editBuf, setEditBuf] = useState<AssetEditBuffer | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<"cancel" | "back" | null>(null);
 
   // After an upload or render, the asset's renderings flip on the
   // server — refetch + re-pull the preview so the UI mirrors disk.
@@ -276,6 +286,37 @@ export function AssetDetail() {
       });
   }, []);
 
+  const dirty = Boolean(asset && editBuf && (
+    JSON.stringify(editBuf) !== JSON.stringify(assetEditBuffer(asset))
+  ));
+
+  useEffect(() => {
+    onDraftGuardChange?.(editing && dirty && asset ? {
+      label: `Asset spec · ${asset.placeholder}`,
+      save: handleSave,
+      discard: cancelEditing,
+    } : null);
+  }, [editing, dirty, saving, assetPath, editBuf, asset, onDraftGuardChange]);
+
+  useEffect(() => () => onDraftGuardChange?.(null), [onDraftGuardChange]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) {
+        event.preventDefault();
+        if (dirty) setPendingLeave("cancel");
+        else cancelEditing();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (dirty && !saving) void handleSave();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editing, dirty, saving, editBuf]);
+
   if (err) return <Layout backTo="/"><div className="empty">⚠ {err}</div></Layout>;
   if (!asset) return <Layout backTo="/"><div className="empty">loading…</div></Layout>;
 
@@ -302,28 +343,17 @@ export function AssetDetail() {
   // The other fields are direct string copies.
   const startEditing = () => {
     if (!asset) return;
-    setEditBuf({
-      description: asset.description,
-      prompt: asset.prompt,
-      placeholder: asset.placeholder,
-      tagsCsv: (asset.tags ?? []).join(", "),
-      sizeTuiCols: asset.sizeHint?.tui?.cols
-        ? String(asset.sizeHint.tui.cols)
-        : "",
-      sizeTuiRows: asset.sizeHint?.tui?.rows
-        ? String(asset.sizeHint.tui.rows)
-        : "",
-      sizeWebAspect: asset.sizeHint?.web?.aspect ?? "",
-      refsCharactersCsv: (asset.refs?.characters ?? []).join(", "),
-      refsEmotion:
-        typeof asset.refs?.emotion === "string" ? asset.refs.emotion : "",
-    });
+    setEditBuf(assetEditBuffer(asset));
+    setSaveError(null);
+    setPendingLeave(null);
     setEditing(true);
   };
 
   const cancelEditing = () => {
     setEditing(false);
     setEditBuf(null);
+    setSaveError(null);
+    setPendingLeave(null);
   };
 
   // Build a PatchableSpecFields payload from the diff between asset
@@ -331,7 +361,7 @@ export function AssetDetail() {
   // on the server then only touches those lines, preserving any
   // surrounding comments and key ordering.
   const handleSave = async () => {
-    if (!asset || !editBuf) return;
+    if (!asset || !editBuf) return false;
     const patch: PatchableSpecFields = {};
 
     if (editBuf.description !== asset.description) {
@@ -399,18 +429,25 @@ export function AssetDetail() {
       showToast(setToast, "no changes");
       setEditing(false);
       setEditBuf(null);
-      return;
+      setPendingLeave(null);
+      return true;
     }
 
     setSaving(true);
+    setSaveError(null);
     try {
       const updated = await patchSpec(assetPath, patch);
       setAsset(updated);
       setEditing(false);
       setEditBuf(null);
       showToast(setToast, "spec saved");
+      setPendingLeave(null);
+      return true;
     } catch (e) {
-      showToast(setToast, (e as Error).message);
+      const message = (e as Error).message;
+      setSaveError(message);
+      showToast(setToast, message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -492,7 +529,11 @@ export function AssetDetail() {
     asset.renderings.sourceQuality && chafaPresent && busy === null;
 
   return (
-    <Layout backTo="/assets">
+    <Layout backTo="/assets" onBack={(event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      setPendingLeave("back");
+    }}>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 4 }}>
@@ -513,17 +554,18 @@ export function AssetDetail() {
               <span>spec</span>
               {editing ? (
                 <span className="row">
+                  <span className={`asset-dirty-state ${dirty ? "dirty" : "clean"}`}><i />{dirty ? "UNSAVED" : "NO CHANGES"}</span>
                   <button
                     className="btn"
-                    onClick={cancelEditing}
+                    onClick={() => dirty ? setPendingLeave("cancel") : cancelEditing()}
                     disabled={saving}
                   >
                     discard
                   </button>
                   <button
                     className="btn primary"
-                    onClick={handleSave}
-                    disabled={saving}
+                    onClick={() => void handleSave()}
+                    disabled={!dirty || saving}
                   >
                     {saving ? "saving…" : "save"}
                   </button>
@@ -534,6 +576,7 @@ export function AssetDetail() {
                 </button>
               )}
             </h2>
+            {saveError && <div className="asset-save-error" role="alert"><strong>Spec rejected · draft preserved</strong><span>{saveError}</span></div>}
             {!editing && (
               <dl className="kv">
                 <dt>kind</dt>
@@ -1069,21 +1112,57 @@ export function AssetDetail() {
         </div>
       </div>
 
+      {pendingLeave && asset && (
+        <DraftNavigationDialog
+          guard={{ label: `Asset spec · ${asset.placeholder}`, save: handleSave, discard: cancelEditing }}
+          destination={pendingLeave === "back" ? "Asset Library" : "asset preview"}
+          saving={saving}
+          error={saveError}
+          onStay={() => setPendingLeave(null)}
+          onDiscard={() => {
+            const leave = pendingLeave;
+            cancelEditing();
+            if (leave === "back") navigate("/assets");
+          }}
+          onSave={() => {
+            const leave = pendingLeave;
+            void handleSave().then((saved) => {
+              if (saved && leave === "back") navigate("/assets");
+            });
+          }}
+        />
+      )}
       {toast && <div className="toast">{toast}</div>}
     </Layout>
   );
 }
 
+function assetEditBuffer(asset: AssetRow): AssetEditBuffer {
+  return {
+    description: asset.description,
+    prompt: asset.prompt,
+    placeholder: asset.placeholder,
+    tagsCsv: (asset.tags ?? []).join(", "),
+    sizeTuiCols: asset.sizeHint?.tui?.cols ? String(asset.sizeHint.tui.cols) : "",
+    sizeTuiRows: asset.sizeHint?.tui?.rows ? String(asset.sizeHint.tui.rows) : "",
+    sizeWebAspect: asset.sizeHint?.web?.aspect ?? "",
+    refsCharactersCsv: (asset.refs?.characters ?? []).join(", "),
+    refsEmotion: typeof asset.refs?.emotion === "string" ? asset.refs.emotion : "",
+  };
+}
+
 function Layout({
   children,
   backTo,
+  onBack,
 }: {
   children: React.ReactNode;
   backTo: string;
+  onBack?: React.MouseEventHandler<HTMLAnchorElement>;
 }) {
   return (
     <div className="asset-detail-page">
-      <Link to={backTo} className="back-link">
+      <Link to={backTo} className="back-link" onClick={onBack}>
         <span>‹</span> Asset Library
       </Link>
       {children}
