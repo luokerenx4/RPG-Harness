@@ -124,6 +124,16 @@ const REMOVABLE_KINDS = new Set<ProjectResourceKind>([
   "script",
 ]);
 
+const STANDALONE_MAP_CHAIN = "";
+
+export interface MapTreeChainGroup {
+  key: string;
+  label: string;
+  rows: ProjectResourceNode[];
+  spatialCount: number;
+  entryCount: number;
+}
+
 type ProjectNavigationIntent =
   | { kind: "select"; key: string; label: string; section?: ProjectSection }
   | { kind: "database-overview"; label: string }
@@ -144,6 +154,7 @@ export function Project({
   const [collapsedKinds, setCollapsedKinds] = useState<Set<ProjectResourceKind>>(
     () => new Set(["manifest"]),
   );
+  const [collapsedMapChains, setCollapsedMapChains] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [draftActive, setDraftActive] = useState(false);
@@ -193,6 +204,14 @@ export function Project({
           value.graph.resources[0]?.key ?? null;
         setSelectedKey(initial);
         setOpenKeys(initial ? [initial] : []);
+        const initialMapId = value.graph.resources.find((resource) => resource.key === initial)?.id;
+        const initialMap = value.maps.find((candidate) => candidate.id === initialMapId);
+        setCollapsedMapChains(new Set(
+          groupMapTreeResources(
+            value.graph.resources.filter((resource) => resource.kind === "map"),
+            value.maps,
+          ).map((group) => group.key).filter((key) => key !== mapTreeChainKey(initialMap)),
+        ));
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
@@ -217,24 +236,46 @@ export function Project({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const mapById = useMemo(
+    () => new Map((project?.maps ?? []).map((candidate) => [candidate.id, candidate])),
+    [project],
+  );
   const groups = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const allowedKinds = new Set(SECTION_KINDS[section]);
     const resources = (project?.graph.resources ?? []).filter((resource) => {
+      const resourceMap = resource.kind === "map" ? mapById.get(resource.id) : undefined;
+      const mapGroupLabel = mapTreeChainLabel(resourceMap).toLowerCase();
       const matches = normalized.length === 0 ||
         resource.key.toLowerCase().includes(normalized) ||
-        resource.label.toLowerCase().includes(normalized);
+        resource.label.toLowerCase().includes(normalized) ||
+        (resource.kind === "map" && mapGroupLabel.includes(normalized));
       return matches && (normalized.length > 0 || allowedKinds.has(resource.kind));
     });
     return KIND_ORDER.flatMap((kind) => {
       const rows = resources.filter((resource) => resource.kind === kind);
       return rows.length > 0 ? [{ kind, rows }] : [];
     });
-  }, [project, query, section]);
-  const mapById = useMemo(
-    () => new Map((project?.maps ?? []).map((candidate) => [candidate.id, candidate])),
-    [project],
-  );
+  }, [mapById, project, query, section]);
+
+  useEffect(() => {
+    if (!project || !selectedKey) return;
+    const selectedResource = project.graph.resources.find((resource) => resource.key === selectedKey);
+    if (selectedResource?.kind !== "map") return;
+    const chainKey = mapTreeChainKey(mapById.get(selectedResource.id));
+    setCollapsedKinds((current) => {
+      if (!current.has("map")) return current;
+      const next = new Set(current);
+      next.delete("map");
+      return next;
+    });
+    setCollapsedMapChains((current) => {
+      if (!current.has(chainKey)) return current;
+      const next = new Set(current);
+      next.delete(chainKey);
+      return next;
+    });
+  }, [mapById, project, selectedKey]);
 
   if (error) return <div className="empty">⚠ {error}</div>;
   if (!project) return <div className="empty">loading project…</div>;
@@ -248,6 +289,22 @@ export function Project({
     : undefined;
 
   const commitSelectResource = (key: string) => {
+    const selectedResource = project.graph.resources.find((resource) => resource.key === key);
+    if (selectedResource?.kind === "map") {
+      const chainKey = mapTreeChainKey(mapById.get(selectedResource.id));
+      setCollapsedKinds((current) => {
+        if (!current.has("map")) return current;
+        const next = new Set(current);
+        next.delete("map");
+        return next;
+      });
+      setCollapsedMapChains((current) => {
+        if (!current.has(chainKey)) return current;
+        const next = new Set(current);
+        next.delete(chainKey);
+        return next;
+      });
+    }
     setDatabaseOverviewOpen(false);
     setSelectedKey(key);
     setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
@@ -270,7 +327,7 @@ export function Project({
   const navigateResourceTree = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) return;
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(
-      ".resource-group-heading, .resource-row",
+      ".resource-group-heading, .map-chain-heading, .resource-row",
     ));
     const target = event.target instanceof HTMLButtonElement ? event.target : null;
     if (!target || !buttons.includes(target)) return;
@@ -286,12 +343,18 @@ export function Project({
         if ((expanded === "true") !== shouldExpand) {
           event.preventDefault();
           target.click();
+          return;
+        }
+        if (event.key === "ArrowLeft" && target.classList.contains("map-chain-heading")) {
+          event.preventDefault();
+          target.closest(".resource-group")?.querySelector<HTMLButtonElement>(":scope > .resource-group-heading")?.focus();
         }
         return;
       }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        target.closest(".resource-group")?.querySelector<HTMLButtonElement>(".resource-group-heading")?.focus();
+        const chainHeading = target.closest(".map-chain-group")?.querySelector<HTMLButtonElement>(":scope > .map-chain-heading");
+        (chainHeading ?? target.closest(".resource-group")?.querySelector<HTMLButtonElement>(":scope > .resource-group-heading"))?.focus();
       }
       return;
     }
@@ -457,6 +520,41 @@ export function Project({
     });
   };
 
+  const renderResourceRow = (
+    resource: ProjectResourceNode,
+    meta: { icon: string; label: string },
+    level: number,
+  ) => {
+    const resourceMap = resource.kind === "map" ? mapById.get(resource.id) : undefined;
+    const mapSummary = resource.kind === "map" ? summarizeMapTreeResource(resourceMap) : null;
+    return <button
+      type="button"
+      role="treeitem"
+      aria-level={level}
+      draggable={PLACEABLE_KINDS.has(resource.kind)}
+      className={`resource-row ${mapSummary ? "map-resource-row" : ""} ${selectedKey === resource.key ? "selected" : ""}`}
+      key={resource.key}
+      aria-selected={selectedKey === resource.key}
+      onClick={() => selectResource(resource.key)}
+      onDragStart={(event) => {
+        if (!PLACEABLE_KINDS.has(resource.kind)) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.setData("application/x-autogal-resource", resource.key);
+        event.dataTransfer.effectAllowed = "copy";
+      }}
+    >
+      <span className="resource-node-icon">{meta.icon}</span>
+      <span className="resource-node-copy">
+        {resource.kind === "map" ? <span className="resource-node-title"><strong>{resource.label}</strong>{resourceMap?.isEntry && <b className="resource-map-entry">ENTRY</b>}</span> : <strong>{resource.label}</strong>}
+        <small>{resource.id}</small>
+        {mapSummary && <span className={mapSummary.spatial ? "resource-map-summary spatial" : "resource-map-summary"}>{mapSummary.label}</span>}
+      </span>
+      {project.graph.missing.some((entry) => entry.referencedBy.includes(resource.key)) && <i className="resource-problem" title="Missing reference">!</i>}
+    </button>;
+  };
+
   return (
     <div className="project-workbench">
       <nav className="project-activitybar" aria-label="Project sections">
@@ -547,36 +645,31 @@ export function Project({
                   <strong>{meta.label}</strong>
                   <small>{rows.length}</small>
                 </button>
-                {!collapsed && rows.map((resource) => {
-                  const mapSummary = resource.kind === "map"
-                    ? summarizeMapTreeResource(mapById.get(resource.id))
-                    : null;
-                  return <button
-                    type="button"
-                    role="treeitem"
-                    draggable={PLACEABLE_KINDS.has(resource.kind)}
-                    className={`resource-row ${mapSummary ? "map-resource-row" : ""} ${selectedKey === resource.key ? "selected" : ""}`}
-                    key={resource.key}
-                    aria-selected={selectedKey === resource.key}
-                    onClick={() => selectResource(resource.key)}
-                    onDragStart={(event) => {
-                      if (!PLACEABLE_KINDS.has(resource.kind)) {
-                        event.preventDefault();
-                        return;
-                      }
-                      event.dataTransfer.setData("application/x-autogal-resource", resource.key);
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
-                  >
-                    <span className="resource-node-icon">{meta.icon}</span>
-                    <span className="resource-node-copy">
-                      <strong>{resource.label}</strong>
-                      <small>{resource.id}</small>
-                      {mapSummary && <span className={mapSummary.spatial ? "resource-map-summary spatial" : "resource-map-summary"}>{mapSummary.label}</span>}
-                    </span>
-                    {project.graph.missing.some((entry) => entry.referencedBy.includes(resource.key)) && <i className="resource-problem" title="Missing reference">!</i>}
-                  </button>;
-                })}
+                {!collapsed && (kind === "map" ? groupMapTreeResources(rows, project.maps).map((chain) => {
+                  const chainCollapsed = query.trim().length === 0 && collapsedMapChains.has(chain.key);
+                  const containsSelected = chain.rows.some((resource) => resource.key === selectedKey);
+                  const mapCount = `${chain.rows.length} map${chain.rows.length === 1 ? "" : "s"}`;
+                  return <section className="map-chain-group" role="group" aria-label={`${chain.label} maps`} key={chain.key}>
+                    <button
+                      type="button"
+                      className={`map-chain-heading${containsSelected ? " contains-selected" : ""}`}
+                      role="treeitem"
+                      aria-level={2}
+                      aria-expanded={!chainCollapsed}
+                      onClick={() => setCollapsedMapChains((current) => {
+                        const next = new Set(current);
+                        next.has(chain.key) ? next.delete(chain.key) : next.add(chain.key);
+                        return next;
+                      })}
+                    >
+                      <span className="tree-chevron">{chainCollapsed ? "›" : "⌄"}</span>
+                      <span className="map-chain-icon">◇</span>
+                      <span className="map-chain-copy"><strong>{chain.label}</strong><small>{chain.spatialCount > 0 ? `${mapCount} · ${chain.spatialCount} 2D` : mapCount}</small></span>
+                      {chain.entryCount > 0 && <b className="map-chain-entry-count">{chain.entryCount} {chain.entryCount === 1 ? "ENTRY" : "ENTRIES"}</b>}
+                    </button>
+                    {!chainCollapsed && chain.rows.map((resource) => renderResourceRow(resource, meta, 3))}
+                  </section>;
+                }) : rows.map((resource) => renderResourceRow(resource, meta, 2)))}
               </section>
             );
           })}
@@ -4010,6 +4103,48 @@ function cloneMap(map: MapDef): MapDef {
 export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
   return JSON.stringify({ layout: saved.layout, placements: saved.placements ?? [] }) !==
     JSON.stringify({ layout: draft.layout, placements: draft.placements ?? [] });
+}
+
+export function mapTreeChainKey(
+  map: Pick<MapDef, "chain"> | undefined,
+): string {
+  return map?.chain?.trim() || STANDALONE_MAP_CHAIN;
+}
+
+export function mapTreeChainLabel(
+  map: Pick<MapDef, "chain"> | undefined,
+): string {
+  const key = mapTreeChainKey(map);
+  return key === STANDALONE_MAP_CHAIN ? "Standalone" : key;
+}
+
+export function groupMapTreeResources(
+  resources: ProjectResourceNode[],
+  maps: Array<Pick<MapDef, "id" | "chain" | "layout" | "isEntry">>,
+): MapTreeChainGroup[] {
+  const mapById = new Map(maps.map((map) => [map.id, map]));
+  const groups = new Map<string, MapTreeChainGroup>();
+  for (const resource of resources) {
+    if (resource.kind !== "map") continue;
+    const map = mapById.get(resource.id);
+    const key = mapTreeChainKey(map);
+    const group = groups.get(key) ?? {
+      key,
+      label: mapTreeChainLabel(map),
+      rows: [],
+      spatialCount: 0,
+      entryCount: 0,
+    };
+    group.rows.push(resource);
+    if (map?.layout) group.spatialCount += 1;
+    if (map?.isEntry) group.entryCount += 1;
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((left, right) => {
+    if (left.key === STANDALONE_MAP_CHAIN) return -1;
+    if (right.key === STANDALONE_MAP_CHAIN) return 1;
+    return left.key.localeCompare(right.key);
+  });
 }
 
 export function summarizeMapTreeResource(

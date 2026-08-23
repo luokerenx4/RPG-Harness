@@ -9,6 +9,7 @@ import {
   eventTriggerMeta,
   filterPlacementPaletteResources,
   fillMapLayerTiles,
+  groupMapTreeResources,
   groupedStacks,
   hasMapDraftChanges,
   mapEventCommandSummary,
@@ -17,6 +18,7 @@ import {
   mapPlacementGraphicPath,
   mapDraftHistoryReducer,
   mapPlacementResourceLabel,
+  mapTreeChainKey,
   moveMapLayer,
   createMapDraftHistory,
   nextAvailableMapCell,
@@ -426,6 +428,58 @@ describe("Studio map event resource picker", () => {
       label: "NODE MAP · 1 RESOURCE",
     });
     expect(summarizeMapTreeResource(undefined)).toBeNull();
+  });
+
+  test("groups World maps by authored chain while preserving resource order and identity", () => {
+    const resources = [
+      { key: "map:edo_castle", kind: "map", id: "edo_castle", label: "大名府", refs: [] },
+      { key: "map:hell_gate_corridor", kind: "map", id: "hell_gate_corridor", label: "業の廊", refs: [] },
+      { key: "map:hell_gate_mouth", kind: "map", id: "hell_gate_mouth", label: "門口", refs: [] },
+      { key: "map:kuro_swamp_crossroads", kind: "map", id: "kuro_swamp_crossroads", label: "三叉路", refs: [] },
+      { key: "script:intro", kind: "script", id: "intro", label: "Intro", refs: [] },
+    ] as ProjectResourceNode[];
+    const maps = [
+      { id: "edo_castle", name: "大名府", description: "" },
+      { id: "hell_gate_corridor", name: "業の廊", description: "", chain: "hell_gate" },
+      { id: "hell_gate_mouth", name: "門口", description: "", chain: "hell_gate", isEntry: true },
+      {
+        id: "kuro_swamp_crossroads",
+        name: "三叉路",
+        description: "",
+        chain: "kuro_swamp",
+        layout: { width: 12, height: 10, tileWidth: 32, tileHeight: 32, layers: [], regions: [] },
+      },
+    ] as MapDef[];
+
+    const groups = groupMapTreeResources(resources, maps);
+    expect(groups.map(({ key, label, rows, spatialCount, entryCount }) => ({
+      key,
+      label,
+      ids: rows.map((row) => row.id),
+      spatialCount,
+      entryCount,
+    }))).toEqual([{
+      key: "",
+      label: "Standalone",
+      ids: ["edo_castle"],
+      spatialCount: 0,
+      entryCount: 0,
+    }, {
+      key: "hell_gate",
+      label: "hell_gate",
+      ids: ["hell_gate_corridor", "hell_gate_mouth"],
+      spatialCount: 0,
+      entryCount: 1,
+    }, {
+      key: "kuro_swamp",
+      label: "kuro_swamp",
+      ids: ["kuro_swamp_crossroads"],
+      spatialCount: 1,
+      entryCount: 0,
+    }]);
+    expect(groups[1]?.rows[0]).toBe(resources[1]);
+    expect(mapTreeChainKey({ chain: "  hell_gate  " })).toBe("hell_gate");
+    expect(mapTreeChainKey({ chain: "  " })).toBe("");
   });
 
   test("paints and resizes canonical tile-layer matrices without losing authored cells", () => {
