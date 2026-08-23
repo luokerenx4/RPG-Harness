@@ -1912,7 +1912,7 @@ function ResourceReference({
   );
 }
 
-type MapEditorTool = "objects" | "terrain" | "collision";
+type MapEditorTool = "objects" | "terrain" | "collision" | "regions";
 
 function MapOverview({
   map,
@@ -1946,6 +1946,7 @@ function MapOverview({
   const [paintLayerId, setPaintLayerId] = useState("");
   const [paintBrush, setPaintBrush] = useState(1);
   const [canvasPainting, setCanvasPainting] = useState<"paint" | "erase" | null>(null);
+  const [selectedRegionId, setSelectedRegionId] = useState("");
   const mapIdRef = useRef(map.id);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
@@ -1965,6 +1966,7 @@ function MapOverview({
     setPaintLayerId("");
     setPaintBrush(1);
     setCanvasPainting(null);
+    setSelectedRegionId("");
   }, [map]);
 
   const width = draft.layout?.width ?? 1;
@@ -1985,6 +1987,8 @@ function MapOverview({
   const paintTiles = draft.layout && paintLayer
     ? normalizeMapTileMatrix(paintLayer.tiles, draft.layout.width, draft.layout.height)
     : [];
+  const selectedRegion = draft.layout?.regions.find((region) => region.id === selectedRegionId)
+    ?? draft.layout?.regions[0];
   const paletteGroups = useMemo(() => {
     const filtered = filterPlacementPaletteResources(resources, paletteQuery);
     return KIND_ORDER.flatMap((kind) => {
@@ -2034,6 +2038,8 @@ function MapOverview({
     } else if (tool === "collision") {
       setPaintLayerId(collisionLayers[0]?.id ?? "");
       setPaintBrush(1);
+    } else if (tool === "regions") {
+      setSelectedRegionId(draft.layout?.regions[0]?.id ?? "");
     }
   };
 
@@ -2050,6 +2056,38 @@ function MapOverview({
     setDraft((current) => ({
       ...current,
       layout: current.layout ? fillMapLayerTiles(current.layout, paintLayer.id, tile) : undefined,
+    }));
+  };
+
+  const addMapRegion = () => {
+    if (!draft.layout) return;
+    const region = {
+      id: uniqueLocalId("region", draft.layout.regions.map((candidate) => candidate.id)),
+      name: "New region",
+      x: 0,
+      y: 0,
+      width: 2,
+      height: 2,
+    };
+    setDraft((current) => ({
+      ...current,
+      layout: current.layout ? { ...current.layout, regions: [...current.layout.regions, region] } : undefined,
+    }));
+    setSelectedRegionId(region.id);
+  };
+
+  const moveSelectedRegion = (x: number, y: number) => {
+    if (!selectedRegion) return;
+    setDraft((current) => ({
+      ...current,
+      layout: current.layout ? {
+        ...current.layout,
+        regions: current.layout.regions.map((region) => region.id === selectedRegion.id ? {
+          ...region,
+          x: clamp(x, 0, Math.max(0, current.layout!.width - region.width)),
+          y: clamp(y, 0, Math.max(0, current.layout!.height - region.height)),
+        } : region),
+      } : undefined,
     }));
   };
 
@@ -2128,6 +2166,11 @@ function MapOverview({
         if (event.key === "3" && collisionLayers.length > 0) {
           event.preventDefault();
           selectMapTool("collision");
+          return;
+        }
+        if (event.key === "4") {
+          event.preventDefault();
+          selectMapTool("regions");
           return;
         }
       }
@@ -2286,6 +2329,7 @@ function MapOverview({
             <button type="button" className={mapTool === "objects" ? "selected" : ""} aria-pressed={mapTool === "objects"} onClick={() => selectMapTool("objects")}><span>◆</span><strong>Objects</strong><small><kbd>1</kbd> events &amp; start</small></button>
             <button type="button" disabled={terrainLayers.length === 0} className={mapTool === "terrain" ? "selected" : ""} aria-pressed={mapTool === "terrain"} onClick={() => selectMapTool("terrain")}><span>▦</span><strong>Terrain</strong><small><kbd>2</kbd> tile layers</small></button>
             <button type="button" disabled={collisionLayers.length === 0} className={mapTool === "collision" ? "selected" : ""} aria-pressed={mapTool === "collision"} onClick={() => selectMapTool("collision")}><span>▧</span><strong>Collision</strong><small><kbd>3</kbd> passability</small></button>
+            <button type="button" className={mapTool === "regions" ? "selected" : ""} aria-pressed={mapTool === "regions"} onClick={() => selectMapTool("regions")}><span>▱</span><strong>Regions</strong><small><kbd>4</kbd> map zones</small></button>
           </nav>
           {paintLayer && (
             <div className="map-mode-brushes">
@@ -2305,6 +2349,22 @@ function MapOverview({
               )}
               <div className="map-mode-layer-actions"><button type="button" onClick={() => fillPaintLayer(paintBrush)}>Fill</button><button type="button" onClick={() => fillPaintLayer(0)}>Clear</button></div>
               <span className="map-mode-hint">Drag to paint · ⌥ click samples · right-click erases</span>
+            </div>
+          )}
+          {mapTool === "regions" && (
+            <div className="map-mode-brushes map-region-tools">
+              <label>Region<select value={selectedRegion?.id ?? ""} onChange={(event) => setSelectedRegionId(event.target.value)}><option value="" disabled>No regions</option>{draft.layout.regions.map((region) => <option value={region.id} key={region.id}>{region.name ?? region.id}</option>)}</select></label>
+              <button type="button" className="region-add" onClick={addMapRegion}>＋ New region</button>
+              <button type="button" className="region-delete" disabled={!selectedRegion} onClick={() => {
+                if (!selectedRegion) return;
+                setDraft((current) => ({
+                  ...current,
+                  layout: current.layout ? { ...current.layout, regions: current.layout.regions.filter((region) => region.id !== selectedRegion.id) } : undefined,
+                }));
+                setSelectedRegionId("");
+              }}>Delete</button>
+              {selectedRegion && <span className="map-region-tool-readout"><strong>{selectedRegion.name ?? selectedRegion.id}</strong><code>{selectedRegion.x},{selectedRegion.y} · {selectedRegion.width}×{selectedRegion.height}</code></span>}
+              <span className="map-mode-hint">Click a map cell to move the selected region · resize in Map setup</span>
             </div>
           )}
         </section>
@@ -2483,9 +2543,22 @@ function MapOverview({
               )))}
             </div>
           )}
+          {editing && mapTool === "regions" && (
+            <div
+              className="map-region-move-grid"
+              aria-label="Region placement grid"
+              style={{ "--map-cols": width, "--map-rows": height } as React.CSSProperties}
+            >
+              {Array.from({ length: width * height }, (_, index) => {
+                const x = index % width;
+                const y = Math.floor(index / width);
+                return <button type="button" aria-label={`Move region to ${x}, ${y}`} key={`${x}:${y}`} onClick={() => moveSelectedRegion(x, y)} />;
+              })}
+            </div>
+          )}
           {draft.layout.regions.map((region) => (
             <div
-              className="map-region"
+              className={`map-region${mapTool === "regions" && selectedRegion?.id === region.id ? " selected" : ""}`}
               key={region.id}
               title={region.name ?? region.id}
               style={{
@@ -2571,7 +2644,9 @@ function MapOverview({
           <span>{editing
             ? mapTool === "objects"
               ? "Drag project resources onto the canvas · drag objects to move"
-              : `Painting ${paintLayer?.name ?? paintLayer?.id ?? "layer"} · drag to paint · right-click to erase`
+              : mapTool === "regions"
+                ? `Positioning ${selectedRegion?.name ?? selectedRegion?.id ?? "region"} · click a cell to move`
+                : `Painting ${paintLayer?.name ?? paintLayer?.id ?? "layer"} · drag to paint · right-click to erase`
             : "Preview is read-only"}</span>
           <span>{draft.layout ? `${width * height} cells` : "semantic node"}</span>
         </footer>

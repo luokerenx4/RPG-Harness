@@ -536,6 +536,13 @@ code, pre, .mono {
 .map-mode-layer-actions { display: flex; gap: 3px; padding-left: 2px; border-left: 1px solid #28303a; }
 .map-mode-layer-actions button { min-height: 28px; padding: 4px 8px; color: #7e8996; border: 1px solid #303946; border-radius: 3px; background: #141a22; cursor: pointer; font-size: 7px; }
 .map-mode-layer-actions button:hover { color: #e5edf2; border-color: #4a5664; }
+.map-region-tools > button { min-height: 30px; padding: 5px 9px; color: #8d839d; border: 1px solid #393143; border-radius: 3px; background: #17131d; cursor: pointer; font-size: 8px; }
+.map-region-tools > button:hover { color: #ddc9fb; border-color: var(--studio-violet); }
+.map-region-tools > button.region-delete { color: #a9767b; }
+.map-region-tools > button:disabled { opacity: .35; cursor: default; }
+.map-region-tool-readout { display: flex; min-width: 108px; flex-direction: column; gap: 2px; }
+.map-region-tool-readout strong { max-width: 150px; overflow: hidden; color: #c9b8e4; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.map-region-tool-readout code { color: #695c79; font-size: 7px; }
 .map-mode-hint { flex: 0 0 auto; margin-left: auto; color: #56616d; font-size: 7px; }
 .map-structure-editor header,
 .placement-events > header {
@@ -3005,16 +3012,22 @@ summary:focus-visible {
 .map-canvas.editing { border-color: rgba(80,199,217,.65); box-shadow: 0 10px 30px rgba(0,0,0,.42), 0 0 0 1px rgba(80,199,217,.16); }
 .map-canvas.editing.tool-terrain { border-color: rgba(80,199,217,.82); cursor: crosshair; }
 .map-canvas.editing.tool-collision { border-color: rgba(231,168,106,.82); cursor: crosshair; }
+.map-canvas.editing.tool-regions { border-color: rgba(172,133,245,.85); cursor: cell; }
 .map-canvas-paint-grid { position: absolute; inset: 0; z-index: 1000; display: grid; grid-template-columns: repeat(var(--map-cols), 1fr); grid-template-rows: repeat(var(--map-rows), 1fr); }
 .map-canvas-paint-grid button { min-width: 0; min-height: 0; padding: 0; border: 0; border-right: 1px solid transparent; border-bottom: 1px solid transparent; background: transparent; cursor: crosshair; }
 .map-canvas-paint-grid button:hover,
 .map-canvas-paint-grid button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; background: rgba(80,199,217,.16); }
 .map-canvas-paint-grid.kind-collision button:hover,
 .map-canvas-paint-grid.kind-collision button:focus-visible { outline-color: var(--studio-orange); background: rgba(231,168,106,.14); }
+.map-region-move-grid { position: absolute; inset: 0; z-index: 1000; display: grid; grid-template-columns: repeat(var(--map-cols), 1fr); grid-template-rows: repeat(var(--map-rows), 1fr); }
+.map-region-move-grid button { min-width: 0; min-height: 0; padding: 0; border: 0; background: transparent; cursor: cell; }
+.map-region-move-grid button:hover,
+.map-region-move-grid button:focus-visible { outline: 2px solid var(--studio-violet); outline-offset: -2px; background: rgba(172,133,245,.16); }
 .map-tile-preview { position: absolute; pointer-events: none; background: hsl(calc(var(--tile-id, 1) * 43deg) 28% 32% / .34); box-shadow: inset 0 0 0 1px rgba(255,255,255,.035); }
 .map-tile-preview.kind-tile.atlas { background-color: #101720; }
 .map-tile-preview.kind-collision { background: repeating-linear-gradient(135deg, rgba(224,158,75,.3) 0 4px, rgba(57,34,20,.42) 4px 8px); box-shadow: inset 0 0 0 1px rgba(240,190,113,.25); }
-.map-region { background: rgba(172,133,245,.08); border-color: rgba(172,133,245,.55); }
+.map-region { z-index: 50; background: rgba(172,133,245,.08); border-color: rgba(172,133,245,.55); }
+.map-region.selected { z-index: 950; border: 2px solid #d4b9ff; background: rgba(116,73,166,.34); box-shadow: inset 0 0 0 1px rgba(225,209,255,.5), 0 0 22px rgba(172,133,245,.34); }
 .map-region > span { position: absolute; top: 5px; left: 6px; max-width: calc(100% - 12px); overflow: hidden; color: rgba(206,183,247,.68); font-size: 7px; font-weight: 650; letter-spacing: .06em; text-overflow: ellipsis; white-space: nowrap; }
 .map-player-start { border: 2px solid #dffaff; color: #fff; background: #23899a; box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 0 0 3px rgba(80,199,217,.16); }
 .map-player-start > span { font-size: 9px; transform: translateY(-2px); }
