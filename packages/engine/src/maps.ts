@@ -1,4 +1,4 @@
-import type { Condition, MapConnection, MapDef, MapEventTrigger, MapPlacementDef, MapPoint } from "./types";
+import type { Condition, MapConnection, MapDef, MapEventTrigger, MapLayerDef, MapPlacementDef, MapPoint } from "./types";
 
 const MAP_LAYER_ORDER_STRIDE = 10_000;
 const MAP_ENTITY_ORDER_OFFSET = 1_000;
@@ -71,6 +71,11 @@ export function isMapPlacementLayerVisible(map: MapDef, placement: MapPlacementD
   if (!placement.visible) return false;
   if (!placement.layer) return true;
   return map.layout?.layers.find((layer) => layer.id === placement.layer)?.visible ?? true;
+}
+
+/** Full-canvas image layers are a renderer concern backed by ordinary assets. */
+export function collectMapImageLayers(map: MapDef): MapLayerDef[] {
+  return (map.layout?.layers ?? []).filter((layer) => layer.kind === "image" && layer.visible && layer.asset);
 }
 
 /**

@@ -192,14 +192,16 @@ describe("SpatialMapSurface", () => {
         ...map.layout!,
         layers: [
           { id: "ground", kind: "tile", z: 0, visible: true },
+          { id: "mist", kind: "image", z: 5, visible: true, asset: "assets/backgrounds/mist" },
           { id: "actors", kind: "object", z: 10, visible: true },
         ],
       },
       placements: [{ ...map.placements![0]!, layer: "actors" }],
     };
     const html = renderToStaticMarkup(
-      <SpatialMapSurface map={layeredMap} activities={[move]} playerPosition={{ x: 3, y: 4 }} onInput={() => {}} />,
+      <SpatialMapSurface map={layeredMap} activities={[move]} assetUrls={{ "assets/backgrounds/mist": "/assets/mist.webp" }} playerPosition={{ x: 3, y: 4 }} onInput={() => {}} />,
     );
+    expect(html).toContain('class="spatial-map-image-layer" style="background-image:url(&quot;/assets/mist.webp&quot;);z-index:50000"');
     expect(html).toContain('class="spatial-map-player" aria-label="玩家位置 3,4" style="left:37.5%;top:66.66666666666666%;width:12.5%;height:16.666666666666668%;z-index:101004"');
     expect(html).toContain('class="spatial-placement resource-map collision-trigger placement-actionable placement-nearby" style="left:37.5%;top:83.33333333333334%;width:25%;height:16.666666666666664%;z-index:101005"');
 

@@ -15,6 +15,7 @@ export type { InputExpectation, InputRejectionCode, InputResult } from "./input"
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
 export {
   collectMapConnections,
+  collectMapImageLayers,
   isMapPlacementLayerVisible,
   isMapEventPlayerAction,
   mapLayerDisplayOrder,

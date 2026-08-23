@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  collectMapImageLayers,
   isMapEventPlayerAction,
   isMapPlacementLayerVisible,
   mapLayerDisplayOrder,
@@ -150,6 +151,7 @@ export function SpatialMapSurface({
   const moveAvailability = mapMoveAvailability(map, playerPosition);
   const stepTargets = collectSpatialStepTargets(map, playerPosition);
   const visibleTiles = collectSpatialTiles(map);
+  const imageLayers = collectMapImageLayers(map);
 
   useEffect(() => {
     const available = contextOperations.filter(({ activity }) => activity?.available);
@@ -211,6 +213,15 @@ export function SpatialMapSurface({
       >
         <div className="spatial-map-compass" aria-hidden="true"><span>N</span><i>◆</i></div>
         <div className="spatial-map-frame" aria-hidden="true" />
+        {imageLayers.map((layer) => {
+          const imageUrl = layer.asset ? assetUrls?.[layer.asset] : undefined;
+          return imageUrl ? <i
+            aria-hidden="true"
+            className="spatial-map-image-layer"
+            key={layer.id}
+            style={{ backgroundImage: `url(${JSON.stringify(imageUrl)})`, zIndex: mapLayerDisplayOrder(layer.z) }}
+          /> : null;
+        })}
         {visibleTiles.map((tile) => {
           if (tile.kind === "collision" && !(expanded && showPathing)) return null;
           const atlasStyle = tile.kind === "tile"

@@ -12,7 +12,7 @@ import type {
   SwitchDef,
   VariableDef,
 } from "@rpg-harness/engine";
-import { isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
+import { collectMapImageLayers, isMapPlacementLayerVisible, mapLayerDisplayOrder, mapPlacementDisplayOrder, mapPlayerDisplayOrder } from "@rpg-harness/engine";
 import {
   fetchProject,
   fetchMapPreview,
@@ -2479,6 +2479,7 @@ function MapOverview({
         </div>
           <MapStructureEditor
             layout={draft.layout}
+            assets={assets}
             onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
           />
         </details>
@@ -2687,6 +2688,12 @@ function MapOverview({
             setSelectedPlacementId(placement.id);
           }}
         >
+          {collectMapImageLayers(draft).map((layer) => <i
+            aria-hidden="true"
+            className="map-image-layer"
+            key={layer.id}
+            style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(layer.asset!))})`, zIndex: mapLayerDisplayOrder(layer.z) }}
+          />)}
           {collectMapEditorTiles(draft.layout).map((tile) => {
             const atlasStyle = tile.kind === "tile" ? studioTileAtlasStyle(tile.tile, tilesetAsset) : undefined;
             return (
@@ -2907,9 +2914,11 @@ function MapOverview({
 
 function MapStructureEditor({
   layout,
+  assets,
   onChange,
 }: {
   layout: MapLayoutDef;
+  assets: ProjectAssetPreview[];
   onChange: (layout: MapLayoutDef) => void;
 }) {
   const patchLayer = (index: number, patch: Partial<MapLayoutDef["layers"][number]>) =>
@@ -2945,7 +2954,10 @@ function MapStructureEditor({
               <option>tile</option><option>image</option><option>object</option><option>collision</option><option>region</option>
             </select>
             <input type="number" aria-label={`${layer.id} z`} value={layer.z} onChange={(event) => patchLayer(index, { z: Number(event.target.value) })} />
-            <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })} />
+            {layer.kind === "image" ? <select aria-label={`${layer.id} image asset`} value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })}>
+              <option value="">No image asset</option>
+              {assets.filter((asset) => Object.values(asset.renderings).some(Boolean)).map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}
+            </select> : <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })} />}
             <label><input type="checkbox" checked={layer.visible} onChange={(event) => patchLayer(index, { visible: event.target.checked })} /> visible</label>
             <span className="layer-order-controls">
               <button type="button" aria-label={`Move ${layer.id} layer up`} disabled={index === 0} onClick={() => onChange(moveMapLayer(layout, index, -1))}>↑</button>
