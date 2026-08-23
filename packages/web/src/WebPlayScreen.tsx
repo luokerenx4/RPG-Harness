@@ -1031,7 +1031,7 @@ export function StageView({
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
       return (
-        <div className="hub-stage-layout">
+        <div className={`hub-stage-layout${currentMap?.layout ? " has-spatial-map" : ""}`}>
           {currentMap?.layout && (
             <SpatialMapSurface
               map={currentMap}

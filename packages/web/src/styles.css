@@ -245,6 +245,69 @@ body {
   overflow-y: auto;
   scrollbar-width: thin;
 }
+.hub-stage-layout.has-spatial-map {
+  display: grid;
+  grid-template-columns: minmax(320px, 360px) minmax(470px, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+.has-spatial-map .spatial-map-surface {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  padding: 11px;
+  border-color: var(--rpg-line);
+  border-radius: 6px;
+  background:
+    linear-gradient(145deg, rgba(80,199,217,.045), transparent 36%),
+    rgba(8,10,15,.94);
+  box-shadow: 0 18px 50px rgba(0,0,0,.44), inset 0 0 0 1px rgba(255,255,255,.025);
+  backdrop-filter: blur(14px);
+}
+.has-spatial-map .spatial-map-head {
+  margin-bottom: 9px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.has-spatial-map .spatial-map-head strong {
+  margin-top: 2px;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", ui-serif, serif;
+  font-size: 16px;
+  letter-spacing: .06em;
+}
+.has-spatial-map .spatial-map-kicker { color: #64b7c6; font-size: 8px; letter-spacing: .15em; }
+.has-spatial-map .spatial-map-head > span { color: #6a727c; font-size: 8px; letter-spacing: .12em; }
+.has-spatial-map .spatial-map-canvas {
+  min-height: 0;
+  border-color: rgba(80,199,217,.28);
+  background-color: #0d131a;
+  box-shadow: inset 0 0 35px rgba(0,0,0,.32);
+}
+.has-spatial-map .spatial-map-controls { margin-top: 9px; }
+.has-spatial-map .spatial-map-controls button {
+  width: 32px;
+  height: 27px;
+  border-radius: 3px;
+  background: rgba(55,119,132,.18);
+}
+.has-spatial-map .spatial-map-footnote { margin: 7px 2px 0; font-size: 8px; line-height: 1.45; }
+.has-spatial-map .hub-panel {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.has-spatial-map .hub-summary {
+  padding-right: 0;
+  padding-bottom: 3px;
+  border-right: 0;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.has-spatial-map .hub-summary .objective-card,
+.has-spatial-map .hub-summary .resource-group {
+  display: inline-block;
+  width: calc(50% - 5px);
+  margin-right: 6px;
+  vertical-align: top;
+}
 
 .spatial-map-surface {
   flex: none;
@@ -1780,6 +1843,7 @@ textarea:focus-visible {
   .game-identity { border-right: 0; }
   .game-menu { border-left: 1px solid rgba(255,255,255,.065); }
   .hub-panel { grid-template-columns: minmax(220px, 250px) minmax(390px, 1fr); }
+  .hub-stage-layout.has-spatial-map { grid-template-columns: minmax(300px, 335px) minmax(430px,1fr); }
   .ai-control-label { display: none; }
 }
 
@@ -1793,6 +1857,10 @@ textarea:focus-visible {
   .hud-handoff { max-width: 220px; }
   .stage-area { padding: 8px; }
   .hub-panel { grid-template-columns: 1fr; gap: 12px; padding: 10px; }
+  .hub-stage-layout.has-spatial-map { display: flex; }
+  .has-spatial-map .spatial-map-surface { position: static; }
+  .has-spatial-map .hub-summary .objective-card,
+  .has-spatial-map .hub-summary .resource-group { display: block; width: 100%; margin-right: 0; }
   .hub-summary { padding-right: 0; padding-bottom: 4px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.07); }
   .dialogue-box { padding: 18px; }
   .narration-text,
