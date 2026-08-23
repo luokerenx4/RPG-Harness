@@ -3,6 +3,19 @@ name: 三叉路
 chain: kuro_swamp
 difficulty: 1
 bg: assets/backgrounds/swamp-edge
+layout:
+  width: 12
+  height: 10
+  tile_width: 32
+  tile_height: 32
+  player_start: [5, 8]
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: routes, kind: object, z: 10 }
+  regions:
+    - { id: north_path, name: 北の細道, x: 4, y: 0, width: 4, height: 4 }
+    - { id: east_path, name: 東の社道, x: 8, y: 3, width: 4, height: 4 }
+    - { id: deep_path, name: 西奥の獣道, x: 0, y: 3, width: 4, height: 4 }
 encounter_table:
   - { enemy: oni_lesser, weight: 70 }
   - { enemy: null, weight: 30 }
@@ -12,15 +25,16 @@ loot_table:
   - { item: null, min: 0, max: 0, weight: 20 }
 placements:
   - id: kagari_spawn
-    at: [0, 0]
+    at: [5, 6]
+    layer: routes
     visible: false
     resource: { kind: character, id: kagari }
     events:
       - { id: encounter, trigger: "sengoku-raid:spawn", chance: 1.0, run: { kind: script, id: encounter_kagari_first } }
   - id: exit_kuro_swamp_shrine
-    at:
-      - 0
-      - 0
+    at: [9, 5]
+    layer: routes
+    footprint: [1, 2]
     resource:
       kind: map
       id: kuro_swamp_shrine
@@ -31,9 +45,9 @@ placements:
         label: 東
         order: 0
   - id: exit_kuro_swamp_ruined_hut
-    at:
-      - 0
-      - 0
+    at: [5, 1]
+    layer: routes
+    footprint: [2, 1]
     resource:
       kind: map
       id: kuro_swamp_ruined_hut
@@ -44,9 +58,9 @@ placements:
         label: 北
         order: 1
   - id: exit_kuro_swamp_deep_grove
-    at:
-      - 0
-      - 0
+    at: [1, 5]
+    layer: routes
+    footprint: [1, 2]
     resource:
       kind: map
       id: kuro_swamp_deep_grove

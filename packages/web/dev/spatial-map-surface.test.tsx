@@ -77,6 +77,8 @@ describe("SpatialMapSurface", () => {
     });
     expect(describePlacementApproach({ x: 3, y: 4 }, map.placements![0]!))
       .toBe("向南 1 格 · 接触后移动");
+    expect(describePlacementApproach({ x: 3, y: 4 }, map.placements![0]!, 1, "manual"))
+      .toBe("向南 1 格 · 可互动");
     expect(["Enter", "e", "E"].every(isSpatialInteractKey)).toBe(true);
     expect(isSpatialInteractKey(" ")).toBe(false);
   });

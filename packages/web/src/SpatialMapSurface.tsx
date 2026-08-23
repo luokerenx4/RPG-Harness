@@ -222,9 +222,18 @@ export function SpatialMapSurface({
             <small>NEARBY · {playerPosition ? `座標 ${playerPosition.x}, ${playerPosition.y}` : "座標 —"}</small>
             <strong>{nearestName ?? "可见地标なし"}{nearbyLandmarks.length > 1 && <b> +{nearbyLandmarks.length - 1}</b>}</strong>
             <em>{nearbyLandmarks.length > 1
-              ? `${nearbyLandmarks.length} 个对象在行动范围内 · ${contextOperations.length} 个事件`
+                ? `${nearbyLandmarks.length} 个对象在行动范围内 · ${contextOperations.length} 个事件`
               : nearestLandmark && playerPosition
-                ? describePlacementApproach(playerPosition, nearestLandmark.placement, nearestLandmark.distance)
+                ? describePlacementApproach(
+                  playerPosition,
+                  nearestLandmark.placement,
+                  nearestLandmark.distance,
+                  nearestLandmark.operations.some(({ event }) => event.trigger === "interact" || event.trigger === "manual")
+                    ? "manual"
+                    : nearestLandmark.operations.some(({ event }) => event.trigger === "player_touch" || event.trigger === "event_touch")
+                      ? "touch"
+                      : undefined,
+                )
               : "地图上没有已显露的资源"}</em>
           </span>
           {contextOperations.length > 0 && (
@@ -373,14 +382,20 @@ export function describePlacementApproach(
   point: MapPoint,
   placement: MapPlacementDef,
   distance = mapPlacementDistance(point, placement),
+  interactionMode?: "manual" | "touch",
 ): string {
-  if (distance === 0) return placement.resource?.kind === "map" ? "脚下是区域出口" : "目前地 · 可以调查";
+  if (distance === 0) {
+    if (placement.resource?.kind !== "map") return "目前地 · 可以调查";
+    return interactionMode === "manual" ? "目前地 · 可以前往" : "脚下是区域出口";
+  }
   const right = placement.at.x + placement.footprint.width - 1;
   const bottom = placement.at.y + placement.footprint.height - 1;
   const vertical = point.y < placement.at.y ? "向南" : point.y > bottom ? "向北" : "";
   const horizontal = point.x < placement.at.x ? "向东" : point.x > right ? "向西" : "";
   const direction = [vertical, horizontal].filter(Boolean).join("再");
-  const triggerHint = placement.resource?.kind === "map" && distance === 1 ? " · 接触后移动" : "";
+  const triggerHint = placement.resource?.kind === "map" && distance === 1
+    ? interactionMode === "manual" ? " · 可互动" : " · 接触后移动"
+    : "";
   return `${direction || "附近"} ${distance} 格${triggerHint}`;
 }
 
