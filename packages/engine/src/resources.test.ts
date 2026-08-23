@@ -102,4 +102,67 @@ describe("project resource registry", () => {
     }]);
     expect(graph.unreferenced).toContain("character:hero");
   });
+
+  test("tracks engine-standard condition and state-delta references", () => {
+    const graph = buildProjectResourceGraph(game({
+      characters: [{ id: "hero", name: "Hero" }],
+      items: [{
+        id: "tonic",
+        name: "Tonic",
+        description: "",
+        kind: "consumable",
+        effects: { characterStats: { hero: { affection: 1 } } },
+      }],
+      weapons: [{ id: "blade", name: "Blade", description: "", basePower: 1 }],
+      skills: [{
+        id: "spark",
+        name: "Spark",
+        description: "",
+        requires: { inventory: { itemId: "tonic", min: 1 } },
+        effects: { weapons: { blade: { power: 1 } } },
+      }],
+      scripts: [{
+        id: "intro",
+        title: "Intro",
+        requires: { all: [
+          { affection: { character: "hero", min: 1 } },
+          { knowsSkill: "spark" },
+          { weaponPower: { weaponId: "blade", min: 1 } },
+        ] },
+        beats: [{
+          type: "choice",
+          options: [{
+            text: "Use tonic",
+            requires: { selfSwitch: { scriptId: "intro", name: "A" } },
+            effects: {
+              inventory: { tonic: -1 },
+              skills: { learn: ["spark"] },
+              selfSwitches: { intro: { A: true } },
+            },
+          }],
+        }],
+      }],
+      actions: [{
+        id: "practice",
+        title: "Practice",
+        cost: 0,
+        requires: { characterStat: { character: "hero", name: "affection", min: 1 } },
+        effects: { inventory: { tonic: 1 } },
+      }],
+    }));
+
+    expect(graph.resources.find((node) => node.key === "script:intro")?.refs).toEqual([
+      "character:hero",
+      "item:tonic",
+      "script:intro",
+      "skill:spark",
+      "weapon:blade",
+    ]);
+    expect(graph.resources.find((node) => node.key === "item:tonic")?.refs)
+      .toContain("character:hero");
+    expect(graph.resources.find((node) => node.key === "skill:spark")?.refs)
+      .toEqual(["item:tonic", "weapon:blade"]);
+    expect(graph.resources.find((node) => node.key === "action:practice")?.refs)
+      .toEqual(["character:hero", "item:tonic"]);
+  });
 });

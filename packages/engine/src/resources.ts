@@ -128,15 +128,38 @@ function collectResourceRefs(
     if (ref && ref.kind !== "custom") refs.push(ref);
   };
   const obj = value as Record<string, any>;
+  const addCondition = (condition: unknown) => {
+    for (const ref of collectConditionResourceRefs(condition)) add(ref);
+  };
+  const addDelta = (delta: unknown) => {
+    for (const ref of collectStateDeltaResourceRefs(delta)) add(ref);
+  };
+  const addAction = (action: Record<string, any>) => {
+    if (action.itemId) add({ kind: "item", id: action.itemId });
+    if (action.enemyId) add({ kind: "enemy", id: action.enemyId });
+    if (action.skillId) add({ kind: "skill", id: action.skillId });
+    if (action.mapId) add({ kind: "map", id: action.mapId });
+    for (const mapId of action.whenIn ?? []) add({ kind: "map", id: mapId });
+    addCondition(action.requires);
+    addDelta(action.effects);
+  };
 
   if (kind === "manifest") {
     for (const module of obj.modules ?? []) add({ kind: "module", id: module.id });
+    for (const endCondition of obj.training?.endConditions ?? []) addCondition(endCondition.when);
   } else if (kind === "character") {
     for (const asset of Object.values(obj.portraits ?? {})) {
       if (typeof asset === "string") add({ kind: "asset", id: asset });
     }
+  } else if (kind === "item") {
+    addDelta(obj.effects);
+  } else if (kind === "skill") {
+    addCondition(obj.requires);
+    addDelta(obj.cost);
+    addDelta(obj.effects);
   } else if (kind === "script") {
     for (const character of obj.characters ?? []) add({ kind: "character", id: character });
+    addCondition(obj.requires);
     for (const beat of obj.beats ?? []) {
       if (beat.type === "dialogue") add({ kind: "character", id: beat.speaker });
       if (beat.type === "setBg" && beat.assetPath) add({ kind: "asset", id: beat.assetPath });
@@ -145,13 +168,16 @@ function collectResourceRefs(
         if (beat.assetPath) add({ kind: "asset", id: beat.assetPath });
         if (beat.characterId) add({ kind: "character", id: beat.characterId });
       }
+      if (beat.type === "effects") addDelta(beat.effects);
+      if (beat.type === "choice") {
+        for (const option of beat.options ?? []) {
+          addCondition(option.requires);
+          addDelta(option.effects);
+        }
+      }
     }
   } else if (kind === "action") {
-    if (obj.itemId) add({ kind: "item", id: obj.itemId });
-    if (obj.enemyId) add({ kind: "enemy", id: obj.enemyId });
-    if (obj.skillId) add({ kind: "skill", id: obj.skillId });
-    if (obj.mapId) add({ kind: "map", id: obj.mapId });
-    for (const mapId of obj.whenIn ?? []) add({ kind: "map", id: mapId });
+    addAction(obj);
   } else if (kind === "map") {
     if (obj.bg) add({ kind: "asset", id: obj.bg });
     if (obj.layout?.tileset) add({ kind: "asset", id: obj.layout.tileset });
@@ -159,7 +185,11 @@ function collectResourceRefs(
       if (layer.asset) add({ kind: "asset", id: layer.asset });
     }
     if (obj.onEnter) add({ kind: "script", id: obj.onEnter });
-    for (const connection of obj.connections ?? []) add({ kind: "map", id: connection.target });
+    for (const action of obj.actions ?? []) addAction(action);
+    for (const connection of obj.connections ?? []) {
+      add({ kind: "map", id: connection.target });
+      addCondition(connection.requires);
+    }
     for (const encounter of obj.encounterTable ?? []) {
       if (encounter.enemyId) add({ kind: "enemy", id: encounter.enemyId });
     }
@@ -172,14 +202,63 @@ function collectResourceRefs(
     }
     for (const placement of obj.placements ?? []) {
       add(placement.resource);
-      for (const event of placement.events ?? []) add(event.run);
+      addCondition(placement.requires);
+      for (const event of placement.events ?? []) {
+        add(event.run);
+        addCondition(event.requires);
+      }
     }
   } else if (kind === "asset") {
     if (obj.styleRef) add({ kind: "asset", id: obj.styleRef });
     for (const character of obj.refs?.characters ?? []) {
       add({ kind: "character", id: character });
     }
+  } else if (kind === "module") {
+    for (const trigger of obj.triggers ?? []) addCondition(trigger.when);
   }
+  return refs;
+}
+
+function collectConditionResourceRefs(value: unknown): ProjectResourceRef[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const condition = value as Record<string, any>;
+  if (Array.isArray(condition.all)) return condition.all.flatMap(collectConditionResourceRefs);
+  if (Array.isArray(condition.any)) return condition.any.flatMap(collectConditionResourceRefs);
+  if (condition.not) return collectConditionResourceRefs(condition.not);
+  if (typeof condition.scriptCompleted === "string") {
+    return [{ kind: "script", id: condition.scriptCompleted }];
+  }
+  if (typeof condition.affection?.character === "string") {
+    return [{ kind: "character", id: condition.affection.character }];
+  }
+  if (typeof condition.characterStat?.character === "string") {
+    return [{ kind: "character", id: condition.characterStat.character }];
+  }
+  if (typeof condition.inventory?.itemId === "string") {
+    return [{ kind: "item", id: condition.inventory.itemId }];
+  }
+  if (typeof condition.weaponPower?.weaponId === "string") {
+    return [{ kind: "weapon", id: condition.weaponPower.weaponId }];
+  }
+  if (typeof condition.knowsSkill === "string") {
+    return [{ kind: "skill", id: condition.knowsSkill }];
+  }
+  if (typeof condition.selfSwitch?.scriptId === "string") {
+    return [{ kind: "script", id: condition.selfSwitch.scriptId }];
+  }
+  return [];
+}
+
+function collectStateDeltaResourceRefs(value: unknown): ProjectResourceRef[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const delta = value as Record<string, any>;
+  const refs: ProjectResourceRef[] = [];
+  for (const id of Object.keys(delta.characterStats ?? {})) refs.push({ kind: "character", id });
+  for (const id of Object.keys(delta.inventory ?? {})) refs.push({ kind: "item", id });
+  for (const id of Object.keys(delta.weapons ?? {})) refs.push({ kind: "weapon", id });
+  for (const id of delta.skills?.learn ?? []) refs.push({ kind: "skill", id });
+  for (const id of delta.skills?.forget ?? []) refs.push({ kind: "skill", id });
+  for (const id of Object.keys(delta.selfSwitches ?? {})) refs.push({ kind: "script", id });
   return refs;
 }
 
