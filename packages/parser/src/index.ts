@@ -24,6 +24,8 @@ export { parseEnemy, EnemyParseError } from "./enemy";
 export { parseWeapon, WeaponParseError } from "./weapon";
 export { parseSkill, SkillParseError } from "./skill";
 export { parseMap, MapParseError } from "./map";
+export { migrateMapToPlacements } from "./map-migration";
+export type { MapV2MigrationResult } from "./map-migration";
 export { parseAssetSpec, AssetParseError } from "./asset";
 export { validateGame, GameValidationError } from "./validate";
 export type { Manifest } from "./manifest";

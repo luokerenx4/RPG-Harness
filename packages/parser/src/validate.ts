@@ -29,7 +29,14 @@
 // All issues are aggregated and reported in one GameValidationError so
 // authors fix everything in one pass rather than playing whack-a-mole.
 
-import type { Condition, Game, Module, StateDelta } from "@rpg-harness/engine";
+import type {
+  Condition,
+  Game,
+  Module,
+  ProjectResourceRef,
+  StateDelta,
+} from "@rpg-harness/engine";
+import { collectMapConnections } from "@rpg-harness/engine";
 
 export class GameValidationError extends Error {}
 
@@ -43,6 +50,10 @@ interface Registries {
   skills: Set<string>;
   enemies: Set<string>;
   maps: Set<string>;
+  actions: Set<string>;
+  assets: Set<string>;
+  assetKinds: Map<string, string>;
+  modules: Set<string>;
   trainingStats: Set<string>;
 }
 
@@ -66,6 +77,10 @@ export function validateGame(game: Game): void {
     skills: new Set((game.skills ?? []).map((s) => s.id)),
     enemies: new Set((game.enemies ?? []).map((e) => e.id)),
     maps: new Set((game.maps ?? []).map((m) => m.id)),
+    actions: new Set((game.actions ?? []).map((a) => a.id)),
+    assets: new Set((game.assets ?? []).map((a) => a.path)),
+    assetKinds: new Map((game.assets ?? []).map((a) => [a.path, a.kind])),
+    modules: new Set((game.modules ?? []).map((m) => m.id)),
     trainingStats: new Set(
       (game.training?.stats ?? []).map((s) => s.id),
     ),
@@ -217,10 +232,130 @@ export function validateGame(game: Game): void {
     }
   }
 
-  // Walk every map: encounter/loot-table id refs, connection targets,
-  // declared map-level actions, character spawn refs. Maps are flat —
-  // movement is map-to-map and there's no zone hierarchy.
+  // Walk every map: legacy flat fields plus Map v2 layout, placements,
+  // resource references, and event bindings.
   for (const m of game.maps ?? []) {
+    if (m.layout?.tileset !== undefined) {
+      if (!reg.assets.has(m.layout.tileset)) {
+        issues.push({
+          path: `map ${m.id}.layout.tileset`,
+          message: `undeclared asset "${m.layout.tileset}". Declared: ${listOrNone(reg.assets)}`,
+        });
+      } else if (reg.assetKinds.get(m.layout.tileset) !== "tileset") {
+        issues.push({
+          path: `map ${m.id}.layout.tileset`,
+          message: `asset "${m.layout.tileset}" must have kind "tileset"`,
+        });
+      }
+    }
+    const layerIds = new Set<string>();
+    const regionIds = new Set<string>();
+    if (m.layout?.playerStart && (
+      m.layout.playerStart.x < 0 || m.layout.playerStart.y < 0 ||
+      m.layout.playerStart.x >= m.layout.width ||
+      m.layout.playerStart.y >= m.layout.height
+    )) {
+      issues.push({
+        path: `map ${m.id}.layout.player_start`,
+        message: `player start must fit inside ${m.layout.width}x${m.layout.height} layout`,
+      });
+    }
+    for (const layer of m.layout?.layers ?? []) {
+      if (layerIds.has(layer.id)) {
+        issues.push({
+          path: `map ${m.id}.layout.layers[${layer.id}]`,
+          message: `duplicate layer id "${layer.id}"`,
+        });
+      }
+      layerIds.add(layer.id);
+      if (layer.asset !== undefined && !reg.assets.has(layer.asset)) {
+        issues.push({
+          path: `map ${m.id}.layout.layers[${layer.id}].asset`,
+          message: `undeclared asset "${layer.asset}". Declared: ${listOrNone(reg.assets)}`,
+        });
+      }
+    }
+    for (const region of m.layout?.regions ?? []) {
+      if (regionIds.has(region.id)) {
+        issues.push({
+          path: `map ${m.id}.layout.regions[${region.id}]`,
+          message: `duplicate region id "${region.id}"`,
+        });
+      }
+      regionIds.add(region.id);
+      if (
+        region.x < 0 || region.y < 0 || region.width <= 0 || region.height <= 0 ||
+        region.x + region.width > m.layout!.width ||
+        region.y + region.height > m.layout!.height
+      ) {
+        issues.push({
+          path: `map ${m.id}.layout.regions[${region.id}]`,
+          message: `region must fit inside ${m.layout!.width}x${m.layout!.height} layout`,
+        });
+      }
+    }
+
+    const placementIds = new Set<string>();
+    for (const placement of m.placements ?? []) {
+      const where = `map ${m.id}.placements[${placement.id}]`;
+      if (placementIds.has(placement.id)) {
+        issues.push({ path: where, message: `duplicate placement id "${placement.id}"` });
+      }
+      placementIds.add(placement.id);
+      if (placement.layer !== undefined && !layerIds.has(placement.layer)) {
+        issues.push({
+          path: `${where}.layer`,
+          message: `undeclared map layer "${placement.layer}". Declared: ${listOrNone(layerIds)}`,
+        });
+      }
+      if (m.layout !== undefined && (
+        placement.at.x < 0 || placement.at.y < 0 ||
+        placement.footprint.width <= 0 || placement.footprint.height <= 0 ||
+        placement.at.x + placement.footprint.width > m.layout.width ||
+        placement.at.y + placement.footprint.height > m.layout.height
+      )) {
+        issues.push({
+          path: `${where}.at`,
+          message: `placement footprint must fit inside ${m.layout.width}x${m.layout.height} layout`,
+        });
+      }
+      if (placement.resource) {
+        visitProjectResourceRef(placement.resource, `${where}.resource`, reg, issues);
+      }
+      if (placement.requires) {
+        visitCondition(placement.requires, `${where}.requires`, reg, issues);
+      }
+      if (!placement.resource && placement.events.length === 0) {
+        issues.push({
+          path: where,
+          message: `placement must declare a resource or at least one event`,
+        });
+      }
+      const eventIds = new Set<string>();
+      for (const event of placement.events) {
+        const eventWhere = `${where}.events[${event.id}]`;
+        if (eventIds.has(event.id)) {
+          issues.push({ path: eventWhere, message: `duplicate event id "${event.id}"` });
+        }
+        eventIds.add(event.id);
+        if (event.run) {
+          visitProjectResourceRef(event.run, `${eventWhere}.run`, reg, issues);
+        }
+        if (event.requires) {
+          visitCondition(event.requires, `${eventWhere}.requires`, reg, issues);
+        }
+        if (event.trigger.includes(":")) {
+          const moduleId = event.trigger.split(":", 1)[0]!;
+          if (!reg.modules.has(moduleId)) {
+            issues.push({
+              path: `${eventWhere}.trigger`,
+              message: `namespaced trigger references undeclared module "${moduleId}". Declared: ${listOrNone(reg.modules)}`,
+            });
+          }
+        }
+      }
+    }
+
     for (const c of m.connections ?? []) {
       const where = `map ${m.id}.connections`;
       if (!reg.maps.has(c.target)) {
@@ -342,9 +477,13 @@ function validateMapChains(game: Game, issues: Issue[]): void {
       const id = pending.pop()!;
       if (reachable.has(id)) continue;
       reachable.add(id);
-      for (const connection of byId.get(id)?.connections ?? []) {
-        if (ids.has(connection.target) && !reachable.has(connection.target)) {
-          pending.push(connection.target);
+      const current = byId.get(id);
+      const targets = current
+        ? collectMapConnections(current).map((connection) => connection.target)
+        : [];
+      for (const target of targets) {
+        if (ids.has(target) && !reachable.has(target)) {
+          pending.push(target);
         }
       }
     }
@@ -356,6 +495,31 @@ function validateMapChains(game: Game, issues: Issue[]): void {
         message: `unreachable from is_entry map "${entries[0]!.id}" in chain "${chain}"`,
       });
     }
+  }
+}
+
+function visitProjectResourceRef(
+  ref: ProjectResourceRef,
+  path: string,
+  reg: Registries,
+  issues: Issue[],
+): void {
+  if (ref.kind === "custom") return;
+  const registry = ref.kind === "character" ? reg.characters
+    : ref.kind === "item" ? reg.items
+    : ref.kind === "enemy" ? reg.enemies
+    : ref.kind === "weapon" ? reg.weapons
+    : ref.kind === "skill" ? reg.skills
+    : ref.kind === "map" ? reg.maps
+    : ref.kind === "script" ? reg.scripts
+    : ref.kind === "action" ? reg.actions
+    : ref.kind === "asset" ? reg.assets
+    : reg.modules;
+  if (!registry.has(ref.id)) {
+    issues.push({
+      path,
+      message: `undeclared ${ref.kind} "${ref.id}". Declared: ${listOrNone(registry)}`,
+    });
   }
 }
 

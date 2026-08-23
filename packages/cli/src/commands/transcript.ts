@@ -179,6 +179,10 @@ function compactInput(value: unknown): unknown | undefined {
         : { type: "select" };
     case "doActivity":
       return typeof value.id === "string" ? { type: "doActivity", id: value.id } : { type: "doActivity" };
+    case "moveMap":
+      return typeof value.direction === "string"
+        ? { type: "moveMap", direction: value.direction }
+        : { type: "moveMap" };
     case "next":
     case "quit":
       return { type: value.type };

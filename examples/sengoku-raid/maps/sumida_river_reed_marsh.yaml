@@ -3,9 +3,6 @@ name: 葦の藪
 chain: sumida_river
 difficulty: 2
 bg: assets/backgrounds/sumida-reed-marsh
-connections:
-  - { dir: 沼奥, target: sumida_river_drowned_shrine }
-  - { dir: 戻る, target: sumida_river_bridge_foot }
 encounter_table:
   - { enemy: oni_lesser, weight: 50 }
   - { enemy: null, weight: 50 }
@@ -13,3 +10,30 @@ loot_table:
   - { item: soul_shard, min: 1, max: 2, weight: 50 }
   - { item: ryo, min: 10, max: 20, weight: 30 }
   - { item: null, min: 0, max: 0, weight: 20 }
+placements:
+  - id: exit_sumida_river_drowned_shrine
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_drowned_shrine
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 沼奥
+        order: 0
+  - id: exit_sumida_river_bridge_foot
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_bridge_foot
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 1

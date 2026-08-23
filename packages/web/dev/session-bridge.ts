@@ -194,6 +194,7 @@ export type BridgeAiPublicAction =
   | { type: "choose"; scriptId?: string; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
+  | { type: "moveMap"; direction: "north" | "east" | "south" | "west" }
   | { type: "quit" };
 
 export type BridgeAiPublicDecisionBasis =
@@ -1291,6 +1292,9 @@ function isBridgeAiPublicAction(value: unknown): value is BridgeAiPublicAction {
     case "doActivity":
       return typeof action.id === "string" &&
         (action.title === undefined || typeof action.title === "string");
+    case "moveMap":
+      return action.direction === "north" || action.direction === "east" ||
+        action.direction === "south" || action.direction === "west";
     default:
       return false;
   }
@@ -1429,6 +1433,11 @@ function bridgePublicAction(event: BridgeStepEvent): BridgeAiPublicAction | unde
               : input.id,
             ...(typeof activity?.title === "string" ? { title: activity.title } : {}),
           }
+        : undefined;
+    case "moveMap":
+      return input.direction === "north" || input.direction === "east" ||
+          input.direction === "south" || input.direction === "west"
+        ? { type: "moveMap", direction: input.direction }
         : undefined;
     default:
       return undefined;

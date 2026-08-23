@@ -2,13 +2,31 @@
 // projection in handlers.ts — kept in this single file so a type
 // drift between server and client is one diff to spot.
 
+import type {
+  HubActivity,
+  MapDef,
+  MapAvailableResource,
+  ProjectResourceKind,
+  ProjectResourceGraph,
+} from "@rpg-harness/engine";
+
 export interface GameSummary {
   title: string;
-  counts: { characters: number; scripts: number; assets: number };
+  counts: {
+    characters: number;
+    scripts: number;
+    assets: number;
+    maps: number;
+    actions: number;
+    items: number;
+    enemies: number;
+    weapons: number;
+    skills: number;
+  };
   gameDir: string;
 }
 
-export type AssetKind = "portrait" | "bg" | "cg" | "sheet";
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "tileset";
 
 export interface TuiRenderPrefs {
   symbols?: string;
@@ -68,6 +86,91 @@ export async function fetchGame(): Promise<GameSummary> {
   const r = await fetch("/api/game");
   if (!r.ok) throw new Error(`/api/game: ${r.status}`);
   return r.json();
+}
+
+export interface ProjectResponse {
+  graph: ProjectResourceGraph;
+  maps: MapDef[];
+}
+
+export async function fetchProject(): Promise<ProjectResponse> {
+  const r = await fetch("/api/project");
+  if (!r.ok) throw new Error(`/api/project: ${r.status}`);
+  return r.json();
+}
+
+export interface ResourceSourceResponse {
+  path: string;
+  source: string;
+}
+
+function resourceSourceUrl(kind: ProjectResourceKind, id: string): string {
+  const query = new URLSearchParams({ kind, id });
+  return `/api/resource-source?${query.toString()}`;
+}
+
+export async function fetchResourceSource(
+  kind: ProjectResourceKind,
+  id: string,
+): Promise<ResourceSourceResponse> {
+  const response = await fetch(resourceSourceUrl(kind, id));
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function saveResourceSource(
+  kind: ProjectResourceKind,
+  id: string,
+  source: string,
+): Promise<ResourceSourceResponse & { project: ProjectResponse }> {
+  const response = await fetch(resourceSourceUrl(kind, id), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function saveMapSpatial(
+  map: Pick<MapDef, "id" | "layout" | "placements">,
+): Promise<ProjectResponse> {
+  const response = await fetch(`/api/maps/${encodeURIComponent(map.id)}/spatial`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      layout: map.layout ?? null,
+      placements: map.placements ?? [],
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export interface MapPreviewResponse {
+  mapId: string;
+  state: "deterministic-initial";
+  hub: HubActivity[];
+  headless: MapAvailableResource[];
+  tui: string[];
+}
+
+export async function fetchMapPreview(mapId: string): Promise<MapPreviewResponse> {
+  const response = await fetch(`/api/maps/${encodeURIComponent(mapId)}/preview`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
 }
 
 // Ghost references: paths that scripts/characters point at with no

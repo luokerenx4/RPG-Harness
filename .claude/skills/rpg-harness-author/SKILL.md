@@ -453,7 +453,7 @@ assets/
       ...
 ```
 
-Four kinds: **portrait** (right/left/center character on a backdrop), **bg** (full-stage backdrop), **cg** (full-screen takeover for cinematic moments), and **sheet** — a *descriptive* asset (character turnarounds, expression sheets) under `assets/sheets/<slug>/`. Sheets never appear on the game stage (no script directive renders them); they exist for authors and image generators as the identity source that portraits and CGs derive from, and are browsable in the studio gallery like everything else.
+Five kinds: **portrait** (right/left/center character on a backdrop), **bg** (full-stage backdrop), **cg** (full-screen takeover for cinematic moments), **sheet** (descriptive character turnarounds/expression sheets), and **tileset** under `assets/tilesets/<slug>/`. Sheets anchor character identity; tilesets are canonical art referenced by `map.layout.tileset` and consumed by spatial renderers.
 
 **Check for ghost references** — a script can `:cg`/`:bg`/`:portrait` a path (or `defaultPortraits` an emotion) that nothing backs. Players hit these as placeholder text mid-scene. Both surfaces report them: `rpgh assets list <game-dir>` prints a `MISSING` section (also in `--format json` under `dangling`), and the studio gallery pins red ghost cards with every referencing site. Run the scan after writing scripts that mention new assets — the reference and its spec.yaml should land in the same commit.
 
@@ -514,8 +514,11 @@ The TUI's `selectRendering` picks the best file the terminal can display:
 
 ### The studio workflow (browser, optional)
 
-`rpgh studio <game-dir>` boots a local web workbench at `http://localhost:5173` for visual asset management. v3 capabilities:
+`rpgh studio <game-dir>` boots a local project workbench at `http://localhost:5173`. Current capabilities:
 
+- **Project tree** — browse/search maps, characters, items, weapons, skills, enemies, actions, scripts, assets, and modules from the shared Resource Registry
+- **Reference diagnostics** — see forward references, backlinks, missing references, source files, and map placement identities
+- **Map overview** — inspect node maps or their spatial layout, collision, placement stacking, resource kinds, and stable placement coordinates
 - **Gallery** — grid of all asset specs, filter by kind / missing-rendering, color-coded badges
 - **Detail page** — view spec, copy prompt to clipboard, upload PNG to `source.quality.png` slot, render `source.quality.png → tui.txt`/`tui.ans` via chafa with options (symbols / dither / colors / size), preview the rendered output (ANSI colors render correctly in browser)
 - **Inline spec edit** — placeholder / description / prompt / tags / refs / size_hint editable; saves go through the YAML Document API so author-formatted comments and key ordering survive the round-trip
@@ -564,16 +567,15 @@ If you skip the compression step entirely, the repo just won't have a distributi
 
 ## Map file format — `maps/*.yaml`
 
-Optional directory. A map is a **container for events** — actions,
-encounter tables, connections to other maps — scoped to "where the
-player is right now." This is the RPGMaker map model: enter a map, the
-hub shows that map's actions/connections; move to another map, the
-hub re-scopes. The engine tracks the player's current location at
-`state.baseline.currentMapId` as a first-class state slot.
+Optional directory. A map is a spatially-capable **container for resources and
+events** scoped to `state.baseline.currentMapId`. `layout` and `placements` are
+canonical engine data, not renderer metadata. Omitting `layout` keeps the
+compact era-style node experience; it does not create a second map system.
 
-Maps are flat — there is no coordinate axis or zone hierarchy inside
-a map. Movement happens map-to-map via `connections`. The graph between
-maps is the world's geometry.
+Hub, TUI, Headless, and 2D Web consume the same available-resource query.
+Headless selects semantic operations and never needs to simulate a visual
+avatar. Node maps can put all placements at `[0,0]`; spatial maps distribute
+the same resources across layers and coordinates.
 
 ```yaml
 # maps/town.yaml
@@ -585,20 +587,42 @@ difficulty: 1                   # optional, defaults to 1
 chain: shibuya                  # optional grouping label
 on_enter: arrive_town           # optional — script id launched on entry
 
-# Edges to other maps. Surfaced as "move:<target>" activities the
-# engine synthesizes with kind: moveToMap.
-connections:
-  - { dir: 校园, target: lab }
-  - { dir: 回家, target: cyber }
-  - { dir: 奥, target: backroom, requires: { switch: { name: key_held, eq: true } }, locked_hint: 鍵がない }
+layout:                         # optional; omit for a node map
+  width: 20
+  height: 12
+  tile_width: 32                # defaults to 32
+  tile_height: 32
+  player_start: [2, 10]         # optional persisted Web grid position
+  tileset: assets/tilesets/town
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: actors, kind: object, z: 10 }
+  regions:
+    - { id: station, name: 駅前, x: 15, y: 8, width: 4, height: 3 }
 
-# Optional inline map-scoped actions. Same shape as actions/*.yaml.
-actions:
-  - id: work_town
-    title: 街でバイト
-    cost: 1
-    effects:
-      stats: { funds: 12, stamina: -1 }
+placements:
+  - id: school_gate
+    at: [3, 1]
+    layer: actors
+    footprint: [2, 1]
+    collision: trigger
+    resource: { kind: map, id: lab }
+    events:
+      - { id: move, trigger: player_touch, label: 校园 }
+
+  - id: alice
+    at: [8, 5]
+    layer: actors
+    facing: south
+    collision: block
+    resource: { kind: character, id: alice }
+    events:
+      - id: talk
+        trigger: interact
+        label: 与爱丽丝交谈
+        run: { kind: script, id: meet_alice }
+        requires: { switch: { name: alice_present, eq: true } }
+        locked_hint: 她今天不在这里。
 
 # Optional encounter table — modules roll on map entry.
 # enemy ids validated against game.enemies. null = "no encounter this draw".
@@ -612,25 +636,43 @@ loot_table:
   - { item: ryo, min: 8, max: 16, weight: 50 }
   - { item: null, min: 0, max: 0, weight: 50 }
 
-# Optional character spawn rules. Modules consume — engine doesn't roll.
-character_spawns:
-  - { character: asahi, chance: 0.3, encounter_script: meet_asahi }
-
 # Optional: marks this map as an "exit" location (raid extract, scene break).
 # Modules surface a leave/extract action when isExtract is true.
 is_extract: false
 ```
 
-### Connections (the world's geometry)
+### Placements, events, and movement
 
-Each connection declares a one-way edge `dir → target`. The engine
-synthesizes a hub activity `move:<target>` with `kind: moveToMap` for
-each connection from the current map. Players see "→ <target.name>（<dir>）"
-in the menu. The bundled `moveToMap` handler calls `enterMap`, which:
+A placement has a map-local stable `id`, `[x,y]` position, optional layer/z,
+facing, footprint, collision, visibility, condition, one resource reference,
+and ordered event bindings. Supported resource kinds include character, item,
+enemy, weapon, skill, map, script, action, asset, and module. Multiple
+placements may occupy the same coordinate.
+
+Built-in event triggers are `interact`, `player_touch`, `event_touch`,
+`map_enter`, `autorun`, `parallel`, and `manual`; modules may define a
+namespaced trigger such as `puzzle:rotate`. Manual/interact/touch bindings
+become the same semantic activities in Hub and Headless. Automatic bindings
+are not rendered as fake player choices.
+
+`map_enter` executes once per visit. `autorun` executes once when its condition
+first becomes true in that visit. `parallel` and namespaced triggers require a
+preset/module scheduler; the core deliberately does not create an unbounded
+per-frame loop. Use an invisible `[0,0]` script placement with `map_enter`
+instead of legacy `on_enter`, and a namespaced event placement instead of a
+module-private `character_spawns` array.
+
+Spatial Web play submits `moveMap`; the engine persists `runtime.mapPosition`,
+checks bounds and blocking footprints, and turns `player_touch` into the same
+semantic activity. Headless never receives movement as an available choice and
+continues to treat the map as one resource node.
+
+A placement whose resource is `{ kind: map, id: <target> }` is an outgoing map
+edge. Dispatch reaches the same `moveToMap`/module contract, which:
 
 1. Sets `state.baseline.currentMapId` to the target.
 2. Syncs `state.baseline.visuals.bg` to `<target>.bg` when set.
-3. Queues `<target>.on_enter` script (if any) into `currentScriptId`.
+3. Resets the spatial cursor to `<target>.layout.player_start` (or `[0,0]`).
 
 If your game needs side effects on movement (turn count, companion
 passives, encounter rolls, narration variants), don't replace the
@@ -638,8 +680,13 @@ engine handler — observe `onActionComplete` for `action.kind === "moveToMap"`
 in a module and layer behavior on top. The engine handler is the
 default channel.
 
-Locked connections render with `lockedHint` as the reason. The player
-sees where they could go but can't dispatch the move until `requires` is true.
+Placement and event `requires` conditions compose. A false event remains
+visible as locked when `locked_hint` is present.
+
+Legacy `connections:` and `on_enter:` still parse during migration, but new
+content should use placements. Run `rpgh migrate-maps <game-dir>` for a dry-run
+and add `--apply` to convert them into `[0,0]` placements without inventing a
+layout.
 
 ### Entry maps and `onSessionStart`
 
@@ -654,8 +701,9 @@ onSessionStart: (ctx) => {
 }
 ```
 
-Or use `enterMap(ctx.state, ctx.game, "town")` if you also want the
-map's `bg` and `on_enter` script to fire.
+Or use `enterMap(ctx.state, ctx.game, "town")` if you also want the map's `bg`
+and spatial player start to initialize. Entry scripts belong in `map_enter`
+placements.
 
 ### Scoping actions to maps — `Action.whenIn`
 
@@ -684,7 +732,7 @@ A `chain: <id>` label on a map marks "this set of maps belongs to the
 same expedition or scene group." Engine doesn't interpret it. Modules
 read it for sorting / gating / "depart on raid → enter the chain's
 entry map" UI patterns. sengoku-raid uses `chain: "kuro_swamp"` (etc.)
-to group flat raid maps under a player-facing "go raid kuro_swamp"
+to group node-projected raid maps under a player-facing "go raid kuro_swamp"
 button that internally enters the chain's entry map.
 
 ### Map vs. script vs. action — when to pick which
@@ -752,7 +800,8 @@ All actions share a frontmatter envelope: `id` (required, unique), `title` (disp
 **Engine-validated fields** on `Action`:
 - `mapId: <id>` — when set, the parser validates the id against `game.maps[]` at load time. Module handlers can pull the map from `ctx.game.maps?.find(...)` or `ctx.mapMap.get(...)`.
 - `whenIn: [<id>, ...]` — array of map ids. The hub builder filters out the action when `state.baseline.currentMapId` isn't one of them. Omitted = ambient (visible on any map).
-- `kind: "moveToMap"` with `payload: { to: <map_id> }` — bundled engine handler. Calls `enterMap` and transitions the player. Used by the synthesized activities the engine emits for each `MapDef.connections[]`.
+- `exposure: placed` — register the action without listing it globally; it becomes available only through a map placement event. Omitted/`ambient` keeps the normal hub behavior.
+- `kind: "moveToMap"` with `payload: { to: <map_id> }` — bundled engine handler. Calls `enterMap` and transitions the player. Map-resource placement events use this semantic operation.
 
 ## Script ID conventions (suggested, not enforced)
 

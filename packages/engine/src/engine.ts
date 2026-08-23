@@ -15,6 +15,7 @@ import { evaluateCondition } from "./condition";
 import { cloneState, createInitialState, resolveModules, resolveRunFn } from "./state";
 import { ensurePersistedRng, persistedRng } from "./rng";
 import { validateOutput } from "./output";
+import { buildProjectResourceRegistry } from "./resources";
 import type {
   ActionHandler,
   ComposedState,
@@ -57,6 +58,7 @@ export function buildPresetContext(
   const weaponMap = new Map((game.weapons ?? []).map((w) => [w.id, w]));
   const skillMap = new Map((game.skills ?? []).map((s) => [s.id, s]));
   const mapMap = new Map((game.maps ?? []).map((m) => [m.id, m]));
+  const resourceRegistry = buildProjectResourceRegistry(game);
   const assetMap = new Map((game.assets ?? []).map((a) => [a.path, a]));
   const characterNameMap = new Map(
     game.characters.map((c) => [c.id, c.name]),
@@ -150,6 +152,7 @@ export function buildPresetContext(
     weaponMap,
     skillMap,
     mapMap,
+    resourceRegistry,
     assetMap,
     characterNameMap,
     rng,

@@ -29,9 +29,12 @@
 //   both.
 
 import {
+  collectMapAvailableResources,
+  collectMapConnections,
   enterMap,
   evaluateCondition,
   explainCondition,
+  isMapEventPlayerAction,
 } from "@rpg-harness/engine";
 import type {
   AiPersonaDecision,
@@ -391,7 +394,7 @@ function nextRaidReturnActivityId(
     while (frontier.length > 0) {
       if (frontier.some((id) => targetIds.has(id))) return steps;
       frontier = frontier.flatMap((id) =>
-        getMap(ctx, id)?.connections?.flatMap(({ target }) => {
+        (getMap(ctx, id) ? collectMapConnections(getMap(ctx, id)!) : []).flatMap(({ target }) => {
           if (seen.has(target)) return [];
           seen.add(target);
           return [target];
@@ -478,7 +481,7 @@ function nextPulseProgressActivityId(
       while (frontier.length > 0) {
         if (frontier.some((id) => encounterTargets.has(id))) return steps;
         frontier = frontier.flatMap((id) =>
-          getMap(ctx, id)?.connections?.flatMap(({ target }) => {
+          (getMap(ctx, id) ? collectMapConnections(getMap(ctx, id)!) : []).flatMap(({ target }) => {
             if (seen.has(target)) return [];
             seen.add(target);
             return [target];
@@ -1431,7 +1434,7 @@ function buildHubMenu(ctx: Ctx): Output {
   return buildSnapshot(activities, ctx);
 }
 
-function buildRaidMenu(ctx: Ctx): Output {
+function buildRaidMenu(ctx: PresetContext): Output {
   const m = moduleState(ctx);
   if (!m.raid) return buildHubMenu(ctx);
 
@@ -1963,7 +1966,7 @@ function buildRaidMenu(ctx: Ctx): Output {
         available: true,
       });
     }
-    for (const conn of map.connections ?? []) {
+    for (const conn of collectMapConnections(map)) {
       const targetMap = getMap(ctx, conn.target);
       const targetInst = m.raid.visited[conn.target];
       const guaranteedEncounterAhead = hasGuaranteedUnclearedEncounter(
@@ -2004,6 +2007,22 @@ function buildRaidMenu(ctx: Ctx): Output {
           : {}),
       });
     }
+  }
+
+  // Map v2 events share the engine's semantic query with Hub and Headless.
+  // Raid-owned map exits stay on the custom `move` handler above so encounter,
+  // turn, and companion side effects remain atomic; other placed operations
+  // (scripts/actions) can use the standard dispatcher unchanged.
+  const existingIds = new Set(activities.map((activity) => activity.id));
+  for (const resource of collectMapAvailableResources(ctx)) {
+    if (
+      resource.source !== "placement" || !resource.activity ||
+      resource.resource?.kind === "map" ||
+      (resource.trigger !== undefined && !isMapEventPlayerAction(resource.trigger)) ||
+      existingIds.has(resource.activity.id)
+    ) continue;
+    activities.push(resource.activity);
+    existingIds.add(resource.activity.id);
   }
 
   return buildSnapshot(activities, ctx);
@@ -2355,13 +2374,28 @@ function rollCharacterSpawn(
   ctx: Ctx,
   map: MapDef,
 ): CharacterSpawnRule | null {
-  if (!map.characterSpawns) return null;
   const m = moduleState(ctx);
-  for (const rule of map.characterSpawns) {
+  for (const rule of collectCharacterSpawnRules(map)) {
     if (m.metCharacters.includes(rule.characterId)) continue;
     if (ctx.rng() <= rule.chance) return rule;
   }
   return null;
+}
+
+function collectCharacterSpawnRules(map: MapDef): CharacterSpawnRule[] {
+  const placed = (map.placements ?? []).flatMap((placement) => {
+    if (placement.resource?.kind !== "character") return [];
+    const characterId = placement.resource.id;
+    return placement.events.flatMap((event) => {
+      if (event.trigger !== "sengoku-raid:spawn" || event.run?.kind !== "script") return [];
+      return [{
+        characterId,
+        chance: event.chance ?? 1,
+        encounterScriptId: event.run.id,
+      }];
+    });
+  });
+  return [...(map.characterSpawns ?? []), ...placed];
 }
 
 function rollLoot(ctx: Ctx, map: MapDef): Record<string, number> {
@@ -3038,7 +3072,7 @@ const useChinkonhoHandler: ActionHandler = (ctx) => {
 // real arrival won't re-roll). Pushes a narration; returns nothing.
 function mioScry(ctx: Ctx, fromMap: MapDef): void {
   const seen: string[] = [];
-  for (const conn of fromMap.connections ?? []) {
+  for (const conn of collectMapConnections(fromMap)) {
     const nextMap = getMap(ctx, conn.target);
     if (!nextMap) continue;
     const inst = ensureMapInstance(ctx, conn.target);
@@ -3097,7 +3131,7 @@ const moveHandler: ActionHandler = (ctx) => {
   if (!m.raid) return {};
   const cur = currentMap(ctx);
   if (!cur) return denial("現在地が不明だ。");
-  const conn = (cur.connections ?? []).find((c) => c.target === target);
+  const conn = collectMapConnections(cur).find((c) => c.target === target);
   if (!conn) return denial(`${cur.name}からそちらへ通じる道はない。`);
 
   // enterMap writes currentMapId + visuals.bg; we layer raid-specific

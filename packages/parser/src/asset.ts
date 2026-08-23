@@ -34,7 +34,13 @@ export class AssetParseError extends Error {
   }
 }
 
-const VALID_KINDS: ReadonlyArray<AssetKind> = ["portrait", "bg", "cg", "sheet"];
+const VALID_KINDS: ReadonlyArray<AssetKind> = [
+  "portrait",
+  "bg",
+  "cg",
+  "sheet",
+  "tileset",
+];
 
 // Spec.yaml keys consumed directly. Anything else lands in `custom`
 // via extractCustom, preserving forward-compat for fields a future

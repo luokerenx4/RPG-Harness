@@ -52,6 +52,7 @@ import {
 } from "./playtest-reports";
 import { loadGame } from "./loader";
 import { projectStatusCommand } from "./commands/project-status";
+import { migrateMapsCommand } from "./commands/migrate-maps";
 
 const HELP = `rpgh — RPG-Harness: the AI-native RPG Maker runtime and playtest CLI
 
@@ -324,6 +325,11 @@ COMMANDS
       5173 (web); both auto-fall-back to the next free slot if the
       default is occupied.
 
+  migrate-maps <game-dir> [--apply] [--format table|json]
+      Convert legacy map connections into canonical placement-backed exits.
+      Node maps remain node maps: migrated exits share logical coordinate
+      [0,0] until an author adds a layout. Dry-run unless --apply is present.
+
   screenshot <game-dir> [--keys "K1,K2,..."] [--cols N] [--rows N]
              [--wait-ms N] [--out FILE]
       Spawn the TUI inside a PTY, replay a key sequence, and dump the
@@ -429,6 +435,8 @@ async function main(): Promise<void> {
       return runAssets(rest);
     case "studio":
       return runStudio(rest);
+    case "migrate-maps":
+      return runMigrateMaps(rest);
     default:
       process.stderr.write(`Unknown command: ${subcommand}\n\n${HELP}`);
       process.exit(1);
@@ -1627,6 +1635,31 @@ async function runStudio(args: string[]): Promise<void> {
     apiPort: Number(values["api-port"] ?? "4174"),
     webPort: Number(values["web-port"] ?? "5173"),
     open: !values["no-open"],
+  });
+}
+
+async function runMigrateMaps(args: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    options: {
+      apply: { type: "boolean", default: false },
+      format: { type: "string", default: "table" },
+    },
+    allowPositionals: true,
+  });
+  const gameDir = requirePositional(
+    positionals,
+    "rpgh migrate-maps <game-dir> [--apply] [--format table|json]",
+  );
+  const format = values.format ?? "table";
+  if (format !== "table" && format !== "json") {
+    process.stderr.write(`--format must be 'table' or 'json' (got ${format})\n`);
+    process.exit(2);
+  }
+  await migrateMapsCommand({
+    gameDir,
+    apply: Boolean(values.apply),
+    format,
   });
 }
 

@@ -173,7 +173,7 @@ rpg-harness/
 │   ├── frontend-core/  Renderer-agnostic Output→ScreenModel reducer, shared by every shell.
 │   ├── cli/            The `rpgh` binary: play / step / report / test / authoring tools.
 │   ├── web/            Browser (React DOM) shell — engine bundled in-tab, games baked at build time, saves in localStorage. Static; deployable to any host.
-│   └── studio/         Browser-based asset workbench (chafa render loop, spec editor).
+│   └── studio/         Browser project editor (resource graph, maps, asset/chafa workflow).
 ├── examples/
 │   ├── sengoku-raid/    "妖刀奇譚" — bundled flagship. Extraction-shooter raid loop +
 │   │                    GalGame bonds + 3 endings + most of the engine surface
@@ -214,7 +214,8 @@ network of raid maps grouped by `chain:` tags. The player's location lives in
 rendering for in-raid stats (companion HP, pulse counters) via `onHubBuild`,
 and observes `onActionComplete` for `moveToMap` dispatches to layer raid-side
 effects (turn count, encounter rolls). Raids are repeatable expeditions
-through chains of flat maps — set-piece scenes still use scripts (intros,
+through one map-resource graph: most locations use the folded node projection,
+while authored layouts can expose the same graph as a playable 2D scene. Set-piece scenes still use scripts (intros,
 character first-meets, bonding beats); the random raid content lives in
 module action handlers with `ctx.rng()`.
 
@@ -276,8 +277,17 @@ rpgh reach    <game-dir> --from-session SAVE --session AI [--key SCRIPT/CHOICE] 
 rpgh reach-script <game-dir> --script ID --from-session SAVE --session AI # complete uncovered story
 rpgh transcript <game-dir> --session NAME [--tail 80]          # compact fork-aware player history
 rpgh assets   <game-dir> list|prompts [--missing]              # asset manifest / prompt copy
-rpgh studio   <game-dir>                                       # browser asset workbench
+rpgh studio   <game-dir>                                       # browser project workbench
+rpgh migrate-maps <game-dir> [--apply]                         # preview/apply legacy map → placement migration
 ```
+
+Studio treats the whole game folder as one project: manifest, maps, characters,
+items, weapons, skills, enemies, scripts, actions, assets, and modules share a
+searchable resource tree with references/backlinks. Map resources add a spatial
+canvas, drag/drop placements, stacking/event editing, and 2D/Hub/TUI/Headless
+previews. Every editable resource can open its original YAML/Markdown source;
+save reloads and validates the complete game and atomically rolls back invalid
+content, so the repository remains the source of truth.
 
 Every mode runs on the same engine and the same content. `step` and `play` produce
 identical state files. `autoplay` is just `step` with a registered persona deciding
@@ -498,8 +508,8 @@ decision. The compact transcript renders that
 evidence on the selected line, so a tailed or forked history still says that an
 opaque module action meant `nonlethal / mercy / memory` without retaining the
 entire preceding menu or leaking its dispatch payload.
-`assets` and `studio` are authoring-side tools — they help humans (or AI) fill in
-visual art for the spec.yaml entries scripts reference.
+`assets` is the visual pipeline; `studio` is the unified project editor over
+all standard resources, maps, references, and those visual specifications.
 
 ## A game is a folder
 
@@ -508,12 +518,12 @@ my-game/
 ├── game.yaml                  title
 ├── characters/
 │   └── alice.md               name, default affection, description, portraits map
-├── maps/                      optional — locations the player can be in
-│   └── town.yaml              connections, actions, encounter tables
+├── maps/                      optional — spatial-capable resource containers
+│   └── town.yaml              layout, placements, actions, encounter tables
 ├── scripts/
 │   ├── 001_meeting.md         台本 with frontmatter: id, title, requires, characters, bg
 │   └── ...
-├── assets/                    optional — portraits, backgrounds, CGs
+├── assets/                    optional — portraits, backgrounds, CGs, tilesets
 │   ├── portraits/alice-smile/
 │   │   ├── spec.yaml                       description, prompt, placeholder, sizing
 │   │   ├── tui.txt?                        ASCII rendering for terminal (optional)
@@ -620,7 +630,7 @@ defaultPortraits:                          ← list form: slots auto-assigned
 [end]
 ```
 
-Backgrounds, portraits, CGs, and character sheets are **visual assets** — each lives in `assets/<kind>/<id>/` with a `spec.yaml` describing what it depicts plus optional pre-rendered files. Sheets (`assets/sheets/`) are descriptive: master design sheets (one image: views + expressions + detail callouts), turnarounds, and expression grids that anchor a character's identity for generation; no script renders them on stage, but the web frontend's 設定集 (art book, in the play HUD) shows them to players grouped per character — the same canon the art pipeline reads. Query a character's full pack with `rpgh assets list <game-dir> --character <id>` or the studio's character filter chips. References that resolve to nothing (a `:cg` path with no spec, a `defaultPortraits` emotion missing from the character's map) are surfaced everywhere: the loader warns on stderr, `rpgh assets list` prints a `MISSING` section, and the studio gallery pins red ghost cards. The convention is two-tier: `source.quality.png` is the author's high-res master (gitignored, kept local) and `source.compressed.{webp,png,jpg,jpeg}` is the slimmed distribution copy that travels with the repo so cloners get a working visual experience out of the box. ASCII art `tui.txt` and color `tui.ans` are what the TUI actually renders; missing renderings degrade to the spec's placeholder text, which is also what AI players see in the headless JSON event stream. See the [rpg-harness-author skill](.claude/skills/rpg-harness-author/SKILL.md) for the full asset spec format.
+Backgrounds, portraits, CGs, character sheets, and map tilesets are **visual assets** — each lives in `assets/<kind>/<id>/` with a `spec.yaml` describing what it depicts plus optional pre-rendered files. Sheets (`assets/sheets/`) are descriptive identity references; tilesets (`assets/tilesets/`) are canonical art referenced by `MapDef.layout.tileset`. Query a character's full pack with `rpgh assets list <game-dir> --character <id>` or the studio's character filter chips. References that resolve to nothing (a `:cg` path with no spec, a `defaultPortraits` emotion missing from the character's map) are surfaced everywhere: the loader warns on stderr, `rpgh assets list` prints a `MISSING` section, and the studio gallery pins red ghost cards. The convention is two-tier: `source.quality.png` is the author's high-res master (gitignored, kept local) and `source.compressed.{webp,png,jpg,jpeg}` is the slimmed distribution copy that travels with the repo so cloners get a working visual experience out of the box. ASCII art `tui.txt` and color `tui.ans` are what the TUI actually renders; missing renderings degrade to the spec's placeholder text, which is also what AI players see in the headless JSON event stream. See the [rpg-harness-author skill](.claude/skills/rpg-harness-author/SKILL.md) for the full asset spec format.
 
 ## Headless step API
 

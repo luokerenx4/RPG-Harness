@@ -36,6 +36,8 @@ export function enterMap(
     );
   }
   state.baseline.currentMapId = mapId;
+  state.runtime.mapPositionMapId = mapId;
+  state.runtime.mapPosition = map.layout?.playerStart ?? { x: 0, y: 0 };
   if (map.bg) {
     state.baseline.visuals.bg = map.bg;
   }

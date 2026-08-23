@@ -4,8 +4,6 @@ chain: sumida_river
 difficulty: 2
 bg: assets/backgrounds/sumida-drowned-shrine
 is_extract: true
-connections:
-  - { dir: 戻る, target: sumida_river_drowned_shrine }
 encounter_table:
   - { enemy: oni_warrior, weight: 60 }
   - { enemy: null, weight: 40 }
@@ -13,3 +11,17 @@ loot_table:
   - { item: oni_horn, min: 1, max: 2, weight: 70 }
   - { item: cursed_blade_fragment, min: 1, max: 1, weight: 10 }
   - { item: soul_shard, min: 2, max: 3, weight: 20 }
+placements:
+  - id: exit_sumida_river_drowned_shrine
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_drowned_shrine
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 0

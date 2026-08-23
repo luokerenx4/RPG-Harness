@@ -87,6 +87,38 @@ export async function* dispatchActivity(
   const dyn = ctx.state.runtime.lastHubActivities.find(
     (a) => a.id === activityId,
   );
+  if (dyn?.sourceKey && dyn.requires && !evaluateCondition(dyn.requires, ctx.state).ok) {
+    ctx.state.runtime.pendingNarrations.push(
+      dyn.lockedReason ?? `[${dyn.title}] 今は実行できない。`,
+    );
+    return "ok";
+  }
+  if (dyn?.resource?.kind === "script") {
+    const requestedScript = ctx.scriptMap.get(dyn.resource.id);
+    if (!requestedScript) return "ok";
+    if (ctx.state.baseline.scripts[requestedScript.id]?.completed === true) return "ok";
+    if (
+      requestedScript.requires !== undefined &&
+      !evaluateCondition(requestedScript.requires, ctx.state).ok
+    ) return "ok";
+    const scriptId = fireOnScriptSelect(ctx, requestedScript.id);
+    const script = ctx.scriptMap.get(scriptId);
+    if (!script) return "ok";
+    ctx.state.baseline.currentScriptId = scriptId;
+    ctx.state.baseline.beatIndex = 0;
+    return "ok";
+  }
+  if (dyn?.resource?.kind === "action") {
+    const original = ctx.actionMap.get(dyn.resource.id);
+    if (!original) return "ok";
+    const available =
+      original.requires === undefined ||
+      evaluateCondition(original.requires, ctx.state).ok;
+    if (!available) return "ok";
+    const dispatched = fireOnActionDispatch(ctx, original);
+    if (dispatched === "cancel") return "ok";
+    return yield* runAction(ctx, dispatched);
+  }
   if (dyn && dyn.kind === "action" && dyn.actionKind) {
     const synthetic: Action = {
       id: dyn.id,

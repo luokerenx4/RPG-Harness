@@ -1,12 +1,12 @@
-import { evaluateCondition, explainCondition } from "../condition";
 import type {
-  Action,
   HubActivity,
   HubSnapshot,
   Output,
   PresetContext,
   StatSnapshot,
 } from "../types";
+import { collectMapAvailableResources } from "./collectMapResources";
+import { isMapEventPlayerAction } from "../maps";
 
 // Build a hub Output scoped to the current map. Activity list contents:
 //   1. Connections of the current map → synthesized "move" activities
@@ -54,71 +54,10 @@ export function buildMapHubSnapshot(ctx: PresetContext): Output {
 // (sengoku-raid's mode-dependent menu) but want to delegate the
 // map-action / connection enumeration to the engine.
 export function collectMapActivities(ctx: PresetContext): HubActivity[] {
-  const activities: HubActivity[] = [];
-  const currentMapId = ctx.state.baseline.currentMapId;
-  const currentMap =
-    currentMapId !== null ? ctx.mapMap.get(currentMapId) : undefined;
-
-  if (currentMap) {
-    for (const conn of currentMap.connections ?? []) {
-      const target = ctx.mapMap.get(conn.target);
-      const title = target ? `→ ${target.name}（${conn.dir}）` : `→ ${conn.dir}`;
-      const r =
-        conn.requires === undefined
-          ? { ok: true as const }
-          : evaluateCondition(conn.requires, ctx.state);
-      activities.push({
-        id: `move:${conn.target}`,
-        kind: "action",
-        actionKind: "moveToMap",
-        payload: { to: conn.target },
-        title,
-        category: "move",
-        cost: 0,
-        available: r.ok,
-        ...(conn.requires ? { requires: conn.requires } : {}),
-        ...(r.ok
-          ? {}
-          : { lockedReason: conn.lockedHint ?? explainCondition(conn.requires!, ctx.state, ctx.game) }),
-      });
-    }
-    for (const a of currentMap.actions ?? []) {
-      pushAction(activities, ctx, a);
-    }
-  }
-
-  for (const a of ctx.game.actions ?? []) {
-    if (a.whenIn !== undefined) {
-      if (currentMapId === null) continue;
-      if (!a.whenIn.includes(currentMapId)) continue;
-    }
-    pushAction(activities, ctx, a);
-  }
-
-  return activities;
-}
-
-function pushAction(
-  activities: HubActivity[],
-  ctx: PresetContext,
-  a: Action,
-): void {
-  const r =
-    a.requires === undefined
-      ? { ok: true as const }
-      : evaluateCondition(a.requires, ctx.state);
-  activities.push({
-    id: `action:${a.id}`,
-    kind: "action",
-    title: a.title,
-    description: a.description,
-    category: a.category,
-    ...(a.aiTags ? { aiTags: [...a.aiTags] } : {}),
-    cost: a.cost,
-    available: r.ok,
-    ...(a.requires ? { requires: a.requires } : {}),
-    ...(r.ok
-      ? {}
-      : { lockedReason: explainCondition(a.requires!, ctx.state, ctx.game) }),
-  });
+  return collectMapAvailableResources(ctx).flatMap((resource) =>
+    resource.activity &&
+        (resource.trigger === undefined || isMapEventPlayerAction(resource.trigger))
+      ? [resource.activity]
+      : []
+  );
 }

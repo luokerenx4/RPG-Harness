@@ -206,6 +206,15 @@ export interface RuntimeState {
   // move actions, per-character bond gifts, etc.) without each module
   // implementing its own prefix-string router.
   lastHubActivities: HubActivity[];
+  // Map-event entry bookkeeping. Optional for save compatibility; the shared
+  // drain path lazily initializes these when a map first becomes current.
+  observedMapId?: string | null;
+  pendingMapEvents?: string[];
+  firedMapEvents?: string[];
+  /** Authoritative grid position for spatial player surfaces. Headless ignores it. */
+  mapPosition?: MapPoint;
+  /** Map owning mapPosition; prevents stale coordinates after transitions. */
+  mapPositionMapId?: string | null;
   // Per-action title markers. Hub builders prepend the marker string to
   // an activity's title when it appears here. Modules populate / clear
   // this map to signal "this option has new content today" — the
@@ -366,14 +375,155 @@ export interface SkillDef {
   custom?: Record<string, unknown>;
 }
 
+export type ProjectResourceKind =
+  | "manifest"
+  | "character"
+  | "item"
+  | "enemy"
+  | "weapon"
+  | "skill"
+  | "map"
+  | "script"
+  | "action"
+  | "asset"
+  | "module"
+  | "test"
+  | "issue"
+  | "custom";
+
+/** A renderer-neutral reference to any project resource. */
+export interface ProjectResourceRef {
+  kind: ProjectResourceKind;
+  id: string;
+}
+
+export interface ProjectResourceEntry<T = unknown> extends ProjectResourceRef {
+  /** Canonical `<kind>:<id>` identity used by tools and diagnostics. */
+  key: string;
+  label: string;
+  value: T;
+}
+
+export type ProjectResourceRegistry = ReadonlyMap<string, ProjectResourceEntry>;
+
+export interface ProjectResourceNode extends ProjectResourceRef {
+  key: string;
+  label: string;
+  source?: string;
+  editable?: boolean;
+  refs: string[];
+}
+
+export interface ProjectMissingReference {
+  key: string;
+  referencedBy: string[];
+}
+
+export interface ProjectResourceGraph {
+  resources: ProjectResourceNode[];
+  backlinks: Record<string, string[]>;
+  missing: ProjectMissingReference[];
+  /** Resources with no inbound registry references; roots may be intentional. */
+  unreferenced: string[];
+}
+
+export interface MapPoint {
+  x: number;
+  y: number;
+}
+
+export interface MapSize {
+  width: number;
+  height: number;
+}
+
+export type MapLayerKind = "tile" | "image" | "object" | "collision" | "region";
+
+export interface MapLayerDef {
+  id: string;
+  name?: string;
+  kind: MapLayerKind;
+  z: number;
+  visible: boolean;
+  /** Optional visual asset or tileset resource. */
+  asset?: string;
+  /** Row-major tile data. Empty rows are permitted while authoring. */
+  tiles?: number[][];
+  custom?: Record<string, unknown>;
+}
+
+export interface MapRegionDef extends MapPoint, MapSize {
+  id: string;
+  name?: string;
+  custom?: Record<string, unknown>;
+}
+
+/**
+ * Canonical two-dimensional structure owned by a map resource. Renderers may
+ * choose not to display it, but must not maintain an alternate authoritative
+ * copy of placement or collision data.
+ */
+export interface MapLayoutDef extends MapSize {
+  tileWidth: number;
+  tileHeight: number;
+  playerStart?: MapPoint;
+  tileset?: string;
+  layers: MapLayerDef[];
+  regions: MapRegionDef[];
+}
+
+export type MapFacing = "north" | "east" | "south" | "west";
+export type MapCollision = "none" | "block" | "trigger";
+export type MapEventTrigger =
+  | "autorun"
+  | "parallel"
+  | "interact"
+  | "player_touch"
+  | "event_touch"
+  | "map_enter"
+  | "manual"
+  | `${string}:${string}`;
+
+export interface MapPlacementEventDef {
+  /** Stable within the containing placement. */
+  id: string;
+  trigger: MapEventTrigger;
+  label?: string;
+  /** If omitted, the placement's own resource is activated. */
+  run?: ProjectResourceRef;
+  /** Optional deterministic-RNG probability gate, inclusive range 0..1. */
+  chance?: number;
+  requires?: Condition;
+  lockedHint?: string;
+  order: number;
+  custom?: Record<string, unknown>;
+}
+
+/** A stable resource instance placed in one map's two-dimensional space. */
+export interface MapPlacementDef {
+  id: string;
+  at: MapPoint;
+  resource?: ProjectResourceRef;
+  layer?: string;
+  z: number;
+  facing?: MapFacing;
+  footprint: MapSize;
+  collision: MapCollision;
+  visible: boolean;
+  requires?: Condition;
+  events: MapPlacementEventDef[];
+  custom?: Record<string, unknown>;
+}
+
 // Engine-level standard map resource. A map is a *container for events*
 // — actions, scripts, encounter tables, connections to other maps — that
 // scopes "what the player can do right now" to "where they currently are."
 // This is the RPGMaker map model: enter a map, the hub shows that map's
 // actions/connections; move to another map, the hub re-scopes.
 //
-// Movement happens map-to-map (via `connections`). There is no coordinate
-// axis inside a map; "where I am" is just `state.baseline.currentMapId`.
+// The map may own a canonical 2D layout and stable project-resource placements.
+// Headless/Hub consumers may collapse that spatial structure to the resources
+// and semantic operations available under `state.baseline.currentMapId`.
 // Maps that conceptually belong to the same expedition / scene group
 // share a `chain` string — engine doesn't interpret it; modules read it
 // for sorting, gating, or "depart on raid → enter the chain's entry map".
@@ -393,6 +543,12 @@ export interface MapDef {
   // physically is rather than freezing at whatever the last script
   // `:setBg` directive set.
   bg?: string;
+  // Optional canonical two-dimensional structure. Omission is the compact
+  // era-style node form; it does not select a different runtime or database.
+  layout?: MapLayoutDef;
+  // Stable instances of resources and event bindings inside this map. Multiple
+  // placements may intentionally occupy one coordinate.
+  placements?: MapPlacementDef[];
   // Actions available while the player is on this map. Surfaced by
   // `buildMapHubSnapshot` (or any caller iterating map.actions) and
   // dispatchable via the standard `action:<id>` activity path. Each
@@ -458,7 +614,7 @@ export interface CharacterSpawnRule {
 }
 
 // Visual asset registry. An asset is a directory under
-// <gameDir>/assets/{portraits,backgrounds,cgs,sheets}/<slug>/ containing a
+// <gameDir>/assets/{portraits,backgrounds,cgs,sheets,tilesets}/<slug>/ containing a
 // spec.yaml plus any number of pre-rendered files (source.quality.png /
 // source.compressed.{webp,png,jpg,jpeg}, tui.txt, tui.ans, web.webp).
 // The engine never decodes images; it
@@ -473,7 +629,8 @@ export interface CharacterSpawnRule {
 // (turnarounds, expression sheets) that no script directive renders;
 // they exist for authors and generators — the identity source that
 // portraits and CGs are derived from.
-export type AssetKind = "portrait" | "bg" | "cg" | "sheet";
+// `tileset` is canonical map-layer art consumed by spatial renderers.
+export type AssetKind = "portrait" | "bg" | "cg" | "sheet" | "tileset";
 
 export interface AssetSpec {
   // Logical id = the asset directory's forward-slash relative path
@@ -859,6 +1016,10 @@ export interface Action {
   // (the existing global-action behavior). Each entry must reference a
   // declared map at parse time.
   whenIn?: string[];
+  // `ambient` (default) participates in ordinary Hub/Headless action
+  // enumeration. `placed` is a reusable database resource exposed only by a
+  // Map placement event, separating definition from spatial availability.
+  exposure?: "ambient" | "placed";
   // Free-form per-action payload. Module handlers read whatever keys
   // they expect (e.g. raid:move reads `zoneId`, raid:bond reads
   // `characterId`). Used primarily by dynamically-constructed
@@ -1272,6 +1433,10 @@ export interface HubActivity {
   // + payload). This is the dispatch-protocol layer; actionKind is
   // the handler-resolution layer.
   kind: "script" | "action";
+  /** Project resource activated by a map placement-backed activity. */
+  resource?: ProjectResourceRef;
+  /** Stable authoring coordinate for diagnostics, Studio, and AI findings. */
+  sourceKey?: string;
   title: string;
   description?: string;
   category?: string;
@@ -1317,6 +1482,26 @@ export interface HubActivity {
   // when the same actionKind is dispatched with different per-activity
   // parameters (e.g. `raid:move` with a `zoneId` payload).
   payload?: Record<string, unknown>;
+}
+
+export interface MapAvailableResource {
+  /** Stable map-local or project resource coordinate. */
+  key: string;
+  mapId: string;
+  source: "placement" | "legacy-connection" | "legacy-map-action" | "global-action";
+  resource?: ProjectResourceRef;
+  placementId?: string;
+  eventId?: string;
+  at?: MapPoint;
+  layer?: string;
+  trigger?: MapEventTrigger;
+  chance?: number;
+  label: string;
+  available: boolean;
+  requires?: Condition;
+  lockedReason?: string;
+  /** Present when this resource is an operation a semantic frontend can run. */
+  activity?: HubActivity;
 }
 
 export interface ActivityForecastMetric {
@@ -1469,6 +1654,7 @@ export type Input =
   | { type: "choose"; choiceId: string; optionId: string }
   | { type: "select"; scriptId: string }
   | { type: "doActivity"; id: string }
+  | { type: "moveMap"; direction: MapFacing }
   | { type: "quit" };
 
 export const END_LABEL = "$end";
@@ -1496,6 +1682,10 @@ export interface PresetContext {
   weaponMap: Map<string, WeaponDef>;
   skillMap: Map<string, SkillDef>;
   mapMap: Map<string, MapDef>;
+  // Uniform authoring/runtime registry. Specialized maps above stay available
+  // for hot paths, while Studio, placements and diagnostics share this one
+  // canonical `<kind>:<id>` namespace.
+  resourceRegistry: ProjectResourceRegistry;
   // AssetSpec.path → AssetSpec. Used by the engine to resolve
   // `setPortrait` emotion → path lookups and by headless presenters
   // to attach placeholder text alongside asset paths.

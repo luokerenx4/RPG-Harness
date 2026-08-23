@@ -4,11 +4,23 @@ chain: mt_houkyou
 difficulty: 3
 bg: assets/backgrounds/houkyou-burnt-temple
 is_extract: true
-connections:
-  - { dir: 戻る, target: mt_houkyou_stone_paths }
 encounter_table:
   - { enemy: oni_warrior, weight: 60 }
   - { enemy: null, weight: 40 }
 loot_table:
   - { item: oni_horn, min: 1, max: 2, weight: 60 }
   - { item: soul_shard, min: 2, max: 3, weight: 40 }
+placements:
+  - id: exit_mt_houkyou_stone_paths
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: mt_houkyou_stone_paths
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 0

@@ -5,10 +5,22 @@ is_entry: true
 difficulty: 3
 bg: assets/backgrounds/houkyou-foothills
 entry_narration: 焼け石の唸りが、地の底から響く。靴底の革がじりじりと焦げる音がする。
-connections:
-  - { dir: 登る, target: mt_houkyou_stone_paths }
 encounter_table:
   - { enemy: null, weight: 1 }
 loot_table:
   - { item: ryo, min: 10, max: 20, weight: 50 }
   - { item: null, min: 0, max: 0, weight: 50 }
+placements:
+  - id: exit_mt_houkyou_stone_paths
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: mt_houkyou_stone_paths
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 登る
+        order: 0

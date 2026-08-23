@@ -97,6 +97,13 @@ export function parseActionSpec(
     }
     if (ids.length > 0) action.whenIn = ids;
   }
+  if (obj.exposure === "ambient" || obj.exposure === "placed") {
+    action.exposure = obj.exposure;
+  } else if (obj.exposure !== undefined) {
+    throw new ActionParseError(
+      `${source ?? action.id}: \`exposure\` must be ambient or placed`,
+    );
+  }
   if (action.kind === "useItem" && !action.itemId) {
     throw new ActionParseError(
       `${source ?? action.id}: kind=useItem requires an \`itemId\` field`,

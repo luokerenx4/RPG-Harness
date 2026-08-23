@@ -5,8 +5,17 @@ import type {
   Condition,
   MapConnection,
   MapDef,
+  MapEventTrigger,
+  MapLayerDef,
+  MapLayoutDef,
+  MapPlacementDef,
+  MapPlacementEventDef,
+  MapRegionDef,
+  ProjectResourceKind,
+  ProjectResourceRef,
 } from "@rpg-harness/engine";
 import { parseActionSpec } from "./action";
+import { parseCondition } from "./condition";
 
 export class MapParseError extends Error {}
 
@@ -16,6 +25,8 @@ const KNOWN_KEYS = [
   "description",
   "difficulty",
   "bg",
+  "layout",
+  "placements",
   "actions",
   "connections",
   "on_enter",
@@ -28,10 +39,10 @@ const KNOWN_KEYS = [
 ] as const;
 
 // Parse a `maps/<id>.yaml` file into an engine-level MapDef. Maps are
-// flat — they declare their own connections / actions / bg / encounter
-// tables / on_enter directly. Movement is map-to-map (no coordinate axis
-// inside a map). snake_case in YAML normalizes to camelCase on the
-// engine side.
+// A map is always an event/resource container. `layout` and `placements`
+// optionally add canonical two-dimensional authoring data; Headless and Hub
+// consumers can still collapse the map to its available semantic operations.
+// snake_case in YAML normalizes to camelCase on the engine side.
 export function parseMap(content: string, source?: string): MapDef {
   let raw: unknown;
   try {
@@ -58,6 +69,15 @@ export function parseMap(content: string, source?: string): MapDef {
   const def: MapDef = { id, name, description, difficulty };
 
   if (typeof obj.bg === "string" && obj.bg.length > 0) def.bg = obj.bg;
+  if (obj.layout !== undefined) {
+    def.layout = parseMapLayout(obj.layout, `${source ?? id}.layout`);
+  }
+  if (obj.placements !== undefined) {
+    def.placements = parseMapPlacements(
+      obj.placements,
+      `${source ?? id}.placements`,
+    );
+  }
   if (obj.is_extract === true) def.isExtract = true;
   if (obj.is_entry === true) def.isEntry = true;
   if (typeof obj.chain === "string" && obj.chain.length > 0) {
@@ -102,6 +122,331 @@ export function parseMap(content: string, source?: string): MapDef {
   const custom = extractCustom(obj, KNOWN_KEYS);
   if (custom) def.custom = custom;
   return def;
+}
+
+const RESOURCE_KINDS = new Set<ProjectResourceKind>([
+  "character",
+  "item",
+  "enemy",
+  "weapon",
+  "skill",
+  "map",
+  "script",
+  "action",
+  "asset",
+  "module",
+  "custom",
+]);
+
+const BUILTIN_TRIGGERS = new Set<MapEventTrigger>([
+  "autorun",
+  "parallel",
+  "interact",
+  "player_touch",
+  "event_touch",
+  "map_enter",
+  "manual",
+]);
+
+function parseMapLayout(raw: unknown, source: string): MapLayoutDef {
+  const obj = readObject(raw, source);
+  const width = readPositiveInt(obj.width, `${source}.width`);
+  const height = readPositiveInt(obj.height, `${source}.height`);
+  const tileWidth = obj.tile_width === undefined
+    ? 32
+    : readPositiveInt(obj.tile_width, `${source}.tile_width`);
+  const tileHeight = obj.tile_height === undefined
+    ? 32
+    : readPositiveInt(obj.tile_height, `${source}.tile_height`);
+
+  const layers = obj.layers === undefined
+    ? []
+    : parseMapLayers(obj.layers, source, width, height);
+  const regions = obj.regions === undefined
+    ? []
+    : parseMapRegions(obj.regions, source, width, height);
+
+  const def: MapLayoutDef = {
+    width,
+    height,
+    tileWidth,
+    tileHeight,
+    layers,
+    regions,
+  };
+  if (obj.player_start !== undefined) {
+    def.playerStart = readPair(obj.player_start, `${source}.player_start`, false);
+    if (def.playerStart.x >= width || def.playerStart.y >= height) {
+      throw new MapParseError(
+        `${source}.player_start must fit inside ${width}x${height} layout`,
+      );
+    }
+  }
+  if (typeof obj.tileset === "string" && obj.tileset.length > 0) {
+    def.tileset = obj.tileset;
+  }
+  return def;
+}
+
+function parseMapLayers(
+  raw: unknown,
+  source: string,
+  width: number,
+  height: number,
+): MapLayerDef[] {
+  if (!Array.isArray(raw)) {
+    throw new MapParseError(`${source}.layers must be an array`);
+  }
+  const layers = raw.map((entry, index) => {
+    const where = `${source}.layers[${index}]`;
+    const obj = readObject(entry, where);
+    const id = readString(obj, "id", where);
+    const kind = obj.kind;
+    if (
+      kind !== "tile" && kind !== "image" && kind !== "object" &&
+      kind !== "collision" && kind !== "region"
+    ) {
+      throw new MapParseError(
+        `${where}.kind must be tile, image, object, collision, or region`,
+      );
+    }
+    const layer: MapLayerDef = {
+      id,
+      kind,
+      z: obj.z === undefined ? index : readFiniteNumber(obj.z, `${where}.z`),
+      visible: obj.visible !== false,
+    };
+    if (typeof obj.name === "string") layer.name = obj.name;
+    if (typeof obj.asset === "string" && obj.asset.length > 0) {
+      layer.asset = obj.asset;
+    }
+    if (obj.tiles !== undefined) {
+      layer.tiles = parseTileMatrix(obj.tiles, `${where}.tiles`, width, height);
+    }
+    const custom = extractCustom(obj, [
+      "id", "name", "kind", "z", "visible", "asset", "tiles",
+    ]);
+    if (custom) layer.custom = custom;
+    return layer;
+  });
+  assertUniqueIds(layers, `${source}.layers`);
+  return layers;
+}
+
+function parseTileMatrix(
+  raw: unknown,
+  source: string,
+  width: number,
+  height: number,
+): number[][] {
+  if (!Array.isArray(raw)) {
+    throw new MapParseError(`${source} must be an array of tile rows`);
+  }
+  if (raw.length === 0) return [];
+  if (raw.length !== height) {
+    throw new MapParseError(`${source} must contain exactly ${height} rows`);
+  }
+  return raw.map((row, y) => {
+    if (!Array.isArray(row) || row.length !== width) {
+      throw new MapParseError(`${source}[${y}] must contain exactly ${width} tiles`);
+    }
+    return row.map((tile, x) => {
+      if (!Number.isInteger(tile)) {
+        throw new MapParseError(`${source}[${y}][${x}] must be an integer tile id`);
+      }
+      return tile as number;
+    });
+  });
+}
+
+function parseMapRegions(
+  raw: unknown,
+  source: string,
+  mapWidth: number,
+  mapHeight: number,
+): MapRegionDef[] {
+  if (!Array.isArray(raw)) {
+    throw new MapParseError(`${source}.regions must be an array`);
+  }
+  const regions = raw.map((entry, index) => {
+    const where = `${source}.regions[${index}]`;
+    const obj = readObject(entry, where);
+    const region: MapRegionDef = {
+      id: readString(obj, "id", where),
+      x: readNonNegativeInt(obj.x, `${where}.x`),
+      y: readNonNegativeInt(obj.y, `${where}.y`),
+      width: readPositiveInt(obj.width, `${where}.width`),
+      height: readPositiveInt(obj.height, `${where}.height`),
+    };
+    if (region.x + region.width > mapWidth || region.y + region.height > mapHeight) {
+      throw new MapParseError(`${where} must fit inside ${mapWidth}x${mapHeight} layout`);
+    }
+    if (typeof obj.name === "string") region.name = obj.name;
+    const custom = extractCustom(obj, ["id", "name", "x", "y", "width", "height"]);
+    if (custom) region.custom = custom;
+    return region;
+  });
+  assertUniqueIds(regions, `${source}.regions`);
+  return regions;
+}
+
+function parseMapPlacements(raw: unknown, source: string): MapPlacementDef[] {
+  if (!Array.isArray(raw)) {
+    throw new MapParseError(`${source} must be an array`);
+  }
+  const placements = raw.map((entry, index) => {
+    const where = `${source}[${index}]`;
+    const obj = readObject(entry, where);
+    const at = readPair(obj.at, `${where}.at`, false);
+    const footprint = obj.footprint === undefined
+      ? { x: 1, y: 1 }
+      : readPair(obj.footprint, `${where}.footprint`, true);
+    const collision = obj.collision ?? "none";
+    if (collision !== "none" && collision !== "block" && collision !== "trigger") {
+      throw new MapParseError(`${where}.collision must be none, block, or trigger`);
+    }
+    const placement: MapPlacementDef = {
+      id: readString(obj, "id", where),
+      at: { x: at.x, y: at.y },
+      z: obj.z === undefined ? 0 : readFiniteNumber(obj.z, `${where}.z`),
+      footprint: { width: footprint.x, height: footprint.y },
+      collision,
+      visible: obj.visible !== false,
+      events: obj.events === undefined ? [] : parsePlacementEvents(obj.events, `${where}.events`),
+    };
+    if (obj.resource !== undefined) {
+      placement.resource = parseResourceRef(obj.resource, `${where}.resource`);
+    }
+    if (typeof obj.layer === "string" && obj.layer.length > 0) {
+      placement.layer = obj.layer;
+    }
+    if (
+      obj.facing === "north" || obj.facing === "east" ||
+      obj.facing === "south" || obj.facing === "west"
+    ) {
+      placement.facing = obj.facing;
+    } else if (obj.facing !== undefined) {
+      throw new MapParseError(`${where}.facing must be north, east, south, or west`);
+    }
+    const requires = parseCondition(obj.requires);
+    if (requires) placement.requires = requires;
+    const custom = extractCustom(obj, [
+      "id", "at", "resource", "layer", "z", "facing", "footprint",
+      "collision", "visible", "requires", "events",
+    ]);
+    if (custom) placement.custom = custom;
+    if (!placement.resource && placement.events.length === 0) {
+      throw new MapParseError(`${where} must declare a resource or at least one event`);
+    }
+    return placement;
+  });
+  assertUniqueIds(placements, source);
+  return placements;
+}
+
+function parsePlacementEvents(raw: unknown, source: string): MapPlacementEventDef[] {
+  if (!Array.isArray(raw)) {
+    throw new MapParseError(`${source} must be an array`);
+  }
+  const events = raw.map((entry, index) => {
+    const where = `${source}[${index}]`;
+    const obj = readObject(entry, where);
+    const trigger = obj.trigger;
+    if (
+      typeof trigger !== "string" ||
+      (!BUILTIN_TRIGGERS.has(trigger as MapEventTrigger) &&
+        !/^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(trigger))
+    ) {
+      throw new MapParseError(
+        `${where}.trigger must be a built-in trigger or namespaced module trigger`,
+      );
+    }
+    const event: MapPlacementEventDef = {
+      id: readString(obj, "id", where),
+      trigger: trigger as MapEventTrigger,
+      order: obj.order === undefined ? index : readFiniteNumber(obj.order, `${where}.order`),
+    };
+    if (typeof obj.label === "string") event.label = obj.label;
+    if (obj.run !== undefined) event.run = parseResourceRef(obj.run, `${where}.run`);
+    if (obj.chance !== undefined) {
+      if (typeof obj.chance !== "number" || obj.chance < 0 || obj.chance > 1) {
+        throw new MapParseError(`${where}.chance must be a number in [0,1]`);
+      }
+      event.chance = obj.chance;
+    }
+    const requires = parseCondition(obj.requires);
+    if (requires) event.requires = requires;
+    if (typeof obj.locked_hint === "string") event.lockedHint = obj.locked_hint;
+    const custom = extractCustom(obj, [
+      "id", "trigger", "label", "run", "chance", "requires", "locked_hint", "order",
+    ]);
+    if (custom) event.custom = custom;
+    return event;
+  });
+  assertUniqueIds(events, source);
+  return events;
+}
+
+function parseResourceRef(raw: unknown, source: string): ProjectResourceRef {
+  const obj = readObject(raw, source);
+  const kind = readString(obj, "kind", source) as ProjectResourceKind;
+  if (!RESOURCE_KINDS.has(kind)) {
+    throw new MapParseError(`${source}.kind is not a standard project resource kind`);
+  }
+  return { kind, id: readString(obj, "id", source) };
+}
+
+function readPair(
+  raw: unknown,
+  source: string,
+  positive: boolean,
+): { x: number; y: number } {
+  if (!Array.isArray(raw) || raw.length !== 2) {
+    throw new MapParseError(`${source} must be a [x, y] pair`);
+  }
+  const read = positive ? readPositiveInt : readNonNegativeInt;
+  return { x: read(raw[0], `${source}[0]`), y: read(raw[1], `${source}[1]`) };
+}
+
+function readObject(raw: unknown, source: string): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new MapParseError(`${source} must be an object`);
+  }
+  return raw as Record<string, unknown>;
+}
+
+function readPositiveInt(raw: unknown, source: string): number {
+  if (!Number.isInteger(raw) || (raw as number) <= 0) {
+    throw new MapParseError(`${source} must be a positive integer`);
+  }
+  return raw as number;
+}
+
+function readNonNegativeInt(raw: unknown, source: string): number {
+  if (!Number.isInteger(raw) || (raw as number) < 0) {
+    throw new MapParseError(`${source} must be a non-negative integer`);
+  }
+  return raw as number;
+}
+
+function readFiniteNumber(raw: unknown, source: string): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    throw new MapParseError(`${source} must be a finite number`);
+  }
+  return raw;
+}
+
+function assertUniqueIds(
+  values: ReadonlyArray<{ id: string }>,
+  source: string,
+): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value.id)) {
+      throw new MapParseError(`${source} contains duplicate id "${value.id}"`);
+    }
+    seen.add(value.id);
+  }
 }
 
 function parseMapConnections(

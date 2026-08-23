@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { emptyVisualState } from "../types";
 import { enterMap } from "../primitives/enterMap";
+import { collectMapConnections } from "../maps";
 import { evaluateCondition } from "../condition";
 
 export const BASELINE_NAMESPACE = "baseline";
@@ -204,7 +205,9 @@ const moveToMapHandler: ActionHandler = ({ state, action, game }) => {
   const from = state.baseline.currentMapId === null
     ? undefined
     : (game.maps ?? []).find((map) => map.id === state.baseline.currentMapId);
-  const connection = from?.connections?.find((edge) => edge.target === to);
+  const connection = from
+    ? collectMapConnections(from).find((edge) => edge.target === to)
+    : undefined;
   if (!connection) {
     return {
       narrations: [`今いる場所から ${to} へ続く道はない。`],

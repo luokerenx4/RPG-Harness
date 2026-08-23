@@ -5,11 +5,35 @@ is_entry: true
 difficulty: 2
 bg: assets/backgrounds/sumida-bridge
 entry_narration: 葦の藪が、足首より高く伸びている。汽水の臭いが鼻を打つ。
-connections:
-  - { dir: 河岸沿い, target: sumida_river_reed_marsh }
-  - { dir: 上流, target: sumida_river_ferry_landing }
 encounter_table:
   - { enemy: null, weight: 1 }
 loot_table:
   - { item: ryo, min: 8, max: 16, weight: 50 }
   - { item: null, min: 0, max: 0, weight: 50 }
+placements:
+  - id: exit_sumida_river_reed_marsh
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_reed_marsh
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 河岸沿い
+        order: 0
+  - id: exit_sumida_river_ferry_landing
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_ferry_landing
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 上流
+        order: 1

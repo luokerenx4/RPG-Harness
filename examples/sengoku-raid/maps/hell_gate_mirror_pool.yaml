@@ -4,10 +4,22 @@ chain: hell_gate
 difficulty: 5
 bg: assets/backgrounds/hell-gate-mirror-pool
 is_extract: true
-connections:
-  - { dir: 戻る, target: hell_gate_corridor }
 encounter_table:
   - { enemy: kagami_oni, weight: 60 }
   - { enemy: kijin, weight: 40 }
 loot_table:
   - { item: cursed_blade_fragment, min: 2, max: 3, weight: 100 }
+placements:
+  - id: exit_hell_gate_corridor
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: hell_gate_corridor
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 0

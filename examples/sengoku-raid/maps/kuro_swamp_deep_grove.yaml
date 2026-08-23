@@ -4,10 +4,22 @@ chain: kuro_swamp
 difficulty: 1
 bg: assets/backgrounds/swamp-edge
 is_extract: true
-connections:
-  - { dir: 戻る, target: kuro_swamp_crossroads }
 encounter_table:
   - { enemy: oni_lesser, weight: 100 }
 loot_table:
   - { item: soul_shard, min: 2, max: 3, weight: 70 }
   - { item: ryo, min: 20, max: 40, weight: 30 }
+placements:
+  - id: exit_kuro_swamp_crossroads
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: kuro_swamp_crossroads
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 0

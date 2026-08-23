@@ -454,6 +454,7 @@ function tuiPublicAction(
       id: activity?.activityId ?? input.id,
       ...(activity?.title ? { title: activity.title } : {}),
     };
+    case "moveMap": return { type: "moveMap", direction: input.direction };
   }
 }
 

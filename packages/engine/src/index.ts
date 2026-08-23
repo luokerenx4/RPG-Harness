@@ -13,6 +13,16 @@ export {
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
+export { collectMapConnections, isMapEventPlayerAction } from "./maps";
+export {
+  buildProjectResourceRegistry,
+  buildProjectResourceGraph,
+  mapPlacementEventKey,
+  mapPlacementKey,
+  projectResourceKey,
+  ProjectResourceRegistryError,
+  resolveProjectResource,
+} from "./resources";
 export type { ActivityDecisionContext, ChoiceDecisionContext } from "./decision";
 export type {
   ModuleHookContext,
@@ -89,6 +99,7 @@ export {
 } from "./modules/runtime";
 export {
   drainNarrations,
+  drainAutomaticMapEvents,
   checkEndConditions,
   checkTriggers,
   TriggerExecutionError,
@@ -100,6 +111,8 @@ export {
   EnterMapError,
   buildMapHubSnapshot,
   collectMapActivities,
+  collectMapAvailableResources,
+  moveMapPlayer,
   giveItem,
   consumeItem,
   hasItem,
@@ -128,6 +141,7 @@ export {
   fireOnEndConditionFire,
   fireOnNarrationDrain,
 } from "./primitives";
+export type { MapMoveResult } from "./primitives";
 export { END_LABEL } from "./types";
 export type {
   Action,
@@ -169,12 +183,31 @@ export type {
   HubSnapshot,
   Input,
   ItemDef,
+  MapCollision,
   MapConnection,
   MapDef,
+  MapEventTrigger,
+  MapFacing,
+  MapLayerDef,
+  MapLayerKind,
+  MapAvailableResource,
+  MapLayoutDef,
+  MapPlacementDef,
+  MapPlacementEventDef,
+  MapPoint,
+  MapRegionDef,
+  MapSize,
   Module,
   ModuleInitializationContext,
   Output,
   PresetContext,
+  ProjectResourceKind,
+  ProjectResourceEntry,
+  ProjectResourceRef,
+  ProjectResourceRegistry,
+  ProjectResourceGraph,
+  ProjectResourceNode,
+  ProjectMissingReference,
   RenderedChoice,
   RunFunction,
   RuntimeState,

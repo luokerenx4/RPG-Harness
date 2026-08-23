@@ -22,4 +22,11 @@ describe("parseAction AI intent", () => {
     expect(() => parseAction("id: x\ntitle: X\nai_tags: [social, social]\n"))
       .toThrow("must not contain duplicates");
   });
+
+  test("parses placement-only exposure and rejects unknown exposure modes", () => {
+    expect(parseAction("id: inspect\ntitle: Inspect\nexposure: placed\n"))
+      .toMatchObject({ exposure: "placed" });
+    expect(() => parseAction("id: inspect\ntitle: Inspect\nexposure: hidden\n"))
+      .toThrow("must be ambient or placed");
+  });
 });

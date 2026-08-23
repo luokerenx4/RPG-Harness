@@ -40,6 +40,7 @@ export type SessionPublicAction =
     }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
+  | { type: "moveMap"; direction: "north" | "east" | "south" | "west" }
   | { type: "quit" };
 
 export type SessionPublicDecisionBasis =
@@ -357,6 +358,9 @@ function isSessionPublicAction(value: unknown): value is SessionPublicAction {
     case "doActivity":
       return typeof action.id === "string" &&
         (action.title === undefined || typeof action.title === "string");
+    case "moveMap":
+      return action.direction === "north" || action.direction === "east" ||
+        action.direction === "south" || action.direction === "west";
     default:
       return false;
   }

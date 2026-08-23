@@ -20,6 +20,8 @@ import type {
   HubSnapshot,
   Input,
   InputResult,
+  MapFacing,
+  MapPoint,
   Output,
 } from "@rpg-harness/engine";
 import {
@@ -41,6 +43,7 @@ import {
 } from "@rpg-harness/frontend-core";
 import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
+import { SpatialMapSurface } from "./SpatialMapSurface";
 import type {
   WebBranchContext,
   WebAiPersona,
@@ -65,6 +68,13 @@ type ModelAction =
   | { kind: "apply"; output: Output }
   | { kind: "choose"; input: Input; selectedBy: "player" | "ai" }
   | { kind: "ui"; action: UiAction };
+
+const MAP_KEY_DIRECTIONS: Partial<Record<string, MapFacing>> = {
+  ArrowUp: "north", w: "north", W: "north",
+  ArrowRight: "east", d: "east", D: "east",
+  ArrowDown: "south", s: "south", S: "south",
+  ArrowLeft: "west", a: "west", A: "west",
+};
 
 function modelReducer(model: ScreenModel, action: ModelAction): ScreenModel {
   if (action.kind === "reset") return action.model;
@@ -224,6 +234,8 @@ function formatAiPublicAction(
       return `进入${quotePublicLabel(action.title ?? action.scriptId)}`;
     case "doActivity":
       return `执行${quotePublicLabel(action.title ?? action.id)}`;
+    case "moveMap":
+      return `在地图上向${({ north: "北", east: "东", south: "南", west: "西" } as const)[action.direction]}移动`;
     case "quit":
       return "选择退出";
   }
@@ -489,9 +501,7 @@ export function WebPlayScreen({
     [aiTurnPending, commit, onCommit],
   );
 
-  // Keyboard: Space/Enter advances text beats; Esc exits. Selection on
-  // choice/hub/scriptComplete is click-driven (each option carries its
-  // own index/id), so no cursor key-walking is needed here.
+  // Keyboard: Space/Enter advances text; arrows/WASD move a spatial map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && onExit) {
@@ -499,7 +509,21 @@ export function WebPlayScreen({
         return;
       }
       if (showBacklog || showArtBook || showFeedback) return;
+      const tag = e.target instanceof HTMLElement ? e.target.tagName : "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const k = model.stage.kind;
+      if (k === "hubMenu") {
+        const currentMapId = engineRef.current?.getState().baseline.currentMapId;
+        const spatial = (game.maps ?? []).some((map) =>
+          map.id === currentMapId && map.layout !== undefined
+        );
+        const direction = MAP_KEY_DIRECTIONS[e.key];
+        if (spatial && direction) {
+          e.preventDefault();
+          void sendInput({ type: "moveMap", direction });
+          return;
+        }
+      }
       if ((e.key === " " || e.key === "Enter") && (k === "narration" || k === "dialogue")) {
         e.preventDefault();
         void sendInput({ type: "next" });
@@ -507,7 +531,7 @@ export function WebPlayScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [model.stage.kind, showBacklog, showArtBook, showFeedback, sendInput, onExit]);
+  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showFeedback, sendInput, onExit]);
 
   return (
     <div className="play-root">
@@ -519,6 +543,10 @@ export function WebPlayScreen({
         <StageView
           stage={model.stage}
           game={game}
+          currentMapId={engineRef.current?.getState().baseline.currentMapId ?? null}
+          currentMapPosition={engineRef.current?.getState().runtime.mapPosition}
+          currentMapPositionMapId={engineRef.current?.getState().runtime.mapPositionMapId}
+          assetUrls={assetUrls}
           onInput={sendInput}
           exploration={exploration}
           exploring={exploring}
@@ -877,6 +905,10 @@ export function DevelopmentBadge({ status }: { status: WebDevelopmentStatus }) {
 export function StageView({
   stage,
   game,
+  currentMapId,
+  currentMapPosition,
+  currentMapPositionMapId,
+  assetUrls,
   onInput,
   exploration,
   exploring = false,
@@ -885,6 +917,10 @@ export function StageView({
 }: {
   stage: Stage;
   game: Game;
+  currentMapId: string | null;
+  currentMapPosition?: MapPoint;
+  currentMapPositionMapId?: string | null;
+  assetUrls: Record<string, string>;
   onInput: (input: Input) => void;
   exploration?: WebExplorationStatus | null;
   exploring?: boolean;
@@ -945,11 +981,26 @@ export function StageView({
       );
     case "hubMenu": {
       const hubView = buildHubView(stage.snapshot);
+      const currentMap = currentMapId
+        ? (game.maps ?? []).find((map) => map.id === currentMapId)
+        : undefined;
       const opportunityByCategory = new Map(
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
       return (
-        <div className="hub-panel">
+        <div className="hub-stage-layout">
+          {currentMap?.layout && (
+            <SpatialMapSurface
+              map={currentMap}
+              activities={stage.snapshot.activities}
+              playerPosition={currentMapPositionMapId === currentMapId
+                ? currentMapPosition
+                : currentMap.layout.playerStart}
+              backgroundUrl={currentMap.bg ? assetUrls[currentMap.bg] : undefined}
+              onInput={onInput}
+            />
+          )}
+          <div className="hub-panel">
           {hubView.strategyDecisionRequired && (
             <div className="hub-strategy">
               STRATEGY · {hubView.opportunityGroups.length} PATHS AVAILABLE
@@ -1056,6 +1107,7 @@ export function StageView({
               </ul>
             </section>
           ))}
+          </div>
         </div>
       );
     }

@@ -9,7 +9,7 @@ if (!el) throw new Error("studio: #root not found");
 
 createRoot(el).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <App />
     </BrowserRouter>
   </React.StrictMode>,

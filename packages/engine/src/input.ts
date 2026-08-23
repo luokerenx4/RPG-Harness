@@ -146,6 +146,16 @@ export function classifyInput(output: Output, input: unknown): InputResult {
       );
   }
 
+  if (input.type === "moveMap") {
+    return input.direction === "north" || input.direction === "east" ||
+        input.direction === "south" || input.direction === "west"
+      ? accepted(expected)
+      : rejected(
+        "malformed-input",
+        "moveMap input requires a north, east, south, or west direction.",
+        expected,
+      );
+  }
   if (input.type !== "doActivity") {
     return rejected(
       "unexpected-input",

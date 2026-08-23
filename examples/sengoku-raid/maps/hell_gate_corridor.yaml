@@ -3,9 +3,6 @@ name: 業の廊
 chain: hell_gate
 difficulty: 5
 bg: assets/backgrounds/hell-gate-corridor
-connections:
-  - { dir: 奥, target: hell_gate_mirror_pool }
-  - { dir: 戻る, target: hell_gate_mouth }
 encounter_table:
   - { enemy: kijin, weight: 50 }
   - { enemy: kagami_oni, weight: 30 }
@@ -13,3 +10,30 @@ encounter_table:
 loot_table:
   - { item: cursed_blade_fragment, min: 1, max: 2, weight: 70 }
   - { item: oni_horn, min: 2, max: 4, weight: 30 }
+placements:
+  - id: exit_hell_gate_mirror_pool
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: hell_gate_mirror_pool
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 奥
+        order: 0
+  - id: exit_hell_gate_mouth
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: hell_gate_mouth
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 1

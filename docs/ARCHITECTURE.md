@@ -224,7 +224,10 @@ execution therefore cannot drift into separate implementations.
 
 ## Standard resources (the database)
 
-The engine owns six typed resource schemas. Each has: a `*Def` type, a directory the loader scans, a slot in `BaselineState`, optional `StateDelta` integration, optional `Condition` operators, and primitives for read/write.
+The shared Resource Registry indexes the game manifest, characters, items,
+enemies, weapons, skills, maps, actions, scripts, visual assets, and modules with canonical
+`<kind>:<id>` keys. Six of these are stateful gameplay resource schemas with a
+dedicated `BaselineState` contract:
 
 | Resource     | Def type      | Game directory  | Runtime state                                              | Condition operators           | Bundled action handler |
 | ------------ | ------------- | --------------- | ---------------------------------------------------------- | ----------------------------- | ---------------------- |
@@ -233,7 +236,7 @@ The engine owns six typed resource schemas. Each has: a `*Def` type, a directory
 | Enemy        | `EnemyDef`    | `enemies/`      | (read-only; modules consume)                               | —                             | (modules)              |
 | Weapon       | `WeaponDef`   | `weapons/`      | `baseline.weapons[id] = { power }` + `equippedWeaponId`    | `weaponPower`                 | —                      |
 | Skill        | `SkillDef`    | `skills/`       | `baseline.knownSkills: string[]` (deduped)                 | `knowsSkill`                  | `kind: useSkill`       |
-| Map          | `MapDef`      | `maps/`         | `baseline.currentMapId: string \| null` (where the player is) | (`Action.whenIn` map filter)  | `kind: moveToMap`      |
+| Map          | `MapDef`      | `maps/`         | `baseline.currentMapId` + optional `runtime.mapPosition` | (`Action.whenIn` map filter)  | `kind: moveToMap`      |
 
 Invariants enforced by `applyDelta`:
 - `inventory[id]` is deleted when it reaches ≤ 0 (no zero-count keys).
@@ -244,41 +247,95 @@ Resources are append-only at load time: the engine never mutates `ItemDef`/`Enem
 
 Every Def also carries an optional `custom?: Record<string, unknown>` populated at parse time from any frontmatter key the parser doesn't recognize (via `extractCustom()` in `packages/parser/src/frontmatter.ts`). Game modules read game-specific metadata via `item.custom.sell_value` or `enemy.custom.attack_power`; the engine doesn't interpret it. This keeps the engine's `Def` shape minimal (only fields every game needs) while letting individual games attach arbitrary numbers, strings, and tags directly in the .md source-of-truth file instead of mirroring them in module-side lookup tables.
 
-## Maps (the location axis)
+## Maps (the location and resource-container axis)
 
-A map is a **container for events** — actions, scripts, encounter tables, connections to other maps — scoped to "where the player is right now." This is the RPGMaker map model: enter a map, the hub shows that map's actions/connections; move to another map, the hub re-scopes. The engine owns `state.baseline.currentMapId` as a first-class location axis the same way it owns `currentScriptId`; modules that need "where am I?" read it instead of inventing private slots.
+A map is a spatially-capable **container for resources and events**, scoped to
+"where the player is right now." The engine owns
+`state.baseline.currentMapId`; modules read that first-class location instead
+of inventing private mode/location slots.
 
-Movement happens map-to-map. There is **no coordinate axis inside a map**; "where I am" is just `currentMapId`. The connection graph between maps is the world's geometry. Maps that conceptually belong to the same expedition or scene group share a `chain: string` label — engine doesn't interpret it; modules read it for sorting, gating, or "depart on raid → enter the chain's entry map".
+`layout` and `placements` are optional. Omitting `layout` produces the compact
+era-style node projection, but it does not select another map system. Node-map
+resources may all share logical coordinate `[0,0]`; a 2D author can instead
+declare dimensions, layers, regions, collision, and real positions. Hub, TUI,
+Headless, and 2D Web all consume the same placement events through
+`collectMapAvailableResources(ctx)`.
 
 ```yaml
-# maps/town.yaml — a flat map (the only shape)
+# maps/town.yaml — one spatial map resource
 id: town
 name: 街
 description: 涩谷·西早稲田。
 bg: assets/backgrounds/town
-on_enter: arrive_town          # optional script id to launch on entry
-connections:
-  - { dir: 校园, target: lab }
-  - { dir: 回家, target: cyber }
-actions:                       # optional map-scoped actions
-  - id: work
-    title: 打工
-    cost: 1
+layout:
+  width: 20
+  height: 12
+  tile_width: 32
+  player_start: [2, 10]        # persisted Web grid cursor; Headless ignores it
+  tile_height: 32
+  tileset: assets/tilesets/town
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: actors, kind: object, z: 10 }
+  regions:
+    - { id: station, x: 15, y: 8, width: 4, height: 3 }
+placements:
+  - id: school_gate
+    at: [3, 1]
+    layer: actors
+    resource: { kind: map, id: lab }
+    collision: trigger
+    events:
+      - { id: move, trigger: player_touch, label: 校园 }
+  - id: alice
+    at: [8, 5]
+    layer: actors
+    facing: south
+    resource: { kind: character, id: alice }
+    events:
+      - { id: talk, trigger: interact, label: 話す, run: { kind: script, id: meet_alice } }
+  - id: arrive_town
+    at: [0, 0]
+    visible: false
+    resource: { kind: script, id: arrive_town }
+    events:
+      - { id: run, trigger: map_enter, order: -100 }
 encounter_table:               # optional — modules roll on entry
   - { enemy: null, weight: 1 }
 loot_table:                    # optional
   - { item: ryo, min: 8, max: 16, weight: 50 }
-character_spawns:              # optional — modules consume
-  - { character: asahi, chance: 0.3, encounter_script: meet_asahi }
 chain: shibuya                 # optional grouping (no engine semantics)
 ```
 
-### How a map scopes the hub
+`layout` is renderer-neutral authoring data. `placements` may reference a map,
+character, item, enemy, weapon, skill, action, script, asset, module, or custom
+resource. Placement and event IDs are stable diagnostic/replay coordinates;
+multiple placements may intentionally overlap.
+
+Legacy `connections` and `on_enter` still parse during migration. `rpgh
+migrate-maps <game-dir> --apply` converts edges and entry scripts to placements
+at `[0,0]` without inventing a layout. New content should author placements
+directly.
+
+### How a map scopes every projection
 
 Two hub-building paths exist; both honor `currentMapId`:
 
-- **`buildMapHubSnapshot(ctx)` / `collectMapActivities(ctx)`** — engine helpers under `primitives/buildMapHub.ts`. Emit `move:<target>` synthesized activities for each `MapDef.connections[]`, then surface the current map's `actions[]` (filtered by `requires`), then `game.actions[]` filtered by `Action.whenIn` (omitted = visible everywhere; listed = only on those maps).
+- **`collectMapAvailableResources(ctx)`** is the renderer-neutral source. It evaluates placement/event conditions, keeps stable resource/event keys, and emits semantic activities for map, action, and script bindings without simulating a visual avatar.
+- **`buildMapHubSnapshot(ctx)` / `collectMapActivities(ctx)`** project that query into Hub activities; global actions remain filtered by `Action.whenIn`, while `exposure: placed` keeps an action out of the ambient list until a placement references it.
 - **Training preset hub** — same filtering layered on top of slot / scripts. Games using `training:` config get map-scoping for free.
+
+The Web 2D shell may additionally submit `moveMap`. `moveMapPlayer(ctx, dir)`
+updates the persisted `runtime.mapPosition`, enforces layout bounds and blocking
+footprints, and maps a `player_touch` collision back to the already-published
+Hub activity. This renderer input is intentionally absent from Headless
+`expected` semantic choices: an AI still operates the map as one node.
+
+`map_enter` fires once per map visit. `autorun` fires once when its condition
+becomes true during that visit. Both use the same deterministic activity
+dispatcher and are never exposed as player buttons. `parallel` and namespaced
+triggers are extension contracts for a preset/module-owned scheduler; core does
+not invent an unbounded per-frame loop.
 
 A game module that owns its own `onHubBuild` can call `collectMapActivities` and layer on game-specific entries (companion HP, depart-to-chain buttons, etc.).
 
@@ -286,7 +343,7 @@ A game module that owns its own `onHubBuild` can call `collectMapActivities` and
 
 Two engine-owned entrypoints for transitioning:
 
-- **`enterMap(state, game, mapId)`** — primitive any preset/module can call. Validates the map exists, sets `currentMapId`, syncs `baseline.visuals.bg` to `map.bg` when present, and (if `map.onEnter` is set and no script is active) queues that script into `currentScriptId`.
+- **`enterMap(state, game, mapId)`** — primitive any preset/module can call. Validates the map exists, sets `currentMapId`, initializes the target's authoritative player position, and syncs `baseline.visuals.bg` to `map.bg` when present. Legacy `map.onEnter` remains transitional; new content uses a `map_enter` event placement.
 - **`kind: "moveToMap"`** — bundled action handler in the baseline module. Reads `payload.to` and calls `enterMap`. This is what the engine-synthesized `move:<target>` activities dispatch through.
 
 Games with side-effects-on-move (raid turn count, companion passives, encounter rolls) provide their own action handler and observe via `onActionComplete` — the engine's `moveToMap` is the simple-game default, not a mandatory channel.
@@ -305,7 +362,9 @@ Read `state.baseline.currentMapId` directly. Read the static `MapDef` via `ctx.m
 - `applyActionResult(ctx, result)` — apply handler's `ActionResult` (deltas + narrations + scriptStart).
 - `mutateState(ctx, delta, source)` — `applyDelta` + `fireOnStateMutated` + `checkTriggers`. The one true write path.
 - `enterMap(state, game, mapId)` — transition the player into a map (writes `currentMapId`, syncs visuals, queues `onEnter` script).
-- `buildMapHubSnapshot(ctx)` / `collectMapActivities(ctx)` — scope hub activities by current map + connections + `whenIn`.
+- `collectMapAvailableResources(ctx)` — query the current map's placement resources and semantic operations.
+- `moveMapPlayer(ctx, direction)` — update authoritative spatial position, enforce collision, and resolve player-touch to a semantic activity.
+- `buildMapHubSnapshot(ctx)` / `collectMapActivities(ctx)` — project the shared query into Hub activities.
 - `checkEndConditions(ctx)` — evaluate `game.training.endConditions` in order.
 - `checkTriggers(ctx)` — rising-edge evaluation across all registered triggers.
 - `fireOnXxx(ctx, ...)` — 15 hook dispatchers (see "Hooks").

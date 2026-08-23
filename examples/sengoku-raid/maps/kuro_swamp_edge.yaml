@@ -6,10 +6,22 @@ difficulty: 1
 description: 黒沼地の入口。霧が脛に絡みつく。
 bg: assets/backgrounds/swamp-edge
 entry_narration: 霧が脛に絡みつく。
-connections:
-  - { dir: 奥, target: kuro_swamp_crossroads }
 encounter_table:
   - { enemy: null, weight: 1 }
 loot_table:
   - { item: ryo, min: 5, max: 12, weight: 30 }
   - { item: null, min: 0, max: 0, weight: 70 }
+placements:
+  - id: exit_kuro_swamp_crossroads
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: kuro_swamp_crossroads
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 奥
+        order: 0

@@ -4,8 +4,37 @@ chain: kuro_swamp
 difficulty: 1
 bg: assets/backgrounds/swamp-shrine
 is_extract: true
-connections:
-  - { dir: 戻る, target: kuro_swamp_crossroads }
+layout:
+  width: 12
+  height: 10
+  tile_width: 32
+  tile_height: 32
+  player_start: [5, 8]
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: objects, kind: object, z: 10 }
+  regions:
+    - { id: altar, name: 崩れた祭壇, x: 4, y: 1, width: 4, height: 3 }
+placements:
+  - id: return_path
+    at: [5, 9]
+    layer: objects
+    footprint: [2, 1]
+    collision: trigger
+    resource: { kind: map, id: kuro_swamp_crossroads }
+    events:
+      - { id: leave, trigger: player_touch, label: 戻る }
+  - id: altar_shard
+    at: [5, 2]
+    layer: objects
+    collision: block
+    resource: { kind: item, id: soul_shard }
+  - id: altar_backdrop_anchor
+    at: [5, 2]
+    layer: ground
+    z: -1
+    visible: false
+    resource: { kind: asset, id: assets/backgrounds/swamp-shrine }
 encounter_table:
   - { enemy: null, weight: 1 }
 loot_table:

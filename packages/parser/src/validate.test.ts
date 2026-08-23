@@ -488,4 +488,90 @@ describe("validateGame — maps", () => {
     });
     expect(() => validateGame(game)).not.toThrow();
   });
+
+  test("Map v2 placements validate layers, bounds, conditions, and resource refs", () => {
+    const game = baseGame({
+      maps: [{
+        id: "shrine",
+        name: "Shrine",
+        description: "",
+        layout: {
+          width: 2,
+          height: 2,
+          tileWidth: 32,
+          tileHeight: 32,
+          layers: [{ id: "ground", kind: "tile", z: 0, visible: true }],
+          regions: [],
+        },
+        placements: [{
+          id: "ghost",
+          at: { x: 1, y: 1 },
+          layer: "actors",
+          z: 0,
+          footprint: { width: 2, height: 1 },
+          collision: "block",
+          visible: true,
+          resource: { kind: "character", id: "missing_character" },
+          requires: { switch: { name: "missing_switch", eq: true } },
+          events: [{
+            id: "talk",
+            trigger: "interact",
+            order: 0,
+            run: { kind: "script", id: "missing_script" },
+          }],
+        }],
+      }],
+    });
+    expect(() => validateGame(game)).toThrow(/missing_character/);
+    expect(() => validateGame(game)).toThrow(/missing_script/);
+    expect(() => validateGame(game)).toThrow(/missing_switch/);
+    expect(() => validateGame(game)).toThrow(/undeclared map layer "actors"/);
+    expect(() => validateGame(game)).toThrow(/footprint must fit inside 2x2/);
+  });
+
+  test("map-chain reachability follows map resource placements", () => {
+    const game = baseGame({
+      maps: [
+        {
+          id: "gate",
+          name: "Gate",
+          description: "",
+          chain: "raid",
+          isEntry: true,
+          placements: [{
+            id: "to_inner",
+            at: { x: 0, y: 0 },
+            z: 0,
+            footprint: { width: 1, height: 1 },
+            collision: "trigger",
+            visible: true,
+            resource: { kind: "map", id: "inner" },
+            events: [{ id: "move", trigger: "player_touch", order: 0 }],
+          }],
+        },
+        { id: "inner", name: "Inner", description: "", chain: "raid" },
+      ],
+    });
+    expect(() => validateGame(game)).not.toThrow();
+  });
+
+  test("namespaced map triggers must belong to a loaded module", () => {
+    const game = baseGame({
+      maps: [{
+        id: "m",
+        name: "M",
+        description: "",
+        placements: [{
+          id: "event",
+          at: { x: 0, y: 0 },
+          z: 0,
+          footprint: { width: 1, height: 1 },
+          collision: "none",
+          visible: false,
+          events: [{ id: "custom", trigger: "raid:scan", order: 0 }],
+        }],
+      }],
+    });
+    expect(() => validateGame(game)).toThrow(/undeclared module "raid"/);
+  });
 });

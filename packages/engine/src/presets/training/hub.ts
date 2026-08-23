@@ -3,6 +3,7 @@
 // surfaces map-connection moves as activities, builds a HubSnapshot.
 
 import { evaluateCondition, explainCondition } from "../../condition";
+import { collectMapConnections } from "../../maps";
 import type {
   ComposedState,
   Game,
@@ -45,7 +46,7 @@ export function buildHubSnapshot(state: ComposedState, game: Game): Output {
   // could go. Movement costs 0 slots; advancing the calendar is a
   // separate concern.
   if (currentMap) {
-    for (const conn of currentMap.connections ?? []) {
+    for (const conn of collectMapConnections(currentMap)) {
       const target = (game.maps ?? []).find((m) => m.id === conn.target);
       const title = target ? `→ ${target.name}（${conn.dir}）` : `→ ${conn.dir}`;
       const r =

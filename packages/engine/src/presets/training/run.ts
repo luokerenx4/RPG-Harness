@@ -21,6 +21,7 @@ import {
   fireOnHubBuild,
   fireOnScriptComplete,
   fireOnSessionStart,
+  moveMapPlayer,
   runScript,
 } from "../../primitives";
 import type { Action, Input, Output, PresetContext } from "../../types";
@@ -126,6 +127,14 @@ export async function* trainingRun(
     }
     const input = yield hubOutput;
     if (input.type === "quit") return;
+    if (input.type === "moveMap") {
+      const movement = moveMapPlayer(ctx, input.direction);
+      if (movement.activityId) {
+        const dispatched = yield* dispatchActivity(ctx, movement.activityId);
+        if (dispatched === "quit") return;
+      }
+      continue;
+    }
     if (input.type !== "doActivity") continue;
     if (hubOutput.type !== "hubMenu") continue;
     const selectedActivity = hubOutput.snapshot.activities.find(

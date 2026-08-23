@@ -3,10 +3,6 @@ name: 三叉路
 chain: kuro_swamp
 difficulty: 1
 bg: assets/backgrounds/swamp-edge
-connections:
-  - { dir: 東, target: kuro_swamp_shrine }
-  - { dir: 北, target: kuro_swamp_ruined_hut }
-  - { dir: 西奥, target: kuro_swamp_deep_grove }
 encounter_table:
   - { enemy: oni_lesser, weight: 70 }
   - { enemy: null, weight: 30 }
@@ -14,5 +10,49 @@ loot_table:
   - { item: ryo, min: 8, max: 20, weight: 50 }
   - { item: soul_shard, min: 1, max: 2, weight: 30 }
   - { item: null, min: 0, max: 0, weight: 20 }
-character_spawns:
-  - { character: kagari, chance: 1.0, encounter_script: encounter_kagari_first }
+placements:
+  - id: kagari_spawn
+    at: [0, 0]
+    visible: false
+    resource: { kind: character, id: kagari }
+    events:
+      - { id: encounter, trigger: "sengoku-raid:spawn", chance: 1.0, run: { kind: script, id: encounter_kagari_first } }
+  - id: exit_kuro_swamp_shrine
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: kuro_swamp_shrine
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 東
+        order: 0
+  - id: exit_kuro_swamp_ruined_hut
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: kuro_swamp_ruined_hut
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 北
+        order: 1
+  - id: exit_kuro_swamp_deep_grove
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: kuro_swamp_deep_grove
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 西奥
+        order: 2

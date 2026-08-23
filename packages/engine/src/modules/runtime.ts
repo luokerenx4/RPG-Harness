@@ -23,6 +23,10 @@ export function createRuntimeState(
     firedTriggers: [],
     firedScriptStarts: [],
     lastHubActivities: [],
+    observedMapId: null,
+    pendingMapEvents: [],
+    firedMapEvents: [],
+    mapPositionMapId: null,
   };
 }
 

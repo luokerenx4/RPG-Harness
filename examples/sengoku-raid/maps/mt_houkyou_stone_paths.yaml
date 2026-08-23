@@ -2,10 +2,6 @@ id: mt_houkyou_stone_paths
 name: 石畳の道
 chain: mt_houkyou
 difficulty: 3
-connections:
-  - { dir: 上, target: mt_houkyou_burnt_temple }
-  - { dir: 横, target: mt_houkyou_lava_vent }
-  - { dir: 戻る, target: mt_houkyou_foothills }
 encounter_table:
   - { enemy: oni_lesser, weight: 40 }
   - { enemy: oni_warrior, weight: 30 }
@@ -15,5 +11,49 @@ loot_table:
   - { item: soul_shard, min: 1, max: 2, weight: 30 }
   - { item: oni_horn, min: 1, max: 1, weight: 20 }
   - { item: null, min: 0, max: 0, weight: 10 }
-character_spawns:
-  - { character: kasumi, chance: 1.0, encounter_script: encounter_kasumi_first }
+placements:
+  - id: kasumi_spawn
+    at: [0, 0]
+    visible: false
+    resource: { kind: character, id: kasumi }
+    events:
+      - { id: encounter, trigger: "sengoku-raid:spawn", chance: 1.0, run: { kind: script, id: encounter_kasumi_first } }
+  - id: exit_mt_houkyou_burnt_temple
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: mt_houkyou_burnt_temple
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 上
+        order: 0
+  - id: exit_mt_houkyou_lava_vent
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: mt_houkyou_lava_vent
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 横
+        order: 1
+  - id: exit_mt_houkyou_foothills
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: mt_houkyou_foothills
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 2

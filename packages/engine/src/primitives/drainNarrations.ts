@@ -1,5 +1,6 @@
 import type { Input, Output, PresetContext } from "../types";
 import { fireOnNarrationDrain } from "./hooks";
+import { drainAutomaticMapEvents } from "./drainMapEvents";
 
 // Drain the pending narration queue one at a time. Each shift happens
 // AFTER the yield — so peek() (which calls .next() once then
@@ -30,6 +31,7 @@ import { fireOnNarrationDrain } from "./hooks";
 export async function* drainNarrations(
   ctx: PresetContext,
 ): AsyncGenerator<Output, void, Input> {
+  yield* drainAutomaticMapEvents(ctx);
   const q = ctx.state.runtime.pendingNarrations;
   while (q.length > 0) {
     const text = q[0]!;

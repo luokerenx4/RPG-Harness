@@ -209,7 +209,13 @@ function collect<T>(
   return out;
 }
 
-const ASSET_KIND_DIRS = ["portraits", "backgrounds", "cgs", "sheets"] as const;
+const ASSET_KIND_DIRS = [
+  "portraits",
+  "backgrounds",
+  "cgs",
+  "sheets",
+  "tilesets",
+] as const;
 
 function collectAssets(raw: Map<string, string>): AssetSpec[] {
   const out: AssetSpec[] = [];

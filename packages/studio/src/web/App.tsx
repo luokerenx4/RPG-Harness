@@ -4,6 +4,8 @@ import type { GameSummary } from "./api";
 import { fetchGame } from "./api";
 import { Gallery } from "./pages/Gallery";
 import { AssetDetail } from "./pages/AssetDetail";
+import { Project } from "./pages/Project";
+import { Link } from "react-router-dom";
 
 // Single-page shell. Loads the GameSummary once at boot so the header
 // can show title + asset counts; child pages fetch their own data.
@@ -24,11 +26,15 @@ export function App() {
     <div className="app">
       <header className="header">
         <div>
-          <span className="title">{game?.title ?? "rpgh studio"}</span>
+          <Link className="title" to="/">{game?.title ?? "rpgh studio"}</Link>
           {loc.pathname !== "/" && (
-            <span className="muted"> &nbsp;·&nbsp; assets</span>
+            <span className="muted"> &nbsp;·&nbsp; Project Studio</span>
           )}
         </div>
+        <nav className="studio-nav">
+          <Link to="/">Project</Link>
+          <Link to="/assets">Assets</Link>
+        </nav>
         <div className="meta">
           {game && (
             <>
@@ -55,7 +61,8 @@ export function App() {
         {err && <div className="empty">⚠ {err}</div>}
         {!err && (
           <Routes>
-            <Route path="/" element={<Gallery />} />
+            <Route path="/" element={<Project />} />
+            <Route path="/assets" element={<Gallery />} />
             <Route path="/asset/*" element={<AssetDetail />} />
           </Routes>
         )}

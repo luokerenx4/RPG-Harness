@@ -19,6 +19,7 @@ import {
   fireOnScriptComplete,
   fireOnSessionStart,
   markScriptCompleted,
+  moveMapPlayer,
   scriptRevision,
   runScript,
 } from "@rpg-harness/engine";
@@ -103,6 +104,14 @@ export async function* trainingRun(
     }
     const input = yield hubOutput;
     if (input.type === "quit") return;
+    if (input.type === "moveMap") {
+      const movement = moveMapPlayer(ctx, input.direction);
+      if (movement.activityId) {
+        const dispatched = yield* dispatchActivity(ctx, movement.activityId);
+        if (dispatched === "quit") return;
+      }
+      continue;
+    }
     if (input.type !== "doActivity") continue;
     const dispatched = yield* dispatchActivity(ctx, input.id);
     if (dispatched === "quit") return;

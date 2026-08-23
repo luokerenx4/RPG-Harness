@@ -5,10 +5,22 @@ is_entry: true
 difficulty: 5
 bg: assets/backgrounds/hell-gate-mouth
 entry_narration: 視界の縁が滲む。鬼の脈に染まった者にしか、この道は開かぬ。
-connections:
-  - { dir: 奥, target: hell_gate_corridor }
 encounter_table:
   - { enemy: oni_warrior, weight: 100 }
 loot_table:
   - { item: cursed_blade_fragment, min: 1, max: 1, weight: 60 }
   - { item: oni_horn, min: 2, max: 3, weight: 40 }
+placements:
+  - id: exit_hell_gate_corridor
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: hell_gate_corridor
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 奥
+        order: 0

@@ -81,7 +81,7 @@ export function Gallery() {
         <p className="muted">
           Drop a spec.yaml under <code>assets/portraits/</code>,{" "}
           <code>assets/backgrounds/</code>, <code>assets/cgs/</code>, or{" "}
-          <code>assets/sheets/</code> to get started.
+          <code>assets/sheets/</code>, or <code>assets/tilesets/</code> to get started.
         </p>
       </div>
     );
@@ -93,6 +93,7 @@ export function Gallery() {
     bg: assets.filter((a) => a.kind === "bg").length,
     cg: assets.filter((a) => a.kind === "cg").length,
     sheet: assets.filter((a) => a.kind === "sheet").length,
+    tileset: assets.filter((a) => a.kind === "tileset").length,
     missing: assets.filter((a) => !a.renderings.tuiTxt && !a.renderings.tuiAns)
       .length,
     ghost:
@@ -128,6 +129,11 @@ export function Gallery() {
           label={`sheet (${counts.sheet})`}
           active={filter === "sheet"}
           onClick={() => setFilter("sheet")}
+        />
+        <FilterChip
+          label={`tileset (${counts.tileset})`}
+          active={filter === "tileset"}
+          onClick={() => setFilter("tileset")}
         />
         <FilterChip
           label={`missing TUI (${counts.missing})`}
@@ -196,6 +202,7 @@ function kindFromPath(p: string): AssetKind | string {
   if (seg === "backgrounds") return "bg";
   if (seg === "cgs") return "cg";
   if (seg === "sheets") return "sheet";
+  if (seg === "tilesets") return "tileset";
   return seg || "?";
 }
 

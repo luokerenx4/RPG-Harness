@@ -6,13 +6,14 @@ This file is for AI co-authors (Claude Code, Cursor, …) picking up this codeba
 
 A headless RPG Maker — an AI-first coding harness for GalGame-shaped games. A game is a folder. The engine runs in a terminal via ink; the same engine drives a web frontend and a JSON-in/JSON-out test harness. The engine owns universal pieces (typed resources, Condition DSL, 15 lifecycle hooks, reactive triggers, one write path); each game owns its mechanics via `modules/*.ts` and, optionally, an ejected `preset/run.ts`.
 
-Five packages, never cross-import internals:
+Six packages, never cross-import internals:
 
 - `@rpg-harness/engine` — pure state machine. No React, no DOM, no Node-specific APIs (no `fs`, no `process`). Pure data in, pure events out. Owns the standard resource schemas (characters / items / enemies / weapons / skills), the Condition DSL, StateDelta, the Module interface (action handlers + 15 lifecycle hooks + reactive triggers), and the primitives that compose into preset loops.
 - `@rpg-harness/parser` — markdown + YAML frontmatter → Game AST. One file per resource type.
 - `@rpg-harness/frontend-core` — renderer-agnostic. The `screen-model` reducer (`applyOutput` / `applyUiAction`): projects the engine's `Output` stream into a stable `ScreenModel` (one current stage + a backlog + visuals). Imported by **both** frontends; depends only on engine types. No React, no ink, no DOM.
 - `@rpg-harness/cli` — terminal frontend (ink) + loader + test harness + `init --eject`.
 - `@rpg-harness/web` — browser frontend (React DOM). Static: the engine bundles into the page, games are baked at build time (`src/loadGame.ts`, the browser twin of the CLI loader), saves go to localStorage. Renders the same `frontend-core` ScreenModel the CLI does, with DOM components instead of ink.
+- `@rpg-harness/studio` — browser project editor. Uses the public loader, Resource Registry/graph, parser, and validator for project/map/resource views; repository YAML/Markdown remains authoritative.
 
 ## Hard rules
 
@@ -21,7 +22,7 @@ Five packages, never cross-import internals:
 3. **One write path: `mutateState`.** Anything that changes `state.baseline` / `state.training` goes through `mutateState(ctx, delta, source)`. It calls `applyDelta` + `fireOnStateMutated` + `checkTriggers`. Bypassing it breaks triggers and the audit trail.
 4. **ActionHandlers resolve atomically.** A handler returns an `ActionResult` (deltas + narrations + scriptStart). It does NOT yield. Multi-step output goes through `narrations: string[]` which the main loop drains one per step. This is what makes `step` mode work; violating it silently breaks AI playtester evaluation.
 5. **Engine owns standard schemas; modules consume them.** Adding a field to `ItemDef` is an engine PR. A module's own data lives under `state[moduleId]` — its private namespace. Modules MUST NOT modify engine-owned slots except via primitives.
-   - **Maps are first-class.** "Where the player is" lives in `state.baseline.currentMapId` (one of the engine's six standard resources, alongside characters/items/enemies/weapons/skills). Modules read it; modules write it via `enterMap(state, game, mapId)`. Do not invent module-private "current location" / "mode flag" fields — that's the pre-refactor pattern that the flat-map model exists to eliminate. If you need to know "are we in a special sub-context" (raid mode, dive jacked-in, etc.), express that by *which map* the player is on (e.g. `currentMap.chain === "kuro_swamp"`) rather than parallel state.
+   - **Maps are first-class resource containers.** "Where the player is" lives in `state.baseline.currentMapId` (one of the engine's six stateful standard resources, alongside characters/items/enemies/weapons/skills). Modules read it; modules write it via `enterMap(state, game, mapId)`. A map may be an era-style node or declare canonical `layout` + `placements`; both forms use `collectMapAvailableResources`, not module-private location/placement metadata. If you need to know "are we in a special sub-context" (raid mode, dive jacked-in, etc.), express that by *which map* the player is on (e.g. `currentMap.chain === "kuro_swamp"`) rather than parallel state.
 6. **No `any`, no `as` casts unless unavoidable.** Strict TS is the contract.
 7. **No comments in source code.** Names and types must document themselves. Add a comment only when the WHY would surprise a future reader. Architecture docs go in `docs/`.
 8. **Frontmatter is the only place imperative-looking syntax lives in content.** Scripts are declarative.
@@ -56,6 +57,7 @@ packages/engine/src/
     mutateState.ts      THE write path — delta + onStateMutated + checkTriggers
     enterMap.ts         set currentMapId + sync visuals.bg + queue onEnter script
     buildMapHub.ts      collectMapActivities / buildMapHubSnapshot — scope hub by currentMapId
+    collectMapResources.ts canonical current-map resource/operation query
     checkEndConditions.ts
     checkTriggers.ts    rising-edge detection + bounded cascade
     hooks.ts            15 fireOn* dispatchers

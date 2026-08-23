@@ -165,3 +165,148 @@ is_entry: true
     expect(m.isEntry).toBe(true);
   });
 });
+
+describe("parseMap — spatial layout and placements", () => {
+  test("parses canonical 2D structure and stacked resource events", () => {
+    const m = parseMap(`id: shrine
+name: 夜之社
+layout:
+  width: 3
+  height: 2
+  tile_width: 16
+  tile_height: 24
+  player_start: [0, 1]
+  tileset: assets/tilesets/shrine
+  layers:
+    - id: ground
+      kind: tile
+      tiles:
+        - [1, 1, 2]
+        - [3, 4, 5]
+    - { id: actors, kind: object, z: 10 }
+  regions:
+    - { id: altar, name: 祭坛, x: 1, y: 0, width: 2, height: 1 }
+placements:
+  - id: kagari
+    at: [1, 0]
+    layer: actors
+    z: 2
+    facing: south
+    footprint: [1, 2]
+    collision: block
+    resource: { kind: character, id: kagari }
+    events:
+      - id: talk
+        trigger: interact
+        label: 与篝交谈
+        run: { kind: script, id: shrine_kagari }
+        requires: { switch: { name: met_kagari, eq: true } }
+      - id: inspect
+        trigger: raid:inspect
+        chance: 0.25
+        order: 20
+        run: { kind: action, id: inspect_kagari }
+  - id: hidden_cg
+    at: [1, 0]
+    visible: false
+    resource: { kind: script, id: memory_cg }
+    events:
+      - { id: play, trigger: autorun }
+`);
+
+    expect(m.layout).toMatchObject({
+      width: 3,
+      height: 2,
+      tileWidth: 16,
+      tileHeight: 24,
+      playerStart: { x: 0, y: 1 },
+      tileset: "assets/tilesets/shrine",
+    });
+    expect(m.layout?.layers[0]).toMatchObject({
+      id: "ground",
+      kind: "tile",
+      z: 0,
+      visible: true,
+      tiles: [[1, 1, 2], [3, 4, 5]],
+    });
+    expect(m.layout?.regions[0]).toMatchObject({
+      id: "altar",
+      x: 1,
+      y: 0,
+      width: 2,
+      height: 1,
+    });
+    expect(m.placements).toHaveLength(2);
+    expect(m.placements?.[0]).toMatchObject({
+      id: "kagari",
+      at: { x: 1, y: 0 },
+      layer: "actors",
+      z: 2,
+      facing: "south",
+      footprint: { width: 1, height: 2 },
+      collision: "block",
+      visible: true,
+      resource: { kind: "character", id: "kagari" },
+    });
+    expect(m.placements?.[0]?.events[0]).toMatchObject({
+      id: "talk",
+      trigger: "interact",
+      label: "与篝交谈",
+      run: { kind: "script", id: "shrine_kagari" },
+      order: 0,
+    });
+    expect(m.placements?.[0]?.events[1]).toMatchObject({
+      id: "inspect",
+      trigger: "raid:inspect",
+      chance: 0.25,
+      order: 20,
+    });
+    expect(m.placements?.[1]).toMatchObject({
+      at: { x: 1, y: 0 },
+      visible: false,
+      footprint: { width: 1, height: 1 },
+      collision: "none",
+    });
+  });
+
+  test("rejects malformed layout and unstable placement identities", () => {
+    expect(() => parseMap(`id: m
+name: M
+layout: { width: 0, height: 2 }
+`)).toThrow(/layout.width must be a positive integer/);
+
+    expect(() => parseMap(`id: m
+name: M
+placements:
+  - { id: same, at: [0, 0], resource: { kind: item, id: a } }
+  - { id: same, at: [0, 0], resource: { kind: item, id: b } }
+`)).toThrow(/duplicate id "same"/);
+  });
+
+  test("rejects wrong tile matrix dimensions and unnamespaced custom triggers", () => {
+    expect(() => parseMap(`id: m
+name: M
+layout:
+  width: 2
+  height: 1
+  layers:
+    - { id: ground, kind: tile, tiles: [[1]] }
+`)).toThrow(/exactly 2 tiles/);
+
+    expect(() => parseMap(`id: m
+name: M
+placements:
+  - id: e
+    at: [0, 0]
+    events: [{ id: run, trigger: custom }]
+`)).toThrow(/built-in trigger or namespaced module trigger/);
+
+    expect(() => parseMap(`id: m
+name: M
+placements:
+  - id: e
+    at: [0, 0]
+    events: [{ id: run, trigger: autorun, chance: 2 }]
+`)).toThrow(/chance must be a number in \[0,1\]/);
+  });
+});

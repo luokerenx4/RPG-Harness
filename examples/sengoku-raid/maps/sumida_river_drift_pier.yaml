@@ -3,10 +3,22 @@ name: 流木の桟橋
 chain: sumida_river
 difficulty: 2
 bg: assets/backgrounds/sumida-drift-pier
-connections:
-  - { dir: 戻る, target: sumida_river_drowned_shrine }
 encounter_table:
   - { enemy: oni_lesser, weight: 100 }
 loot_table:
   - { item: ryo, min: 25, max: 40, weight: 60 }
   - { item: soul_shard, min: 2, max: 3, weight: 40 }
+placements:
+  - id: exit_sumida_river_drowned_shrine
+    at:
+      - 0
+      - 0
+    resource:
+      kind: map
+      id: sumida_river_drowned_shrine
+    collision: trigger
+    events:
+      - id: move
+        trigger: manual
+        label: 戻る
+        order: 0

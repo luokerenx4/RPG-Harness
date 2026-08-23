@@ -227,6 +227,7 @@ export type WebAiPublicAction =
   | { type: "choose"; scriptId?: string; choiceId?: string; optionId?: string; text?: string }
   | { type: "select"; scriptId: string; title?: string }
   | { type: "doActivity"; id: string; title?: string }
+  | { type: "moveMap"; direction: "north" | "east" | "south" | "west" }
   | { type: "quit" };
 
 export type WebAiPublicDecisionBasis =
@@ -563,6 +564,9 @@ function isWebAiPublicAction(value: unknown): value is WebAiPublicAction {
     case "doActivity":
       return typeof action.id === "string" &&
         (action.title === undefined || typeof action.title === "string");
+    case "moveMap":
+      return action.direction === "north" || action.direction === "east" ||
+        action.direction === "south" || action.direction === "west";
     default:
       return false;
   }

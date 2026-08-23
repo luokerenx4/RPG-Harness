@@ -1,10 +1,21 @@
-import { readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AssetSpec, TuiRenderPrefs } from "@rpg-harness/engine";
+import {
+  buildPresetContext,
+  buildProjectResourceGraph,
+  collectMapActivities,
+  collectMapAvailableResources,
+  createInitialState,
+  type AssetSpec,
+  type ProjectResourceKind,
+  type TuiRenderPrefs,
+} from "@rpg-harness/engine";
 import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
+import { updateMapSpatial, type MapSpatialPatch } from "./map-write";
+import { readResourceSource, updateResourceSource } from "./resource-source";
 
 interface Ctx {
   gameDir: string;
@@ -21,7 +32,14 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   if (method === "GET") {
     if (pathname === "/api/health") return getHealthRoute();
     if (pathname === "/api/game") return getGame(ctx);
+    if (pathname === "/api/project") return getProject(ctx);
+    if (pathname === "/api/resource-source") return getResourceSource(ctx, url);
     if (pathname === "/api/assets") return getAssets(ctx);
+
+    const mapPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/preview$/);
+    if (mapPreviewMatch?.[1]) {
+      return getMapPreview(ctx, decodeURIComponent(mapPreviewMatch[1]));
+    }
 
     // /api/assets/<asset-path>   (asset-path may itself contain slashes)
     const specMatch = pathname.match(/^\/api\/assets\/(.+)$/);
@@ -51,12 +69,102 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "PATCH") {
+    if (pathname === "/api/resource-source") return patchResourceSource(ctx, url, req);
+    const mapMatch = pathname.match(/^\/api\/maps\/([^/]+)\/spatial$/);
+    if (mapMatch?.[1]) return patchMapSpatial(ctx, decodeURIComponent(mapMatch[1]), req);
     // /api/assets/<asset-path>/spec — edit mutable spec fields
     const m = pathname.match(/^\/api\/assets\/(.+)\/spec$/);
     if (m && m[1]) return patchSpec(ctx, m[1], req);
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function getMapPreview(ctx: Ctx, mapId: string): Promise<Response> {
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
+    if (!map) return json({ error: "map not found" }, 404);
+    const state = createInitialState(game, { seed: 0 });
+    state.baseline.currentMapId = mapId;
+    const preset = buildPresetContext(game, state, () => 0.5);
+    const headless = collectMapAvailableResources(preset);
+    const hub = collectMapActivities(preset);
+    return json({
+      mapId,
+      state: "deterministic-initial",
+      hub,
+      headless,
+      tui: hub.map((activity, index) =>
+        `${index === 0 ? ">" : " "} ${activity.title}${activity.available ? "" : `  [LOCKED: ${activity.lockedReason ?? "condition"}]`}`
+      ),
+    });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+async function getResourceSource(ctx: Ctx, url: URL): Promise<Response> {
+  const identity = readResourceIdentity(url);
+  if (identity instanceof Response) return identity;
+  try {
+    const game = await loadGame(ctx.gameDir);
+    return json(await readResourceSource(
+      ctx.gameDir,
+      game,
+      identity.kind,
+      identity.id,
+    ));
+  } catch (error) {
+    return json({ error: (error as Error).message }, 404);
+  }
+}
+
+async function patchResourceSource(
+  ctx: Ctx,
+  url: URL,
+  req: Request,
+): Promise<Response> {
+  const identity = readResourceIdentity(url);
+  if (identity instanceof Response) return identity;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const source = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>).source
+    : undefined;
+  if (typeof source !== "string") return json({ error: "source must be a string" }, 400);
+
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const updated = await updateResourceSource(
+      ctx.gameDir,
+      game,
+      identity.kind,
+      identity.id,
+      source,
+      () => loadGame(ctx.gameDir),
+    );
+    return json({
+      path: updated.path,
+      source,
+      project: await projectGame(ctx, updated.game),
+    });
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+}
+
+function readResourceIdentity(
+  url: URL,
+): { kind: ProjectResourceKind; id: string } | Response {
+  const kind = url.searchParams.get("kind");
+  const id = url.searchParams.get("id");
+  if (!kind || !id) return json({ error: "kind and id are required" }, 400);
+  return { kind: kind as ProjectResourceKind, id };
 }
 
 async function getHealthRoute(): Promise<Response> {
@@ -71,9 +179,193 @@ async function getGame(ctx: Ctx): Promise<Response> {
       characters: game.characters.length,
       scripts: game.scripts.length,
       assets: (game.assets ?? []).length,
+      maps: (game.maps ?? []).length,
+      actions: (game.actions ?? []).length,
+      items: (game.items ?? []).length,
+      enemies: (game.enemies ?? []).length,
+      weapons: (game.weapons ?? []).length,
+      skills: (game.skills ?? []).length,
     },
     gameDir: ctx.gameDir,
   });
+}
+
+async function getProject(ctx: Ctx): Promise<Response> {
+  const game = await loadGame(ctx.gameDir);
+  return json(await projectGame(ctx, game));
+}
+
+async function projectGame(ctx: Ctx, game: Awaited<ReturnType<typeof loadGame>>) {
+  const graph = buildProjectResourceGraph(game);
+  const artifacts = await scanProjectArtifacts(ctx.gameDir);
+  graph.resources.push(...artifacts);
+  graph.resources.sort((left, right) =>
+    left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id)
+  );
+  const resourceKeys = new Set(graph.resources.map((resource) => resource.key));
+  for (const artifact of artifacts) {
+    for (const ref of artifact.refs) {
+      if (resourceKeys.has(ref)) {
+        graph.backlinks[ref] = [...new Set([
+          ...(graph.backlinks[ref] ?? []),
+          artifact.key,
+        ])].sort();
+      } else {
+        const existing = graph.missing.find((candidate) => candidate.key === ref);
+        if (existing) {
+          existing.referencedBy = [...new Set([...existing.referencedBy, artifact.key])].sort();
+        } else {
+          graph.missing.push({ key: ref, referencedBy: [artifact.key] });
+        }
+      }
+    }
+  }
+  graph.missing.sort((left, right) => left.key.localeCompare(right.key));
+  graph.unreferenced.push(...artifacts.map((artifact) => artifact.key));
+  return { graph, maps: game.maps ?? [] };
+}
+
+export async function scanProjectArtifacts(gameDir: string) {
+  const tests = await readdir(path.join(gameDir, "tests"), { withFileTypes: true })
+    .catch(() => []);
+  const testNodes = tests
+    .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => ({
+      kind: "test" as const,
+      id: entry.name.replace(/\.ya?ml$/, ""),
+      key: `test:${entry.name.replace(/\.ya?ml$/, "")}`,
+      label: entry.name.replace(/\.ya?ml$/, ""),
+      source: `tests/${entry.name}`,
+      editable: false,
+      refs: [],
+    }));
+  const sessionsDir = path.join(gameDir, ".rpg-harness", "sessions");
+  const sessions = await readdir(sessionsDir, { withFileTypes: true }).catch(() => []);
+  const issueGroups = await Promise.all(sessions
+    .filter((entry) => entry.isDirectory())
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(async (entry) => {
+      const session = entry.name;
+      return readFile(path.join(sessionsDir, session, "issues.jsonl"), "utf-8")
+        .then((content) => content.split(/\r?\n/).flatMap((line, index) => {
+          if (!line.trim()) return [];
+          try {
+            const issue = JSON.parse(line) as Record<string, unknown>;
+            const reportId = typeof issue.id === "string" ? issue.id : `line-${index + 1}`;
+            const id = `${session}/${reportId}`;
+            const title = typeof issue.title === "string" ? issue.title : reportId;
+            const status = typeof issue.status === "string" ? issue.status : "open";
+            return [{
+              kind: "issue" as const,
+              id,
+              key: `issue:${id}`,
+              label: `[${status}] ${title}`,
+              editable: false,
+              refs: issueResourceRefs(issue),
+            }];
+          } catch {
+            const id = `${session}/invalid-line-${index + 1}`;
+            return [{
+              kind: "issue" as const,
+              id,
+              key: `issue:${id}`,
+              label: `[invalid] ${session}/issues.jsonl line ${index + 1}`,
+              editable: false,
+              refs: [],
+            }];
+          }
+        }))
+        .catch(() => []);
+    }));
+  const issueNodes = issueGroups.flat();
+  return [...testNodes, ...issueNodes];
+}
+
+function issueResourceRefs(issue: Record<string, unknown>): string[] {
+  const refs = new Set<string>();
+  const target = issue.target;
+  if (typeof target === "string") {
+    const match = target.match(/^(characters|items|enemies|weapons|skills|maps|scripts|actions)\/([^/]+?)\.(?:ya?ml|md)$/);
+    if (match?.[1] && match[2]) {
+      const singular = match[1] === "characters" ? "character"
+        : match[1] === "items" ? "item"
+        : match[1] === "enemies" ? "enemy"
+        : match[1] === "weapons" ? "weapon"
+        : match[1] === "skills" ? "skill"
+        : match[1] === "maps" ? "map"
+        : match[1] === "scripts" ? "script"
+        : "action";
+      refs.add(`${singular}:${match[2]}`);
+    }
+  }
+  const evidence = issue.evidence;
+  if (evidence && typeof evidence === "object" && !Array.isArray(evidence)) {
+    const record = evidence as Record<string, unknown>;
+    if (typeof record.currentScriptId === "string") {
+      refs.add(`script:${record.currentScriptId}`);
+    }
+    const sourceTargets = record.sourceTargets;
+    if (Array.isArray(sourceTargets)) {
+      for (const value of sourceTargets) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+        const source = value as Record<string, unknown>;
+        if (typeof source.scriptId === "string") refs.add(`script:${source.scriptId}`);
+        if (typeof source.moduleId === "string") refs.add(`module:${source.moduleId}`);
+      }
+    }
+  }
+  return [...refs].sort();
+}
+
+async function patchMapSpatial(
+  ctx: Ctx,
+  mapId: string,
+  req: Request,
+): Promise<Response> {
+  const game = await loadGame(ctx.gameDir);
+  const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
+  if (!map) return json({ error: "map not found" }, 404);
+
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return json({ error: "body must be an object" }, 400);
+  }
+  const body = raw as Record<string, unknown>;
+  if (!(body.layout === null || (body.layout && typeof body.layout === "object"))) {
+    return json({ error: "layout must be an object or null" }, 400);
+  }
+  if (!Array.isArray(body.placements)) {
+    return json({ error: "placements must be an array" }, 400);
+  }
+
+  const abs = await resolveMapFile(ctx.gameDir, mapId);
+  if (!abs) return json({ error: "map source file not found" }, 404);
+  try {
+    await updateMapSpatial(abs, game, mapId, body as unknown as MapSpatialPatch);
+  } catch (error) {
+    return json({ error: (error as Error).message }, 400);
+  }
+  const updated = await loadGame(ctx.gameDir);
+  return json(await projectGame(ctx, updated));
+}
+
+async function resolveMapFile(gameDir: string, mapId: string): Promise<string | undefined> {
+  for (const extension of ["yaml", "yml"] as const) {
+    const abs = path.join(gameDir, "maps", `${mapId}.${extension}`);
+    try {
+      const contents = await readFile(abs, "utf-8");
+      if (/^\s*id\s*:\s*/m.test(contents)) return abs;
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
 }
 
 async function getAssets(ctx: Ctx): Promise<Response> {

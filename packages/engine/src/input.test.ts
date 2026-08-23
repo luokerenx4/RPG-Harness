@@ -102,6 +102,16 @@ describe("public output/input contract", () => {
       id: "depart",
     }).accepted).toBe(true);
   });
+
+  test("accepts renderer movement without adding it to Headless semantic options", () => {
+    const result = classifyInput(hub(), { type: "moveMap", direction: "south" });
+    expect(result.accepted).toBe(true);
+    expect(result.expected.some((entry) => entry.type === "moveMap")).toBe(false);
+    expect(classifyInput(hub(), { type: "moveMap", direction: "down" })).toMatchObject({
+      accepted: false,
+      code: "malformed-input",
+    });
+  });
 });
 
 function hub(): Extract<Output, { type: "hubMenu" }> {

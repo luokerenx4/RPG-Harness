@@ -97,5 +97,6 @@ function publicAction(
       id: activity?.activityId ?? input.id,
       ...(activity?.title ? { title: activity.title } : {}),
     };
+    case "moveMap": return { type: "moveMap" as const, direction: input.direction };
   }
 }

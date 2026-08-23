@@ -31,8 +31,8 @@ describe("parseAssetSpec — minimal", () => {
 });
 
 describe("parseAssetSpec — kind", () => {
-  test("portrait / bg / cg all accepted", () => {
-    for (const kind of ["portrait", "bg", "cg"] as const) {
+  test("stage, authoring, and map asset kinds are accepted", () => {
+    for (const kind of ["portrait", "bg", "cg", "sheet", "tileset"] as const) {
       const spec = parseAssetSpec(
         `kind: ${kind}\ndescription: x\nprompt: y\nplaceholder: z\n`,
         `assets/x/y`,
