@@ -25,6 +25,7 @@ describe("serializeSpatialMapPatch", () => {
         id: "guide",
         at: { x: 4, y: 3 },
         resource: { kind: "character", id: "guide" },
+        asset: "assets/sheets/guide-map",
         layer: "actors",
         z: 0,
         facing: "south",
@@ -53,6 +54,7 @@ describe("serializeSpatialMapPatch", () => {
       id: "guide",
       at: { x: 4, y: 3 },
       resource: { kind: "character", id: "guide" },
+      asset: "assets/sheets/guide-map",
     });
   });
 });

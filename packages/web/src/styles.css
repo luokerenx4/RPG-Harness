@@ -509,6 +509,8 @@ body {
   color: #dff9ff;
   transform: translate(-1px, -1px);
 }
+.spatial-placement-graphic { position: absolute; inset: 1px; width: calc(100% - 2px); height: calc(100% - 2px); object-fit: cover; object-position: center; border-radius: 4px; filter: saturate(.82) contrast(1.05); opacity: .9; }
+.spatial-placement:has(.spatial-placement-graphic) .spatial-placement-marker { position: relative; width: 22px; height: 22px; border-color: rgba(225,248,252,.72); background: rgba(8,18,23,.72); box-shadow: 0 2px 8px rgba(0,0,0,.55); font-size: 9px; transform: translateY(1px); }
 .spatial-placement.collision-block {
   color: #f4cf79;
 }

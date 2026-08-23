@@ -189,6 +189,7 @@ layout:
 placements:
   - id: kagari
     at: [1, 0]
+    asset: assets/sheets/kagari-map
     layer: actors
     z: 2
     facing: south
@@ -240,6 +241,7 @@ placements:
     expect(m.placements?.[0]).toMatchObject({
       id: "kagari",
       at: { x: 1, y: 0 },
+      asset: "assets/sheets/kagari-map",
       layer: "actors",
       z: 2,
       facing: "south",
@@ -281,6 +283,12 @@ placements:
   - { id: same, at: [0, 0], resource: { kind: item, id: a } }
   - { id: same, at: [0, 0], resource: { kind: item, id: b } }
 `)).toThrow(/duplicate id "same"/);
+
+    expect(() => parseMap(`id: m
+name: M
+placements:
+  - { id: event, at: [0, 0], asset: "", events: [{ id: run, trigger: manual }] }
+`)).toThrow(/asset must be a non-empty asset path string/);
   });
 
   test("rejects wrong tile matrix dimensions and unnamespaced custom triggers", () => {

@@ -58,6 +58,7 @@ loot_table:
 placements:
   - id: exit_sumida_river_under_eaves
     at: [6, 1]
+    asset: assets/backgrounds/sumida-drowned-shrine
     layer: waterways
     footprint: [2, 1]
     resource:
@@ -71,6 +72,7 @@ placements:
         order: 0
   - id: exit_sumida_river_drift_pier
     at: [11, 5]
+    asset: assets/backgrounds/sumida-drift-pier
     layer: waterways
     footprint: [1, 2]
     resource:
@@ -84,6 +86,7 @@ placements:
         order: 1
   - id: exit_sumida_river_reed_marsh
     at: [6, 9]
+    asset: assets/backgrounds/sumida-reed-marsh
     layer: waterways
     footprint: [2, 1]
     resource:

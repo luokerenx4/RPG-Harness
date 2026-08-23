@@ -317,6 +317,11 @@ function parseMapPlacements(raw: unknown, source: string): MapPlacementDef[] {
     if (obj.resource !== undefined) {
       placement.resource = parseResourceRef(obj.resource, `${where}.resource`);
     }
+    if (typeof obj.asset === "string" && obj.asset.length > 0) {
+      placement.asset = obj.asset;
+    } else if (obj.asset !== undefined) {
+      throw new MapParseError(`${where}.asset must be a non-empty asset path string`);
+    }
     if (typeof obj.layer === "string" && obj.layer.length > 0) {
       placement.layer = obj.layer;
     }
@@ -331,7 +336,7 @@ function parseMapPlacements(raw: unknown, source: string): MapPlacementDef[] {
     const requires = parseCondition(obj.requires);
     if (requires) placement.requires = requires;
     const custom = extractCustom(obj, [
-      "id", "at", "resource", "layer", "z", "facing", "footprint",
+      "id", "at", "resource", "asset", "layer", "z", "facing", "footprint",
       "collision", "visible", "requires", "events",
     ]);
     if (custom) placement.custom = custom;

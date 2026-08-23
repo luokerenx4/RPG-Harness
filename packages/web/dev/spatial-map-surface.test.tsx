@@ -144,7 +144,7 @@ describe("SpatialMapSurface", () => {
     const mapWithHiddenPlacement: MapDef = {
       ...map,
       placements: [
-        ...map.placements!,
+        { ...map.placements![0]!, asset: "assets/sheets/gate" },
         {
           ...map.placements![0]!,
           id: "authoring-anchor",
@@ -159,6 +159,7 @@ describe("SpatialMapSurface", () => {
         activities={[move]}
         playerPosition={{ x: 1, y: 2 }}
         resourceLabels={new Map([["map:town", "城下町"]])}
+        assetUrls={{ "assets/sheets/gate": "/assets/gate.webp" }}
         onInput={() => {}}
       />,
     );
@@ -173,6 +174,7 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("向南移动");
     expect(html).toContain('aria-keyshortcuts="ArrowDown S"');
     expect(html).toContain("resource-map");
+    expect(html).toContain('class="spatial-placement-graphic" src="/assets/gate.webp"');
     expect(html).toContain("出口");
     expect(html).not.toContain("Town");
     expect(html).not.toContain("Private Backdrop Anchor");

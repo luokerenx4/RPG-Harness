@@ -512,6 +512,7 @@ describe("validateGame — maps", () => {
           collision: "block",
           visible: true,
           resource: { kind: "character", id: "missing_character" },
+          asset: "assets/sheets/missing_map_graphic",
           requires: { switch: { name: "missing_switch", eq: true } },
           events: [{
             id: "talk",
@@ -523,6 +524,7 @@ describe("validateGame — maps", () => {
       }],
     });
     expect(() => validateGame(game)).toThrow(/missing_character/);
+    expect(() => validateGame(game)).toThrow(/missing_map_graphic/);
     expect(() => validateGame(game)).toThrow(/missing_script/);
     expect(() => validateGame(game)).toThrow(/missing_switch/);
     expect(() => validateGame(game)).toThrow(/undeclared map layer "actors"/);

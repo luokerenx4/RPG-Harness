@@ -96,6 +96,7 @@ function encodePlacement(placement: MapPlacementDef): Record<string, unknown> {
     id: placement.id,
     at: [placement.at.x, placement.at.y],
     ...(placement.resource ? { resource: placement.resource } : {}),
+    ...(placement.asset ? { asset: placement.asset } : {}),
     ...(placement.layer ? { layer: placement.layer } : {}),
     z: placement.z,
     ...(placement.facing ? { facing: placement.facing } : {}),

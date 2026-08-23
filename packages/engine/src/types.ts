@@ -506,6 +506,8 @@ export interface MapPlacementDef {
   id: string;
   at: MapPoint;
   resource?: ProjectResourceRef;
+  /** Optional first-class map graphic. Uses the canonical project asset path. */
+  asset?: string;
   layer?: string;
   z: number;
   facing?: MapFacing;

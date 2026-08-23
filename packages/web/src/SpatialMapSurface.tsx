@@ -108,6 +108,7 @@ export function SpatialMapSurface({
   backgroundUrl,
   tileset,
   tilesetUrl,
+  assetUrls,
   playerPosition,
   resourceLabels,
   onInput,
@@ -117,6 +118,7 @@ export function SpatialMapSurface({
   backgroundUrl?: string;
   tileset?: AssetSpec;
   tilesetUrl?: string;
+  assetUrls?: Readonly<Record<string, string>>;
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
   onInput: (input: Input) => void;
@@ -245,6 +247,7 @@ export function SpatialMapSurface({
             activities={byId}
             playerPosition={playerPosition}
             resourceLabels={resourceLabels}
+            graphicUrl={placement.asset ? assetUrls?.[placement.asset] : undefined}
           />
         ))}
         {stepTargets.map((target) => (
@@ -358,12 +361,14 @@ function Placement({
   activities,
   playerPosition,
   resourceLabels,
+  graphicUrl,
 }: {
   map: MapDef;
   placement: MapPlacementDef;
   activities: Map<string, HubActivity>;
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
+  graphicUrl?: string;
 }) {
   const layout = map.layout!;
   const operations = resolveSpatialPlacementOperations(map, placement, activities);
@@ -391,6 +396,7 @@ function Placement({
       aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}`}
       role="img"
     >
+      {graphicUrl && <img className="spatial-placement-graphic" src={graphicUrl} alt="" aria-hidden="true" />}
       <span className="spatial-placement-marker" aria-hidden="true">
         {resourceKindIcon(resourceKind)}
       </span>

@@ -202,6 +202,7 @@ function collectResourceRefs(
     }
     for (const placement of obj.placements ?? []) {
       add(placement.resource);
+      if (placement.asset) add({ kind: "asset", id: placement.asset });
       addCondition(placement.requires);
       for (const event of placement.events ?? []) {
         add(event.run);

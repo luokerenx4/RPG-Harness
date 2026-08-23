@@ -2724,8 +2724,9 @@ function MapOverview({
                 opacity: placement.visible ? 1 : 0.45,
               }}
             >
-              <span>{resourceLabel}</span>
-              <small>{placement.resource?.kind ?? "event"} · {placement.id}</small>
+              {placement.asset && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(placement.asset))})` }} aria-hidden="true" />}
+              <span className="map-placement-copy">{resourceLabel}</span>
+              <small className="map-placement-copy">{placement.resource?.kind ?? "event"} · {placement.id}</small>
               </div>
             );
           })}
@@ -2754,6 +2755,7 @@ function MapOverview({
         <PlacementEditor
           placement={selectedPlacement}
           layers={draft.layout?.layers.map((layer) => layer.id) ?? []}
+          assets={assets}
           resources={resources}
           switches={switches}
           variables={variables}
@@ -2949,6 +2951,7 @@ function MapSurfacePreviews({ map }: { map: MapDef }) {
 function PlacementEditor({
   placement,
   layers,
+  assets,
   resources,
   switches,
   variables,
@@ -2959,6 +2962,7 @@ function PlacementEditor({
 }: {
   placement: MapPlacementDef;
   layers: string[];
+  assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
@@ -3038,6 +3042,14 @@ function PlacementEditor({
               )}
               {placementChoices.map((choice) => <option value={choice.id} key={choice.key}>{choice.label} · {choice.id}</option>)}
             </select></label>
+          </div>
+          <div className="placement-graphic-fields">
+            <span className={`placement-graphic-preview${placement.asset ? " authored" : ""}`} style={placement.asset ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(placement.asset))})` } : undefined} aria-hidden="true">{placement.asset ? "" : "◇"}</span>
+            <label>Map graphic<select value={placement.asset ?? ""} onChange={(event) => onChange((current) => ({ ...current, asset: event.target.value || undefined }))}>
+              <option value="">System marker</option>
+              {assets.map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}
+            </select></label>
+            <small>{placement.asset ?? "Renderer-owned marker · Headless ignores the visual"}</small>
           </div>
           <p>Choose from the project database. The stable resource ID is written into the map source.</p>
         </section>

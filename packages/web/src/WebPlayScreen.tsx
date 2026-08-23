@@ -1441,6 +1441,7 @@ export function StageView({
                 ? (game.assets ?? []).find((asset) => asset.path === currentMap.layout!.tileset)
                 : undefined}
               tilesetUrl={currentMap.layout.tileset ? assetUrls[currentMap.layout.tileset] : undefined}
+              assetUrls={assetUrls}
               onInput={onInput}
             />
           )}

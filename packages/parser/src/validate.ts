@@ -322,6 +322,12 @@ export function validateGame(game: Game): void {
       if (placement.resource) {
         visitProjectResourceRef(placement.resource, `${where}.resource`, reg, issues);
       }
+      if (placement.asset !== undefined && !reg.assets.has(placement.asset)) {
+        issues.push({
+          path: `${where}.asset`,
+          message: `undeclared asset "${placement.asset}". Declared: ${listOrNone(reg.assets)}`,
+        });
+      }
       if (placement.requires) {
         visitCondition(placement.requires, `${where}.requires`, reg, issues);
       }

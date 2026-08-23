@@ -66,7 +66,15 @@ describe("project resource registry", () => {
       characters: [{
         id: "hero",
         name: "Hero",
-        portraits: { default: "assets/portraits/hero" },
+        portraits: { default: "assets/portraits/missing" },
+      }],
+      assets: [{
+        path: "assets/sheets/hero-map",
+        kind: "sheet",
+        description: "Hero map graphic",
+        prompt: "Hero on the field",
+        placeholder: "Hero map graphic",
+        renderings: {},
       }],
       maps: [{
         id: "town",
@@ -79,6 +87,7 @@ describe("project resource registry", () => {
           footprint: { width: 1, height: 1 },
           collision: "none",
           visible: false,
+          asset: "assets/sheets/hero-map",
           events: [{
             id: "run",
             trigger: "autorun",
@@ -90,16 +99,17 @@ describe("project resource registry", () => {
     }));
     expect(graph.resources.find((node) => node.key === "map:town")).toMatchObject({
       source: "maps/town.yaml",
-      refs: ["script:intro"],
+      refs: ["asset:assets/sheets/hero-map", "script:intro"],
     });
     expect(graph.resources.find((node) => node.key === "manifest:game")).toMatchObject({
       source: "game.yaml",
     });
     expect(graph.backlinks["script:intro"]).toContain("map:town");
     expect(graph.missing).toEqual([{
-      key: "asset:assets/portraits/hero",
+      key: "asset:assets/portraits/missing",
       referencedBy: ["character:hero"],
     }]);
+    expect(graph.backlinks["asset:assets/sheets/hero-map"]).toContain("map:town");
     expect(graph.unreferenced).toContain("character:hero");
   });
 
