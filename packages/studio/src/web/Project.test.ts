@@ -478,8 +478,8 @@ describe("Studio map event resource picker", () => {
       entryCount: 0,
     }]);
     expect(groups[1]?.rows[0]).toBe(resources[1]);
-    expect(mapTreeChainKey({ chain: "  hell_gate  " })).toBe("hell_gate");
-    expect(mapTreeChainKey({ chain: "  " })).toBe("");
+    expect(mapTreeChainKey({ chain: "  hell_gate  " })).toBe("  hell_gate  ");
+    expect(mapTreeChainKey({ chain: "  " })).toBe("  ");
   });
 
   test("paints and resizes canonical tile-layer matrices without losing authored cells", () => {

@@ -42,6 +42,12 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import { WorldAtlas } from "../WorldAtlas";
+import {
+  compareMapCatalogChainKeys,
+  mapCatalogChainKey,
+  mapCatalogChainLabel,
+} from "../MapCatalog";
 import {
   createMapPreviewRequestGate,
   isAbortError,
@@ -136,8 +142,6 @@ const REMOVABLE_KINDS = new Set<ProjectResourceKind>([
   "script",
 ]);
 
-const STANDALONE_MAP_CHAIN = "";
-
 export interface MapTreeChainGroup {
   key: string;
   label: string;
@@ -148,6 +152,7 @@ export interface MapTreeChainGroup {
 
 type ProjectNavigationIntent =
   | { kind: "select"; key: string; label: string; section?: ProjectSection }
+  | { kind: "world-atlas"; label: string }
   | { kind: "database-overview"; label: string }
   | { kind: "create"; resourceKind: Exclude<DatabaseOverviewKind, "asset">; label: string }
   | { kind: "assets"; label: string }
@@ -162,7 +167,7 @@ export function Project({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const [section, setSection] = useState<ProjectSection>("world");
-  const [databaseOverviewOpen, setDatabaseOverviewOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState<"world" | "database" | null>("world");
   const [collapsedKinds, setCollapsedKinds] = useState<Set<ProjectResourceKind>>(
     () => new Set(["manifest"]),
   );
@@ -317,13 +322,13 @@ export function Project({
         return next;
       });
     }
-    setDatabaseOverviewOpen(false);
+    setOverviewOpen(null);
     setSelectedKey(key);
     setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
   };
 
   const selectResource = (key: string) => {
-    if (draftActive && selectedKey && (key !== selectedKey || databaseOverviewOpen)) {
+    if (draftActive && selectedKey && (key !== selectedKey || overviewOpen !== null)) {
       const label = project.graph.resources.find((resource) => resource.key === key)?.label ?? key;
       setNavigationError(null);
       setPendingNavigation({ kind: "select", key, label });
@@ -418,18 +423,27 @@ export function Project({
       commitSelectResource(intent.key);
       return;
     }
+    if (intent.kind === "world-atlas") {
+      setSection("world");
+      setQuery("");
+      setCreateDialogOpen(false);
+      setCreateInitialKind(null);
+      setOverviewOpen("world");
+      return;
+    }
     if (intent.kind === "database-overview") {
       setSection("database");
       setQuery("");
       setCreateDialogOpen(false);
       setCreateInitialKind(null);
-      setDatabaseOverviewOpen(true);
+      setOverviewOpen("database");
       return;
     }
     if (intent.kind === "create") {
-      setSection("database");
+      const destinationSection = databaseSectionForKind(intent.resourceKind) ?? "database";
+      setSection(destinationSection);
       setQuery("");
-      setDatabaseOverviewOpen(true);
+      setOverviewOpen(destinationSection);
       setCreateInitialKind(intent.resourceKind);
       setCreateDialogOpen(true);
       return;
@@ -444,7 +458,7 @@ export function Project({
   const requestNavigation = (intent: ProjectNavigationIntent) => {
     const keepsCurrentRecord = intent.kind === "select" &&
       intent.key === selectedKey &&
-      !databaseOverviewOpen;
+      overviewOpen === null;
     if (draftActive && !keepsCurrentRecord) {
       setNavigationError(null);
       setPendingNavigation(intent);
@@ -457,7 +471,15 @@ export function Project({
     requestNavigation({ kind: "database-overview", label: "Game Database" });
   };
 
+  const openWorldAtlas = () => {
+    requestNavigation({ kind: "world-atlas", label: "World Atlas" });
+  };
+
   const openDatabaseKind = (kind: Exclude<DatabaseOverviewKind, "asset">) => {
+    if (kind === "map") {
+      openWorldAtlas();
+      return;
+    }
     const resource = project.graph.resources.find((candidate) => candidate.kind === kind);
     if (!resource) {
       requestNavigation({ kind: "create", resourceKind: kind, label: `New ${KIND_META[kind]?.label ?? kind} record` });
@@ -578,6 +600,10 @@ export function Project({
             title={item.label}
             aria-label={item.label}
             onClick={() => {
+              if (item.id === "world") {
+                openWorldAtlas();
+                return;
+              }
               if (item.id === "database") {
                 openDatabaseOverview();
                 return;
@@ -586,7 +612,7 @@ export function Project({
               setQuery("");
               setCreateDialogOpen(false);
               setCreateInitialKind(null);
-              setDatabaseOverviewOpen(false);
+              setOverviewOpen(null);
             }}
           ><span>{item.icon}</span><small>{item.label}</small></button>
         ))}
@@ -694,7 +720,14 @@ export function Project({
 
       <section className="project-editor-shell">
         <nav className="document-tabs" aria-label="Open resources">
-          {databaseOverviewOpen && (
+          {overviewOpen === "world" && (
+            <div className="document-tab world-atlas-tab active">
+              <button type="button" aria-current="page" onClick={openWorldAtlas}>
+                <span>▦</span><strong>World Atlas</strong>
+              </button>
+            </div>
+          )}
+          {overviewOpen === "database" && (
             <div className="document-tab database-overview-tab active">
               <button type="button" aria-current="page" onClick={openDatabaseOverview}>
                 <span>◫</span><strong>Game Database</strong>
@@ -706,7 +739,7 @@ export function Project({
             if (!resource) return null;
             const meta = KIND_META[resource.kind] ?? { icon: "·", label: resource.kind };
             return (
-              <div className={`document-tab ${!databaseOverviewOpen && selectedKey === key ? "active" : ""}`} key={key}>
+              <div className={`document-tab ${overviewOpen === null && selectedKey === key ? "active" : ""}`} key={key}>
                 <button type="button" onClick={() => selectResource(key)}>
                   <span>{meta.icon}</span><strong>{resource.label}</strong>
                 </button>
@@ -717,7 +750,18 @@ export function Project({
           <span className="document-tabs-fill" />
         </nav>
         <div className="project-detail">
-          {databaseOverviewOpen ? (
+          {overviewOpen === "world" ? (
+            <WorldAtlas
+              maps={project.maps}
+              resources={project.graph.resources}
+              assets={project.assets}
+              onOpenMap={(mapId) => {
+                const resource = project.graph.resources.find((candidate) => candidate.kind === "map" && candidate.id === mapId);
+                if (resource) selectResource(resource.key);
+              }}
+              onCreateMap={() => requestNavigation({ kind: "create", resourceKind: "map", label: "New Map" })}
+            />
+          ) : overviewOpen === "database" ? (
             <DatabaseOverview
               project={project}
               onOpenKind={openDatabaseKind}
@@ -4183,14 +4227,13 @@ export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
 export function mapTreeChainKey(
   map: Pick<MapDef, "chain"> | undefined,
 ): string {
-  return map?.chain?.trim() || STANDALONE_MAP_CHAIN;
+  return mapCatalogChainKey(map);
 }
 
 export function mapTreeChainLabel(
   map: Pick<MapDef, "chain"> | undefined,
 ): string {
-  const key = mapTreeChainKey(map);
-  return key === STANDALONE_MAP_CHAIN ? "Standalone" : key;
+  return mapCatalogChainLabel(map);
 }
 
 export function groupMapTreeResources(
@@ -4215,11 +4258,7 @@ export function groupMapTreeResources(
     if (map?.isEntry) group.entryCount += 1;
     groups.set(key, group);
   }
-  return [...groups.values()].sort((left, right) => {
-    if (left.key === STANDALONE_MAP_CHAIN) return -1;
-    if (right.key === STANDALONE_MAP_CHAIN) return 1;
-    return left.key.localeCompare(right.key);
-  });
+  return [...groups.values()].sort((left, right) => compareMapCatalogChainKeys(left.key, right.key));
 }
 
 export function summarizeMapTreeResource(
