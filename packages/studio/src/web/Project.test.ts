@@ -431,10 +431,11 @@ describe("Studio map event resource picker", () => {
     expect(resized.layers[0]?.tiles).toEqual([[0, 0]]);
     expect(resized.layers[1]?.tiles).toEqual([[0, 1]]);
     expect(fillMapLayerTiles(resized, "ground", 4).layers[0]?.tiles).toEqual([[4, 4]]);
-    expect(moveMapLayer(resized, 1, -1).layers.map((layer) => [layer.id, layer.z])).toEqual([
-      ["walls", 0],
+    expect(moveMapLayer(resized, 0, -1).layers.map((layer) => [layer.id, layer.z])).toEqual([
       ["ground", 1],
+      ["walls", 0],
     ]);
+    expect(moveMapLayer(resized, 1, -1)).toBe(resized);
     expect(studioTileAtlasStyle(6, {
       path: "assets/tilesets/shrine",
       tileGrid: { columns: 4, rows: 4, firstId: 1 },

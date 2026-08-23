@@ -2921,6 +2921,9 @@ function MapStructureEditor({
   assets: ProjectAssetPreview[];
   onChange: (layout: MapLayoutDef) => void;
 }) {
+  const layerRows = layout.layers
+    .map((layer, sourceIndex) => ({ layer, sourceIndex }))
+    .sort((left, right) => right.layer.z - left.layer.z || left.sourceIndex - right.sourceIndex);
   const patchLayer = (index: number, patch: Partial<MapLayoutDef["layers"][number]>) =>
     onChange({
       ...layout,
@@ -2943,27 +2946,28 @@ function MapStructureEditor({
           layers: [...layout.layers, {
             id: uniqueLocalId("layer", layout.layers.map((layer) => layer.id)),
             kind: "object",
-            z: layout.layers.length,
+            z: layout.layers.length > 0 ? Math.max(...layout.layers.map((layer) => layer.z)) + 1 : 0,
             visible: true,
           }],
         })}>+ Layer</button></header>
-        {layout.layers.map((layer, index) => (
-          <div className="structure-row layer-row" key={`${layer.id}-${index}`}>
-            <input aria-label={`Layer ${index + 1} id`} value={layer.id} onChange={(event) => patchLayer(index, { id: event.target.value })} />
-            <select value={layer.kind} onChange={(event) => patchLayer(index, { kind: event.target.value as typeof layer.kind })}>
+        {layerRows.map(({ layer, sourceIndex }, displayIndex) => (
+          <div className="structure-row layer-row" key={`${layer.id}-${sourceIndex}`}>
+            <input aria-label={`Layer ${displayIndex + 1} id`} value={layer.id} onChange={(event) => patchLayer(sourceIndex, { id: event.target.value })} />
+            <input aria-label={`${layer.id} name`} placeholder="display name" value={layer.name ?? ""} onChange={(event) => patchLayer(sourceIndex, { name: event.target.value || undefined })} />
+            <select value={layer.kind} onChange={(event) => patchLayer(sourceIndex, { kind: event.target.value as typeof layer.kind })}>
               <option>tile</option><option>image</option><option>object</option><option>collision</option><option>region</option>
             </select>
-            <input type="number" aria-label={`${layer.id} z`} value={layer.z} onChange={(event) => patchLayer(index, { z: Number(event.target.value) })} />
-            {layer.kind === "image" ? <select aria-label={`${layer.id} image asset`} value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })}>
+            <input type="number" aria-label={`${layer.id} z`} value={layer.z} onChange={(event) => patchLayer(sourceIndex, { z: Number(event.target.value) })} />
+            {layer.kind === "image" ? <select aria-label={`${layer.id} image asset`} value={layer.asset ?? ""} onChange={(event) => patchLayer(sourceIndex, { asset: event.target.value || undefined })}>
               <option value="">No image asset</option>
               {assets.filter((asset) => Object.values(asset.renderings).some(Boolean)).map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}
-            </select> : <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })} />}
-            <label><input type="checkbox" checked={layer.visible} onChange={(event) => patchLayer(index, { visible: event.target.checked })} /> visible</label>
+            </select> : <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(sourceIndex, { asset: event.target.value || undefined })} />}
+            <label><input type="checkbox" checked={layer.visible} onChange={(event) => patchLayer(sourceIndex, { visible: event.target.checked })} /> visible</label>
             <span className="layer-order-controls">
-              <button type="button" aria-label={`Move ${layer.id} layer up`} disabled={index === 0} onClick={() => onChange(moveMapLayer(layout, index, -1))}>↑</button>
-              <button type="button" aria-label={`Move ${layer.id} layer down`} disabled={index === layout.layers.length - 1} onClick={() => onChange(moveMapLayer(layout, index, 1))}>↓</button>
+              <button type="button" aria-label={`Move ${layer.id} layer up`} disabled={displayIndex === 0} onClick={() => onChange(moveMapLayer(layout, sourceIndex, -1))}>↑</button>
+              <button type="button" aria-label={`Move ${layer.id} layer down`} disabled={displayIndex === layerRows.length - 1} onClick={() => onChange(moveMapLayer(layout, sourceIndex, 1))}>↓</button>
             </span>
-            <button type="button" className="danger" onClick={() => onChange({ ...layout, layers: layout.layers.filter((_, candidate) => candidate !== index) })}>×</button>
+            <button type="button" className="danger" onClick={() => onChange({ ...layout, layers: layout.layers.filter((_, candidate) => candidate !== sourceIndex) })}>×</button>
           </div>
         ))}
       </section>
@@ -3894,14 +3898,22 @@ export function moveMapLayer(
   index: number,
   delta: -1 | 1,
 ): MapLayoutDef {
-  const target = index + delta;
-  if (index < 0 || index >= layout.layers.length || target < 0 || target >= layout.layers.length) return layout;
-  const layers = [...layout.layers];
-  const currentLayer = layers[index]!;
-  const targetLayer = layers[target]!;
-  layers[index] = { ...targetLayer, z: currentLayer.z };
-  layers[target] = { ...currentLayer, z: targetLayer.z };
-  return { ...layout, layers };
+  if (index < 0 || index >= layout.layers.length) return layout;
+  const orderedIndices = layout.layers
+    .map((layer, sourceIndex) => ({ sourceIndex, z: layer.z }))
+    .sort((left, right) => right.z - left.z || left.sourceIndex - right.sourceIndex)
+    .map(({ sourceIndex }) => sourceIndex);
+  const displayIndex = orderedIndices.indexOf(index);
+  const targetIndex = orderedIndices[displayIndex + delta];
+  if (targetIndex === undefined) return layout;
+  const currentZ = layout.layers[index]!.z;
+  const targetZ = layout.layers[targetIndex]!.z;
+  return {
+    ...layout,
+    layers: layout.layers.map((layer, sourceIndex) => sourceIndex === index
+      ? { ...layer, z: targetZ }
+      : sourceIndex === targetIndex ? { ...layer, z: currentZ } : layer),
+  };
 }
 
 export function resizeMapLayout(

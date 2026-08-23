@@ -2971,7 +2971,7 @@ summary:focus-visible {
 .map-structure-editor { grid-template-columns: 1fr; margin: 0 8px 8px; }
 .map-structure-editor > section { padding: 9px; border-color: var(--studio-line); background: #0f131a; }
 .map-structure-editor h3 { color: #747e8b; font-size: 8px; letter-spacing: .1em; }
-.layer-row { grid-template-columns: minmax(80px,1fr) 74px 48px minmax(100px,1.2fr) auto 48px 26px; }
+.layer-row { grid-template-columns: minmax(72px,.8fr) minmax(84px,1fr) 68px 44px minmax(120px,1.2fr) auto 48px 26px; }
 .layer-order-controls { display: flex; gap: 2px; }
 .layer-order-controls button { display: grid; width: 22px; height: 24px; padding: 0; place-items: center; }
 .layer-order-controls button:disabled { opacity: .28; cursor: default; }
