@@ -731,11 +731,27 @@ body {
   font: 6px/1 ui-monospace, monospace;
 }
 .spatial-map-interact strong { max-width: 76px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-interact.locked { min-width: 106px; max-width: 156px; }
+.spatial-map-interact-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 140px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #bc9870;
+  font-size: 7px;
+  font-style: normal;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+}
+.spatial-map-interact-reason i { flex: 0 0 auto; color: #8e6046; font-size: 5px; font-style: normal; transform: translateY(2px); }
 .spatial-map-context-actions.multiple .spatial-map-interact { min-width: 0; padding: 5px 6px; }
 .spatial-map-context-actions.multiple .spatial-map-interact small,
 .spatial-map-context-actions.multiple .spatial-map-interact strong { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-map-context-actions.multiple .spatial-map-interact-reason { max-width: 76px; white-space: normal; }
 .spatial-map-interact:hover:not(:disabled) { border-color: rgba(242,193,93,.72); background: rgba(113,79,25,.38); }
-.spatial-map-interact:disabled { opacity: .36; cursor: not-allowed; }
+.spatial-map-interact:disabled { opacity: .64; cursor: not-allowed; }
 .spatial-map-controls > button {
   justify-self: center;
 }
@@ -1435,6 +1451,71 @@ body {
   border: 0;
   cursor: pointer;
   font-size: 18px;
+}
+
+.spatial-action-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 31px minmax(140px, 1fr) 24px;
+  align-items: center;
+  gap: 9px;
+  width: min(370px, calc(100% - 32px));
+  min-height: 52px;
+  padding: 7px 7px 7px 9px;
+  overflow: hidden;
+  color: #d8edf0;
+  border: 1px solid rgba(113, 191, 199, .48);
+  border-radius: 5px;
+  background: linear-gradient(100deg, rgba(13, 47, 53, .97), rgba(12, 24, 31, .97) 68%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(255, 255, 255, .025);
+  transform: translateX(-50%);
+  animation: spatial-action-arrive 180ms ease-out;
+}
+.spatial-action-toast::after {
+  position: absolute;
+  right: 38px;
+  bottom: -25px;
+  width: 84px;
+  height: 84px;
+  content: "";
+  border: 1px solid rgba(113, 191, 199, .08);
+  transform: rotate(45deg);
+}
+.spatial-action-toast-mark {
+  display: grid;
+  z-index: 1;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  color: #10282d;
+  border-radius: 3px;
+  background: #7bc7cf;
+  box-shadow: 0 0 16px rgba(93, 190, 202, .26);
+  font-size: 12px;
+}
+.spatial-action-toast-copy { display: flex; z-index: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.spatial-action-toast-copy small { color: #679aa1; font: 6px/1 ui-monospace, monospace; letter-spacing: .16em; }
+.spatial-action-toast-copy strong { overflow: hidden; color: #e0f2f3; font: 600 11px/1.2 ui-serif, Georgia, serif; text-overflow: ellipsis; white-space: nowrap; }
+.spatial-action-toast button {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #66848a;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+.spatial-action-toast button:hover { color: #d7edef; }
+@keyframes spatial-action-arrive {
+  from { opacity: 0; transform: translate(-50%, 7px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* ---------- backlog ---------- */

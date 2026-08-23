@@ -46,8 +46,10 @@ import { ArtBook } from "./ArtBook";
 import { VisualLayer } from "./VisualLayer";
 import {
   collectSpatialPlacementActivityIds,
+  resolveAcceptedSpatialActivityFeedback,
   SpatialMapSurface,
 } from "./SpatialMapSurface";
+import type { SpatialActivityFeedback } from "./SpatialMapSurface";
 import type {
   WebBranchContext,
   WebAiPersona,
@@ -298,6 +300,10 @@ export function WebPlayScreen({
   const overlayReturnFocusRef = useRef<HTMLElement | null>(null);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
   const [inputNoticeSource, setInputNoticeSource] = useState<string | null>(null);
+  const [spatialActivityFeedback, setSpatialActivityFeedback] = useState<
+    (SpatialActivityFeedback & { sequence: number }) | null
+  >(null);
+  const spatialActivityFeedbackSequence = useRef(0);
   const [externalAdvance, setExternalAdvance] = useState(
     externalAdvanceNotice ?? null,
   );
@@ -321,6 +327,7 @@ export function WebPlayScreen({
 
   useEffect(() => {
     if (externalInputNotice?.result.accepted === false) {
+      setSpatialActivityFeedback(null);
       setInputNotice(externalInputNotice.result);
       setInputNoticeSource(externalInputNotice.source ?? "external");
       return;
@@ -328,6 +335,17 @@ export function WebPlayScreen({
     setInputNotice(null);
     setInputNoticeSource(null);
   }, [externalInputNotice]);
+
+  useEffect(() => {
+    if (!spatialActivityFeedback) return;
+    const currentSequence = spatialActivityFeedback.sequence;
+    const timeout = window.setTimeout(() => {
+      setSpatialActivityFeedback((current) => (
+        current?.sequence === currentSequence ? null : current
+      ));
+    }, 2800);
+    return () => window.clearTimeout(timeout);
+  }, [spatialActivityFeedback]);
 
   useEffect(() => {
     if (aiTurnReceipt) setAiReceipt(aiTurnReceipt);
@@ -476,6 +494,7 @@ export function WebPlayScreen({
         const replayState = engineRef.current?.getState();
         const submitted = await submitWebInput(currentOutput, input, runner);
         if (!submitted.inputResult.accepted) {
+          setSpatialActivityFeedback(null);
           setInputNotice(submitted.inputResult);
           setInputNoticeSource(null);
           const engine = engineRef.current;
@@ -492,6 +511,15 @@ export function WebPlayScreen({
         setInputNoticeSource(null);
         setExternalAdvance(null);
         setAiReceipt(null);
+        const currentMap = replayState?.baseline.currentMapId
+          ? (game.maps ?? []).find((map) => map.id === replayState.baseline.currentMapId)
+          : undefined;
+        const nextSpatialFeedback = resolveAcceptedSpatialActivityFeedback(
+          currentMap,
+          currentOutput.type === "hubMenu" ? currentOutput.snapshot.activities : [],
+          input,
+          submitted.inputResult,
+        );
         dispatch({ kind: "choose", input, selectedBy: "player" });
         await commit(
           submitted.result!,
@@ -499,13 +527,20 @@ export function WebPlayScreen({
           submitted.inputResult,
           replayState,
         );
+        if (nextSpatialFeedback) {
+          spatialActivityFeedbackSequence.current += 1;
+          setSpatialActivityFeedback({
+            ...nextSpatialFeedback,
+            sequence: spatialActivityFeedbackSequence.current,
+          });
+        }
       } catch (err) {
         dispatch({ kind: "reset", model: makeErrorModel(err as Error) });
       } finally {
         processingRef.current = false;
       }
     },
-    [aiTurnPending, commit, onCommit],
+    [aiTurnPending, commit, game.maps, onCommit],
   );
 
   const openOverlay = useCallback((open: () => void) => {
@@ -757,7 +792,20 @@ export function WebPlayScreen({
           >×</button>
         </div>
       )}
-      {!inputNotice && externalAdvance && (
+      {!inputNotice && spatialActivityFeedback && (
+        <div className="spatial-action-toast" role="status" aria-live="polite">
+          <span className="spatial-action-toast-mark" aria-hidden="true">✦</span>
+          <span className="spatial-action-toast-copy">
+            <small>FIELD ACTION · COMPLETE</small>
+            <strong>{spatialActivityFeedback.title}</strong>
+          </span>
+          <button
+            onClick={() => setSpatialActivityFeedback(null)}
+            aria-label="关闭地图活动通知"
+          >×</button>
+        </div>
+      )}
+      {!inputNotice && !spatialActivityFeedback && externalAdvance && (
         <div className="input-notice accepted" role="status">
           <strong>{inputNoticeSourceLabel(externalAdvance.source ?? "external")} · SYNCED</strong>
           <span>{formatExternalAdvanceNotice(externalAdvance.source)}</span>

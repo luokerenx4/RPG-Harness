@@ -13,7 +13,9 @@ import {
   isSpatialInteractKey,
   mapMoveAvailability,
   mapPlacementDistance,
+  resolveAcceptedSpatialActivityFeedback,
   resolveSpatialPlacementOperations,
+  spatialOperationUnavailableReason,
   spatialTileAtlasStyle,
   SpatialMapSurface,
 } from "../src/SpatialMapSurface";
@@ -290,6 +292,67 @@ describe("SpatialMapSurface", () => {
       inspectMap,
       new Map([[inspectActivity.id, inspectActivity]]),
     )]).toEqual([inspectActivity.id]);
+    expect(resolveAcceptedSpatialActivityFeedback(
+      inspectMap,
+      [inspectActivity],
+      { type: "doActivity", id: inspectActivity.id },
+      { accepted: true, code: "accepted", message: "Input accepted.", expected: [] },
+    )).toEqual({ activityId: inspectActivity.id, title: "调查门扉" });
+    expect(resolveAcceptedSpatialActivityFeedback(
+      inspectMap,
+      [inspectActivity],
+      { type: "doActivity", id: inspectActivity.id },
+      { accepted: false, code: "activity-locked", message: "locked", expected: [] },
+    )).toBeUndefined();
+  });
+
+  test("shows nearby locked reasons without making the event keyboard-actionable", () => {
+    const lockedMap: MapDef = {
+      ...map,
+      placements: [{
+        ...map.placements![0]!,
+        resource: { kind: "item", id: "sealed_chest" },
+        events: [{ id: "open", trigger: "interact", label: "打开宝箱", order: 0 }],
+      }],
+    };
+    const activityId = mapPlacementEventKey(lockedMap.id, "gate", "open");
+    const lockedActivity: HubActivity = {
+      ...move,
+      id: activityId,
+      title: "打开宝箱",
+      available: false,
+      lockedReason: "需要古旧钥匙",
+    };
+    const operation = resolveSpatialPlacementOperations(
+      lockedMap,
+      lockedMap.placements![0]!,
+      new Map([[activityId, lockedActivity]]),
+    )[0]!;
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={lockedMap}
+        activities={[lockedActivity]}
+        playerPosition={{ x: 3, y: 4 }}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(spatialOperationUnavailableReason(operation)).toBe("需要古旧钥匙");
+    expect(html).toContain('class="spatial-map-interact locked"');
+    expect(html).toContain('aria-label="打开宝箱 · 锁定：需要古旧钥匙"');
+    const lockedButton = html.match(/<button class="spatial-map-interact locked"[\s\S]*?<\/button>/)?.[0];
+    expect(lockedButton).toContain("<kbd>—</kbd>LOCKED");
+    expect(lockedButton).not.toContain("aria-keyshortcuts");
+    expect(html).toContain('class="spatial-map-interact-reason"');
+    expect(html).toContain("需要古旧钥匙");
+    expect(html).toContain("道具 · 暂不可用");
+    expect(html).not.toContain('class="spatial-placement-interact-cue"');
+    expect(resolveAcceptedSpatialActivityFeedback(
+      lockedMap,
+      [lockedActivity],
+      { type: "doActivity", id: activityId },
+      { accepted: true, code: "accepted", message: "Input accepted.", expected: [] },
+    )).toBeUndefined();
   });
 
   test("keeps stacked resources visible and prioritizes an actionable landmark at equal distance", () => {

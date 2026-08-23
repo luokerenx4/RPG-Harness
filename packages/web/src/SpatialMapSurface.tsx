@@ -13,6 +13,7 @@ import type {
   AssetSpec,
   HubActivity,
   Input,
+  InputResult,
   MapDef,
   MapPlacementDef,
   MapPlacementEventDef,
@@ -35,6 +36,11 @@ export interface SpatialLandmark {
 export interface SpatialContextOperation extends SpatialPlacementOperation {
   placement: MapPlacementDef;
   distance: number;
+}
+
+export interface SpatialActivityFeedback {
+  activityId: string;
+  title: string;
 }
 
 type SpatialResourceLabels = ReadonlyMap<string, string>;
@@ -108,6 +114,40 @@ export function collectSpatialPlacementActivityIds(
       .flatMap((placement) => resolveSpatialPlacementOperations(map, placement, activities))
       .flatMap(({ activity }) => activity ? [activity.id] : []),
   );
+}
+
+/**
+ * Project a confirmed engine input back into a small player-facing field
+ * receipt. Keeping the accepted InputResult in this boundary prevents the map
+ * shell from showing an optimistic success state for a stale or locked event.
+ */
+export function resolveAcceptedSpatialActivityFeedback(
+  map: MapDef | undefined,
+  activities: HubActivity[],
+  input: Input,
+  inputResult: InputResult,
+): SpatialActivityFeedback | undefined {
+  if (!map?.layout || !inputResult.accepted || input.type !== "doActivity") return undefined;
+  const byId = new Map(activities.map((activity) => [activity.id, activity]));
+  const activity = byId.get(input.id);
+  if (!activity || !activity.available) return undefined;
+  const operation = (map.placements ?? [])
+    .flatMap((placement) => resolveSpatialPlacementOperations(map, placement, byId))
+    .find((candidate) => candidate.activity?.id === input.id);
+  if (!operation) return undefined;
+  return {
+    activityId: input.id,
+    title: operation.event.label?.trim() || activity.title,
+  };
+}
+
+export function spatialOperationUnavailableReason(
+  operation: SpatialPlacementOperation,
+): string | undefined {
+  if (operation.activity?.available) return undefined;
+  return operation.activity?.lockedReason?.trim()
+    || operation.event.lockedHint?.trim()
+    || (operation.activity ? "当前条件尚未满足" : "此事件当前未开放");
 }
 
 export function SpatialMapSurface({
@@ -333,22 +373,36 @@ export function SpatialMapSurface({
           </span>
           {contextOperations.length > 0 && (
             <div className={`spatial-map-context-actions${contextOperations.length > 1 ? " multiple" : ""}`} aria-label="附近可执行事件">
-              {contextOperations.map((operation, index) => (
-                <button
-                  className="spatial-map-interact"
-                  type="button"
-                  key={`${operation.placement.id}:${operation.event.id}`}
-                  aria-keyshortcuts={index === 0
-                    ? "E Enter Digit1"
-                    : index < 9 ? `Digit${index + 1}` : undefined}
-                  disabled={!operation.activity?.available}
-                  title={operation.activity?.lockedReason ?? operation.event.lockedHint ?? ""}
-                  onClick={() => operation.activity && onInput({ type: "doActivity", id: operation.activity.id })}
-                >
-                  <small><kbd>{index === 0 ? "E" : index + 1}</kbd>{contextOperations.length > 1 ? placementDisplayName(operation.placement, resourceLabels) : "ACTION"}</small>
-                  <strong>{operation.event.label ?? operation.activity?.title ?? "调查"}</strong>
-                </button>
-              ))}
+              {contextOperations.map((operation, index) => {
+                const unavailableReason = spatialOperationUnavailableReason(operation);
+                const label = operation.event.label ?? operation.activity?.title ?? "调查";
+                const available = operation.activity?.available === true;
+                const shortcutIndex = contextOperations
+                  .slice(0, index + 1)
+                  .filter((candidate) => candidate.activity?.available).length - 1;
+                return (
+                  <button
+                    className={`spatial-map-interact${unavailableReason ? " locked" : ""}`}
+                    type="button"
+                    key={`${operation.placement.id}:${operation.event.id}`}
+                    aria-label={`${label}${unavailableReason ? ` · 锁定：${unavailableReason}` : ""}`}
+                    aria-keyshortcuts={!available
+                      ? undefined
+                      : shortcutIndex === 0
+                      ? "E Enter Digit1"
+                      : shortcutIndex < 9 ? `Digit${shortcutIndex + 1}` : undefined}
+                    disabled={!available}
+                    title={unavailableReason ?? ""}
+                    onClick={() => operation.activity && onInput({ type: "doActivity", id: operation.activity.id })}
+                  >
+                    <small><kbd>{available ? shortcutIndex === 0 ? "E" : shortcutIndex + 1 : "—"}</kbd>{unavailableReason
+                      ? "LOCKED"
+                      : contextOperations.length > 1 ? placementDisplayName(operation.placement, resourceLabels) : "ACTION"}</small>
+                    <strong>{label}</strong>
+                    {unavailableReason && <em className="spatial-map-interact-reason"><i aria-hidden="true">◆</i>{unavailableReason}</em>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -437,7 +491,9 @@ function Placement({
         <small>{distance === 0
           ? `${resourceKindLabel(resourceKind)} · 目前地`
           : nearby && primaryOperation
-            ? `${resourceKindLabel(resourceKind)} · ${primaryOperationIsManual ? "可互动" : "接触触发"}`
+            ? `${resourceKindLabel(resourceKind)} · ${primaryOperation.activity?.available
+              ? primaryOperationIsManual ? "可互动" : "接触触发"
+              : "暂不可用"}`
             : distance !== undefined
               ? `${resourceKindLabel(resourceKind)} · ${distance} 格`
               : resourceKindLabel(resourceKind)}</small>
