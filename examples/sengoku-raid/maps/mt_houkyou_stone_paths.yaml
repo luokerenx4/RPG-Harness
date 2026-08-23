@@ -2,6 +2,20 @@ id: mt_houkyou_stone_paths
 name: 石畳の道
 chain: mt_houkyou
 difficulty: 3
+bg: assets/backgrounds/houkyou-foothills
+layout:
+  width: 14
+  height: 10
+  tile_width: 32
+  tile_height: 32
+  player_start: [6, 8]
+  layers:
+    - { id: ground, kind: tile, z: 0 }
+    - { id: routes, kind: object, z: 10 }
+  regions:
+    - { id: temple_steps, name: 焼け寺への石段, x: 4, y: 0, width: 5, height: 4 }
+    - { id: vent_trail, name: 噴気の横道, x: 9, y: 3, width: 5, height: 4 }
+    - { id: descent, name: 麓への下り, x: 4, y: 7, width: 5, height: 3 }
 encounter_table:
   - { enemy: oni_lesser, weight: 40 }
   - { enemy: oni_warrior, weight: 30 }
@@ -13,15 +27,16 @@ loot_table:
   - { item: null, min: 0, max: 0, weight: 10 }
 placements:
   - id: kasumi_spawn
-    at: [0, 0]
+    at: [6, 6]
+    layer: routes
     visible: false
     resource: { kind: character, id: kasumi }
     events:
       - { id: encounter, trigger: "sengoku-raid:spawn", chance: 1.0, run: { kind: script, id: encounter_kasumi_first } }
   - id: exit_mt_houkyou_burnt_temple
-    at:
-      - 0
-      - 0
+    at: [6, 1]
+    layer: routes
+    footprint: [2, 1]
     resource:
       kind: map
       id: mt_houkyou_burnt_temple
@@ -32,9 +47,9 @@ placements:
         label: 上
         order: 0
   - id: exit_mt_houkyou_lava_vent
-    at:
-      - 0
-      - 0
+    at: [11, 5]
+    layer: routes
+    footprint: [1, 2]
     resource:
       kind: map
       id: mt_houkyou_lava_vent
@@ -45,9 +60,9 @@ placements:
         label: 横
         order: 1
   - id: exit_mt_houkyou_foothills
-    at:
-      - 0
-      - 0
+    at: [6, 9]
+    layer: routes
+    footprint: [2, 1]
     resource:
       kind: map
       id: mt_houkyou_foothills
