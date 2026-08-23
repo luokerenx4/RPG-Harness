@@ -11,6 +11,9 @@
 import path from "node:path";
 import { loadGame } from "@rpg-harness/cli/loader";
 import { handle } from "./handlers";
+import { recoverMapTopologyTransactions } from "./map-topology-journal";
+import { withProjectSnapshotLock } from "./project-mutation-lock";
+import { withProjectProcessLock } from "./project-process-lock";
 
 interface StartArgs {
   gameDir: string;
@@ -28,7 +31,12 @@ export async function startStudioServer(args: StartArgs): Promise<{
   // browser. The handler caches the Game in-memory and re-reads from
   // disk on every /api/game so the gallery reflects live spec edits
   // without us building a watch+invalidate pipeline in v1.
-  await loadGame(gameDir);
+  await withProjectSnapshotLock(gameDir, async () => {
+    await withProjectProcessLock(gameDir, async () => {
+      await recoverMapTopologyTransactions(gameDir);
+      await loadGame(gameDir);
+    }, { waitForStale: true });
+  });
 
   const server = Bun.serve({
     port: args.port,

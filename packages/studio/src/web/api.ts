@@ -380,6 +380,89 @@ export async function saveMapDraft(
   return response.json();
 }
 
+export interface MapTopologyAssignment {
+  id: string;
+  chain: string | null;
+  isEntry: boolean;
+}
+
+export interface MapTopologyIntent {
+  expected: {
+    chain: string | null;
+    isEntry: boolean;
+    sourceEntryId: string | null;
+    destinationEntryId: string | null;
+    revision?: string;
+  };
+  destination: {
+    chain: string | null;
+    entry: "keep-existing" | "make-selected";
+  };
+  sourceReplacementEntryId?: string;
+}
+
+export interface MapTopologyPreviewResponse {
+  revision: string;
+  changedIds: string[];
+  assignments: MapTopologyAssignment[];
+}
+
+export interface MapTopologyUpdateResponse {
+  changedIds: string[];
+  project: ProjectResponse;
+}
+
+export class MapTopologyRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "MapTopologyRequestError";
+  }
+}
+
+export async function previewMapTopology(
+  mapId: string,
+  intent: MapTopologyIntent,
+  signal?: AbortSignal,
+): Promise<MapTopologyPreviewResponse> {
+  return readMapTopologyResponse(fetch(`/api/maps/${encodeURIComponent(mapId)}/topology/preview`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+    signal,
+  }));
+}
+
+export async function saveMapTopology(
+  mapId: string,
+  intent: MapTopologyIntent,
+): Promise<MapTopologyUpdateResponse> {
+  return readMapTopologyResponse(fetch(`/api/maps/${encodeURIComponent(mapId)}/topology`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(intent),
+  }));
+}
+
+async function readMapTopologyResponse<T>(request: Promise<Response>): Promise<T> {
+  const response = await request;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as {
+      error?: unknown;
+      code?: unknown;
+    };
+    throw new MapTopologyRequestError(
+      typeof body.error === "string" ? body.error : `HTTP ${response.status}`,
+      response.status,
+      typeof body.code === "string" ? body.code : undefined,
+    );
+  }
+  return response.json();
+}
+
 export interface MapPreviewResponse {
   mapId: string;
   state: "deterministic-initial";

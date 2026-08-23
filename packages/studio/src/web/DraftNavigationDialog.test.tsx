@@ -19,5 +19,14 @@ describe("Studio draft navigation guard", () => {
     expect(html).toContain("Save &amp; leave");
     expect(html).toContain("Discard &amp; leave");
     expect(html).toContain("Keep editing");
+    expect(html).toContain('class="draft-navigation-dialog"');
+    expect(html).toContain('tabindex="-1"');
+    expect(html).toContain("⌘S");
+  });
+
+  test("stays above map editing dialogs while owning the keyboard decision", async () => {
+    const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+    expect(css).toContain(".draft-navigation-layer { position: fixed; z-index: 7400;");
+    expect(css).toContain(".map-properties-layer { position: fixed; z-index: 7000;");
   });
 });

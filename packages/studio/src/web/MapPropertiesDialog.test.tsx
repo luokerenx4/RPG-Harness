@@ -36,6 +36,8 @@ function renderProperties({
     onChange={() => {}}
     onClose={() => {}}
     onSave={async () => false}
+    onChangeTopology={() => {}}
+    topologyButtonRef={React.createRef<HTMLButtonElement>()}
     dirty={Boolean(error)}
     saving={false}
     error={error}
@@ -55,6 +57,7 @@ describe("Studio Map Properties dialog shell", () => {
     expect(body).toBeGreaterThan(errorSlot);
     expect(html).toContain('role="alert"');
     expect(html).toContain("map name must not be blank");
+    expect(html).toContain("Change topology…");
   });
 
   test("renders a keyboard-reachable horizontal scrollport for dense layout fields", async () => {
@@ -69,5 +72,26 @@ describe("Studio Map Properties dialog shell", () => {
     expect(css).toContain("grid-template-rows: auto auto auto minmax(0,1fr) auto");
     expect(css).toContain(".map-layout-advanced-scroll { width: 100%; max-width: 100%; overflow-x: auto;");
     expect(css).toContain(".map-layout-advanced-inner { min-width: 620px;");
+  });
+
+  test("hands dirty topology navigation to the modal guard before editor shortcuts", async () => {
+    const source = await Bun.file(new URL("./pages/Project.tsx", import.meta.url)).text();
+    const overview = source.slice(
+      source.indexOf("function MapOverview("),
+      source.indexOf("export function MapPropertiesDialog("),
+    );
+    const keyboard = overview.slice(
+      overview.indexOf("const onKeyDown = (event: KeyboardEvent)"),
+      overview.indexOf('window.addEventListener("keydown", onKeyDown)'),
+    );
+
+    expect(overview).toContain("setPropertiesOpen(false);\n      setTopologyGuardOpen(true);");
+    expect(overview).toContain("setPropertiesOpen(true);\n          requestAnimationFrame(() => requestAnimationFrame(() => topologyButtonRef.current?.focus()));");
+    expect(keyboard.indexOf("if (propertiesOpen || topologyOpen || topologyGuardOpen) return;")).toBeLessThan(
+      keyboard.indexOf('event.key.toLowerCase() === "s"'),
+    );
+    expect(overview.indexOf("topologyAfterSaveRef.current = true;")).toBeLessThan(
+      overview.indexOf("const saved = await save();"),
+    );
   });
 });

@@ -12,7 +12,7 @@ import {
   type TuiRenderPrefs,
 } from "@rpg-harness/engine";
 import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
-import { parseMap } from "@rpg-harness/parser";
+import { GameValidationError } from "@rpg-harness/parser";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
@@ -21,6 +21,14 @@ import {
   updateMapAuthoring,
   type MapAuthoringPatch,
 } from "./map-write";
+import { resolveMapSource, resolveMapSourceFile } from "./map-source";
+import {
+  MapTopologyError,
+  mapTopologyRevision,
+  planMapTopology,
+  updateMapTopology,
+  type MapTopologyIntent,
+} from "./map-topology";
 import { readResourceSource, updateResourceSource } from "./resource-source";
 import {
   createProjectResource,
@@ -47,18 +55,53 @@ import {
   restoreAssetTrashEntry,
   trashAsset,
 } from "./asset-delete";
+import { withProjectSnapshotLock } from "./project-mutation-lock";
+import { recoverMapTopologyTransactions } from "./map-topology-journal";
+import { withProjectProcessLock } from "./project-process-lock";
 
 interface Ctx {
   gameDir: string;
 }
 
-// Dispatch by URL path + method. Tiny hand-rolled router — Bun.serve
-// doesn't ship with one and adding express/hono for a handful of
-// routes is overkill. GET handlers read; POST handlers write.
 export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   const url = new URL(req.url);
-  const { pathname } = url;
   const method = req.method.toUpperCase();
+  if (url.pathname !== "/api/health") {
+    // Never hold the project snapshot lock while a client is still streaming
+    // its request. A stalled upload must not starve unrelated Studio reads.
+    let prepared = req;
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        prepared = new Request(req, { body: await req.arrayBuffer() });
+      } catch (error) {
+        return json({ error: `failed to read request body: ${(error as Error).message}` }, 400);
+      }
+    }
+    return withProjectSnapshotLock(ctx.gameDir, async () => {
+      try {
+        return await withProjectProcessLock(ctx.gameDir, async () => {
+          await recoverMapTopologyTransactions(ctx.gameDir);
+          return route(prepared, ctx, url, method);
+        });
+      } catch (error) {
+        return mapTopologyErrorResponse(error);
+      }
+    });
+  }
+  return route(req, ctx, url, method);
+}
+
+// Dispatch by URL path + method. Tiny hand-rolled router — Bun.serve
+// doesn't ship with one and adding express/hono for a handful of
+// routes is overkill. Project reads and writes pass through one project lock so
+// no request can observe a partially replaced multi-map transaction.
+async function route(
+  req: Request,
+  ctx: Ctx,
+  url: URL,
+  method: string,
+): Promise<Response> {
+  const { pathname } = url;
 
   if (method === "GET") {
     if (pathname === "/api/health") return getHealthRoute();
@@ -92,6 +135,10 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "POST") {
+    const topologyPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/topology\/preview$/);
+    if (topologyPreviewMatch?.[1]) {
+      return postMapTopologyPreview(ctx, decodeURIComponent(topologyPreviewMatch[1]), req);
+    }
     const mapPreviewMatch = pathname.match(/^\/api\/maps\/([^/]+)\/preview$/);
     if (mapPreviewMatch?.[1]) {
       return postMapDraftPreview(ctx, decodeURIComponent(mapPreviewMatch[1]), req);
@@ -114,6 +161,10 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   if (method === "PATCH") {
     if (pathname === "/api/resource-source") return patchResourceSource(ctx, url, req);
     if (pathname === "/api/resources/rename") return patchResourceRename(ctx, req);
+    const topologyMatch = pathname.match(/^\/api\/maps\/([^/]+)\/topology$/);
+    if (topologyMatch?.[1]) {
+      return patchMapTopology(ctx, decodeURIComponent(topologyMatch[1]), req);
+    }
     const mapMatch = pathname.match(/^\/api\/maps\/([^/]+)\/(?:authoring|spatial)$/);
     if (mapMatch?.[1]) return patchMapAuthoring(ctx, decodeURIComponent(mapMatch[1]), req);
     // /api/assets/<asset-path>/spec — edit mutable spec fields
@@ -434,7 +485,7 @@ async function postMapDraftPreview(
   if (!map) return json({ error: "map not found" }, 404);
   const parsed = await readMapAuthoringPatch(req);
   if (parsed instanceof Response) return parsed;
-  const abs = await resolveMapFile(ctx.gameDir, mapId);
+  const abs = await resolveMapSourceFile(ctx.gameDir, mapId);
   if (!abs) return json({ error: "map source file not found" }, 404);
   let original: string;
   try {
@@ -728,7 +779,7 @@ async function patchMapAuthoring(
   const patch = await readMapAuthoringPatch(req);
   if (patch instanceof Response) return patch;
 
-  const abs = await resolveMapFile(ctx.gameDir, mapId);
+  const abs = await resolveMapSourceFile(ctx.gameDir, mapId);
   if (!abs) return json({ error: "map source file not found" }, 404);
   let updated: Awaited<ReturnType<typeof updateMapAuthoring>>;
   try {
@@ -743,6 +794,218 @@ async function patchMapAuthoring(
     return json({ error: (error as Error).message }, 400);
   }
   return json(await projectGame(ctx, updated.game));
+}
+
+async function postMapTopologyPreview(
+  ctx: Ctx,
+  mapId: string,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readMapTopologyIntent(req, mapId);
+  if (parsed instanceof Response) return parsed;
+  try {
+    await requireMapTopologySource(ctx.gameDir, mapId);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planMapTopology(game, parsed);
+    for (const assignment of plan.assignments) {
+      await requireMapTopologySource(ctx.gameDir, assignment.id);
+    }
+    return json({
+      revision: mapTopologyRevision(game),
+      changedIds: plan.changedIds,
+      assignments: plan.assignments,
+    });
+  } catch (error) {
+    return mapTopologyErrorResponse(error);
+  }
+}
+
+async function patchMapTopology(
+  ctx: Ctx,
+  mapId: string,
+  req: Request,
+): Promise<Response> {
+  const parsed = await readMapTopologyIntent(req, mapId);
+  if (parsed instanceof Response) return parsed;
+  if (parsed.expected.revision === undefined) {
+    return json({
+      error: "expected.revision is required; preview this topology change before applying it",
+      code: "map_topology_preview_required",
+    }, 409);
+  }
+  try {
+    await requireMapTopologySource(ctx.gameDir, mapId);
+    const game = await loadGame(ctx.gameDir);
+    const plan = planMapTopology(game, parsed);
+    const sources = new Map<string, string>();
+    for (const assignment of plan.assignments) {
+      const source = await requireMapTopologySource(ctx.gameDir, assignment.id);
+      sources.set(assignment.id, source);
+    }
+    // Projection is part of the transaction contract: a response that cannot
+    // be represented in Studio must fail before any source is replaced.
+    await projectGame(ctx, plan.game);
+    let project: Awaited<ReturnType<typeof projectGame>> | undefined;
+    const updated = await updateMapTopology(
+      sources,
+      parsed,
+      () => loadGame(ctx.gameDir),
+      async (updatedGame) => {
+        for (const [id, expectedSource] of sources) {
+          const authoritativeSource = await requireMapTopologySource(ctx.gameDir, id);
+          if (authoritativeSource !== expectedSource) {
+            throw new MapTopologyError(
+              `map source authority changed during topology reload: ${id}`,
+              409,
+              "stale_map_source",
+            );
+          }
+        }
+        project = await projectGame(ctx, updatedGame);
+      },
+    );
+    if (!project) throw new Error("map topology response projection was not produced");
+    return json({
+      changedIds: updated.changedIds,
+      project,
+    });
+  } catch (error) {
+    return mapTopologyErrorResponse(error);
+  }
+}
+
+async function requireMapTopologySource(gameDir: string, mapId: string): Promise<string> {
+  const resolution = await resolveMapSource(gameDir, mapId);
+  if (resolution.kind === "found") return resolution.path;
+  if (resolution.kind === "ambiguous") {
+    throw new MapTopologyError(
+      `map source is ambiguous for ${mapId}: ${resolution.paths.join(", ")}`,
+      409,
+      "ambiguous_map_source",
+    );
+  }
+  if (resolution.kind === "mismatched") {
+    throw new MapTopologyError(
+      `map source identity mismatch for ${mapId}: found ${resolution.actualId} in ${resolution.path}`,
+      409,
+      "mismatched_map_source",
+    );
+  }
+  if (resolution.kind === "invalid") {
+    throw new MapTopologyError(
+      `map source is invalid for ${mapId}: ${resolution.error}`,
+      422,
+    );
+  }
+  throw new MapTopologyError(`map source file not found: ${mapId}`, 404);
+}
+
+function mapTopologyErrorResponse(error: unknown): Response {
+  const status = error instanceof MapTopologyError
+    ? error.status
+    : error instanceof GameValidationError
+      ? 422
+      : 500;
+  return json({
+    error: error instanceof Error ? error.message : String(error),
+    code: error instanceof MapTopologyError
+      ? error.code
+      : status === 422
+        ? "invalid_map_topology"
+        : status >= 500
+          ? "map_topology_unavailable"
+          : "invalid_map_topology",
+  }, status);
+}
+
+async function readMapTopologyIntent(
+  req: Request,
+  mapId: string,
+): Promise<MapTopologyIntent | Response> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return json({ error: "body must be an object" }, 400);
+  }
+  const body = raw as Record<string, unknown>;
+  const unexpected = Object.keys(body).find((key) =>
+    !["expected", "destination", "sourceReplacementEntryId"].includes(key)
+  );
+  if (unexpected) return json({ error: `unknown topology field: ${unexpected}` }, 400);
+  if (!body.expected || typeof body.expected !== "object" || Array.isArray(body.expected)) {
+    return json({ error: "expected must be an object" }, 400);
+  }
+  if (!body.destination || typeof body.destination !== "object" || Array.isArray(body.destination)) {
+    return json({ error: "destination must be an object" }, 400);
+  }
+  const expected = body.expected as Record<string, unknown>;
+  const destination = body.destination as Record<string, unknown>;
+  const unexpectedExpected = Object.keys(expected).find((key) =>
+    !["chain", "isEntry", "sourceEntryId", "destinationEntryId", "revision"].includes(key)
+  );
+  if (unexpectedExpected) {
+    return json({ error: `unknown expected topology field: ${unexpectedExpected}` }, 400);
+  }
+  const unexpectedDestination = Object.keys(destination).find((key) =>
+    !["chain", "entry"].includes(key)
+  );
+  if (unexpectedDestination) {
+    return json({ error: `unknown destination topology field: ${unexpectedDestination}` }, 400);
+  }
+  for (const [scope, record] of [["expected", expected], ["destination", destination]] as const) {
+    const chain = record.chain;
+    if (chain !== null && typeof chain !== "string") {
+      return json({ error: `${scope}.chain must be a string or null` }, 400);
+    }
+    if (chain === "") {
+      return json({ error: `${scope}.chain must be non-empty or null` }, 400);
+    }
+  }
+  if (typeof expected.isEntry !== "boolean") {
+    return json({ error: "expected.isEntry must be a boolean" }, 400);
+  }
+  if (expected.revision !== undefined && (
+    typeof expected.revision !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(expected.revision)
+  )) {
+    return json({ error: "expected.revision must be a sha256 topology revision" }, 400);
+  }
+  for (const key of ["sourceEntryId", "destinationEntryId"] as const) {
+    const value = expected[key];
+    if (value !== null && typeof value !== "string") {
+      return json({ error: `expected.${key} must be a string or null` }, 400);
+    }
+  }
+  if (destination.entry !== "keep-existing" && destination.entry !== "make-selected") {
+    return json({ error: "destination.entry must be keep-existing or make-selected" }, 400);
+  }
+  if (
+    body.sourceReplacementEntryId !== undefined &&
+    (typeof body.sourceReplacementEntryId !== "string" || body.sourceReplacementEntryId.length === 0)
+  ) {
+    return json({ error: "sourceReplacementEntryId must be a non-empty string" }, 400);
+  }
+  return {
+    mapId,
+    expected: {
+      chain: expected.chain as string | null,
+      isEntry: expected.isEntry,
+      sourceEntryId: expected.sourceEntryId as string | null,
+      destinationEntryId: expected.destinationEntryId as string | null,
+      ...(typeof expected.revision === "string" ? { revision: expected.revision } : {}),
+    },
+    destination: {
+      chain: destination.chain as string | null,
+      entry: destination.entry,
+    },
+    ...(typeof body.sourceReplacementEntryId === "string"
+      ? { sourceReplacementEntryId: body.sourceReplacementEntryId }
+      : {}),
+  };
 }
 
 async function readMapAuthoringPatch(req: Request): Promise<MapAuthoringPatch | Response> {
@@ -805,24 +1068,6 @@ async function readMapAuthoringPatch(req: Request): Promise<MapAuthoringPatch | 
     }
   }
   return body as unknown as MapAuthoringPatch;
-}
-
-async function resolveMapFile(gameDir: string, mapId: string): Promise<string | undefined> {
-  if (!mapId || mapId.includes("/") || mapId.includes("\\") || mapId === "." || mapId === "..") {
-    return undefined;
-  }
-  const mapsDir = path.resolve(gameDir, "maps");
-  for (const extension of ["yaml", "yml"] as const) {
-    const abs = path.resolve(mapsDir, `${mapId}.${extension}`);
-    if (path.dirname(abs) !== mapsDir) continue;
-    try {
-      const contents = await readFile(abs, "utf-8");
-      if (parseMap(contents, abs).id === mapId) return abs;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
 }
 
 async function getAssets(ctx: Ctx): Promise<Response> {

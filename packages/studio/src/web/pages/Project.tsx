@@ -25,6 +25,8 @@ import {
   planResourceRename,
   renameProjectResource,
   restoreStudioTrashEntry,
+  previewMapTopology,
+  saveMapTopology,
   trashProjectResource,
   saveMapDraft,
   saveResourceSource,
@@ -42,6 +44,7 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import { buildMapTopologyChains, MapTopologyDialog } from "../MapTopologyDialog";
 import { WorldAtlas } from "../WorldAtlas";
 import {
   compareMapCatalogChainKeys,
@@ -774,6 +777,7 @@ export function Project({
             />
           ) : selected ? (
             <ResourceDetail
+              project={project}
               node={selected}
               map={map}
               maps={project.maps}
@@ -1049,6 +1053,7 @@ function CreateResourceDialog({
 }
 
 function ResourceDetail({
+  project,
   node,
   map,
   maps,
@@ -1068,6 +1073,7 @@ function ResourceDetail({
   onResourceRenamed,
   onResourceDuplicated,
 }: {
+  project: ProjectResponse;
   node: ProjectResourceNode;
   map?: MapDef;
   maps: MapDef[];
@@ -1240,7 +1246,7 @@ function ResourceDetail({
           </div>
         </header>
         {map ? (
-          <MapOverview map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
+          <MapOverview project={project} map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -2288,6 +2294,7 @@ export function reconcileMapDraftAfterSave(
 }
 
 function MapOverview({
+  project,
   map,
   maps,
   assets,
@@ -2297,6 +2304,7 @@ function MapOverview({
   onProjectSaved,
   onDraftGuardChange,
 }: {
+  project: ProjectResponse;
   map: MapDef;
   maps: MapDef[];
   assets: ProjectAssetPreview[];
@@ -2320,6 +2328,11 @@ function MapOverview({
   const [saveReceipt, setSaveReceipt] = useState<{ mapName: string; summary: string; savedAt: string } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [topologyOpen, setTopologyOpen] = useState(false);
+  const [topologyGuardOpen, setTopologyGuardOpen] = useState(false);
+  const [topologyGuardSaving, setTopologyGuardSaving] = useState(false);
+  const [topologyGuardError, setTopologyGuardError] = useState<string | null>(null);
+  const [topologyReturnFocusPending, setTopologyReturnFocusPending] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
   const [paletteResourceKey, setPaletteResourceKey] = useState("");
@@ -2336,11 +2349,17 @@ function MapOverview({
   const paintGestureRef = useRef(0);
   const activePaintGroupRef = useRef<string | undefined>(undefined);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
   const propertiesButtonRef = useRef<HTMLButtonElement>(null);
+  const topologyButtonRef = useRef<HTMLButtonElement>(null);
+  const topologyAppliedRef = useRef(false);
+  const topologyAfterSaveRef = useRef(false);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const pendingSave = preserveDraftAfterSaveRef.current;
+    const continueToTopology = topologyAfterSaveRef.current && mapIdRef.current === map.id;
+    topologyAfterSaveRef.current = false;
     const preserveDraft = pendingSave !== null &&
       pendingSave.map.id === map.id &&
       !hasMapDraftChanges(pendingSave.map, map);
@@ -2358,6 +2377,10 @@ function MapOverview({
     setSaveError(null);
     setConfirmDiscard(false);
     setPropertiesOpen(false);
+    setTopologyOpen(continueToTopology);
+    setTopologyGuardOpen(false);
+    setTopologyGuardSaving(false);
+    setTopologyGuardError(null);
     setZoom(100);
     setPaletteResourceKey("");
     setPaletteQuery("");
@@ -2369,6 +2392,12 @@ function MapOverview({
     setCanvasPainting(null);
     setSelectedRegionId("");
   }, [map]);
+
+  useEffect(() => {
+    if (!topologyReturnFocusPending || editing || topologyOpen) return;
+    setTopologyReturnFocusPending(false);
+    requestAnimationFrame(() => editButtonRef.current?.focus());
+  }, [editing, topologyOpen, topologyReturnFocusPending]);
 
   const width = draft.layout?.width ?? 1;
   const height = draft.layout?.height ?? 1;
@@ -2574,6 +2603,38 @@ function MapOverview({
     setConfirmDiscard(false);
   };
 
+  const openTopology = () => {
+    topologyAppliedRef.current = false;
+    setTopologyReturnFocusPending(false);
+    setTopologyGuardOpen(false);
+    setTopologyGuardError(null);
+    setPropertiesOpen(false);
+    setTopologyOpen(true);
+  };
+
+  const requestTopology = () => {
+    if (dirty) {
+      setTopologyGuardError(null);
+      setPropertiesOpen(false);
+      setTopologyGuardOpen(true);
+      return;
+    }
+    openTopology();
+  };
+
+  const closeTopology = () => {
+    setTopologyOpen(false);
+    if (topologyAppliedRef.current) {
+      topologyAppliedRef.current = false;
+      setPropertiesOpen(false);
+      setTopologyReturnFocusPending(true);
+      return;
+    }
+    setEditing(true);
+    setPropertiesOpen(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => topologyButtonRef.current?.focus()));
+  };
+
   useEffect(() => {
     onDraftGuardChange(editing && dirty ? {
       label: `Map · ${map.name}`,
@@ -2598,6 +2659,7 @@ function MapOverview({
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
+      if (propertiesOpen || topologyOpen || topologyGuardOpen) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (dirty && !saving) void save();
@@ -2615,7 +2677,6 @@ function MapOverview({
         setSelectedPlacementId(null);
         return;
       }
-      if (propertiesOpen) return;
       if (!acceptsText && !event.metaKey && !event.ctrlKey && !event.altKey) {
         if (event.key === "1") {
           event.preventDefault();
@@ -2654,7 +2715,7 @@ function MapOverview({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen]);
+  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen, topologyOpen, topologyGuardOpen]);
 
   useEffect(() => {
     const stopPainting = () => {
@@ -2707,7 +2768,7 @@ function MapOverview({
         </div>
         <div className="map-editor-actions">
           {!editing ? (
-            <button type="button" onClick={() => { setEditing(true); setPropertiesOpen(false); setConfirmDiscard(false); }}>Edit map</button>
+            <button ref={editButtonRef} type="button" onClick={() => { setEditing(true); setPropertiesOpen(false); setConfirmDiscard(false); }}>Edit map</button>
           ) : (
             <>
               <button ref={propertiesButtonRef} type="button" onClick={() => setPropertiesOpen(true)}>Map properties…</button>
@@ -2751,9 +2812,61 @@ function MapOverview({
         dirty={dirty}
         saving={saving}
         error={saveError}
+        topologyButtonRef={topologyButtonRef}
+        onChangeTopology={requestTopology}
         onClose={() => {
           setPropertiesOpen(false);
           requestAnimationFrame(() => propertiesButtonRef.current?.focus());
+        }}
+      />}
+      {topologyOpen && <MapTopologyDialog
+        project={project}
+        selectedMap={map}
+        chains={buildMapTopologyChains(project.maps)}
+        onPreview={(intent, signal) => previewMapTopology(map.id, intent, signal)}
+        onApply={async (intent) => {
+          const result = await saveMapTopology(map.id, intent);
+          topologyAppliedRef.current = true;
+          onProjectSaved(result.project);
+          const saved = result.project.maps.find((candidate) => candidate.id === map.id);
+          setSaveReceipt({
+            mapName: saved?.name ?? map.name,
+            summary: `${result.changedIds.length} topology source${result.changedIds.length === 1 ? "" : "s"} committed together`,
+            savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          });
+          return result;
+        }}
+        onClose={closeTopology}
+      />}
+      {topologyGuardOpen && <DraftNavigationDialog
+        guard={{ label: `Map · ${map.name}`, save, discard }}
+        destination="World Topology"
+        saving={topologyGuardSaving}
+        error={topologyGuardError}
+        onStay={() => {
+          setTopologyGuardOpen(false);
+          setTopologyGuardError(null);
+          setPropertiesOpen(true);
+          requestAnimationFrame(() => requestAnimationFrame(() => topologyButtonRef.current?.focus()));
+        }}
+        onDiscard={() => {
+          discard();
+          openTopology();
+        }}
+        onSave={() => {
+          void (async () => {
+            setTopologyGuardSaving(true);
+            setTopologyGuardError(null);
+            topologyAfterSaveRef.current = true;
+            const saved = await save();
+            setTopologyGuardSaving(false);
+            if (!saved) {
+              topologyAfterSaveRef.current = false;
+              setTopologyGuardError("Map draft could not be saved. Correct its validation error and try again.");
+              return;
+            }
+            openTopology();
+          })();
         }}
       />}
       {editing && !draft.layout && (
@@ -3263,6 +3376,8 @@ export function MapPropertiesDialog({
   onChange,
   onClose,
   onSave,
+  onChangeTopology,
+  topologyButtonRef,
   dirty,
   saving,
   error,
@@ -3275,6 +3390,8 @@ export function MapPropertiesDialog({
   onChange: (update: React.SetStateAction<MapDef>, group?: string) => void;
   onClose: () => void;
   onSave: () => Promise<boolean>;
+  onChangeTopology: () => void;
+  topologyButtonRef: React.RefObject<HTMLButtonElement>;
   dirty: boolean;
   saving: boolean;
   error: string | null;
@@ -3293,6 +3410,12 @@ export function MapPropertiesDialog({
   }, []);
 
   const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (dirty && !saving && draft.name.trim()) void onSave();
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -3375,7 +3498,8 @@ export function MapPropertiesDialog({
                 <div className="map-property-topology-readonly">
                   <span><small>Map chain</small><code>{draft.chain === undefined ? "standalone" : JSON.stringify(draft.chain)}</code></span>
                   <span><small>Chain role</small><strong>{draft.isEntry ? "Entry map" : draft.chain ? "Member map" : "Independent"}</strong></span>
-                  <p>Chain membership and entry transfer are project-wide topology changes, so this record dialog keeps them read-only until they can be committed atomically.</p>
+                  <p>Membership and entry roles are edited as a separate whole-project transaction. The selected map ID and authored routes remain unchanged.</p>
+                  <button ref={topologyButtonRef} type="button" disabled={saving} onClick={onChangeTopology}><span aria-hidden="true">⌘</span>Change topology…</button>
                 </div>
                 {topology && <div className="map-chain-diagnostics"><span className="validated"><i aria-hidden="true">✓</i><span><strong>{topology.memberCount} maps in this exact chain</strong><small>{topology.entryIds.length === 1 ? `entry ${topology.entryIds[0]} · whole-chain reachability revalidates on Save` : `${topology.entryIds.length} declared entries`}</small></span></span></div>}
                 <label className="map-property-difficulty"><span>Difficulty hint</span><input type="number" step="any" value={draft.difficulty ?? 1} onChange={(event) => onChange((current) => ({ ...current, difficulty: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 1 }))} /><small>Author-declared number; modules decide how to interpret it.</small></label>

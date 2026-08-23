@@ -24,6 +24,11 @@ export interface MapAuthoringPatch {
   properties?: MapPropertiesPatch;
 }
 
+export interface MapTopologyPatch {
+  chain: string | null;
+  isEntry: boolean;
+}
+
 export interface MapAuthoringPatchPreview {
   content: string;
   game: Game;
@@ -51,7 +56,13 @@ export function serializeMapAuthoringPatch(
 
   const properties = patch.properties ?? {};
   if (patch.layout === undefined && patch.placements === undefined) {
-    const content = serializeScalarProperties(original, doc, properties);
+    const content = serializeScalarFields(original, doc, [
+      ["name", properties.name],
+      ["description", properties.description],
+      ["difficulty", properties.difficulty],
+      ["bg", properties.bg],
+      ["is_extract", properties.isExtract],
+    ]);
     return { content, map: parseMap(content, source) };
   }
   if (properties.name !== undefined) doc.set("name", properties.name);
@@ -73,19 +84,32 @@ export function serializeMapAuthoringPatch(
   return { content, map: parseMap(content, source) };
 }
 
-function serializeScalarProperties(
+export function serializeMapTopologyPatch(
+  original: string,
+  patch: MapTopologyPatch,
+  source?: string,
+): { content: string; map: MapDef } {
+  const doc = parseDocument(original);
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `${source ?? "map"}: existing YAML has parse errors — ${doc.errors[0]!.message}`,
+    );
+  }
+  const content = serializeScalarFields(original, doc, [
+    ["chain", patch.chain],
+    ["is_entry", patch.isEntry],
+  ]);
+  return { content, map: parseMap(content, source) };
+}
+
+type MapScalarFieldValue = string | number | boolean | null | undefined;
+
+function serializeScalarFields(
   original: string,
   doc: ReturnType<typeof parseDocument>,
-  properties: MapPropertiesPatch,
+  values: Array<[string, MapScalarFieldValue]>,
 ): string {
   if (!isMap(doc.contents)) throw new Error("map: existing YAML root must be an object");
-  const values: Array<[string, string | number | boolean | null | undefined]> = [
-    ["name", properties.name],
-    ["description", properties.description],
-    ["difficulty", properties.difficulty],
-    ["bg", properties.bg],
-    ["is_extract", properties.isExtract],
-  ];
   const edits: Array<{ start: number; end: number; replacement: string }> = [];
   const additions: string[] = [];
 
@@ -283,6 +307,25 @@ async function withMapWriteLock<T>(
   } finally {
     if (mapWriteQueues.get(key) === tail) mapWriteQueues.delete(key);
   }
+}
+
+/**
+ * Acquire every affected map source in a stable order. This lets project-wide
+ * topology transactions compose with ordinary one-map authoring saves without
+ * deadlocking or allowing an older rollback to erase a later write.
+ */
+export async function withMapWriteLocks<T>(
+  keys: string[],
+  operation: () => Promise<T>,
+): Promise<T> {
+  const ordered = [...new Set(keys)].sort();
+  const acquire = (index: number): Promise<T> => {
+    const key = ordered[index];
+    return key === undefined
+      ? operation()
+      : withMapWriteLock(key, () => acquire(index + 1));
+  };
+  return acquire(0);
 }
 
 function setOptionalScalar(
