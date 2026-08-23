@@ -1023,52 +1023,73 @@ body {
 /* ---------- backlog ---------- */
 /* ---------- 設定集 (art book) ---------- */
 .artbook-inner {
+  display: grid;
+  grid-template-rows: 54px minmax(0,1fr) 25px;
   width: min(1100px, 100%);
-}
-.artbook-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px 0;
-  flex-wrap: wrap;
-}
-.artbook-tab-active {
-  border-color: var(--accent, #5fd3f0);
-  color: var(--accent, #5fd3f0);
-}
-.artbook-scroll {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.artbook-plate {
-  margin: 0;
-}
-.artbook-plate img {
-  width: 100%;
-  border-radius: 6px;
-  display: block;
-}
-.artbook-plate figcaption {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #9ba1ad;
-}
-.artbook-portrait-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.artbook-portrait-row .artbook-plate {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.artbook-placeholder,
-.artbook-empty {
-  padding: 24px;
-  text-align: center;
-  color: #9ba1ad;
-  border: 1px dashed #33333f;
+  height: min(760px, 88vh);
+  max-height: none;
+  border-color: rgba(213,170,80,.3);
   border-radius: 8px;
+  background: #0c1016;
+  box-shadow: 0 24px 80px rgba(0,0,0,.62);
+}
+.artbook-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 13px 8px 17px; border-bottom: 1px solid rgba(255,255,255,.075); background: linear-gradient(90deg,rgba(213,170,80,.07),transparent 45%); }
+.artbook-head > div { display: flex; flex-direction: column; gap: 2px; }
+.artbook-head span { color: #a68143; font: 7px/1 ui-monospace,monospace; letter-spacing: .17em; }
+.artbook-head strong { color: #eef0f2; font: 600 15px/1.2 ui-serif,Georgia,serif; letter-spacing: .08em; }
+.artbook-head button { padding: 6px 8px; color: #858e99; border: 1px solid rgba(255,255,255,.1); border-radius: 4px; background: rgba(255,255,255,.025); cursor: pointer; font-size: 9px; }
+.artbook-head button:hover { color: #fff; border-color: rgba(213,170,80,.38); }
+.artbook-head kbd { margin-left: 5px; color: #565f69; font: 7px/1 ui-monospace,monospace; }
+.artbook-layout { display: grid; grid-template-columns: 172px minmax(0,1fr); min-width: 0; min-height: 0; }
+.artbook-index { display: grid; grid-template-rows: auto minmax(0,1fr) auto; min-width: 0; min-height: 0; border-right: 1px solid rgba(255,255,255,.07); background: #0a0d12; }
+.artbook-index > header { display: flex; justify-content: space-between; padding: 12px 11px 8px; color: #59636e; font: 7px/1 ui-monospace,monospace; letter-spacing: .12em; }
+.artbook-index nav { padding: 0 7px; overflow: auto; }
+.artbook-index nav button { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 6px; width: 100%; min-height: 48px; padding: 6px 7px; color: #818a95; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; text-align: left; }
+.artbook-index nav button:hover { color: #d6dbe0; background: rgba(255,255,255,.03); }
+.artbook-index nav button.active { color: #eef1f3; border-color: rgba(100,183,198,.3); background: linear-gradient(90deg,rgba(49,123,137,.25),rgba(49,123,137,.05)); box-shadow: inset 2px 0 #64b7c6; }
+.artbook-index nav button > span { color: #4c5661; font: 8px/1 ui-monospace,monospace; }
+.artbook-index nav button > div { display: flex; min-width: 0; flex-direction: column; }
+.artbook-index nav button strong { overflow: hidden; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.artbook-index nav button small { overflow: hidden; color: #505964; font: 7px/1.3 ui-monospace,monospace; text-overflow: ellipsis; white-space: nowrap; }
+.artbook-index nav button i { color: #4b5660; font: normal 7px/1 ui-monospace,monospace; }
+.artbook-index > footer { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; color: #46505b; border-top: 1px solid rgba(255,255,255,.06); font: 7px/1.2 ui-monospace,monospace; letter-spacing: .08em; }
+.artbook-index > footer small { color: #373f48; font-size: 7px; }
+.artbook-scroll { min-width: 0; min-height: 0; padding: 17px; overflow-y: auto; scrollbar-color: #39414b transparent; scrollbar-width: thin; }
+.artbook-record-head { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 20px; margin-bottom: 18px; padding: 3px 3px 14px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.artbook-record-head > div { display: flex; min-width: 0; flex-direction: column; }
+.artbook-record-head span { color: #6d7b87; font: 7px/1 ui-monospace,monospace; letter-spacing: .14em; }
+.artbook-record-head h2 { margin: 5px 0 2px; color: #f0f2f3; font: 600 22px/1.15 ui-serif,Georgia,serif; }
+.artbook-record-head code { color: #53606b; font-size: 8px; }
+.artbook-record-head dl { display: flex; gap: 5px; margin: 0; }
+.artbook-record-head dl > div { min-width: 60px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 4px; background: rgba(255,255,255,.02); }
+.artbook-record-head dt { color: #4c5661; font: 7px/1 ui-monospace,monospace; }
+.artbook-record-head dd { margin: 4px 0 0; color: #aab2ba; font: 10px/1 ui-monospace,monospace; }
+.artbook-record-head p { grid-column: 1 / -1; max-width: 720px; margin: 4px 0 0; color: #78828c; font-size: 9px; line-height: 1.65; }
+.artbook-gallery-section + .artbook-gallery-section { margin-top: 22px; }
+.artbook-gallery-section > header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+.artbook-gallery-section > header span { color: #8c754c; font: 7px/1 ui-monospace,monospace; letter-spacing: .15em; }
+.artbook-gallery-section > header small { color: #48515b; font-size: 8px; }
+.artbook-plate { margin: 0 0 13px; overflow: hidden; border: 1px solid rgba(255,255,255,.075); border-radius: 6px; background: #11151b; }
+.artbook-plate img { display: block; width: 100%; background: #e8e6df; }
+.artbook-plate figcaption { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 8px; margin: 0; padding: 7px 9px; }
+.artbook-plate figcaption > span { grid-row: 1 / 3; align-self: start; padding: 3px 5px; color: #8bbbc2; border: 1px solid rgba(100,183,198,.22); border-radius: 3px; background: rgba(49,123,137,.12); font: 7px/1 ui-monospace,monospace; text-transform: uppercase; }
+.artbook-plate figcaption p { margin: 0; color: #8d969f; font-size: 8px; line-height: 1.45; }
+.artbook-plate figcaption code { color: #48525c; font-size: 7px; }
+.artbook-portrait-row { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; align-items: start; }
+.artbook-portrait-row .artbook-plate { min-width: 0; }
+.artbook-placeholder,
+.artbook-empty { padding: 24px; color: #9ba1ad; border: 1px dashed #33333f; border-radius: 8px; text-align: center; }
+.artbook-footer { display: flex; align-items: center; justify-content: space-between; padding: 0 11px; color: #414a54; border-top: 1px solid rgba(255,255,255,.06); background: #090c11; font: 7px/1 ui-monospace,monospace; letter-spacing: .08em; }
+
+@media (max-width: 700px) {
+  .artbook-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); }
+  .artbook-index { display: block; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .artbook-index > header,
+  .artbook-index > footer { display: none; }
+  .artbook-index nav { display: flex; gap: 4px; padding: 7px; overflow-x: auto; }
+  .artbook-index nav button { flex: 0 0 130px; min-height: 42px; }
+  .artbook-record-head dl { display: none; }
+  .artbook-portrait-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 .backlog-overlay {
