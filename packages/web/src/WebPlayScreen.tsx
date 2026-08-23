@@ -716,6 +716,9 @@ export function WebPlayScreen({
           sceneLabel={sceneLabel}
           sessionLabel={sessionLabel}
           backlogAvailable={model.backlog.length > 0}
+          controlMode={model.stage.kind === "hubMenu"
+            ? currentMap?.layout ? "field" : "hub"
+            : "story"}
           onResume={() => setShowSystemMenu(false)}
           onAdventureRecord={() => { setShowSystemMenu(false); setShowAdventureRecord(true); }}
           onBacklog={() => { setShowSystemMenu(false); setShowBacklog(true); }}
@@ -751,6 +754,7 @@ export function SystemMenuOverlay({
   sceneLabel,
   sessionLabel,
   backlogAvailable,
+  controlMode = "story",
   onResume,
   onAdventureRecord,
   onBacklog,
@@ -761,12 +765,34 @@ export function SystemMenuOverlay({
   sceneLabel: string;
   sessionLabel?: string;
   backlogAvailable: boolean;
+  controlMode?: "story" | "hub" | "field";
   onResume: () => void;
   onAdventureRecord: () => void;
   onBacklog: () => void;
   onArtBook: () => void;
   onExit: () => void;
 }) {
+  const actionsRef = useRef<HTMLElement>(null);
+  const controlRows = systemMenuControlRows(controlMode);
+
+  useEffect(() => {
+    const actions = actionsRef.current;
+    if (!actions) return;
+    const enabledButtons = () => Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+    enabledButtons()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      const buttons = enabledButtons();
+      if (buttons.length === 0) return;
+      event.preventDefault();
+      const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const nextIndex = nextHubCommandIndex(currentIndex, buttons.length, event.key === "ArrowDown" ? 1 : -1);
+      buttons[nextIndex]?.focus();
+    };
+    actions.addEventListener("keydown", onKeyDown);
+    return () => actions.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="system-menu-overlay" role="dialog" aria-modal="true" aria-label="系统菜单" onClick={onResume}>
       <section className="system-menu-frame" onClick={(event) => event.stopPropagation()}>
@@ -775,7 +801,7 @@ export function SystemMenuOverlay({
           <button type="button" onClick={onResume} aria-label="关闭系统菜单">×</button>
         </header>
         <div className="system-menu-body">
-          <nav className="system-menu-actions" aria-label="系统菜单操作">
+          <nav ref={actionsRef} className="system-menu-actions" aria-label="系统菜单操作">
             <button type="button" className="primary" onClick={onResume}><span>▶</span><strong>继续游戏</strong><small>物語へ戻る</small></button>
             <button type="button" onClick={onAdventureRecord}><span>◆</span><strong>冒险记录</strong><small>人物・装備・所持品</small></button>
             <button type="button" disabled={!backlogAvailable} onClick={onBacklog}><span>≡</span><strong>回看记录</strong><small>会話ログ</small></button>
@@ -788,16 +814,28 @@ export function SystemMenuOverlay({
             <dl>
               <div><dt>SAVE</dt><dd><i /> AUTO · 同期済み</dd></div>
               <div><dt>SESSION</dt><dd>{sessionLabel ?? "local"}</dd></div>
-              <div><dt>CONTROL</dt><dd>Space / Enter · 進む</dd></div>
-              <div><dt>MAP</dt><dd>Arrow / WASD · 移動</dd></div>
+              {controlRows.map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}
             </dl>
             <p>ゲームの進行は共有セッションへ自動保存されます。</p>
           </aside>
         </div>
-        <footer><span>Esc · 閉じる</span><span>RPG HARNESS PLAYER</span></footer>
+        <footer><span>↑↓ · 選択　 Enter · 決定　 Esc · 閉じる</span><span>RPG HARNESS PLAYER</span></footer>
       </section>
     </div>
   );
+}
+
+export function systemMenuControlRows(mode: "story" | "hub" | "field") {
+  if (mode === "field") return [
+    { label: "MOVE", value: "Arrow / WASD · 移動" },
+    { label: "ACTION", value: "E / Enter · 調べる" },
+    { label: "COMMAND", value: "Tab · 指令へ" },
+  ];
+  if (mode === "hub") return [
+    { label: "SELECT", value: "Arrow ↑↓ · 選択" },
+    { label: "CONFIRM", value: "Enter · 決定" },
+  ];
+  return [{ label: "CONTROL", value: "Space / Enter · 進む" }];
 }
 
 export function AdventureRecordOverlay({

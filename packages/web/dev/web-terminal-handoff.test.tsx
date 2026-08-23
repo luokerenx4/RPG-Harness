@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, nextHubCommandIndex, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
+import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, nextHubCommandIndex, resolveFeedbackTarget, StageView, systemMenuControlRows, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
@@ -13,6 +13,7 @@ describe("Web terminal handoff", () => {
       sceneLabel="潰れた社"
       sessionLabel="shared-session"
       backlogAvailable={false}
+      controlMode="field"
       onResume={() => {}}
       onAdventureRecord={() => {}}
       onBacklog={() => {}}
@@ -25,6 +26,11 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("返回标题");
     expect(html).toContain("shared-session");
     expect(html).toContain("disabled");
+    expect(html).toContain("E / Enter · 調べる");
+    expect(systemMenuControlRows("hub")).toEqual([
+      { label: "SELECT", value: "Arrow ↑↓ · 選択" },
+      { label: "CONFIRM", value: "Enter · 決定" },
+    ]);
   });
 
   test("renders standard engine state as an RPG adventure record", () => {
