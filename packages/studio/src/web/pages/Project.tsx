@@ -34,6 +34,7 @@ import {
   type ResourceRenamePlan,
 } from "../api";
 import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
+import { MapAssetPicker } from "../MapAssetPicker";
 
 const KIND_ORDER: ProjectResourceKind[] = [
   "manifest",
@@ -2985,10 +2986,16 @@ function MapStructureEditor({
               <option>tile</option><option>image</option><option>object</option><option>collision</option><option>region</option>
             </select>
             <input type="number" aria-label={`${layer.id} z`} value={layer.z} onChange={(event) => patchLayer(sourceIndex, { z: Number(event.target.value) })} />
-            {layer.kind === "image" ? <select aria-label={`${layer.id} image asset`} value={layer.asset ?? ""} onChange={(event) => patchLayer(sourceIndex, { asset: event.target.value || undefined })}>
-              <option value="">No image asset</option>
-              {assets.filter((asset) => Object.values(asset.renderings).some(Boolean)).map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}
-            </select> : <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(sourceIndex, { asset: event.target.value || undefined })} />}
+            {layer.kind === "image" ? <MapAssetPicker
+              assets={assets.filter((asset) => Object.values(asset.renderings).some(Boolean))}
+              value={layer.asset}
+              preferredKind="bg"
+              emptyLabel="No image asset"
+              label={`${layer.id} image asset`}
+              title={`Choose image for ${layer.name ?? layer.id}`}
+              description="Pick the authored background, CG, or other visual rendered by this map layer."
+              onChange={(asset) => patchLayer(sourceIndex, { asset })}
+            /> : <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(sourceIndex, { asset: event.target.value || undefined })} />}
             <label><input type="checkbox" checked={layer.visible} onChange={(event) => patchLayer(sourceIndex, { visible: event.target.checked })} /> visible</label>
             <span className="layer-order-controls">
               <button type="button" aria-label={`Move ${layer.id} layer up`} disabled={displayIndex === 0} onClick={() => onChange(moveMapLayer(layout, sourceIndex, -1))}>↑</button>
@@ -3204,11 +3211,16 @@ function PlacementEditor({
           </div>
           <div className="placement-graphic-fields">
             <span className={`placement-graphic-preview${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} aria-hidden="true">{graphicPath ? "" : "◇"}</span>
-            <label>Map graphic<select value={placement.asset ?? ""} onChange={(event) => onChange((current) => ({ ...current, asset: event.target.value || undefined }))}>
-              <option value="">{inheritedGraphic ? "Character default" : "System marker"}</option>
-              {assets.some((asset) => asset.kind === "sprite") && <optgroup label="Map sprites">{assets.filter((asset) => asset.kind === "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder}</option>)}</optgroup>}
-              <optgroup label="Scene and design assets">{assets.filter((asset) => asset.kind !== "sprite").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder} · {asset.kind}</option>)}</optgroup>
-            </select></label>
+            <MapAssetPicker
+              assets={assets}
+              value={placement.asset}
+              preferredKind="sprite"
+              emptyLabel={inheritedGraphic ? "Use character default" : "Use system marker"}
+              label="Map graphic"
+              title={`Choose map graphic for ${placementLabel}`}
+              description="Assign a visual override to this placement without changing its project record or event behavior."
+              onChange={(asset) => onChange((current) => ({ ...current, asset }))}
+            />
             <small>{placement.asset ?? (inheritedGraphic ? `Inherited · ${inheritedGraphic}` : "Renderer-owned marker · Headless ignores the visual")}</small>
           </div>
           <p>Choose from the project database. The stable resource ID is written into the map source.</p>
