@@ -33,8 +33,8 @@ export function ArtBook({
         <div className="backlog-inner" onClick={(e) => e.stopPropagation()}>
           <div className="backlog-head">
             <span>設定集</span>
-            <button className="hud-btn" onClick={onClose}>
-              閉じる
+            <button className="hud-btn" autoFocus onClick={onClose} aria-label="关闭設定集">
+              閉じる <kbd>Esc</kbd>
             </button>
           </div>
           <div className="artbook-empty">設定資料はまだありません。</div>
@@ -50,7 +50,7 @@ export function ArtBook({
       <div className="backlog-inner artbook-inner" onClick={(e) => e.stopPropagation()}>
         <header className="artbook-head">
           <div><span>ARCHIVE · {packs.length} RECORDS</span><strong>設定資料集</strong></div>
-          <button type="button" onClick={onClose}>閉じる <kbd>Esc</kbd></button>
+          <button type="button" autoFocus onClick={onClose} aria-label="关闭設定集">閉じる <kbd>Esc</kbd></button>
         </header>
         <div className="artbook-layout">
           <aside className="artbook-index">

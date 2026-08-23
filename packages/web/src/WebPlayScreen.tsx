@@ -292,6 +292,7 @@ export function WebPlayScreen({
   const [showAdventureRecord, setShowAdventureRecord] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showSystemMenu, setShowSystemMenu] = useState(false);
+  const overlayReturnFocusRef = useRef<HTMLElement | null>(null);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
   const [inputNoticeSource, setInputNoticeSource] = useState<string | null>(null);
   const [externalAdvance, setExternalAdvance] = useState(
@@ -504,22 +505,35 @@ export function WebPlayScreen({
     [aiTurnPending, commit, onCommit],
   );
 
+  const openOverlay = useCallback((open: () => void) => {
+    overlayReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    open();
+  }, []);
+
+  const closeOverlay = useCallback((close: () => void) => {
+    close();
+    requestAnimationFrame(() => overlayReturnFocusRef.current?.focus());
+  }, []);
+
   // Keyboard: classic RPG field movement, Hub cursor navigation, confirm and cancel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         if (showFeedback) {
-          setShowFeedback(false);
+          closeOverlay(() => setShowFeedback(false));
         } else if (showArtBook) {
-          setShowArtBook(false);
+          closeOverlay(() => setShowArtBook(false));
         } else if (showAdventureRecord) {
-          setShowAdventureRecord(false);
+          closeOverlay(() => setShowAdventureRecord(false));
         } else if (showBacklog) {
-          setShowBacklog(false);
+          closeOverlay(() => setShowBacklog(false));
         } else if (showSystemMenu) {
-          setShowSystemMenu(false);
+          closeOverlay(() => setShowSystemMenu(false));
         } else if (onExit) {
-          setShowSystemMenu(true);
+          openOverlay(() => setShowSystemMenu(true));
         }
         return;
       }
@@ -563,7 +577,7 @@ export function WebPlayScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showAdventureRecord, showFeedback, showSystemMenu, sendInput, onExit]);
+  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showAdventureRecord, showFeedback, showSystemMenu, sendInput, onExit, openOverlay, closeOverlay]);
 
   const currentMapId = engineRef.current?.getState().baseline.currentMapId ?? null;
   const currentMap = currentMapId
@@ -589,20 +603,20 @@ export function WebPlayScreen({
           )}
           <nav className="game-menu" aria-label="ゲームメニュー">
             {onExit && (
-              <button className="hud-btn" onClick={() => setShowSystemMenu(true)}>
+              <button className="hud-btn" onClick={() => openOverlay(() => setShowSystemMenu(true))}>
                 <span aria-hidden="true">☰</span> 菜单
               </button>
             )}
             {model.backlog.length > 0 && (
-              <button className="hud-btn" onClick={() => setShowBacklog(true)}>
+              <button className="hud-btn" onClick={() => openOverlay(() => setShowBacklog(true))}>
                 <span aria-hidden="true">≡</span> 回看
               </button>
             )}
-            <button className="hud-btn" onClick={() => setShowArtBook(true)}>
+            <button className="hud-btn" onClick={() => openOverlay(() => setShowArtBook(true))}>
               <span aria-hidden="true">◇</span> 設定集
             </button>
             {feedbackEnabled && onFeedback && (
-              <button className="hud-btn hud-feedback-btn" onClick={() => setShowFeedback(true)}>
+              <button className="hud-btn hud-feedback-btn" onClick={() => openOverlay(() => setShowFeedback(true))}>
                 <span aria-hidden="true">✦</span> AIへフィードバック{feedbackFeed?.open
                   ? ` · ${feedbackFeed.open}件対応中`
                   : feedbackFeed?.resolved
@@ -708,7 +722,7 @@ export function WebPlayScreen({
         </div>
       )}
       {showBacklog && (
-        <BacklogOverlay entries={model.backlog} onClose={() => setShowBacklog(false)} />
+        <BacklogOverlay entries={model.backlog} onClose={() => closeOverlay(() => setShowBacklog(false))} />
       )}
       {showSystemMenu && onExit && (
         <SystemMenuOverlay
@@ -719,7 +733,7 @@ export function WebPlayScreen({
           controlMode={model.stage.kind === "hubMenu"
             ? currentMap?.layout ? "field" : "hub"
             : "story"}
-          onResume={() => setShowSystemMenu(false)}
+          onResume={() => closeOverlay(() => setShowSystemMenu(false))}
           onAdventureRecord={() => { setShowSystemMenu(false); setShowAdventureRecord(true); }}
           onBacklog={() => { setShowSystemMenu(false); setShowBacklog(true); }}
           onArtBook={() => { setShowSystemMenu(false); setShowArtBook(true); }}
@@ -727,10 +741,10 @@ export function WebPlayScreen({
         />
       )}
       {showArtBook && (
-        <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
+        <ArtBook game={game} assetUrls={assetUrls} onClose={() => closeOverlay(() => setShowArtBook(false))} />
       )}
       {showAdventureRecord && adventureState && (
-        <AdventureRecordOverlay game={game} state={adventureState} onClose={() => setShowAdventureRecord(false)} />
+        <AdventureRecordOverlay game={game} state={adventureState} onClose={() => closeOverlay(() => setShowAdventureRecord(false))} />
       )}
       {showFeedback && onFeedback && (
         <FeedbackOverlay
@@ -742,7 +756,7 @@ export function WebPlayScreen({
           )}
           feedbackFeed={feedbackFeed}
           onSubmit={onFeedback}
-          onClose={() => setShowFeedback(false)}
+          onClose={() => closeOverlay(() => setShowFeedback(false))}
         />
       )}
     </div>
@@ -873,7 +887,7 @@ export function AdventureRecordOverlay({
       <section className="adventure-record-frame" onClick={(event) => event.stopPropagation()}>
         <header className="adventure-record-heading">
           <div><span>ADVENTURE RECORD</span><strong>旅の記録</strong><small>角色、装备与旅程状态</small></div>
-          <button type="button" onClick={onClose} aria-label="关闭冒险记录">× <kbd>Esc</kbd></button>
+          <button type="button" autoFocus onClick={onClose} aria-label="关闭冒险记录">× <kbd>Esc</kbd></button>
         </header>
 
         <div className="adventure-record-hero">
@@ -1509,8 +1523,8 @@ export function BacklogOverlay({
       <div className="backlog-inner" onClick={(e) => e.stopPropagation()}>
         <div className="backlog-head">
           <span>回看</span>
-          <button className="hud-btn" onClick={onClose}>
-            閉じる
+          <button className="hud-btn" autoFocus onClick={onClose} aria-label="关闭回看记录">
+            閉じる <kbd>Esc</kbd>
           </button>
         </div>
         <div className="backlog-scroll">
