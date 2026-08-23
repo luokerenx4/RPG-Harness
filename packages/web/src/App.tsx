@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComposedState, Game } from "@rpg-harness/engine";
 import type { InputResult } from "@rpg-harness/engine";
 import { listGames, loadWebGame } from "./loadGame";
@@ -58,6 +58,7 @@ export function App() {
   const [autoStartConsumed, setAutoStartConsumed] = useState(false);
   const [aiTurnPending, setAiTurnPending] = useState(false);
   const [freshStartGameId, setFreshStartGameId] = useState<string | null>(null);
+  const pickerListRef = useRef<HTMLUListElement>(null);
   const requestedGame = useMemo(
     () => requestedWebGame(window.location.search),
     [],
@@ -92,6 +93,29 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [freshStartGameId]);
+
+  useEffect(() => {
+    const list = pickerListRef.current;
+    if (!list || loaded || savedGames === null || freshStartGameId) return;
+    const buttons = () => Array.from(list.querySelectorAll<HTMLButtonElement>(".picker-btn:not(:disabled)"));
+    const initial = buttons()[0];
+    if (initial && (document.activeElement === document.body || document.activeElement === null)) initial.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const entries = buttons();
+      if (entries.length === 0) return;
+      event.preventDefault();
+      const currentIndex = entries.indexOf(document.activeElement as HTMLButtonElement);
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? entries.length - 1
+          : nextPickerIndex(currentIndex, entries.length, event.key === "ArrowDown" ? 1 : -1);
+      entries[nextIndex]?.focus();
+    };
+    list.addEventListener("keydown", onKeyDown);
+    return () => list.removeEventListener("keydown", onKeyDown);
+  }, [freshStartGameId, loaded, savedGames]);
 
   const start = useCallback(async (id: string, fresh: boolean) => {
     try {
@@ -394,7 +418,7 @@ export function App() {
           <div><span>SELECT PROJECT</span><h2>物語を選ぶ</h2></div>
           <small>{games.length} PROJECT{games.length === 1 ? "" : "S"}</small>
         </header>
-        <ul className="picker-list">
+        <ul ref={pickerListRef} className="picker-list">
           {games.map((g, index) => {
             const saved = savedGames?.has(g.id) ?? false;
             return (
@@ -422,7 +446,7 @@ export function App() {
             );
           })}
         </ul>
-        <footer className="picker-footer"><span>FILES ARE AUTHORITATIVE</span><span>WEB SURFACE · READY</span></footer>
+        <footer className="picker-footer"><span>↑↓ SELECT · ENTER START</span><span>FILES ARE AUTHORITATIVE</span><span>WEB SURFACE · READY</span></footer>
       </main>
       {freshStartGameId && (
         <div className="picker-reset-overlay" onClick={() => setFreshStartGameId(null)}>
@@ -447,6 +471,12 @@ export function App() {
       )}
     </div>
   );
+}
+
+export function nextPickerIndex(currentIndex: number, total: number, delta: 1 | -1): number {
+  if (total <= 0) return -1;
+  if (currentIndex < 0 || currentIndex >= total) return delta > 0 ? 0 : total - 1;
+  return (currentIndex + delta + total) % total;
 }
 
 function needsBranchContextPolling(branch: WebBranchContext | undefined): boolean {
