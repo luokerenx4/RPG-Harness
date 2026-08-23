@@ -2482,7 +2482,7 @@ textarea:focus-visible {
 @media (max-width: 760px) {
   .game-identity { min-width: 0; }
   .game-identity small { display: none; }
-  .game-menu .hud-btn { padding-inline: 7px; font-size: 0; }
+  .game-menu .hud-btn { min-width: 40px; height: 40px; justify-content: center; padding-inline: 7px; font-size: 0; touch-action: manipulation; }
   .game-menu .hud-btn span { font-size: 13px; }
   .game-contextbar { gap: 6px; overflow-x: auto; }
   .game-context-status { flex: 0 0 auto; overflow: visible; }
@@ -2501,7 +2501,10 @@ textarea:focus-visible {
   .choice-heading { align-items: flex-start; flex-direction: column; gap: 7px; min-height: 0; padding: 11px 13px; }
   .choice-heading > div strong { max-width: 100%; font-size: 14px; white-space: normal; }
   .choice-panel .option-list { max-height: calc(74vh - 84px); padding: 8px; }
-  .choice-panel .option-btn { min-height: 50px; padding: 7px 8px; }
+  .choice-panel .option-btn { min-height: 54px; padding: 8px; touch-action: manipulation; }
+  .spatial-map-navigation { align-items: stretch; }
+  .spatial-map-controls button { width: 44px; height: 40px; touch-action: manipulation; }
+  .spatial-map-interact { min-width: 76px; min-height: 44px; touch-action: manipulation; }
   .backlog-overlay { padding: 10px; }
   .feedback-row { grid-template-columns: 1fr; }
 }
@@ -2520,9 +2523,33 @@ textarea:focus-visible {
   .game-identity { padding-left: 8px; }
   .game-identity strong { font-size: 12px; }
   .game-menu { padding-inline: 4px; }
+  .game-menu .hud-btn { min-width: 37px; height: 38px; }
+  .game-contextbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 4px 8px 6px;
+    overflow: visible;
+  }
+  .game-context-status { width: 100%; overflow: hidden; }
+  .hud-session {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .game-context-status .hud-development { display: none; }
-  .hud-ai-control select { max-width: 112px; }
+  .hud-ai-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    height: 34px;
+  }
+  .hud-ai-control select { width: 100%; max-width: none; height: 28px; }
+  .hud-ai-control .hud-btn { min-height: 28px; padding-inline: 12px; touch-action: manipulation; }
   .hub-stage-layout { padding-inline: 0; }
+  .stage-area { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  .advance-hint { min-height: 34px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
