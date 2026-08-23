@@ -28,6 +28,11 @@ import {
   restoreStudioTrashEntry,
   trashProjectResource,
 } from "./resource-delete";
+import {
+  planProjectResourceRename,
+  renameProjectResource,
+  ResourceRenameError,
+} from "./resource-rename";
 
 interface Ctx {
   gameDir: string;
@@ -73,6 +78,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   if (method === "POST") {
     if (pathname === "/api/resources") return postProjectResource(ctx, req);
+    if (pathname === "/api/resources/rename-plan") return postResourceRenamePlan(ctx, req);
     if (pathname === "/api/trash/restore") return postRestoreStudioTrash(ctx, req);
     // /api/assets/<asset-path>/source       — upload source.quality.png
     // /api/assets/<asset-path>/render-tui   — invoke chafa
@@ -85,6 +91,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   if (method === "PATCH") {
     if (pathname === "/api/resource-source") return patchResourceSource(ctx, url, req);
+    if (pathname === "/api/resources/rename") return patchResourceRename(ctx, req);
     const mapMatch = pathname.match(/^\/api\/maps\/([^/]+)\/spatial$/);
     if (mapMatch?.[1]) return patchMapSpatial(ctx, decodeURIComponent(mapMatch[1]), req);
     // /api/assets/<asset-path>/spec — edit mutable spec fields
@@ -97,6 +104,78 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function postResourceRenamePlan(ctx: Ctx, req: Request): Promise<Response> {
+  const input = await readRenameInput(req);
+  if (input instanceof Response) return input;
+  try {
+    const game = await loadGame(ctx.gameDir);
+    return json(await planProjectResourceRename(
+      ctx.gameDir,
+      game,
+      input.kind as CreatableResourceKind,
+      input.id,
+      input.newId,
+      await artifactBacklinks(ctx.gameDir, `${input.kind}:${input.id}`),
+    ));
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof ResourceRenameError ? error.status : 400,
+    );
+  }
+}
+
+async function patchResourceRename(ctx: Ctx, req: Request): Promise<Response> {
+  const input = await readRenameInput(req);
+  if (input instanceof Response) return input;
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const renamed = await renameProjectResource(
+      ctx.gameDir,
+      game,
+      input.kind as CreatableResourceKind,
+      input.id,
+      input.newId,
+      () => loadGame(ctx.gameDir),
+      await artifactBacklinks(ctx.gameDir, `${input.kind}:${input.id}`),
+    );
+    return json({
+      plan: renamed.plan,
+      resource: renamed.resource,
+      project: await projectGame(ctx, renamed.game),
+    });
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof ResourceRenameError ? error.status : 400,
+    );
+  }
+}
+
+async function readRenameInput(req: Request): Promise<
+  { kind: string; id: string; newId: string } | Response
+> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const input = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  if (typeof input.kind !== "string" || typeof input.id !== "string" || typeof input.newId !== "string") {
+    return json({ error: "kind, id, and newId must be strings" }, 400);
+  }
+  return { kind: input.kind, id: input.id, newId: input.newId };
+}
+
+async function artifactBacklinks(gameDir: string, resourceKey: string): Promise<string[]> {
+  return (await scanProjectArtifacts(gameDir))
+    .filter((artifact) => artifact.refs.includes(resourceKey))
+    .map((artifact) => artifact.key);
 }
 
 async function getStudioTrash(ctx: Ctx): Promise<Response> {
@@ -139,9 +218,7 @@ async function deleteProjectResource(ctx: Ctx, url: URL): Promise<Response> {
   try {
     const game = await loadGame(ctx.gameDir);
     const resourceKey = `${identity.kind}:${identity.id}`;
-    const artifactBlockers = (await scanProjectArtifacts(ctx.gameDir))
-      .filter((artifact) => artifact.refs.includes(resourceKey))
-      .map((artifact) => artifact.key);
+    const artifactBlockers = await artifactBacklinks(ctx.gameDir, resourceKey);
     const trashed = await trashProjectResource(
       ctx.gameDir,
       game,

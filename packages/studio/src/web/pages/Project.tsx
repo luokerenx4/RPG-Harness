@@ -17,6 +17,8 @@ import {
   fetchResourceSource,
   createProjectResource,
   fetchStudioTrash,
+  planResourceRename,
+  renameProjectResource,
   restoreStudioTrashEntry,
   trashProjectResource,
   saveMapSpatial,
@@ -26,6 +28,7 @@ import {
   type ProjectResponse,
   type MapPreviewResponse,
   type StudioTrashEntry,
+  type ResourceRenamePlan,
 } from "../api";
 import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
 
@@ -343,6 +346,17 @@ export function Project({
     setLifecycleReceipt({ title: `${restored.resource.label} restored`, path: restored.entry.sourcePath });
   };
 
+  const handleResourceRenamed = (renamed: Awaited<ReturnType<typeof renameProjectResource>>) => {
+    const previousKey = renamed.plan.resource.key;
+    setProject(renamed.project);
+    setSelectedKey(renamed.resource.key);
+    setOpenKeys((current) => current.map((key) => key === previousKey ? renamed.resource.key : key));
+    setLifecycleReceipt({
+      title: `${renamed.resource.label} refactored to ${renamed.resource.id}`,
+      path: `${renamed.plan.files.length} files · ${renamed.plan.totalChanges} semantic changes`,
+    });
+  };
+
   return (
     <div className="project-workbench">
       <nav className="project-activitybar" aria-label="Project sections">
@@ -490,6 +504,7 @@ export function Project({
               draftActive={draftActive}
               onSelectResource={selectResource}
               onResourceTrashed={handleResourceTrashed}
+              onResourceRenamed={handleResourceRenamed}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
@@ -723,6 +738,7 @@ function ResourceDetail({
   draftActive,
   onSelectResource,
   onResourceTrashed,
+  onResourceRenamed,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -738,12 +754,15 @@ function ResourceDetail({
   draftActive: boolean;
   onSelectResource: (key: string) => void;
   onResourceTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
+  onResourceRenamed: (renamed: Awaited<ReturnType<typeof renameProjectResource>>) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(() => map === undefined);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const renameButtonRef = useRef<HTMLButtonElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
@@ -756,7 +775,10 @@ function ResourceDetail({
     inspectorRef.current?.scrollTo({ top: 0, left: 0 });
   }, [node.key, map === undefined]);
 
-  useEffect(() => setDeleteOpen(false), [node.key]);
+  useEffect(() => {
+    setDeleteOpen(false);
+    setRenameOpen(false);
+  }, [node.key]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -796,6 +818,16 @@ function ResourceDetail({
                 onClick={() => adjacent.next && onSelectResource(adjacent.next.key)}
               >›</button>
             </nav>
+            {REMOVABLE_KINDS.has(node.kind) && node.source && node.editable !== false && (
+              <button
+                ref={renameButtonRef}
+                type="button"
+                className="resource-rename-trigger"
+                disabled={draftActive}
+                title={draftActive ? "Save or discard the current draft first" : "Rename stable ID and rewrite references"}
+                onClick={() => setRenameOpen(true)}
+              ><span aria-hidden="true">⌘</span>Rename</button>
+            )}
             {REMOVABLE_KINDS.has(node.kind) && node.source && node.editable !== false && (
               <button
                 ref={deleteButtonRef}
@@ -888,6 +920,126 @@ function ResourceDetail({
           }}
         />
       )}
+      {renameOpen && (
+        <RenameResourceDialog
+          node={node}
+          onClose={() => {
+            setRenameOpen(false);
+            requestAnimationFrame(() => renameButtonRef.current?.focus());
+          }}
+          onRenamed={(renamed) => {
+            setRenameOpen(false);
+            onResourceRenamed(renamed);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RenameResourceDialog({
+  node,
+  onClose,
+  onRenamed,
+}: {
+  node: ProjectResourceNode;
+  onClose: () => void;
+  onRenamed: (renamed: Awaited<ReturnType<typeof renameProjectResource>>) => void;
+}) {
+  const [newId, setNewId] = useState(node.id);
+  const [plan, setPlan] = useState<ResourceRenamePlan | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idValid = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(newId);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  useEffect(() => {
+    setPlan(null);
+    setError(null);
+    if (!idValid || newId === node.id) {
+      setPlanning(false);
+      return;
+    }
+    let cancelled = false;
+    setPlanning(true);
+    const timer = window.setTimeout(() => {
+      void planResourceRename(node.kind, node.id, newId)
+        .then((next) => {
+          if (!cancelled) setPlan(next);
+        })
+        .catch((cause) => {
+          if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        })
+        .finally(() => {
+          if (!cancelled) setPlanning(false);
+        });
+    }, 240);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [idValid, newId, node.id, node.kind]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!plan || plan.blockers.length > 0 || renaming) return;
+    setRenaming(true);
+    setError(null);
+    try {
+      onRenamed(await renameProjectResource(node.kind, node.id, newId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setRenaming(false);
+    }
+  };
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="rename-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-resource-title" onClick={renaming ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !renaming) onClose();
+    }}>
+      <form ref={dialogRef} className="rename-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header><div><span>DATABASE REFACTOR</span><strong id="rename-resource-title">Rename stable resource ID</strong><small>Studio rewrites only engine-proven semantic references, renames the authoritative source when applicable, then reloads the complete game atomically.</small></div><button type="button" aria-label="Close rename resource dialog" disabled={renaming} onClick={onClose}>×</button></header>
+        <div className="rename-resource-body">
+          <div className="rename-resource-identity"><i aria-hidden="true">⌘</i><div><span>{node.kind.toUpperCase()}</span><strong>{node.label}</strong><code>{node.id}</code></div><b aria-hidden="true">→</b><label><span>NEW STABLE ID</span><input ref={inputRef} value={newId} maxLength={80} aria-invalid={!idValid} autoComplete="off" onChange={(event) => setNewId(event.target.value)} /></label></div>
+          {!idValid && <div className="rename-resource-hint invalid">Use 1–80 ASCII letters, numbers, dashes or underscores.</div>}
+          {idValid && newId === node.id && <div className="rename-resource-hint">Enter a different stable ID to build the refactor plan.</div>}
+          {planning && <div className="rename-resource-planning"><span>◌</span>Tracing semantic references…</div>}
+          {plan && (
+            <div className="rename-resource-plan">
+              <header><div><span>REFACTOR PLAN</span><strong>{plan.files.length} files</strong></div><b>{plan.totalChanges} semantic changes</b></header>
+              <div className="rename-resource-files">{plan.files.map((file) => (
+                <article key={file.key}><i aria-hidden="true">{KIND_META[file.kind as ProjectResourceKind]?.icon ?? "·"}</i><div><strong>{file.label}</strong><code>{file.path}{file.destinationPath ? ` → ${file.destinationPath}` : ""}</code></div><b>{file.changes}</b></article>
+              ))}</div>
+            </div>
+          )}
+          {plan && plan.blockers.length > 0 && <div className="rename-resource-blockers" role="alert"><strong>Manual changes required</strong><span>Studio will not start the refactor while any source is unsafe:</span>{plan.blockers.map((blocker) => <div key={blocker.key}><code>{blocker.key}</code><small>{blocker.reason}</small></div>)}</div>}
+          {error && <div className="rename-resource-error" role="alert"><strong>Refactor failed</strong><span>{error}</span><small>All authoritative files remain at their previous identity.</small></div>}
+        </div>
+        <footer><span>STRUCTURED REWRITE · CONFLICT CHECK · ATOMIC ROLLBACK</span><div><button type="button" disabled={renaming} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!plan || plan.blockers.length > 0 || renaming}>{renaming ? "Validating…" : plan?.blockers.length ? "Resolve blockers first" : plan ? `Rename & rewrite ${plan.totalChanges}` : "Build a valid plan"}</button></div></footer>
+      </form>
     </div>
   );
 }

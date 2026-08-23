@@ -232,6 +232,61 @@ export async function trashProjectResource(
   return response.json();
 }
 
+export interface ResourceRenamePlan {
+  target: { kind: ProjectResourceKind; id: string; newId: string };
+  resource: ProjectResourceNode;
+  files: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    path: string;
+    destinationPath?: string;
+    changes: number;
+  }>;
+  blockers: Array<{ key: string; reason: string }>;
+  totalChanges: number;
+}
+
+export async function planResourceRename(
+  kind: ProjectResourceKind,
+  id: string,
+  newId: string,
+): Promise<ResourceRenamePlan> {
+  const response = await fetch("/api/resources/rename-plan", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, id, newId }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export interface RenameProjectResourceResponse {
+  plan: ResourceRenamePlan;
+  resource: ProjectResourceNode;
+  project: ProjectResponse;
+}
+
+export async function renameProjectResource(
+  kind: ProjectResourceKind,
+  id: string,
+  newId: string,
+): Promise<RenameProjectResourceResponse> {
+  const response = await fetch("/api/resources/rename", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, id, newId }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function saveMapSpatial(
   map: Pick<MapDef, "id" | "layout" | "placements">,
 ): Promise<ProjectResponse> {
