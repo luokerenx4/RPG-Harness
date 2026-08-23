@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { HubActivity, MapDef } from "@rpg-harness/engine";
 import {
+  mapPlacementDistance,
   resolveSpatialPlacementOperations,
   SpatialMapSurface,
 } from "../src/SpatialMapSurface";
@@ -44,6 +45,13 @@ const move: HubActivity = {
 };
 
 describe("SpatialMapSurface", () => {
+  test("measures player distance from a placement footprint", () => {
+    const placement = map.placements![0]!;
+    expect(mapPlacementDistance({ x: 1, y: 2 }, placement)).toBe(5);
+    expect(mapPlacementDistance({ x: 3, y: 4 }, placement)).toBe(1);
+    expect(mapPlacementDistance({ x: 4, y: 5 }, placement)).toBe(0);
+  });
+
   test("maps a visual placement to the existing semantic activity", () => {
     const placement = map.placements![0]!;
     expect(resolveSpatialPlacementOperations(
@@ -78,6 +86,9 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("left:37.5%");
     expect(html).toContain("width:25%");
     expect(html).toContain("玩家位置 1,2");
+    expect(html).toContain("POSITION 1,2");
+    expect(html).toContain("Town · 5 格");
+    expect(html).toContain("placement-distant");
     expect(html).toContain("向南移动");
     expect(html).toContain("resource-map");
     expect(html).toContain("出口");
