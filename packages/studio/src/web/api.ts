@@ -7,6 +7,7 @@ import type {
   MapDef,
   MapAvailableResource,
   ProjectResourceKind,
+  ProjectResourceNode,
   ProjectResourceGraph,
   SwitchDef,
   VariableDef,
@@ -141,6 +142,29 @@ export async function saveResourceSource(
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ source }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export interface CreateProjectResourceResponse {
+  resource: ProjectResourceNode;
+  source: ResourceSourceResponse;
+  project: ProjectResponse;
+}
+
+export async function createProjectResource(
+  kind: ProjectResourceKind,
+  id: string,
+  label: string,
+): Promise<CreateProjectResourceResponse> {
+  const response = await fetch("/api/resources", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind, id, label }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));

@@ -15,6 +15,7 @@ import {
   fetchProject,
   fetchMapPreview,
   fetchResourceSource,
+  createProjectResource,
   saveMapSpatial,
   saveResourceSource,
   sourceImageUrl,
@@ -56,6 +57,13 @@ const SECTION_META: Array<{ id: ProjectSection; icon: string; label: string }> =
   { id: "story", icon: "¶", label: "Story" },
   { id: "qa", icon: "✓", label: "QA" },
 ];
+
+const CREATABLE_SECTION_KINDS: Record<ProjectSection, ProjectResourceKind[]> = {
+  world: ["map"],
+  database: ["character", "item", "weapon", "skill", "enemy", "action"],
+  story: ["script"],
+  qa: [],
+};
 
 const KIND_META: Partial<Record<ProjectResourceKind, { icon: string; label: string }>> = {
   manifest: { icon: "◆", label: "Project" },
@@ -110,9 +118,16 @@ export function Project({
   const [pendingNavigation, setPendingNavigation] = useState<ProjectNavigationIntent | null>(null);
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resourceTreeRef = useRef<HTMLDivElement | null>(null);
   const draftGuardRef = useRef<StudioDraftGuard | null>(null);
+  const createResourceButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const closeCreateDialog = () => {
+    setCreateDialogOpen(false);
+    requestAnimationFrame(() => createResourceButtonRef.current?.focus());
+  };
 
   const handleDraftGuardChange = useCallback((guard: StudioDraftGuard | null) => {
     draftGuardRef.current = guard;
@@ -272,7 +287,7 @@ export function Project({
             key={item.id}
             title={item.label}
             aria-label={item.label}
-            onClick={() => { setSection(item.id); setQuery(""); }}
+            onClick={() => { setSection(item.id); setQuery(""); setCreateDialogOpen(false); }}
           ><span>{item.icon}</span><small>{item.label}</small></button>
         ))}
       </nav>
@@ -280,7 +295,19 @@ export function Project({
       <aside className="project-explorer">
         <header className="explorer-heading">
           <div><span>PROJECT</span><strong>{SECTION_META.find((item) => item.id === section)?.label}</strong></div>
-          <small>{project.graph.resources.length}</small>
+          <div className="explorer-heading-actions">
+            <small>{project.graph.resources.length}</small>
+            {CREATABLE_SECTION_KINDS[section].length > 0 && (
+              <button
+                ref={createResourceButtonRef}
+                type="button"
+                aria-label={`New ${SECTION_META.find((item) => item.id === section)?.label} resource`}
+                title={draftActive ? "Save or discard the current draft first" : "Create resource"}
+                disabled={draftActive}
+                onClick={() => setCreateDialogOpen(true)}
+              >＋</button>
+            )}
+          </div>
         </header>
         <label className="project-searchbox">
           <span aria-hidden="true">⌕</span>
@@ -418,6 +445,90 @@ export function Project({
           }}
         />
       )}
+      {createDialogOpen && (
+        <CreateResourceDialog
+          kinds={CREATABLE_SECTION_KINDS[section]}
+          onClose={closeCreateDialog}
+          onCreated={(created) => {
+            setProject(created.project);
+            setCreateDialogOpen(false);
+            commitSelectResource(created.resource.key);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateResourceDialog({
+  kinds,
+  onClose,
+  onCreated,
+}: {
+  kinds: ProjectResourceKind[];
+  onClose: () => void;
+  onCreated: (created: Awaited<ReturnType<typeof createProjectResource>>) => void;
+}) {
+  const initialKind = kinds[0] ?? "script";
+  const [kind, setKind] = useState<ProjectResourceKind>(initialKind);
+  const [label, setLabel] = useState("");
+  const [id, setId] = useState(`new_${initialKind}`);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const idValid = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(id);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!label.trim() || !idValid || creating) return;
+    setCreating(true);
+    setError(null);
+    try {
+      onCreated(await createProjectResource(kind, id, label));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setCreating(false);
+    }
+  };
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  return (
+    <div className="create-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="create-resource-title" onClick={creating ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !creating) onClose();
+    }}>
+      <form ref={dialogRef} className="create-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header>
+          <div><span>NEW DATABASE RECORD</span><strong id="create-resource-title">Create project resource</strong><small>A validated standalone source file will become authoritative immediately.</small></div>
+          <button type="button" aria-label="Close new resource dialog" disabled={creating} onClick={onClose}>×</button>
+        </header>
+        <div className="create-resource-body">
+          <label><span>Resource type</span><select value={kind} onChange={(event) => {
+            const next = event.target.value as ProjectResourceKind;
+            setId((current) => current === `new_${kind}` ? `new_${next}` : current);
+            setKind(next);
+          }}>{kinds.map((candidate) => <option value={candidate} key={candidate}>{KIND_META[candidate]?.label ?? candidate}</option>)}</select></label>
+          <label><span>Display name</span><input autoFocus maxLength={160} required value={label} placeholder="What authors and players will see" onChange={(event) => setLabel(event.target.value)} /></label>
+          <label><span>Stable ID</span><input value={id} maxLength={80} aria-invalid={!idValid} onChange={(event) => setId(event.target.value)} /><small>ASCII letters, numbers, dashes and underscores. This becomes the filename and resource key.</small></label>
+          {error && <div className="create-resource-error" role="alert"><strong>Creation failed</strong><span>{error}</span><small>No partial resource was kept.</small></div>}
+        </div>
+        <footer>
+          <span>FILES ARE AUTHORITATIVE · VALIDATE BEFORE COMMIT</span>
+          <div><button type="button" disabled={creating} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!label.trim() || !idValid || creating}>{creating ? "Validating…" : "Create record"}</button></div>
+        </footer>
+      </form>
     </div>
   );
 }

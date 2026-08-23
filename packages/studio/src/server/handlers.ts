@@ -16,6 +16,11 @@ import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
 import { updateMapSpatial, type MapSpatialPatch } from "./map-write";
 import { readResourceSource, updateResourceSource } from "./resource-source";
+import {
+  createProjectResource,
+  ResourceCreateError,
+  type CreatableResourceKind,
+} from "./resource-create";
 
 interface Ctx {
   gameDir: string;
@@ -59,6 +64,7 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   if (method === "POST") {
+    if (pathname === "/api/resources") return postProjectResource(ctx, req);
     // /api/assets/<asset-path>/source       — upload source.quality.png
     // /api/assets/<asset-path>/render-tui   — invoke chafa
     const m = pathname.match(/^\/api\/assets\/(.+)\/(source|render-tui)$/);
@@ -78,6 +84,40 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   }
 
   return new Response("not found", { status: 404 });
+}
+
+async function postProjectResource(ctx: Ctx, req: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error) {
+    return json({ error: `invalid JSON body: ${(error as Error).message}` }, 400);
+  }
+  const input = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  if (typeof input.kind !== "string" || typeof input.id !== "string" || typeof input.label !== "string") {
+    return json({ error: "kind, id, and label must be strings" }, 400);
+  }
+  try {
+    const created = await createProjectResource(
+      ctx.gameDir,
+      input.kind as CreatableResourceKind,
+      input.id,
+      input.label,
+      () => loadGame(ctx.gameDir),
+    );
+    return json({
+      resource: created.resource,
+      source: { path: created.path, source: created.source },
+      project: await projectGame(ctx, created.game),
+    }, 201);
+  } catch (error) {
+    return json(
+      { error: (error as Error).message },
+      error instanceof ResourceCreateError ? error.status : 400,
+    );
+  }
 }
 
 async function getMapPreview(ctx: Ctx, mapId: string): Promise<Response> {
