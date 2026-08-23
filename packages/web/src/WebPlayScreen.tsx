@@ -517,6 +517,20 @@ export function WebPlayScreen({
     requestAnimationFrame(() => overlayReturnFocusRef.current?.focus());
   }, []);
 
+  const optionFocusKey = model.stage.kind === "choice"
+    ? `choice:${model.stage.choiceId ?? model.stage.cursor}:${model.stage.options.map((option) => option.id ?? option.text).join("|")}`
+    : model.stage.kind === "scriptComplete"
+      ? `scripts:${model.stage.completedId}:${model.stage.nextAvailable.map((script) => script.id).join("|")}`
+      : null;
+
+  useEffect(() => {
+    if (!optionFocusKey) return;
+    const frame = requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(".choice-panel .option-btn:not(:disabled)")?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [optionFocusKey]);
+
   // Keyboard: classic RPG field movement, Hub cursor navigation, confirm and cancel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -541,6 +555,27 @@ export function WebPlayScreen({
       const tag = e.target instanceof HTMLElement ? e.target.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const k = model.stage.kind;
+      if (k === "choice" || k === "scriptComplete") {
+        const options = Array.from(document.querySelectorAll<HTMLButtonElement>(
+          ".choice-panel .option-btn:not(:disabled)",
+        ));
+        const focused = options.indexOf(document.activeElement as HTMLButtonElement);
+        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key) && options.length > 0) {
+          e.preventDefault();
+          const nextIndex = e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? options.length - 1
+              : nextHubCommandIndex(focused, options.length, e.key === "ArrowDown" ? 1 : -1);
+          options[nextIndex]?.focus();
+          return;
+        }
+        if ((e.key === "Enter" || e.key === " ") && focused >= 0) {
+          e.preventDefault();
+          options[focused]?.click();
+          return;
+        }
+      }
       if (k === "hubMenu") {
         const currentMapId = engineRef.current?.getState().baseline.currentMapId;
         const spatial = (game.maps ?? []).some((map) =>
@@ -1253,12 +1288,16 @@ export function StageView({
     case "choice":
       return (
         <div className="choice-panel">
-          {stage.prompt && <div className="choice-prompt">{stage.prompt}</div>}
+          <header className="choice-heading">
+            <div><span>DECISION · {stage.options.filter((option) => option.available).length}/{stage.options.length}</span><strong>{stage.prompt || "選択してください"}</strong></div>
+            <small><kbd>↑↓</kbd> 選択　<kbd>Enter</kbd> 決定</small>
+          </header>
           <ul className="option-list">
             {stage.options.map((opt, i) => (
               <li key={i}>
                 <button
                   className="option-btn"
+                  aria-label={`${opt.text}${!opt.available && opt.lockedReason ? ` · ${opt.lockedReason}` : ""}`}
                   disabled={!opt.available}
                   onClick={() => onInput(
                     stage.choiceId && opt.id
@@ -1267,10 +1306,9 @@ export function StageView({
                   )}
                   title={opt.lockedReason ?? ""}
                 >
-                  <span>{opt.text}</span>
-                  {!opt.available && opt.lockedReason && (
-                    <span className="locked-reason">🔒 {opt.lockedReason}</span>
-                  )}
+                  <span className="option-index">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="option-copy"><strong>{opt.text}</strong>{!opt.available && opt.lockedReason && <small className="locked-reason">🔒 {opt.lockedReason}</small>}</span>
+                  <i className="option-cursor" aria-hidden="true">›</i>
                 </button>
               </li>
             ))}
@@ -1437,18 +1475,27 @@ export function StageView({
           {stage.nextAvailable.length === 0 ? (
             <div className="choice-prompt">（次の物語はまだない）</div>
           ) : (
-            <ul className="option-list">
-              {stage.nextAvailable.map((s) => (
+            <>
+              <header className="choice-heading">
+                <div><span>NEXT CHAPTER · {stage.nextAvailable.length}</span><strong>次の物語を選ぶ</strong></div>
+                <small><kbd>↑↓</kbd> 選択　<kbd>Enter</kbd> 決定</small>
+              </header>
+              <ul className="option-list">
+              {stage.nextAvailable.map((s, index) => (
                 <li key={s.id}>
                   <button
                     className="option-btn"
+                    aria-label={s.title}
                     onClick={() => onInput({ type: "select", scriptId: s.id })}
                   >
-                    {s.title}
+                    <span className="option-index">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="option-copy"><strong>{s.title}</strong><small>{s.id}</small></span>
+                    <i className="option-cursor" aria-hidden="true">›</i>
                   </button>
                 </li>
               ))}
-            </ul>
+              </ul>
+            </>
           )}
         </div>
       );
