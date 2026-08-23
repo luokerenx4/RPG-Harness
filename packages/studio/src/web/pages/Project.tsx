@@ -391,10 +391,21 @@ function ResourceDetail({
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(() => map === undefined);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setInspectorOpen(map === undefined);
+    workspaceRef.current?.scrollTo({ top: 0, left: 0 });
+    editorRef.current?.scrollTo({ top: 0, left: 0 });
+    inspectorRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [node.key, map === undefined]);
+
   return (
-    <div className={`resource-workspace${inspectorOpen ? "" : " inspector-collapsed"}`}>
-      <main className="resource-editor-pane">
+    <div ref={workspaceRef} className={`resource-workspace${inspectorOpen ? "" : " inspector-collapsed"}`}>
+      <main ref={editorRef} className="resource-editor-pane">
         <header className="resource-editor-heading">
           <div className={`resource-editor-icon kind-${node.kind}`}>{meta.icon}</div>
           <div><span>{meta.label}</span><h1>{node.label}</h1><code>{node.key}</code></div>
@@ -422,7 +433,7 @@ function ResourceDetail({
         )}
       </main>
 
-      <aside className="resource-inspector">
+      <aside ref={inspectorRef} className="resource-inspector">
         <header><span>INSPECTOR</span><strong>{meta.label}</strong></header>
         <section className="inspector-section">
           <h2>Identity</h2>
