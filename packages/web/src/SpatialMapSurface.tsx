@@ -122,6 +122,7 @@ export function SpatialMapSurface({
   onInput: (input: Input) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showPathing, setShowPathing] = useState(false);
   const layout = map.layout;
   if (!layout) return null;
   const byId = new Map(activities.map((activity) => [activity.id, activity]));
@@ -176,6 +177,7 @@ export function SpatialMapSurface({
             <span>{visiblePlacements.length} LANDMARKS</span>
             <small>{playerPosition ? `POSITION ${playerPosition.x},${playerPosition.y}` : "POSITION —"}</small>
           </div>
+          {expanded && <button type="button" className={`spatial-map-pathing${showPathing ? " selected" : ""}`} aria-label={showPathing ? "隐藏通行图层" : "显示通行图层"} aria-pressed={showPathing} onClick={() => setShowPathing((current) => !current)}><span aria-hidden="true">▧</span><small>PATHING</small></button>}
           <button type="button" className="spatial-map-expand" aria-label={expanded ? "收起地图" : "展开地图"} aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><span aria-hidden="true">{expanded ? "↙" : "↗"}</span><small>{expanded ? "CLOSE" : "EXPAND"}</small></button>
         </div>
       </header>
@@ -196,6 +198,7 @@ export function SpatialMapSurface({
         <div className="spatial-map-compass" aria-hidden="true"><span>N</span><i>◆</i></div>
         <div className="spatial-map-frame" aria-hidden="true" />
         {visibleTiles.map((tile) => {
+          if (tile.kind === "collision" && !(expanded && showPathing)) return null;
           const atlasStyle = tile.kind === "tile"
             ? spatialTileAtlasStyle(tile.tile, tileset, tilesetUrl)
             : undefined;

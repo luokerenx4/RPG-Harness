@@ -123,7 +123,7 @@ describe("SpatialMapSurface", () => {
       <SpatialMapSurface map={tiledMap} activities={[move]} playerPosition={{ x: 0, y: 5 }} onInput={() => {}} />,
     );
     expect(html).toContain("spatial-map-tile kind-tile");
-    expect(html).toContain("spatial-map-tile kind-collision");
+    expect(html).not.toContain("spatial-map-tile kind-collision");
     expect(html).toContain('aria-label="向东移动" aria-keyshortcuts="ArrowRight D" disabled=""');
     expect(spatialTileAtlasStyle(6, {
       tileGrid: { columns: 4, rows: 4, firstId: 1 },

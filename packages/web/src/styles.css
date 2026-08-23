@@ -365,10 +365,15 @@ body {
   gap: 2px;
 }
 .spatial-map-head-actions { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
-.spatial-map-expand { display: grid; width: 38px; height: 32px; padding: 3px; place-items: center; color: #7d929a; border: 1px solid rgba(124,200,216,.2); border-radius: 4px; background: rgba(44,84,94,.12); cursor: pointer; }
-.spatial-map-expand:hover { color: #d7f5fa; border-color: rgba(124,200,216,.55); background: rgba(55,119,132,.28); }
-.spatial-map-expand span { font-size: 11px; line-height: 1; }
-.spatial-map-expand small { font: 5px/1 ui-monospace,monospace; letter-spacing: .08em; }
+.spatial-map-expand,
+.spatial-map-pathing { display: grid; width: 38px; height: 32px; padding: 3px; place-items: center; color: #7d929a; border: 1px solid rgba(124,200,216,.2); border-radius: 4px; background: rgba(44,84,94,.12); cursor: pointer; }
+.spatial-map-expand:hover,
+.spatial-map-pathing:hover { color: #d7f5fa; border-color: rgba(124,200,216,.55); background: rgba(55,119,132,.28); }
+.spatial-map-pathing.selected { color: #f4d095; border-color: rgba(235,174,90,.65); background: rgba(105,70,26,.28); box-shadow: inset 0 -2px rgba(235,174,90,.72); }
+.spatial-map-expand span,
+.spatial-map-pathing span { font-size: 11px; line-height: 1; }
+.spatial-map-expand small,
+.spatial-map-pathing small { font: 5px/1 ui-monospace,monospace; letter-spacing: .08em; }
 .spatial-map-meta small { color: #4f5964; font: 7px/1 ui-monospace, monospace; letter-spacing: .08em; }
 .spatial-map-head strong {
   color: #fff;
