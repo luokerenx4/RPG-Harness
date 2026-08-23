@@ -565,6 +565,7 @@ export function Project({
       {createDialogOpen && (
         <CreateResourceDialog
           kinds={CREATABLE_SECTION_KINDS[section]}
+          assets={project.assets}
           onClose={closeCreateDialog}
           onCreated={(created) => {
             setProject(created.project);
@@ -678,10 +679,12 @@ function formatTrashDate(value: string): string {
 
 function CreateResourceDialog({
   kinds,
+  assets,
   onClose,
   onCreated,
 }: {
   kinds: ProjectResourceKind[];
+  assets: ProjectAssetPreview[];
   onClose: () => void;
   onCreated: (created: Awaited<ReturnType<typeof createProjectResource>>) => void;
 }) {
@@ -689,17 +692,31 @@ function CreateResourceDialog({
   const [kind, setKind] = useState<ProjectResourceKind>(initialKind);
   const [label, setLabel] = useState("");
   const [id, setId] = useState(`new_${initialKind}`);
+  const [mapMode, setMapMode] = useState<"node" | "spatial">("node");
+  const [mapWidth, setMapWidth] = useState("14");
+  const [mapHeight, setMapHeight] = useState("10");
+  const [mapTileset, setMapTileset] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
   const idValid = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(id);
+  const mapSizeValid = mapMode === "node" || (
+    Number.isInteger(Number(mapWidth)) && Number(mapWidth) >= 2 && Number(mapWidth) <= 200 &&
+    Number.isInteger(Number(mapHeight)) && Number(mapHeight) >= 2 && Number(mapHeight) <= 200
+  );
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!label.trim() || !idValid || creating) return;
+    if (!label.trim() || !idValid || !mapSizeValid || creating) return;
     setCreating(true);
     setError(null);
     try {
-      onCreated(await createProjectResource(kind, id, label));
+      onCreated(await createProjectResource(kind, id, label, kind === "map" && mapMode === "spatial" ? {
+        mapLayout: {
+          width: Number(mapWidth),
+          height: Number(mapHeight),
+          ...(mapTileset ? { tileset: mapTileset } : {}),
+        },
+      } : {}));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       setCreating(false);
@@ -736,13 +753,25 @@ function CreateResourceDialog({
             setId((current) => current === `new_${kind}` ? `new_${next}` : current);
             setKind(next);
           }}>{kinds.map((candidate) => <option value={candidate} key={candidate}>{KIND_META[candidate]?.label ?? candidate}</option>)}</select></label>
+          {kind === "map" && <fieldset className="create-map-preset"><legend>Map topology</legend>
+            <div className="create-map-mode" role="radiogroup" aria-label="Map topology">
+              <button type="button" role="radio" aria-checked={mapMode === "node"} className={mapMode === "node" ? "selected" : ""} onClick={() => setMapMode("node")}><i aria-hidden="true">◇</i><span><strong>Node Map</strong><small>era-style location · connections and activities</small></span></button>
+              <button type="button" role="radio" aria-checked={mapMode === "spatial"} className={mapMode === "spatial" ? "selected" : ""} onClick={() => setMapMode("spatial")}><i aria-hidden="true">▦</i><span><strong>2D Map</strong><small>RPG field · terrain, collision and objects</small></span></button>
+            </div>
+            {mapMode === "spatial" && <div className="create-map-layout-fields">
+              <label><span>Width</span><input type="number" min="2" max="200" value={mapWidth} aria-invalid={!mapSizeValid} onChange={(event) => setMapWidth(event.target.value)} /></label>
+              <label><span>Height</span><input type="number" min="2" max="200" value={mapHeight} aria-invalid={!mapSizeValid} onChange={(event) => setMapHeight(event.target.value)} /></label>
+              <label><span>Tileset</span><select value={mapTileset} onChange={(event) => setMapTileset(event.target.value)}><option value="">Procedural colors</option>{assets.filter((asset) => asset.kind === "tileset").map((asset) => <option value={asset.path} key={asset.path}>{asset.placeholder}</option>)}</select></label>
+              <small>Starts at the center with Ground, Collision and Objects layers. Everything remains editable after creation.</small>
+            </div>}
+          </fieldset>}
           <label><span>Display name</span><input autoFocus maxLength={160} required value={label} placeholder="What authors and players will see" onChange={(event) => setLabel(event.target.value)} /></label>
           <label><span>Stable ID</span><input value={id} maxLength={80} aria-invalid={!idValid} onChange={(event) => setId(event.target.value)} /><small>ASCII letters, numbers, dashes and underscores. This becomes the filename and resource key.</small></label>
           {error && <div className="create-resource-error" role="alert"><strong>Creation failed</strong><span>{error}</span><small>No partial resource was kept.</small></div>}
         </div>
         <footer>
           <span>FILES ARE AUTHORITATIVE · VALIDATE BEFORE COMMIT</span>
-          <div><button type="button" disabled={creating} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!label.trim() || !idValid || creating}>{creating ? "Validating…" : "Create record"}</button></div>
+          <div><button type="button" disabled={creating} onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={!label.trim() || !idValid || !mapSizeValid || creating}>{creating ? "Validating…" : kind === "map" && mapMode === "spatial" ? "Create 2D map" : "Create record"}</button></div>
         </footer>
       </form>
     </div>

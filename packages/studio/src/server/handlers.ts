@@ -21,6 +21,7 @@ import {
   createProjectResource,
   ResourceCreateError,
   type CreatableResourceKind,
+  type ResourceCreateOptions,
 } from "./resource-create";
 import {
   readStudioTrash,
@@ -376,6 +377,9 @@ async function postProjectResource(ctx: Ctx, req: Request): Promise<Response> {
       input.id,
       input.label,
       () => loadGame(ctx.gameDir),
+      input.options && typeof input.options === "object" && !Array.isArray(input.options)
+        ? input.options as ResourceCreateOptions
+        : {},
     );
     return json({
       resource: created.resource,

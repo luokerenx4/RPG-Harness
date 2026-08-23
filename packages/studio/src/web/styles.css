@@ -1700,6 +1700,18 @@ summary:focus-visible {
 .create-resource-body select:focus { border-color: var(--studio-accent); box-shadow: 0 0 0 2px rgba(80,199,217,.09); }
 .create-resource-body input[aria-invalid="true"] { border-color: var(--studio-red); }
 .create-resource-body label small { color: #525d69; font-size: 7px; font-weight: 400; line-height: 1.5; }
+.create-map-preset { display: grid; gap: 9px; padding: 10px; border: 1px solid rgba(80,199,217,.2); border-radius: 6px; background: rgba(80,199,217,.025); }
+.create-map-preset > legend { padding: 0 5px; color: var(--studio-accent); font-size: 7px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.create-map-mode { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.create-map-mode > button { display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 8px; min-height: 53px; padding: 7px 9px; color: #737e8a; border: 1px solid #2b3440; border-radius: 5px; background: #0c1117; cursor: pointer; text-align: left; }
+.create-map-mode > button.selected { color: #d9f1f3; border-color: rgba(80,199,217,.58); background: rgba(80,199,217,.08); box-shadow: inset 0 -2px rgba(80,199,217,.5); }
+.create-map-mode > button > i { display: grid; width: 30px; height: 30px; color: var(--studio-accent); border: 1px solid rgba(80,199,217,.22); border-radius: 4px; background: rgba(80,199,217,.045); font-style: normal; place-items: center; }
+.create-map-mode > button > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.create-map-mode strong { font-size: 9px; }
+.create-map-mode small { color: #55616d; font-size: 7px; }
+.create-map-layout-fields { display: grid; grid-template-columns: 75px 75px minmax(0,1fr); gap: 7px; padding-top: 2px; }
+.create-map-layout-fields > label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: #707b87; font-size: 7px; }
+.create-map-layout-fields > small { grid-column: 1 / -1; color: #56626d; font-size: 7px; line-height: 1.45; }
 .create-resource-error { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 9px; padding: 9px 10px; color: #bdc3cb; border: 1px solid rgba(224,111,121,.34); border-radius: 5px; background: rgba(224,111,121,.055); font-size: 8px; }
 .create-resource-error strong { color: var(--studio-red); }
 .create-resource-error span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

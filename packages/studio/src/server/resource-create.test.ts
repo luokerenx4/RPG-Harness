@@ -62,6 +62,25 @@ describe("Studio resource creation", () => {
       .rejects.toThrow("already exists");
   });
 
+  test("creates a parser-valid RPG map preset with canonical authoring layers", () => {
+    expect(parseMap(projectResourceTemplate("map", "river_gate", "River Gate", {
+      mapLayout: { width: 14, height: 10, tileset: "assets/tilesets/river" },
+    }))).toMatchObject({
+      id: "river_gate",
+      layout: {
+        width: 14,
+        height: 10,
+        playerStart: { x: 7, y: 5 },
+        tileset: "assets/tilesets/river",
+        layers: [
+          { id: "ground", kind: "tile", z: 0 },
+          { id: "collision", kind: "collision", z: 5 },
+          { id: "objects", kind: "object", z: 10 },
+        ],
+      },
+    });
+  });
+
   test("removes the new file when authoritative project reload fails", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "autogal-create-"));
     created.push(directory);

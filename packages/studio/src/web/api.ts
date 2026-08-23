@@ -175,11 +175,12 @@ export async function createProjectResource(
   kind: ProjectResourceKind,
   id: string,
   label: string,
+  options: { mapLayout?: { width: number; height: number; tileset?: string } } = {},
 ): Promise<CreateProjectResourceResponse> {
   const response = await fetch("/api/resources", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind, id, label }),
+    body: JSON.stringify({ kind, id, label, options }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));

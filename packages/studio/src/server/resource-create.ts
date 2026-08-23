@@ -21,6 +21,14 @@ export const CREATABLE_RESOURCE_KINDS = [
 
 export type CreatableResourceKind = typeof CREATABLE_RESOURCE_KINDS[number];
 
+export interface ResourceCreateOptions {
+  mapLayout?: {
+    width: number;
+    height: number;
+    tileset?: string;
+  };
+}
+
 const RESOURCE_FILES: Record<CreatableResourceKind, { directory: string; extension: string }> = {
   map: { directory: "maps", extension: ".yaml" },
   character: { directory: "characters", extension: ".md" },
@@ -44,12 +52,14 @@ export async function createProjectResource(
   id: string,
   label: string,
   reload: () => Promise<Game>,
+  options: ResourceCreateOptions = {},
 ): Promise<{ path: string; source: string; game: Game; resource: ProjectResourceNode }> {
   assertCreatableResourceInput(kind, id, label);
+  assertResourceCreateOptions(kind, options);
   const file = RESOURCE_FILES[kind];
   const relative = path.posix.join(file.directory, `${id}${file.extension}`);
   const absolute = path.join(gameDir, file.directory, `${id}${file.extension}`);
-  const source = projectResourceTemplate(kind, id, label.trim());
+  const source = projectResourceTemplate(kind, id, label.trim(), options);
   await mkdir(path.dirname(absolute), { recursive: true });
   try {
     await writeFile(absolute, source, { encoding: "utf-8", flag: "wx" });
@@ -77,9 +87,31 @@ export function projectResourceTemplate(
   kind: CreatableResourceKind,
   id: string,
   label: string,
+  options: ResourceCreateOptions = {},
 ): string {
   if (kind === "map") {
-    return stringifyYaml({ id, name: label, description: "" });
+    const mapLayout = options.mapLayout;
+    return stringifyYaml({
+      id,
+      name: label,
+      description: "",
+      ...(mapLayout ? {
+        layout: {
+          width: mapLayout.width,
+          height: mapLayout.height,
+          tile_width: 32,
+          tile_height: 32,
+          player_start: [Math.floor(mapLayout.width / 2), Math.floor(mapLayout.height / 2)],
+          ...(mapLayout.tileset ? { tileset: mapLayout.tileset } : {}),
+          layers: [
+            { id: "ground", kind: "tile", z: 0, visible: true },
+            { id: "collision", kind: "collision", z: 5, visible: true },
+            { id: "objects", kind: "object", z: 10, visible: true },
+          ],
+          regions: [],
+        },
+      } : {}),
+    });
   }
   if (kind === "action") {
     return stringifyYaml({
@@ -106,6 +138,18 @@ export function projectResourceTemplate(
           : { id, name: label };
   const body = kind === "script" ? "[end]\n" : "";
   return `---\n${stringifyYaml(meta)}---\n\n${body}`;
+}
+
+export function assertResourceCreateOptions(kind: CreatableResourceKind, options: ResourceCreateOptions): void {
+  if (!options.mapLayout) return;
+  if (kind !== "map") throw new ResourceCreateError("mapLayout is only valid when creating a map");
+  const { width, height, tileset } = options.mapLayout;
+  if (!Number.isInteger(width) || width < 2 || width > 200 || !Number.isInteger(height) || height < 2 || height > 200) {
+    throw new ResourceCreateError("mapLayout width and height must be integers from 2 to 200");
+  }
+  if (tileset !== undefined && (typeof tileset !== "string" || !tileset.startsWith("assets/tilesets/"))) {
+    throw new ResourceCreateError("mapLayout tileset must be an assets/tilesets path");
+  }
 }
 
 export function assertCreatableResourceInput(
