@@ -44,8 +44,7 @@ export function moveMapPlayer(
     (map.placements ?? []).some((placement) =>
       placement.id === resource.placementId &&
       containsPoint(placement.at, placement.footprint, next)
-    ) &&
-    (resource.chance === undefined || ctx.rng() < resource.chance)
+    )
   );
   if (!touched?.activity) return { moved: true, position: next };
 

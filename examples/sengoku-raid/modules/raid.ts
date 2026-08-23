@@ -4548,17 +4548,32 @@ const raidModule: Module = {
     ctx.state.baseline.switches.companion_mio = true;
   },
 
-  // ============== Companion-aware reducers ==============
+  // ============== Raid action reducers ==============
   //
-  // onActionDispatch (first-wins): when a companion is in party at
-  // critical HP, veto `attack` and `sneak_strike` dispatches. The first
-  // refusal remains a story beat; after it fires, buildRaidMenu exposes the
-  // same decision as locked so GUI and Headless clients cannot loop on it.
-  // Player must flee, use chinkonho, or let HP recover before re-engaging.
-  // Returns "cancel" — engine still fires onActionComplete with
-  // result=undefined, but the handler body doesn't run.
+  // onActionDispatch (first-wins): while a raid is active, normalize the
+  // baseline map-resource action into the raid-owned move action so manual,
+  // map-enter, and autorun routes all share travel bookkeeping and hooks.
+  // Hub departure remains a distinct `depart` action before m.raid exists.
+  //
+  // When a companion is in party at critical HP, veto `attack` and
+  // `sneak_strike` dispatches. The first refusal remains a story beat; after
+  // it fires, buildRaidMenu exposes the same decision as locked so GUI and
+  // Headless clients cannot loop on it. Player must flee, use chinkonho, or
+  // let HP recover before re-engaging. Returns "cancel" — engine still fires
+  // onActionComplete with result=undefined, but the handler body doesn't run.
   onActionDispatch: (ctx, action) => {
     const m = moduleState(ctx);
+    if (m.raid && action.kind === "moveToMap") {
+      const { to, ...payload } = action.payload ?? {};
+      return {
+        ...action,
+        kind: "move",
+        payload: {
+          ...payload,
+          ...(typeof to === "string" ? { mapId: to } : {}),
+        },
+      };
+    }
     if (
       m.companion &&
       m.companionHp > 0 &&

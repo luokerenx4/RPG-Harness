@@ -7,6 +7,7 @@ import type {
   PresetContext,
 } from "../types";
 import { applyActionResult } from "./applyActionResult";
+import { collectMapAvailableResources } from "./collectMapResources";
 import {
   fireOnActionComplete,
   fireOnActionDispatch,
@@ -80,10 +81,9 @@ export async function* dispatchActivity(
 
   // Dynamic activity dispatch: resolve via the most recent hubMenu's
   // snapshot. If the activity declared an actionKind, synthesize an
-  // Action and run it. We don't pre-gate on `available: false` —
-  // that flag is for UI display; the handler is expected to surface
-  // its own denial narration when the player picks a blocked
-  // activity, so they understand WHY it's locked.
+  // Action and run it. Snapshot-only `available: false` remains a UI
+  // hint, but a sourceKey re-resolves the canonical current-map resource:
+  // its live eligibility and placement-event chance are runtime authority.
   const dyn = ctx.state.runtime.lastHubActivities.find(
     (a) => a.id === activityId,
   );
@@ -93,6 +93,20 @@ export async function* dispatchActivity(
     );
     return "ok";
   }
+  const sourceResource = dyn?.sourceKey
+    ? collectMapAvailableResources(ctx).find(
+      (resource) => resource.key === dyn.sourceKey,
+    )
+    : undefined;
+  if (sourceResource && !sourceResource.available) {
+    ctx.state.runtime.pendingNarrations.push(
+      sourceResource.lockedReason ?? dyn?.lockedReason ??
+        `[${dyn?.title ?? sourceResource.label}] 今は実行できない。`,
+    );
+    return "ok";
+  }
+  const passesSourceChance = (): boolean =>
+    sourceResource?.chance === undefined || ctx.rng() < sourceResource.chance;
   if (dyn?.resource?.kind === "script") {
     const requestedScript = ctx.scriptMap.get(dyn.resource.id);
     if (!requestedScript) return "ok";
@@ -101,6 +115,7 @@ export async function* dispatchActivity(
       requestedScript.requires !== undefined &&
       !evaluateCondition(requestedScript.requires, ctx.state).ok
     ) return "ok";
+    if (!passesSourceChance()) return "ok";
     const scriptId = fireOnScriptSelect(ctx, requestedScript.id);
     const script = ctx.scriptMap.get(scriptId);
     if (!script) return "ok";
@@ -115,11 +130,13 @@ export async function* dispatchActivity(
       original.requires === undefined ||
       evaluateCondition(original.requires, ctx.state).ok;
     if (!available) return "ok";
+    if (!passesSourceChance()) return "ok";
     const dispatched = fireOnActionDispatch(ctx, original);
     if (dispatched === "cancel") return "ok";
     return yield* runAction(ctx, dispatched);
   }
   if (dyn && dyn.kind === "action" && dyn.actionKind) {
+    if (!passesSourceChance()) return "ok";
     const synthetic: Action = {
       id: dyn.id,
       title: dyn.title,

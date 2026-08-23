@@ -74,6 +74,42 @@ describe("sengoku-raid map routes", () => {
     });
   });
 
+  test("routes a real map-enter transfer through the raid-owned move pipeline", async () => {
+    const loaded = await loadGame(GAME_DIR);
+    const arrival: MapArrivalDef = { at: { x: 2, y: 3 } };
+    const game = gameWithKuroAutomaticRoute(loaded, arrival);
+    const castleHub = await enterCastleHub(game);
+    const state = structuredClone(castleHub.state);
+    const module = raidState(state);
+
+    module.companion = "kagari";
+    module.companionHp = 10;
+    module.metCharacters = ["kagari"];
+    state.baseline.characters.player!.stats.spectral = 10;
+
+    const moved = await step(game, state, {
+      type: "doActivity",
+      id: "depart:kuro_swamp",
+    });
+
+    expect(moved.inputResult?.accepted).toBe(true);
+    expect(moved.state.baseline.currentMapId).toBe(TARGET_ID);
+    expect(moved.state.runtime.mapPosition).toEqual({ x: 2, y: 3 });
+    expect(raidState(moved.state).raid).toMatchObject({
+      turnsTaken: 1,
+      visited: {
+        [ENTRY_ID]: { visited: true },
+        [TARGET_ID]: { visited: true },
+      },
+    });
+    expect(moved.state.baseline.characters.player!.stats.spectral).toBe(9);
+    expect(
+      moved.state.runtime.pendingNarrations.some((text) =>
+        text.includes("霊体化 -1")
+      ),
+    ).toBe(true);
+  });
+
   test("keeps a locked route closed in both the public Hub and the raid handler", async () => {
     const game = await gameWithLockedKuroRoute();
     const raidHub = await enterKuroSwampRaid(game);
@@ -163,7 +199,33 @@ async function gameWithKuroRouteArrival(
   return { ...loaded, maps };
 }
 
+function gameWithKuroAutomaticRoute(
+  loaded: Game,
+  arrival: MapArrivalDef,
+): Game {
+  const maps = (loaded.maps ?? []).map((map) =>
+    map.id === ENTRY_ID ? structuredClone(map) : map
+  );
+  const event = maps.find((map) => map.id === ENTRY_ID)?.placements?.find(
+    (placement) => placement.id === "exit_kuro_swamp_crossroads",
+  )?.events.find((candidate) => candidate.id === "move");
+  if (!event) throw new Error("real kuro swamp route fixture is missing");
+  event.trigger = "map_enter";
+  event.arrival = arrival;
+  return { ...loaded, maps };
+}
+
 async function enterKuroSwampRaid(game: Game): Promise<StepResult> {
+  const hub = await enterCastleHub(game);
+  const departed = await step(game, hub.state, {
+    type: "doActivity",
+    id: "depart:kuro_swamp",
+  });
+  expect(departed.inputResult?.accepted).toBe(true);
+  return advanceToHub(game, departed);
+}
+
+async function enterCastleHub(game: Game): Promise<StepResult> {
   const state = createInitialState(game, { seed: 0 });
   state.baseline.scripts["000_intro"] = {
     completed: true,
@@ -171,14 +233,7 @@ async function enterKuroSwampRaid(game: Game): Promise<StepResult> {
   };
   state.baseline.completionOrder = ["000_intro"];
   enterMap(state, game, "edo_castle");
-
-  const hub = await peek(game, state);
-  const departed = await step(game, hub.state, {
-    type: "doActivity",
-    id: "depart:kuro_swamp",
-  });
-  expect(departed.inputResult?.accepted).toBe(true);
-  return advanceToHub(game, departed);
+  return peek(game, state);
 }
 
 async function advanceToHub(game: Game, initial: StepResult): Promise<StepResult> {
@@ -208,12 +263,18 @@ function findActivity(
 }
 
 function raidState(state: ComposedState): {
+  companion?: string | null;
+  companionHp: number;
+  metCharacters: string[];
   raid?: {
     turnsTaken: number;
     visited: Record<string, { visited: boolean }>;
   };
 } {
   return state["sengoku-raid"] as {
+    companion?: string | null;
+    companionHp: number;
+    metCharacters: string[];
     raid?: {
       turnsTaken: number;
       visited: Record<string, { visited: boolean }>;

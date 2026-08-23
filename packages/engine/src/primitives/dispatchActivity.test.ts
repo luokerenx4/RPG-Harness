@@ -408,6 +408,7 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
                 id: "enter",
                 trigger: "interact",
                 label: "封じた扉",
+                chance: 1,
                 requires: { switch: { name: "sealed_door_open", eq: true } },
                 lockedHint: "この扉は閉ざされている。",
                 order: 0,
@@ -447,7 +448,13 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
         },
       ],
     });
-    const ctx = makeCtx(game);
+    let rngCalls = 0;
+    const ctx = makeCtx(game, {
+      rng: () => {
+        rngCalls++;
+        return 0.5;
+      },
+    });
     ctx.state.baseline.currentMapId = "gate";
     const activities = collectMapActivities(ctx);
     const sealed = activities.find((activity) => activity.title === "封じた扉")!;
@@ -465,6 +472,110 @@ describe("dispatchActivity — moveToMap (baseline-provided handler)", () => {
     await drain(dispatchActivity(ctx, sealed.id));
     expect(ctx.state.baseline.currentMapId).toBe("gate");
     expect(ctx.state.runtime.pendingNarrations).toContain("この扉は閉ざされている。");
+    expect(rngCalls).toBe(0);
+  });
+
+  test("rolls player-touch placement chance exactly once on direct Headless dispatch", async () => {
+    for (const [chance, expectedMapId] of [[0, "gate"], [1, "inner"]] as const) {
+      let rngCalls = 0;
+      const game = makeGame({
+        characters: [makeCharacter("alice")],
+        maps: [
+          {
+            id: "gate",
+            name: "門",
+            description: "",
+            placements: [{
+              id: "door",
+              at: { x: 0, y: 0 },
+              z: 0,
+              footprint: { width: 1, height: 1 },
+              collision: "trigger",
+              visible: true,
+              resource: { kind: "map", id: "inner" },
+              events: [{
+                id: "enter",
+                trigger: "player_touch",
+                chance,
+                order: 0,
+              }],
+            }],
+          },
+          { id: "inner", name: "内側", description: "" },
+        ],
+      });
+      const ctx = makeCtx(game, {
+        rng: () => {
+          rngCalls++;
+          return 0.5;
+        },
+      });
+      ctx.state.baseline.currentMapId = "gate";
+      const activity = collectMapActivities(ctx)[0]!;
+      ctx.state.runtime.lastHubActivities = [activity];
+
+      await drain(dispatchActivity(ctx, activity.id));
+
+      expect(ctx.state.baseline.currentMapId).toBe(expectedMapId);
+      expect(rngCalls).toBe(1);
+    }
+  });
+
+  test("checks current placement eligibility before rolling a stale activity", async () => {
+    let rngCalls = 0;
+    const game = makeGame({
+      characters: [makeCharacter("alice")],
+      switches: [{ id: "door_open", initial: false }],
+      maps: [
+        {
+          id: "gate",
+          name: "門",
+          description: "",
+          placements: [{
+            id: "door",
+            at: { x: 0, y: 0 },
+            z: 0,
+            footprint: { width: 1, height: 1 },
+            collision: "trigger",
+            visible: true,
+            resource: { kind: "map", id: "inner" },
+            events: [{
+              id: "enter",
+              trigger: "player_touch",
+              chance: 1,
+              requires: { switch: { name: "door_open", eq: true } },
+              lockedHint: "扉は閉じている。",
+              order: 0,
+            }],
+          }],
+        },
+        { id: "inner", name: "内側", description: "" },
+      ],
+    });
+    const ctx = makeCtx(game, {
+      rng: () => {
+        rngCalls++;
+        return 0.5;
+      },
+    });
+    ctx.state.baseline.currentMapId = "gate";
+    const canonical = collectMapActivities(ctx)[0]!;
+    ctx.state.runtime.lastHubActivities = [{
+      id: canonical.id,
+      kind: "action",
+      sourceKey: canonical.sourceKey!,
+      actionKind: "moveToMap",
+      payload: canonical.payload!,
+      title: canonical.title,
+      cost: 0,
+      available: true,
+    }];
+
+    await drain(dispatchActivity(ctx, canonical.id));
+
+    expect(ctx.state.baseline.currentMapId).toBe("gate");
+    expect(ctx.state.runtime.pendingNarrations).toEqual(["扉は閉じている。"]);
+    expect(rngCalls).toBe(0);
   });
 
   test("synthesized move activity transitions currentMapId", async () => {

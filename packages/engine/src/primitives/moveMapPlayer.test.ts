@@ -32,7 +32,7 @@ const shrine: MapDef = {
     footprint: { width: 1, height: 1 },
     collision: "trigger",
     visible: true,
-    events: [{ id: "leave", trigger: "player_touch", order: 0 }],
+    events: [{ id: "leave", trigger: "player_touch", chance: 0, order: 0 }],
     resource: { kind: "map", id: "town" },
   }],
 };
@@ -54,8 +54,14 @@ describe("moveMapPlayer", () => {
     expect(ctx.state.runtime.mapPosition).toEqual({ x: 2, y: 1 });
   });
 
-  test("maps player-touch to the published semantic activity", () => {
-    const ctx = makeCtx(game);
+  test("maps player-touch to the published semantic activity without rolling chance", () => {
+    let rngCalls = 0;
+    const ctx = makeCtx(game, {
+      rng: () => {
+        rngCalls++;
+        return 0.5;
+      },
+    });
     ctx.state.baseline.currentMapId = "shrine";
     ctx.state.runtime.lastHubActivities = [{
       id: "move:town",
@@ -71,6 +77,7 @@ describe("moveMapPlayer", () => {
       position: { x: 2, y: 3 },
       activityId: "move:town",
     });
+    expect(rngCalls).toBe(0);
   });
 
   test("treats non-zero collision-layer tiles as authoritative blockers", () => {

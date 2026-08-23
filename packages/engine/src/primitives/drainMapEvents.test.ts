@@ -88,4 +88,52 @@ describe("drainAutomaticMapEvents", () => {
     expect(ctx.state.runtime.pendingNarrations).toEqual(["revealed"]);
     expect(ctx.state.baseline.switches.ready).toBe(false);
   });
+
+  test("applies automatic placement chance once and marks failed rolls fired", async () => {
+    for (const [chance, expectedAffection] of [[0, 0], [1, 1]] as const) {
+      let rngCalls = 0;
+      const game = makeGame({
+        characters: [makeCharacter("hero")],
+        actions: [makeAction("blessing", {
+          exposure: "placed",
+          effects: { characterStats: { hero: { affection: 1 } } },
+        })],
+        maps: [{
+          id: "room",
+          name: "Room",
+          description: "",
+          placements: [{
+            id: "altar",
+            at: { x: 0, y: 0 },
+            z: 0,
+            footprint: { width: 1, height: 1 },
+            collision: "none",
+            visible: false,
+            resource: { kind: "action", id: "blessing" },
+            events: [{
+              id: "run",
+              trigger: "autorun",
+              chance,
+              order: 0,
+            }],
+          }],
+        }],
+      });
+      const ctx = makeCtx(game, {
+        rng: () => {
+          rngCalls++;
+          return 0.5;
+        },
+      });
+      ctx.state.baseline.currentMapId = "room";
+
+      await drain(drainAutomaticMapEvents(ctx));
+
+      expect(ctx.state.baseline.characters.hero!.stats.affection).toBe(expectedAffection);
+      expect(ctx.state.runtime.firedMapEvents).toEqual([
+        "map:room/placement:altar/event:run",
+      ]);
+      expect(rngCalls).toBe(1);
+    }
+  });
 });

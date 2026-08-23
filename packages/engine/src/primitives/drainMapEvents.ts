@@ -46,10 +46,6 @@ function queueAutomaticMapEvents(ctx: PresetContext): void {
       (entered && resource.trigger === "map_enter");
     if (!automatic || !resource.available || !resource.activity) continue;
     if (fired.includes(resource.key) || pending.includes(resource.key)) continue;
-    if (resource.chance !== undefined && ctx.rng() >= resource.chance) {
-      fired.push(resource.key);
-      continue;
-    }
     pending.push(resource.key);
   }
 }
