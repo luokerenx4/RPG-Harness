@@ -159,6 +159,7 @@ describe("SpatialMapSurface", () => {
         activities={[move]}
         playerPosition={{ x: 1, y: 2 }}
         resourceLabels={new Map([["map:town", "城下町"]])}
+        playerGraphicUrl="/assets/player.webp"
         assetUrls={{ "assets/sheets/gate": "/assets/gate.webp" }}
         onInput={() => {}}
       />,
@@ -167,6 +168,8 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain("left:37.5%");
     expect(html).toContain("width:25%");
     expect(html).toContain("玩家位置 1,2");
+    expect(html).toContain('<img src="/assets/player.webp" alt="" aria-hidden="true"/>');
+    expect(html).not.toContain(">◆</span>");
     expect(html).toContain("POSITION 1,2");
     expect(html).toContain("城下町");
     expect(html).toContain("向南再向东 5 格");

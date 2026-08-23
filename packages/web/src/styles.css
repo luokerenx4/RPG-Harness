@@ -619,6 +619,7 @@ body {
   background: rgba(31, 123, 147, .95);
   font-size: 10px;
 }
+.spatial-map-player img { position: absolute; right: -50%; bottom: 0; width: 200%; height: 200%; object-fit: contain; object-position: center bottom; filter: saturate(.94) contrast(1.04) drop-shadow(0 4px 5px rgba(0,0,0,.78)); }
 .spatial-map-player small {
   position: absolute;
   top: calc(50% + 13px);

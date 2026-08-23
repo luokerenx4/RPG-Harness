@@ -1,6 +1,7 @@
 ---
 id: player
 name: 妖刀使い
+map_sprite: assets/sprites/player-field
 stats:
   hp:        { initial: 30, min: 0, max: 30 }
   mental:    { initial: 10, min: 0, max: 10 }

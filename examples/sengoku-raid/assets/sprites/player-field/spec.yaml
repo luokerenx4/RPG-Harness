@@ -1,0 +1,18 @@
+kind: sprite
+description: |
+  妖刀使い的地图用全身图形。黑色战装、深红绳结和红黑漆鞘形成
+  主角轮廓，在二维地图上取代无身份的通用菱形标记。
+prompt: |
+  Use case: stylized-concept
+  Asset type: transparent RPG field-map player sprite
+  Subject: a young male cursed-sword wielder with tousled black hair,
+    charcoal Sengoku clothing, restrained deep-red cords and an ancestral katana.
+  Style: compact painterly anime game sprite with a strong readable silhouette.
+  Composition: single full-body human character, neutral idle pose, transparent background.
+  Constraints: no demonic transformation, text, frame, scenery or watermark.
+placeholder: "[妖刀使い・地图图形] 黑衣与深红妖刀的年轻剑士"
+refs:
+  characters: [player]
+size_hint:
+  web: { aspect: "1:1" }
+tags: [protagonist, map-sprite]

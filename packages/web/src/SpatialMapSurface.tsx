@@ -113,6 +113,7 @@ export function SpatialMapSurface({
   playerPosition,
   resourceLabels,
   resourceGraphics,
+  playerGraphicUrl,
   onInput,
 }: {
   map: MapDef;
@@ -124,6 +125,7 @@ export function SpatialMapSurface({
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
   resourceGraphics?: SpatialResourceGraphics;
+  playerGraphicUrl?: string;
   onInput: (input: Input) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -281,7 +283,11 @@ export function SpatialMapSurface({
               width: `${100 / layout.width}%`,
               height: `${100 / layout.height}%`,
             }}
-          ><span>◆</span><small>YOU</small></div>
+          >{playerGraphicUrl
+            ? <img src={playerGraphicUrl} alt="" aria-hidden="true" />
+            : <span>◆</span>}
+            <small>YOU</small>
+          </div>
         )}
       </div>
       <div className="spatial-map-navigation">

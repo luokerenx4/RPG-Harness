@@ -3051,6 +3051,7 @@ summary:focus-visible {
 .map-region > span { position: absolute; top: 5px; left: 6px; max-width: calc(100% - 12px); overflow: hidden; color: rgba(206,183,247,.68); font-size: 7px; font-weight: 650; letter-spacing: .06em; text-overflow: ellipsis; white-space: nowrap; }
 .map-player-start { border: 2px solid #dffaff; color: #fff; background: #23899a; box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 0 0 3px rgba(80,199,217,.16); }
 .map-player-start > span { font-size: 9px; transform: translateY(-2px); }
+.map-player-start > .map-player-start-graphic { position: absolute; right: -50%; bottom: 0; width: 200%; height: 200%; background-position: center bottom; background-repeat: no-repeat; background-size: contain; filter: saturate(.94) contrast(1.04) drop-shadow(0 4px 5px rgba(0,0,0,.78)); transform: none; }
 .map-player-start > small { position: absolute; top: calc(50% + 8px); left: 50%; padding: 2px 3px; color: #bdebf1; border: 1px solid rgba(80,199,217,.25); border-radius: 2px; background: rgba(7,17,23,.86); font: 6px/1 ui-monospace,monospace; letter-spacing: .08em; transform: translateX(-50%); }
 .map-player-start.editable { pointer-events: auto; cursor: grab; }
 .map-player-start.editable:active { cursor: grabbing; }

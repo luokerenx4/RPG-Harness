@@ -2102,6 +2102,8 @@ function MapOverview({
   const paletteKindCounts = useMemo(() => new Map(
     KIND_ORDER.map((kind) => [kind, paletteMatches.filter((resource) => resource.kind === kind).length]),
   ), [paletteMatches]);
+  const playerResource = resources.find((resource) => resource.key === "character:player");
+  const playerGraphicPath = playerResource ? mapPaletteResourceGraphicPath(playerResource, assets) : undefined;
 
   const mutatePlacement = (
     id: string,
@@ -2743,7 +2745,7 @@ function MapOverview({
                 width: `${100 / width}%`,
                 height: `${100 / height}%`,
               }}
-            ><span>◆</span><small>START</small></div>
+            ><span className={playerGraphicPath ? "map-player-start-graphic" : ""} style={playerGraphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(playerGraphicPath))})` } : undefined}>{playerGraphicPath ? "" : "◆"}</span><small>START</small></div>
           )}
           {(draft.placements ?? []).map((placement) => {
             const resourceLabel = mapPlacementResourceLabel(placement, resources);

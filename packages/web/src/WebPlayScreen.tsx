@@ -1442,6 +1442,7 @@ export function StageView({
                 : currentMap.layout.playerStart}
               resourceLabels={spatialResourceLabels}
               resourceGraphics={spatialResourceGraphics}
+              playerGraphicUrl={assetUrls[spatialResourceGraphics?.get("character:player") ?? ""]}
               backgroundUrl={currentMap.bg ? assetUrls[currentMap.bg] : undefined}
               tileset={currentMap.layout.tileset
                 ? (game.assets ?? []).find((asset) => asset.path === currentMap.layout!.tileset)
