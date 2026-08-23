@@ -2625,6 +2625,7 @@ function MapOverview({
             {(draft.placements ?? []).map((placement) => {
               const label = mapPlacementResourceLabel(placement, resources);
               const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
+              const eventSummary = mapPlacementEventSummary(placement);
               return (
                 <button
                   type="button"
@@ -2634,6 +2635,7 @@ function MapOverview({
                 >
                   <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} />
                   <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
+                  <b className={`map-object-event-state${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}${eventSummary.hidden ? " hidden" : ""}`} title={eventSummary.title}><i>{eventSummary.icons || "—"}</i>{eventSummary.count}<small>{eventSummary.gated ? "◆" : eventSummary.hidden ? "○" : ""}</small></b>
                   <small>{placement.at.x},{placement.at.y}</small>
                 </button>
               );
@@ -2819,6 +2821,7 @@ function MapOverview({
             const resourceLabel = mapPlacementResourceLabel(placement, resources);
             const graphicPath = mapPlacementGraphicPath(placement, resources, assets);
             const rendered = isMapPlacementLayerVisible(draft, placement);
+            const eventSummary = mapPlacementEventSummary(placement);
             return (
               <div
               className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}`}
@@ -2840,6 +2843,7 @@ function MapOverview({
               }}
             >
               {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
+              {eventSummary.count > 0 && <span className={`map-placement-event-summary${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}`} title={eventSummary.title}><i>{eventSummary.icons}</i><b>{eventSummary.count}</b>{eventSummary.gated && <small>◆</small>}</span>}
               <span className="map-placement-copy">{resourceLabel}</span>
               <small className="map-placement-copy">{placement.resource?.kind ?? "event"} · {placement.id}</small>
               </div>
@@ -3725,6 +3729,32 @@ export function eventTriggerMeta(trigger: MapEventTrigger): { icon: string; labe
     icon: "⌁",
     label: trigger.split(":").map((part) => part.replace(/[_-]+/g, " ")).join(" · "),
     description: `Custom engine trigger: ${trigger}`,
+  };
+}
+
+export function mapPlacementEventSummary(placement: MapPlacementDef): {
+  count: number;
+  icons: string;
+  gated: boolean;
+  automatic: boolean;
+  hidden: boolean;
+  title: string;
+} {
+  const triggers = [...new Set(placement.events.map((event) => event.trigger))];
+  const metas = triggers.map(eventTriggerMeta);
+  const gatedPages = placement.events.filter((event) => event.requires || event.chance !== undefined && event.chance < 1).length;
+  const gated = Boolean(placement.requires) || gatedPages > 0;
+  const automatic = placement.events.some((event) => ["map_enter", "autorun", "parallel"].includes(event.trigger));
+  const pageLabel = `${placement.events.length} event page${placement.events.length === 1 ? "" : "s"}`;
+  const triggerLabel = metas.length > 0 ? metas.map((meta) => meta.label).join(" · ") : "No trigger";
+  const states = [gated ? `${gatedPages + (placement.requires ? 1 : 0)} gated` : "", !placement.visible ? "hidden placement" : ""].filter(Boolean);
+  return {
+    count: placement.events.length,
+    icons: metas.slice(0, 3).map((meta) => meta.icon).join(""),
+    gated,
+    automatic,
+    hidden: !placement.visible,
+    title: [pageLabel, triggerLabel, ...states].join(" · "),
   };
 }
 

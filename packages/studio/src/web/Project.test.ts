@@ -13,6 +13,7 @@ import {
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPaletteResourceGraphicPath,
+  mapPlacementEventSummary,
   mapPlacementGraphicPath,
   mapDraftHistoryReducer,
   mapPlacementResourceLabel,
@@ -536,6 +537,25 @@ describe("Studio map event resource picker", () => {
       icon: "⌁",
       label: "quest · resolved",
       description: "Custom engine trigger: quest:resolved",
+    });
+    expect(mapPlacementEventSummary({
+      id: "altar",
+      at: { x: 1, y: 2 },
+      z: 0,
+      footprint: { width: 1, height: 1 },
+      collision: "trigger",
+      visible: false,
+      events: [
+        { id: "inspect", trigger: "interact", order: 0 },
+        { id: "watch", trigger: "parallel", chance: 0.5, order: 1 },
+      ],
+    })).toEqual({
+      count: 2,
+      icons: "◎∞",
+      gated: true,
+      automatic: true,
+      hidden: true,
+      title: "2 event pages · Action Button · Parallel Process · 1 gated · hidden placement",
     });
   });
 });
