@@ -328,6 +328,7 @@ export function Project({
               unreferenced={project.graph.unreferenced.includes(selected.key)}
               onProjectSaved={setProject}
               onDraftGuardChange={handleDraftGuardChange}
+              draftActive={draftActive}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
@@ -374,6 +375,7 @@ function ResourceDetail({
   unreferenced,
   onProjectSaved,
   onDraftGuardChange,
+  draftActive,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -385,6 +387,7 @@ function ResourceDetail({
   unreferenced: boolean;
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
+  draftActive: boolean;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
@@ -410,6 +413,8 @@ function ResourceDetail({
             icon={meta.icon}
             kindLabel={meta.label}
             onProjectSaved={onProjectSaved}
+            onDraftGuardChange={onDraftGuardChange}
+            draftBlocked={draftActive}
             onEditSource={node.source && node.editable !== false
               ? () => setSourceEditKey(node.key)
               : undefined}
@@ -431,6 +436,8 @@ function ResourceDetail({
           <ResourceSourceEditor
             node={node}
             onProjectSaved={onProjectSaved}
+            onDraftGuardChange={onDraftGuardChange}
+            draftBlocked={draftActive}
             openRequested={sourceEditKey === node.key}
             onOpenHandled={() => setSourceEditKey(null)}
           />
@@ -459,25 +466,33 @@ function ResourceRecordEditor({
   icon,
   kindLabel,
   onProjectSaved,
+  onDraftGuardChange,
+  draftBlocked,
   onEditSource,
 }: {
   node: ProjectResourceNode;
   icon: string;
   kindLabel: string;
   onProjectSaved: (project: ProjectResponse) => void;
+  onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
+  draftBlocked: boolean;
   onEditSource?: () => void;
 }) {
   const [source, setSource] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [draft, setDraft] = useState<Record<string, string | boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
     setSource(null);
-    setError(null);
+    setLoadError(null);
+    setSaveError(null);
     setEditing(false);
+    setConfirmCancel(false);
     setDraft({});
     if (!node.source) return () => { cancelled = true; };
     void fetchResourceSource(node.kind, node.id)
@@ -485,7 +500,7 @@ function ResourceRecordEditor({
         if (!cancelled) setSource(result.source);
       })
       .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled) setLoadError(cause instanceof Error ? cause.message : String(cause));
       });
     return () => { cancelled = true; };
   }, [node]);
@@ -500,14 +515,21 @@ function ResourceRecordEditor({
 
   const beginRecordEdit = () => {
     setDraft(Object.fromEntries(editableFields.map((field) => [field.key, field.value])));
-    setError(null);
+    setSaveError(null);
     setEditing(true);
   };
 
+  const discardRecord = () => {
+    setEditing(false);
+    setDraft({});
+    setSaveError(null);
+    setConfirmCancel(false);
+  };
+
   const saveRecord = async () => {
-    if (!source || !dirty || invalid) return;
+    if (!source || !dirty || invalid) return false;
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
       const nextSource = patchResourceScalarFields(source, draft);
       const result = await saveResourceSource(node.kind, node.id, nextSource);
@@ -515,20 +537,33 @@ function ResourceRecordEditor({
       setEditing(false);
       setDraft({});
       onProjectSaved(result.project);
+      setConfirmCancel(false);
+      return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setSaveError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
   useEffect(() => {
+    onDraftGuardChange(editing && dirty ? {
+      label: `${singularResourceLabel(kindLabel)} · ${node.label}`,
+      save: saveRecord,
+      discard: discardRecord,
+    } : null);
+  }, [editing, dirty, invalid, saving, source, draft, node.key, node.label, kindLabel, onDraftGuardChange]);
+
+  useEffect(() => () => onDraftGuardChange(null), [onDraftGuardChange]);
+
+  useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !saving) {
         event.preventDefault();
-        setEditing(false);
-        setError(null);
+        if (dirty) setConfirmCancel(true);
+        else discardRecord();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
@@ -551,12 +586,12 @@ function ResourceRecordEditor({
               <button type="button" className="primary" disabled={!dirty || invalid || saving} onClick={() => void saveRecord()}>
                 {saving ? "Validating…" : "Save changes  ⌘S"}
               </button>
-              <button type="button" disabled={saving} onClick={() => { setEditing(false); setError(null); }}>Cancel</button>
+              <button type="button" disabled={saving} onClick={() => dirty ? setConfirmCancel(true) : discardRecord()}>Cancel</button>
             </>
           ) : (
             <>
-              {editableFields.length > 0 && <button type="button" className="primary" onClick={beginRecordEdit}>Edit record</button>}
-              {onEditSource && <button type="button" onClick={onEditSource}>Source</button>}
+              {editableFields.length > 0 && <button type="button" className="primary" disabled={draftBlocked} onClick={beginRecordEdit}>Edit record</button>}
+              {onEditSource && <button type="button" disabled={draftBlocked} onClick={onEditSource}>Source</button>}
             </>
           )}
         </div>
@@ -568,13 +603,13 @@ function ResourceRecordEditor({
       </div>
       {!node.source ? (
         <div className="record-message"><strong>Virtual resource</strong><span>This record is provided by project code and has no standalone source document.</span></div>
-      ) : error ? (
-        <div className="record-message error"><strong>Source preview unavailable</strong><span>{error}</span></div>
+      ) : loadError ? (
+        <div className="record-message error"><strong>Source preview unavailable</strong><span>{loadError}</span></div>
       ) : !summary ? (
         <div className="record-loading"><i /><span>Reading source record…</span></div>
       ) : (
         <div className="record-body">
-          {error && <div className="record-save-error" role="alert"><strong>Changes rejected</strong><span>{error}</span></div>}
+          {saveError && <div className="record-save-error" role="alert"><strong>Changes rejected · draft preserved</strong><span>{saveError}</span></div>}
           <section className="record-section">
             <header><span>FIELDS</span><small>{fields.length} · {editableFields.length} editable</small></header>
             {fields.length > 0 ? (
@@ -623,6 +658,17 @@ function ResourceRecordEditor({
             </section>
           )}
         </div>
+      )}
+      {confirmCancel && (
+        <DraftNavigationDialog
+          guard={{ label: `${singularResourceLabel(kindLabel)} · ${node.label}`, save: saveRecord, discard: discardRecord }}
+          destination="record preview"
+          saving={saving}
+          error={saveError}
+          onStay={() => setConfirmCancel(false)}
+          onDiscard={discardRecord}
+          onSave={() => { void saveRecord().then((saved) => { if (saved) setConfirmCancel(false); }); }}
+        />
       )}
     </section>
   );
@@ -783,25 +829,34 @@ function cleanSourceValue(value: string): string {
 function ResourceSourceEditor({
   node,
   onProjectSaved,
+  onDraftGuardChange,
+  draftBlocked,
   openRequested = false,
   onOpenHandled,
 }: {
   node: ProjectResourceNode;
   onProjectSaved: (project: ProjectResponse) => void;
+  onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
+  draftBlocked: boolean;
   openRequested?: boolean;
   onOpenHandled?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState("");
+  const [savedSource, setSavedSource] = useState("");
   const [sourcePath, setSourcePath] = useState(node.source ?? "");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty = editing && source !== savedSource;
 
   useEffect(() => {
     setEditing(false);
     setSource("");
+    setSavedSource("");
     setSourcePath(node.source ?? "");
+    setConfirmCancel(false);
     setError(null);
   }, [node.key, node.source]);
 
@@ -811,6 +866,7 @@ function ResourceSourceEditor({
     try {
       const result = await fetchResourceSource(node.kind, node.id);
       setSource(result.source);
+      setSavedSource(result.source);
       setSourcePath(result.path);
       setEditing(true);
     } catch (cause) {
@@ -821,43 +877,65 @@ function ResourceSourceEditor({
   };
 
   useEffect(() => {
-    if (!openRequested || editing || loading) return;
+    if (!openRequested || editing || loading || draftBlocked) return;
     onOpenHandled?.();
     void begin();
-  }, [openRequested]);
+  }, [openRequested, editing, loading, draftBlocked]);
+
+  const discardSource = () => {
+    setSource(savedSource);
+    setEditing(false);
+    setError(null);
+    setConfirmCancel(false);
+  };
 
   const save = async () => {
+    if (!dirty) return false;
     setSaving(true);
     setError(null);
     try {
       const result = await saveResourceSource(node.kind, node.id, source);
       setSource(result.source);
+      setSavedSource(result.source);
       setSourcePath(result.path);
       onProjectSaved(result.project);
       setEditing(false);
+      setConfirmCancel(false);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
   useEffect(() => {
+    onDraftGuardChange(dirty ? {
+      label: `Source · ${node.label}`,
+      save,
+      discard: discardSource,
+    } : null);
+  }, [dirty, saving, source, savedSource, node.key, node.label, onDraftGuardChange]);
+
+  useEffect(() => () => onDraftGuardChange(null), [onDraftGuardChange]);
+
+  useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !saving) {
         event.preventDefault();
-        setEditing(false);
-        setError(null);
+        if (dirty) setConfirmCancel(true);
+        else discardSource();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (!saving) void save();
+        if (!saving && dirty) void save();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, saving, source]);
+  }, [editing, saving, dirty, source, savedSource]);
 
   return (
     <>
@@ -868,8 +946,8 @@ function ResourceSourceEditor({
         aria-label="Close source editor"
         onClick={() => {
           if (saving) return;
-          setEditing(false);
-          setError(null);
+          if (dirty) setConfirmCancel(true);
+          else discardSource();
         }}
       />
     )}
@@ -877,18 +955,16 @@ function ResourceSourceEditor({
       <header>
         <div><h2>Source file</h2><code>{sourcePath}</code></div>
         {!editing ? (
-          <button type="button" disabled={loading} onClick={begin}>
-            {loading ? "Loading…" : "Edit source"}
+          <button type="button" disabled={loading || draftBlocked} onClick={begin}>
+            {loading ? "Loading…" : draftBlocked ? "Finish active draft" : "Edit source"}
           </button>
         ) : (
           <div>
-            <button type="button" className="primary" disabled={saving} onClick={save}>
+            <span className={`source-dirty-state ${dirty ? "dirty" : "clean"}`}><i />{dirty ? "UNSAVED" : "NO CHANGES"}</span>
+            <button type="button" className="primary" disabled={!dirty || saving} onClick={() => void save()}>
               {saving ? "Validating…" : "Save & validate  ⌘S"}
             </button>
-            <button type="button" disabled={saving} onClick={() => {
-              setEditing(false);
-              setError(null);
-            }}>Cancel  Esc</button>
+            <button type="button" disabled={saving} onClick={() => dirty ? setConfirmCancel(true) : discardSource()}>Cancel  Esc</button>
           </div>
         )}
       </header>
@@ -901,6 +977,17 @@ function ResourceSourceEditor({
           onChange={(event) => setSource(event.target.value)}
           spellCheck={false}
           aria-label={`${node.label} source`}
+        />
+      )}
+      {confirmCancel && (
+        <DraftNavigationDialog
+          guard={{ label: `Source · ${node.label}`, save, discard: discardSource }}
+          destination="source preview"
+          saving={saving}
+          error={error}
+          onStay={() => setConfirmCancel(false)}
+          onDiscard={discardSource}
+          onSave={() => { void save().then((saved) => { if (saved) setConfirmCancel(false); }); }}
         />
       )}
     </section>

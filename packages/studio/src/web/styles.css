@@ -2088,6 +2088,12 @@ summary:focus-visible {
   font-size: 9px;
 }
 .resource-source-editor button:hover { color: var(--studio-accent); border-color: rgba(80,199,217,.45); }
+.resource-source-editor button:disabled { opacity: .45; cursor: default; }
+.source-dirty-state { display: inline-flex; align-items: center; gap: 5px; color: #5a6470; font-size: 7px; font-weight: 750; letter-spacing: .1em; }
+.source-dirty-state i { width: 5px; height: 5px; border-radius: 50%; background: #56616d; }
+.source-dirty-state.dirty { color: var(--studio-orange); }
+.source-dirty-state.dirty i { background: var(--studio-orange); box-shadow: 0 0 7px rgba(231,168,106,.45); }
+.source-dirty-state.clean i { background: var(--studio-green); }
 .source-editor-backdrop {
   position: fixed;
   z-index: 1990;
