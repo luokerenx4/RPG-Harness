@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Game } from "@rpg-harness/engine";
-import { BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
+import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, resolveFeedbackTarget, StageView, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
 
@@ -14,15 +14,53 @@ describe("Web terminal handoff", () => {
       sessionLabel="shared-session"
       backlogAvailable={false}
       onResume={() => {}}
+      onAdventureRecord={() => {}}
       onBacklog={() => {}}
       onArtBook={() => {}}
       onExit={() => {}}
     />);
     expect(html).toContain('role="dialog"');
     expect(html).toContain("继续游戏");
+    expect(html).toContain("冒险记录");
     expect(html).toContain("返回标题");
     expect(html).toContain("shared-session");
     expect(html).toContain("disabled");
+  });
+
+  test("renders standard engine state as an RPG adventure record", () => {
+    const game = {
+      title: "妖刀奇譚",
+      maps: [{ id: "shrine", name: "潰れた社", description: "崩れた祭壇。" }],
+      characters: [{ id: "kagari", name: "篝" }],
+      items: [{ id: "shard", name: "魂石", kind: "key" }],
+      weapons: [{ id: "katana", name: "妖刀", description: "封じられた刃。", basePower: 8 }],
+      skills: [{ id: "flash", name: "閃", description: "一閃。" }],
+      scripts: [{ id: "intro", title: "邂逅" }],
+    } as unknown as Game;
+    const html = renderToStaticMarkup(<AdventureRecordOverlay
+      game={game}
+      state={{
+        baseline: {
+          currentMapId: "shrine",
+          characters: { kagari: { stats: { affection: 3 }, custom: {} } },
+          inventory: { shard: 2 },
+          equippedWeaponId: "katana",
+          weapons: { katana: { power: 11 } },
+          knownSkills: ["flash"],
+          completionOrder: ["intro"],
+        },
+      } as never}
+      onClose={() => {}}
+    />);
+    expect(html).toContain("ADVENTURE RECORD");
+    expect(html).toContain("潰れた社");
+    expect(html).toContain("篝");
+    expect(html).toContain("Affection");
+    expect(html).toContain("魂石");
+    expect(html).toContain("× 2");
+    expect(html).toContain("妖刀");
+    expect(html).toContain("11");
+    expect(html).toContain("邂逅");
   });
 
   test("labels cross-surface input diagnostics by their actual controller", () => {

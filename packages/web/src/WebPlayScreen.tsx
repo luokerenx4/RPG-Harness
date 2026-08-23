@@ -288,6 +288,7 @@ export function WebPlayScreen({
   const outputRef = useRef<Output | null>(null);
   const [showBacklog, setShowBacklog] = useState(false);
   const [showArtBook, setShowArtBook] = useState(false);
+  const [showAdventureRecord, setShowAdventureRecord] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showSystemMenu, setShowSystemMenu] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputResult | null>(null);
@@ -510,6 +511,8 @@ export function WebPlayScreen({
           setShowFeedback(false);
         } else if (showArtBook) {
           setShowArtBook(false);
+        } else if (showAdventureRecord) {
+          setShowAdventureRecord(false);
         } else if (showBacklog) {
           setShowBacklog(false);
         } else if (showSystemMenu) {
@@ -519,7 +522,7 @@ export function WebPlayScreen({
         }
         return;
       }
-      if (showBacklog || showArtBook || showFeedback || showSystemMenu) return;
+      if (showBacklog || showArtBook || showAdventureRecord || showFeedback || showSystemMenu) return;
       const tag = e.target instanceof HTMLElement ? e.target.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const k = model.stage.kind;
@@ -542,13 +545,14 @@ export function WebPlayScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showFeedback, showSystemMenu, sendInput, onExit]);
+  }, [game.maps, model.stage.kind, showBacklog, showArtBook, showAdventureRecord, showFeedback, showSystemMenu, sendInput, onExit]);
 
   const currentMapId = engineRef.current?.getState().baseline.currentMapId ?? null;
   const currentMap = currentMapId
     ? (game.maps ?? []).find((map) => map.id === currentMapId)
     : undefined;
   const sceneLabel = currentMap?.name ?? stageContextLabel(model.stage.kind);
+  const adventureState = engineRef.current?.getState() ?? initialState;
 
   return (
     <div className="play-root">
@@ -695,6 +699,7 @@ export function WebPlayScreen({
           sessionLabel={sessionLabel}
           backlogAvailable={model.backlog.length > 0}
           onResume={() => setShowSystemMenu(false)}
+          onAdventureRecord={() => { setShowSystemMenu(false); setShowAdventureRecord(true); }}
           onBacklog={() => { setShowSystemMenu(false); setShowBacklog(true); }}
           onArtBook={() => { setShowSystemMenu(false); setShowArtBook(true); }}
           onExit={onExit}
@@ -702,6 +707,9 @@ export function WebPlayScreen({
       )}
       {showArtBook && (
         <ArtBook game={game} assetUrls={assetUrls} onClose={() => setShowArtBook(false)} />
+      )}
+      {showAdventureRecord && adventureState && (
+        <AdventureRecordOverlay game={game} state={adventureState} onClose={() => setShowAdventureRecord(false)} />
       )}
       {showFeedback && onFeedback && (
         <FeedbackOverlay
@@ -726,6 +734,7 @@ export function SystemMenuOverlay({
   sessionLabel,
   backlogAvailable,
   onResume,
+  onAdventureRecord,
   onBacklog,
   onArtBook,
   onExit,
@@ -735,6 +744,7 @@ export function SystemMenuOverlay({
   sessionLabel?: string;
   backlogAvailable: boolean;
   onResume: () => void;
+  onAdventureRecord: () => void;
   onBacklog: () => void;
   onArtBook: () => void;
   onExit: () => void;
@@ -749,6 +759,7 @@ export function SystemMenuOverlay({
         <div className="system-menu-body">
           <nav className="system-menu-actions" aria-label="系统菜单操作">
             <button type="button" className="primary" onClick={onResume}><span>▶</span><strong>继续游戏</strong><small>物語へ戻る</small></button>
+            <button type="button" onClick={onAdventureRecord}><span>◆</span><strong>冒险记录</strong><small>人物・装備・所持品</small></button>
             <button type="button" disabled={!backlogAvailable} onClick={onBacklog}><span>≡</span><strong>回看记录</strong><small>会話ログ</small></button>
             <button type="button" onClick={onArtBook}><span>◇</span><strong>設定集</strong><small>世界・人物・美術</small></button>
             <button type="button" className="exit" onClick={onExit}><span>⌂</span><strong>返回标题</strong><small>タイトル画面へ</small></button>
@@ -769,6 +780,110 @@ export function SystemMenuOverlay({
       </section>
     </div>
   );
+}
+
+export function AdventureRecordOverlay({
+  game,
+  state,
+  onClose,
+}: {
+  game: Game;
+  state: ComposedState;
+  onClose: () => void;
+}) {
+  const map = (game.maps ?? []).find((entry) => entry.id === state.baseline.currentMapId);
+  const inventory = Object.entries(state.baseline.inventory)
+    .filter(([, count]) => count > 0)
+    .map(([id, count]) => ({
+      id,
+      count,
+      item: (game.items ?? []).find((entry) => entry.id === id),
+    }));
+  const weapon = state.baseline.equippedWeaponId
+    ? (game.weapons ?? []).find((entry) => entry.id === state.baseline.equippedWeaponId)
+    : undefined;
+  const weaponPower = weapon ? state.baseline.weapons[weapon.id]?.power ?? weapon.basePower : null;
+  const skills = state.baseline.knownSkills.map((id) =>
+    (game.skills ?? []).find((entry) => entry.id === id) ?? { id, name: recordLabel(id), description: "" }
+  );
+  const completed = state.baseline.completionOrder.slice(-6).reverse();
+
+  return (
+    <div className="adventure-record-overlay" role="dialog" aria-modal="true" aria-label="冒险记录" onClick={onClose}>
+      <section className="adventure-record-frame" onClick={(event) => event.stopPropagation()}>
+        <header className="adventure-record-heading">
+          <div><span>ADVENTURE RECORD</span><strong>旅の記録</strong><small>角色、装备与旅程状态</small></div>
+          <button type="button" onClick={onClose} aria-label="关闭冒险记录">× <kbd>Esc</kbd></button>
+        </header>
+
+        <div className="adventure-record-hero">
+          <span className="adventure-record-crest" aria-hidden="true">旅</span>
+          <div><small>CURRENT LOCATION</small><strong>{map?.name ?? "旅の途中"}</strong><span>{map?.description ?? game.title}</span></div>
+          <dl>
+            <div><dt>EVENTS</dt><dd>{state.baseline.completionOrder.length}</dd></div>
+            <div><dt>ITEMS</dt><dd>{inventory.reduce((total, entry) => total + entry.count, 0)}</dd></div>
+            <div><dt>SKILLS</dt><dd>{skills.length}</dd></div>
+          </dl>
+        </div>
+
+        <div className="adventure-record-body">
+          <section className="adventure-record-section party-record">
+            <header><div><span>01</span><strong>人物状态</strong></div><small>PARTY &amp; BONDS</small></header>
+            <div className="adventure-character-list">
+              {(game.characters ?? []).map((character, index) => {
+                const stats = Object.entries(state.baseline.characters[character.id]?.stats ?? {});
+                return (
+                  <article key={character.id}>
+                    <span className="adventure-character-number">{String(index + 1).padStart(2, "0")}</span>
+                    <div><strong>{character.name}</strong><small>{character.id}</small></div>
+                    <dl>{stats.length > 0 ? stats.map(([name, value]) => <div key={name}><dt>{recordLabel(name)}</dt><dd>{value}</dd></div>) : <div><dt>STATUS</dt><dd>—</dd></div>}</dl>
+                  </article>
+                );
+              })}
+              {(game.characters ?? []).length === 0 && <p className="adventure-record-empty">No character records in this project.</p>}
+            </div>
+          </section>
+
+          <section className="adventure-record-section loadout-record">
+            <header><div><span>02</span><strong>装备与能力</strong></div><small>LOADOUT</small></header>
+            <div className="adventure-weapon-card">
+              <span aria-hidden="true">†</span>
+              <div><small>EQUIPPED WEAPON</small><strong>{weapon?.name ?? "未装备"}</strong><p>{weapon?.description || "当前没有装备武器。"}</p></div>
+              {weaponPower !== null && <b><small>POWER</small>{weaponPower}</b>}
+            </div>
+            <div className="adventure-skill-list">
+              <span>LEARNED SKILLS</span>
+              {skills.length > 0 ? skills.map((skill) => <div key={skill.id}><i>✦</i><strong>{skill.name}</strong><small>{skill.description}</small></div>) : <p className="adventure-record-empty">まだ技を習得していません。</p>}
+            </div>
+          </section>
+
+          <section className="adventure-record-section inventory-record">
+            <header><div><span>03</span><strong>所持品</strong></div><small>INVENTORY</small></header>
+            <div className="adventure-item-list">
+              {inventory.length > 0 ? inventory.map(({ id, count, item }) => (
+                <article key={id}><span>◇</span><div><strong>{item?.name ?? recordLabel(id)}</strong><small>{item?.kind ?? "item"}</small></div><b>× {count}</b></article>
+              )) : <p className="adventure-record-empty">所持品はありません。</p>}
+            </div>
+          </section>
+
+          <section className="adventure-record-section progress-record">
+            <header><div><span>04</span><strong>旅程</strong></div><small>STORY PROGRESS</small></header>
+            <ol>
+              {completed.length > 0 ? completed.map((id, index) => {
+                const script = (game.scripts ?? []).find((entry) => entry.id === id);
+                return <li key={`${id}-${index}`}><span>✓</span><div><strong>{script?.title ?? recordLabel(id)}</strong><small>{id}</small></div></li>;
+              }) : <li className="empty"><span>◇</span><div><strong>物語は始まったばかり</strong><small>Completed events will appear here.</small></div></li>}
+            </ol>
+          </section>
+        </div>
+        <footer><span>Auto Save · Shared Session</span><span>Esc · 戻る</span></footer>
+      </section>
+    </div>
+  );
+}
+
+function recordLabel(value: string): string {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function stageContextLabel(kind: Stage["kind"]): string {
