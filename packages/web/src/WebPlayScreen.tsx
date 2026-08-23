@@ -504,8 +504,16 @@ export function WebPlayScreen({
   // Keyboard: Space/Enter advances text; arrows/WASD move a spatial map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && onExit) {
-        onExit();
+      if (e.key === "Escape") {
+        if (showFeedback) {
+          setShowFeedback(false);
+        } else if (showArtBook) {
+          setShowArtBook(false);
+        } else if (showBacklog) {
+          setShowBacklog(false);
+        } else if (onExit) {
+          onExit();
+        }
         return;
       }
       if (showBacklog || showArtBook || showFeedback) return;
@@ -533,17 +541,93 @@ export function WebPlayScreen({
     return () => window.removeEventListener("keydown", onKey);
   }, [game.maps, model.stage.kind, showBacklog, showArtBook, showFeedback, sendInput, onExit]);
 
+  const currentMapId = engineRef.current?.getState().baseline.currentMapId ?? null;
+  const currentMap = currentMapId
+    ? (game.maps ?? []).find((map) => map.id === currentMapId)
+    : undefined;
+  const sceneLabel = currentMap?.name ?? stageContextLabel(model.stage.kind);
+
   return (
     <div className="play-root">
       <VisualLayer visuals={model.visuals} assetMap={assetMap} assetUrls={assetUrls} />
-      {model.stage.kind === "hubMenu" && (
-        <StatusBar snapshot={model.stage.snapshot} />
-      )}
+      <header className="game-chrome">
+        <div className={`game-topbar${model.stage.kind === "hubMenu" ? " has-status" : ""}`}>
+          <div className="game-identity">
+            <span className="game-crest" aria-hidden="true">妖</span>
+            <div>
+              <strong>{game.title}</strong>
+              <small>{sceneLabel}</small>
+            </div>
+          </div>
+          {model.stage.kind === "hubMenu" && (
+            <StatusBar snapshot={model.stage.snapshot} />
+          )}
+          <nav className="game-menu" aria-label="ゲームメニュー">
+            {onExit && (
+              <button className="hud-btn" onClick={onExit}>
+                <span aria-hidden="true">⌂</span> 主菜单
+              </button>
+            )}
+            {model.backlog.length > 0 && (
+              <button className="hud-btn" onClick={() => setShowBacklog(true)}>
+                <span aria-hidden="true">≡</span> 回看
+              </button>
+            )}
+            <button className="hud-btn" onClick={() => setShowArtBook(true)}>
+              <span aria-hidden="true">◇</span> 設定集
+            </button>
+            {feedbackEnabled && onFeedback && (
+              <button className="hud-btn hud-feedback-btn" onClick={() => setShowFeedback(true)}>
+                <span aria-hidden="true">✦</span> AIへフィードバック{feedbackFeed?.open
+                  ? ` · ${feedbackFeed.open}件対応中`
+                  : feedbackFeed?.resolved
+                    ? ` · ${feedbackFeed.resolved}件対応済み`
+                    : ""}
+              </button>
+            )}
+          </nav>
+        </div>
+        <div className="game-contextbar">
+          <div className="game-context-status">
+            {sessionLabel && (
+              <span className="hud-session" title="Headless CLI と共有される保存先">
+                <i aria-hidden="true" /> {sessionLabel}
+              </span>
+            )}
+            {branchContext?.handoff && <BranchHandoffBadge branch={branchContext} />}
+            {developmentStatus && <DevelopmentBadge status={developmentStatus} />}
+          </div>
+          {model.stage.kind !== "ended" && aiControlEnabled && onAdvanceAiTurn && (
+            <span className="hud-ai-control" title={aiPersonas.find((entry) => entry.name === aiPersona)?.description}>
+              <span className="ai-control-label">AI COPILOT</span>
+              <select
+                aria-label="AI人格"
+                value={aiPersona}
+                disabled={aiThinking || aiTurnPending || aiPersonas.length === 0}
+                onChange={(event) => setAiPersona(event.target.value)}
+              >
+                {aiPersonas.map((persona) => (
+                  <option value={persona.name} key={persona.name}>
+                    {persona.source.startsWith("module:") ? "PROJECT · " : ""}{persona.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="hud-btn hud-ai-btn"
+                disabled={aiThinking || aiTurnPending || !aiPersona}
+                onClick={() => void advanceAi()}
+              >
+                {aiThinking || aiTurnPending ? "AI思考中…" : "一手交给 AI"}
+              </button>
+            </span>
+          )}
+        </div>
+      </header>
       <div className="stage-area">
         <StageView
           stage={model.stage}
           game={game}
-          currentMapId={engineRef.current?.getState().baseline.currentMapId ?? null}
+          currentMapId={currentMapId}
           currentMapPosition={engineRef.current?.getState().runtime.mapPosition}
           currentMapPositionMapId={engineRef.current?.getState().runtime.mapPositionMapId}
           assetUrls={assetUrls}
@@ -580,60 +664,6 @@ export function WebPlayScreen({
           >×</button>
         </div>
       )}
-      <div className="hud">
-        {sessionLabel && (
-          <span className="hud-session" title="Headless CLI と共有される保存先">
-            ⛓ {sessionLabel}
-          </span>
-        )}
-        {branchContext?.handoff && <BranchHandoffBadge branch={branchContext} />}
-        {developmentStatus && <DevelopmentBadge status={developmentStatus} />}
-        {model.stage.kind !== "ended" && aiControlEnabled && onAdvanceAiTurn && (
-          <span className="hud-ai-control" title={aiPersonas.find((entry) => entry.name === aiPersona)?.description}>
-            <select
-              aria-label="AI人格"
-              value={aiPersona}
-              disabled={aiThinking || aiTurnPending || aiPersonas.length === 0}
-              onChange={(event) => setAiPersona(event.target.value)}
-            >
-              {aiPersonas.map((persona) => (
-                <option value={persona.name} key={persona.name}>
-                  {persona.source.startsWith("module:") ? "PROJECT · " : ""}{persona.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="hud-btn hud-ai-btn"
-              disabled={aiThinking || aiTurnPending || !aiPersona}
-              onClick={() => void advanceAi()}
-            >
-              {aiThinking || aiTurnPending ? "AI思考中…" : "一手交给 AI"}
-            </button>
-          </span>
-        )}
-        {onExit && (
-          <button className="hud-btn" onClick={onExit}>
-            ← 主菜单
-          </button>
-        )}
-        {model.backlog.length > 0 && (
-          <button className="hud-btn" onClick={() => setShowBacklog(true)}>
-            回看
-          </button>
-        )}
-        <button className="hud-btn" onClick={() => setShowArtBook(true)}>
-          設定集
-        </button>
-        {feedbackEnabled && onFeedback && (
-          <button className="hud-btn hud-feedback-btn" onClick={() => setShowFeedback(true)}>
-            AIへフィードバック{feedbackFeed?.open
-              ? ` · ${feedbackFeed.open}件対応中`
-              : feedbackFeed?.resolved
-                ? ` · ${feedbackFeed.resolved}件対応済み`
-                : ""}
-          </button>
-        )}
-      </div>
       {(aiReceipt || aiError) && (
         <div className={`ai-turn-receipt${aiError ? " error" : ""}`} role="status">
           {aiError
@@ -673,6 +703,19 @@ export function WebPlayScreen({
       )}
     </div>
   );
+}
+
+function stageContextLabel(kind: Stage["kind"]): string {
+  switch (kind) {
+    case "hubMenu": return "拠点行動";
+    case "dialogue": return "会話";
+    case "narration": return "物語";
+    case "choice": return "選択";
+    case "scriptComplete": return "次章選択";
+    case "ended": return "終幕";
+    case "error": return "異常";
+    default: return "読込中";
+  }
 }
 
 export function FeedbackOverlay({
@@ -719,8 +762,8 @@ export function FeedbackOverlay({
     }
   };
   return (
-    <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="AIへのフィードバック">
-      <div className="backlog-inner feedback-inner">
+    <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="AIへのフィードバック" onClick={onClose}>
+      <div className="backlog-inner feedback-inner" onClick={(event) => event.stopPropagation()}>
         <div className="backlog-head">
           <div>
             <strong>AIへフィードバック</strong>
@@ -1001,112 +1044,118 @@ export function StageView({
             />
           )}
           <div className="hub-panel">
-          {hubView.strategyDecisionRequired && (
-            <div className="hub-strategy">
-              STRATEGY · {hubView.opportunityGroups.length} PATHS AVAILABLE
-            </div>
-          )}
-          {(stage.snapshot.resourceGroups ?? []).map((group) => (
-            <section className="resource-group" key={group.id}>
-              <div className="resource-group-title">{group.title}</div>
-              <div className="resource-group-items">
-                {group.resources.map((resource) => (
-                  <span className="resource-chip" key={resource.id}>
-                    {resource.name} ×{resource.quantity}
-                  </span>
-                ))}
-              </div>
-              {group.description && (
-                <div className="resource-group-description">{group.description}</div>
-              )}
-            </section>
-          ))}
-          {(stage.snapshot.objectives ?? []).map((objective) => (
-            <section
-              className={`objective-card objective-${objective.status} objective-scope-${objective.scope}${objective.focus === true ? " objective-focused" : ""}`}
-              key={objective.id}
-            >
-              <div className="objective-title">
-                <span className="objective-badge">
-                  {objective.scope === "main"
-                    ? "MAIN"
-                    : objective.scope === "side"
-                      ? "SIDE"
-                      : "MASTERY"}
-                  {objective.terminal ? " · FINAL" : ""}
-                  {objective.focus === true ? " · NOW" : ""}
-                </span>
-                {objective.status === "completed" ? "✓" : "◆"} {objective.title}
-              </div>
-              {objective.description && (
-                <div className="objective-description">{objective.description}</div>
-              )}
-              {(objective.requirements ?? []).map((req) => (
-                <div
-                  className={`objective-requirement${req.satisfied ? " satisfied" : ""}`}
-                  key={req.id}
-                >
-                  {formatObjectiveRequirement(req)}
+            <aside className="hub-summary" aria-label="任務と所持品">
+              <div className="hub-column-title"><span>STATUS</span><strong>任務と所持品</strong></div>
+              {hubView.strategyDecisionRequired && (
+                <div className="hub-strategy">
+                  STRATEGY · {hubView.opportunityGroups.length} PATHS AVAILABLE
                 </div>
+              )}
+              {(stage.snapshot.resourceGroups ?? []).map((group) => (
+                <section className="resource-group" key={group.id}>
+                  <div className="resource-group-title">{group.title}</div>
+                  <div className="resource-group-items">
+                    {group.resources.map((resource) => (
+                      <span className="resource-chip" key={resource.id}>
+                        {resource.name} ×{resource.quantity}
+                      </span>
+                    ))}
+                  </div>
+                  {group.description && (
+                    <div className="resource-group-description">{group.description}</div>
+                  )}
+                </section>
               ))}
-            </section>
-          ))}
-          {hubView.sections.map((section) => (
-            <section className="activity-section" key={section.category}>
-              <div className="activity-section-head">
-                <span>{section.label}</span>
-                <span>
-                  {opportunityByCategory.get(section.category)?.decisionRequired &&
-                    "CHOICE · "}
-                  {section.availableCount}/{section.activities.length}
-                </span>
-              </div>
-              <ul className="activity-list">
-                {section.activities.map(({ activity: a }) => (
-                  <li key={a.id}>
-                    <button
-                      className={`activity-btn${
-                        a.id === hubView.primaryActivityId
-                          ? " activity-primary"
-                          : ""
-                      }`}
-                      disabled={!a.available}
-                      onClick={() => onInput({ type: "doActivity", id: a.id })}
-                      title={a.lockedReason ?? ""}
+              {(stage.snapshot.objectives ?? []).map((objective) => (
+                <section
+                  className={`objective-card objective-${objective.status} objective-scope-${objective.scope}${objective.focus === true ? " objective-focused" : ""}`}
+                  key={objective.id}
+                >
+                  <div className="objective-title">
+                    <span className="objective-badge">
+                      {objective.scope === "main"
+                        ? "MAIN"
+                        : objective.scope === "side"
+                          ? "SIDE"
+                          : "MASTERY"}
+                      {objective.terminal ? " · FINAL" : ""}
+                      {objective.focus === true ? " · NOW" : ""}
+                    </span>
+                    {objective.status === "completed" ? "✓" : "◆"} {objective.title}
+                  </div>
+                  {objective.description && (
+                    <div className="objective-description">{objective.description}</div>
+                  )}
+                  {(objective.requirements ?? []).map((req) => (
+                    <div
+                      className={`objective-requirement${req.satisfied ? " satisfied" : ""}`}
+                      key={req.id}
                     >
-                      <div className="activity-head">
-                        <span className="activity-title">
-                          {a.id === hubView.primaryActivityId && (
-                            <span className="primary-mark">★</span>
-                          )}
-                          {a.title}
-                        </span>
-                        {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
-                      </div>
-                      {a.description && (
-                        <div className="activity-desc">{a.description}</div>
-                      )}
-                      {playerForecastMetrics(a).length > 0 && (
-                        <div className="activity-forecast">
-                          {playerForecastMetrics(a).map((metric) => (
-                            <span
-                              className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
-                              key={metric.id}
-                            >
-                              {metric.label} {formatForecastMetricValue(metric)}
+                      {formatObjectiveRequirement(req)}
+                    </div>
+                  ))}
+                </section>
+              ))}
+            </aside>
+            <main className="hub-actions" aria-label="実行可能な行動">
+              <div className="hub-column-title"><span>COMMAND</span><strong>行動を選ぶ</strong></div>
+              {hubView.sections.map((section) => (
+                <section className="activity-section" key={section.category}>
+                  <div className="activity-section-head">
+                    <span>{section.label}</span>
+                    <span>
+                      {opportunityByCategory.get(section.category)?.decisionRequired &&
+                        "CHOICE · "}
+                      {section.availableCount}/{section.activities.length}
+                    </span>
+                  </div>
+                  <ul className="activity-list">
+                    {section.activities.map(({ activity: a }) => (
+                      <li key={a.id}>
+                        <button
+                          className={`activity-btn${
+                            a.id === hubView.primaryActivityId
+                              ? " activity-primary"
+                              : ""
+                          }`}
+                          disabled={!a.available}
+                          onClick={() => onInput({ type: "doActivity", id: a.id })}
+                          title={a.lockedReason ?? ""}
+                        >
+                          <div className="activity-head">
+                            <span className="activity-title">
+                              {a.id === hubView.primaryActivityId && (
+                                <span className="primary-mark">★</span>
+                              )}
+                              {a.title}
                             </span>
-                          ))}
-                        </div>
-                      )}
-                      {!a.available && a.lockedReason && (
-                        <div className="locked-reason">🔒 {a.lockedReason}</div>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                            {a.cost > 0 && <span className="activity-cost">⏳{a.cost}</span>}
+                          </div>
+                          {a.description && (
+                            <div className="activity-desc">{a.description}</div>
+                          )}
+                          {playerForecastMetrics(a).length > 0 && (
+                            <div className="activity-forecast">
+                              {playerForecastMetrics(a).map((metric) => (
+                                <span
+                                  className={`forecast-chip forecast-${metric.polarity ?? "neutral"}`}
+                                  key={metric.id}
+                                >
+                                  {metric.label} {formatForecastMetricValue(metric)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {!a.available && a.lockedReason && (
+                            <div className="locked-reason">🔒 {a.lockedReason}</div>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </main>
           </div>
         </div>
       );
@@ -1193,7 +1242,7 @@ export function BacklogOverlay({
   onClose: () => void;
 }) {
   return (
-    <div className="backlog-overlay" onClick={onClose}>
+    <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="回看" onClick={onClose}>
       <div className="backlog-inner" onClick={(e) => e.stopPropagation()}>
         <div className="backlog-head">
           <span>回看</span>

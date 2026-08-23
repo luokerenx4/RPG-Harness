@@ -28,7 +28,7 @@ export function ArtBook({
 
   if (packs.length === 0) {
     return (
-      <div className="backlog-overlay" onClick={onClose}>
+      <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="設定集" onClick={onClose}>
         <div className="backlog-inner" onClick={(e) => e.stopPropagation()}>
           <div className="backlog-head">
             <span>設定集</span>
@@ -45,7 +45,7 @@ export function ArtBook({
   const pack = packs[Math.min(active, packs.length - 1)]!;
 
   return (
-    <div className="backlog-overlay" onClick={onClose}>
+    <div className="backlog-overlay" role="dialog" aria-modal="true" aria-label="設定集" onClick={onClose}>
       <div className="backlog-inner artbook-inner" onClick={(e) => e.stopPropagation()}>
         <div className="backlog-head">
           <span>設定集</span>

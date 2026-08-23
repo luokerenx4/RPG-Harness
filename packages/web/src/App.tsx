@@ -366,37 +366,51 @@ export function App() {
 
   return (
     <div className="picker">
-      <h1 className="picker-title">RPG-Harness</h1>
-      <p className="picker-sub">headless RPG Maker — web</p>
-      <p className="picker-session">
-        {sessionInfo ? `⛓ ${sessionInfo.label}` : "保存先を確認中…"}
-      </p>
-      <ul className="picker-list">
-        {games.map((g) => {
-          const saved = savedGames?.has(g.id) ?? false;
-          return (
-            <li key={g.id} className="picker-row">
-              <button
-                className="picker-btn"
-                disabled={savedGames === null}
-                onClick={() => void start(g.id, !saved)}
-              >
-                <span>{g.title}</span>
-                <span className="picker-action">{saved ? "続きから ▸" : "はじめる ▸"}</span>
-              </button>
-              {saved && (
+      <aside className="picker-hero">
+        <span className="picker-kicker">OPEN RPG AUTHORING RUNTIME</span>
+        <div className="picker-emblem" aria-hidden="true">R</div>
+        <h1 className="picker-title">RPG<span>HARNESS</span></h1>
+        <p className="picker-sub">Headless RPG Maker, rendered for players.</p>
+        <div className="picker-rule" />
+        <p className="picker-note">同じゲーム資源を Web・TUI・Headless で共有します。</p>
+        <p className="picker-session">
+          <i aria-hidden="true" /> {sessionInfo ? sessionInfo.label : "保存先を確認中…"}
+        </p>
+      </aside>
+      <main className="picker-library">
+        <header className="picker-library-head">
+          <div><span>SELECT PROJECT</span><h2>物語を選ぶ</h2></div>
+          <small>{games.length} PROJECT{games.length === 1 ? "" : "S"}</small>
+        </header>
+        <ul className="picker-list">
+          {games.map((g, index) => {
+            const saved = savedGames?.has(g.id) ?? false;
+            return (
+              <li key={g.id} className="picker-row">
                 <button
-                  className="picker-fresh"
-                  title="セーブを消して最初から"
-                  onClick={() => void start(g.id, true)}
+                  className="picker-btn"
+                  disabled={savedGames === null}
+                  onClick={() => void start(g.id, !saved)}
                 >
-                  最初から
+                  <span className="picker-index">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="picker-game-copy"><strong>{g.title}</strong><small>{g.id}</small></span>
+                  <span className="picker-action">{saved ? "続きから" : "はじめる"}<i>›</i></span>
                 </button>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                {saved && (
+                  <button
+                    className="picker-fresh"
+                    title="セーブを消して最初から"
+                    onClick={() => void start(g.id, true)}
+                  >
+                    <span>↻</span> 最初から
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <footer className="picker-footer"><span>FILES ARE AUTHORITATIVE</span><span>WEB SURFACE · READY</span></footer>
+      </main>
     </div>
   );
 }
