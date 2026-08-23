@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Condition,
   MapDef,
@@ -35,6 +35,39 @@ const KIND_ORDER: ProjectResourceKind[] = [
   "custom",
 ];
 
+type ProjectSection = "world" | "database" | "story" | "qa";
+
+const SECTION_KINDS: Record<ProjectSection, ProjectResourceKind[]> = {
+  world: ["manifest", "map"],
+  database: ["character", "item", "weapon", "skill", "enemy", "action"],
+  story: ["script", "asset", "module", "custom"],
+  qa: ["test", "issue"],
+};
+
+const SECTION_META: Array<{ id: ProjectSection; icon: string; label: string }> = [
+  { id: "world", icon: "▦", label: "World" },
+  { id: "database", icon: "◫", label: "Database" },
+  { id: "story", icon: "¶", label: "Story" },
+  { id: "qa", icon: "✓", label: "QA" },
+];
+
+const KIND_META: Partial<Record<ProjectResourceKind, { icon: string; label: string }>> = {
+  manifest: { icon: "◆", label: "Project" },
+  map: { icon: "▦", label: "Maps" },
+  character: { icon: "♙", label: "Characters" },
+  item: { icon: "◇", label: "Items" },
+  weapon: { icon: "†", label: "Weapons" },
+  skill: { icon: "✦", label: "Skills" },
+  enemy: { icon: "♞", label: "Enemies" },
+  action: { icon: "▶", label: "Actions" },
+  script: { icon: "¶", label: "Scripts" },
+  asset: { icon: "▧", label: "Assets" },
+  module: { icon: "⬡", label: "Modules" },
+  test: { icon: "✓", label: "Tests" },
+  issue: { icon: "!", label: "Issues" },
+  custom: { icon: "＋", label: "Custom" },
+};
+
 const PLACEABLE_KINDS = new Set<ProjectResourceKind>([
   "map",
   "character",
@@ -52,33 +85,57 @@ const PLACEABLE_KINDS = new Set<ProjectResourceKind>([
 export function Project() {
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
+  const [section, setSection] = useState<ProjectSection>("world");
+  const [collapsedKinds, setCollapsedKinds] = useState<Set<ProjectResourceKind>>(
+    () => new Set(["manifest"]),
+  );
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchProject()
       .then((value) => {
         setProject(value);
-        setSelectedKey(
-          value.graph.resources.find((resource) => resource.kind === "map")?.key ??
-            value.graph.resources[0]?.key ?? null,
-        );
+        const initial = value.graph.resources.find((resource) => resource.kind === "map")?.key ??
+          value.graph.resources[0]?.key ?? null;
+        setSelectedKey(initial);
+        setOpenKeys(initial ? [initial] : []);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+      if (event.key === "Escape" && document.activeElement === searchRef.current) {
+        setQuery("");
+        searchRef.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const groups = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const resources = (project?.graph.resources ?? []).filter((resource) =>
-      normalized.length === 0 ||
-      resource.key.toLowerCase().includes(normalized) ||
-      resource.label.toLowerCase().includes(normalized)
-    );
+    const allowedKinds = new Set(SECTION_KINDS[section]);
+    const resources = (project?.graph.resources ?? []).filter((resource) => {
+      const matches = normalized.length === 0 ||
+        resource.key.toLowerCase().includes(normalized) ||
+        resource.label.toLowerCase().includes(normalized);
+      return matches && (normalized.length > 0 || allowedKinds.has(resource.kind));
+    });
     return KIND_ORDER.flatMap((kind) => {
       const rows = resources.filter((resource) => resource.kind === kind);
       return rows.length > 0 ? [{ kind, rows }] : [];
     });
-  }, [project, query]);
+  }, [project, query, section]);
 
   if (error) return <div className="empty">⚠ {error}</div>;
   if (!project) return <div className="empty">loading project…</div>;
@@ -88,62 +145,135 @@ export function Project() {
     ? project.maps.find((candidate) => candidate.id === selected.id)
     : undefined;
 
+  const selectResource = (key: string) => {
+    setSelectedKey(key);
+    setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
+  };
+
+  const closeTab = (key: string) => {
+    setOpenKeys((current) => {
+      const next = current.filter((candidate) => candidate !== key);
+      if (selectedKey === key) setSelectedKey(next.at(-1) ?? null);
+      return next;
+    });
+  };
+
   return (
-    <div className="project-layout">
-      <aside className="project-tree">
-        <div className="project-tree-heading">
-          <h1>Project</h1>
-          <span>{project.graph.resources.length} resources</span>
-        </div>
-        <input
-          className="project-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search resources…"
-          aria-label="Search project resources"
-        />
-        {groups.map(({ kind, rows }) => (
-          <section className="resource-group" key={kind}>
-            <h2>{kind}<span>{rows.length}</span></h2>
-            {rows.map((resource) => (
-              <button
-                type="button"
-                draggable={PLACEABLE_KINDS.has(resource.kind)}
-                className={`resource-row ${selectedKey === resource.key ? "selected" : ""}`}
-                key={resource.key}
-                onClick={() => setSelectedKey(resource.key)}
-                onDragStart={(event) => {
-                  if (!PLACEABLE_KINDS.has(resource.kind)) {
-                    event.preventDefault();
-                    return;
-                  }
-                  event.dataTransfer.setData("application/x-autogal-resource", resource.key);
-                  event.dataTransfer.effectAllowed = "copy";
-                }}
-              >
-                <span>{resource.label}</span>
-                <small>{resource.id}</small>
-              </button>
-            ))}
-          </section>
+    <div className="project-workbench">
+      <nav className="project-activitybar" aria-label="Project sections">
+        {SECTION_META.map((item) => (
+          <button
+            type="button"
+            className={section === item.id && !query ? "active" : ""}
+            key={item.id}
+            title={item.label}
+            aria-label={item.label}
+            onClick={() => { setSection(item.id); setQuery(""); }}
+          ><span>{item.icon}</span><small>{item.label}</small></button>
         ))}
-      </aside>
-      <section className="project-detail">
-        {selected ? (
-          <ResourceDetail
-            node={selected}
-            map={map}
-            resources={project.graph.resources}
-            backlinks={project.graph.backlinks[selected.key] ?? []}
-            missing={project.graph.missing.filter((entry) =>
-              entry.referencedBy.includes(selected.key)
-            )}
-            unreferenced={project.graph.unreferenced.includes(selected.key)}
-            onProjectSaved={setProject}
+      </nav>
+
+      <aside className="project-explorer">
+        <header className="explorer-heading">
+          <div><span>PROJECT</span><strong>{SECTION_META.find((item) => item.id === section)?.label}</strong></div>
+          <small>{project.graph.resources.length}</small>
+        </header>
+        <label className="project-searchbox">
+          <span aria-hidden="true">⌕</span>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Find anything"
+            aria-label="Search project resources"
           />
-        ) : (
-          <div className="empty">Select a project resource.</div>
-        )}
+          {query ? <button type="button" aria-label="Clear search" onClick={() => setQuery("")}>×</button> : <kbd>⌘K</kbd>}
+        </label>
+        <div className="resource-tree-scroll">
+          {groups.length === 0 && <div className="tree-empty">No matching resources</div>}
+          {groups.map(({ kind, rows }) => {
+            const meta = KIND_META[kind] ?? { icon: "·", label: kind };
+            const collapsed = query.length === 0 && collapsedKinds.has(kind);
+            return (
+              <section className="resource-group" key={kind}>
+                <button
+                  type="button"
+                  className="resource-group-heading"
+                  aria-expanded={!collapsed}
+                  onClick={() => setCollapsedKinds((current) => {
+                    const next = new Set(current);
+                    next.has(kind) ? next.delete(kind) : next.add(kind);
+                    return next;
+                  })}
+                >
+                  <span className="tree-chevron">{collapsed ? "›" : "⌄"}</span>
+                  <span className="tree-kind-icon">{meta.icon}</span>
+                  <strong>{meta.label}</strong>
+                  <small>{rows.length}</small>
+                </button>
+                {!collapsed && rows.map((resource) => (
+                  <button
+                    type="button"
+                    draggable={PLACEABLE_KINDS.has(resource.kind)}
+                    className={`resource-row ${selectedKey === resource.key ? "selected" : ""}`}
+                    key={resource.key}
+                    onClick={() => selectResource(resource.key)}
+                    onDragStart={(event) => {
+                      if (!PLACEABLE_KINDS.has(resource.kind)) {
+                        event.preventDefault();
+                        return;
+                      }
+                      event.dataTransfer.setData("application/x-autogal-resource", resource.key);
+                      event.dataTransfer.effectAllowed = "copy";
+                    }}
+                  >
+                    <span className="resource-node-icon">{meta.icon}</span>
+                    <span className="resource-node-copy"><strong>{resource.label}</strong><small>{resource.id}</small></span>
+                    {project.graph.missing.some((entry) => entry.referencedBy.includes(resource.key)) && <i className="resource-problem" title="Missing reference">!</i>}
+                  </button>
+                ))}
+              </section>
+            );
+          })}
+        </div>
+        <footer className="explorer-footer">
+          <span>{groups.reduce((total, group) => total + group.rows.length, 0)} shown</span>
+          <span>Drag resources onto maps</span>
+        </footer>
+      </aside>
+
+      <section className="project-editor-shell">
+        <nav className="document-tabs" aria-label="Open resources">
+          {openKeys.map((key) => {
+            const resource = project.graph.resources.find((candidate) => candidate.key === key);
+            if (!resource) return null;
+            const meta = KIND_META[resource.kind] ?? { icon: "·", label: resource.kind };
+            return (
+              <div className={`document-tab ${selectedKey === key ? "active" : ""}`} key={key}>
+                <button type="button" onClick={() => setSelectedKey(key)}>
+                  <span>{meta.icon}</span><strong>{resource.label}</strong>
+                </button>
+                <button type="button" className="document-tab-close" aria-label={`Close ${resource.label}`} onClick={() => closeTab(key)}>×</button>
+              </div>
+            );
+          })}
+          <span className="document-tabs-fill" />
+        </nav>
+        <div className="project-detail">
+          {selected ? (
+            <ResourceDetail
+              node={selected}
+              map={map}
+              resources={project.graph.resources}
+              backlinks={project.graph.backlinks[selected.key] ?? []}
+              missing={project.graph.missing.filter((entry) => entry.referencedBy.includes(selected.key))}
+              unreferenced={project.graph.unreferenced.includes(selected.key)}
+              onProjectSaved={setProject}
+            />
+          ) : (
+            <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
+          )}
+        </div>
       </section>
     </div>
   );
@@ -166,44 +296,57 @@ function ResourceDetail({
   unreferenced: boolean;
   onProjectSaved: (project: ProjectResponse) => void;
 }) {
+  const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   return (
-    <>
-      <header className="resource-detail-header">
-        <span className={`kind-badge ${node.kind}`}>{node.kind}</span>
-        <h1>{node.label}</h1>
-        <code>{node.key}</code>
-        {node.source && <div className="resource-source">{node.source}</div>}
-      </header>
+    <div className="resource-workspace">
+      <main className="resource-editor-pane">
+        <header className="resource-editor-heading">
+          <div className={`resource-editor-icon kind-${node.kind}`}>{meta.icon}</div>
+          <div><span>{meta.label}</span><h1>{node.label}</h1><code>{node.key}</code></div>
+        </header>
+        {map ? (
+          <MapOverview map={map} resources={resources} onProjectSaved={onProjectSaved} />
+        ) : (
+          <div className="resource-data-sheet">
+            <div className="resource-data-hero"><span>{meta.icon}</span><strong>{node.label}</strong><code>{node.id}</code></div>
+            <div className="resource-data-guidance">
+              <span>AUTHORING RESOURCE</span>
+              <h2>Edit the source, keep the graph honest.</h2>
+              <p>This resource participates in the same project registry as maps, events, assets, and tests. Its source file remains authoritative.</p>
+            </div>
+          </div>
+        )}
+      </main>
 
-      {map && (
-        <MapOverview
-          map={map}
-          resources={resources}
-          onProjectSaved={onProjectSaved}
-        />
-      )}
-
-      {node.source && node.editable !== false && (
-        <ResourceSourceEditor node={node} onProjectSaved={onProjectSaved} />
-      )}
-
-      <div className="reference-grid">
+      <aside className="resource-inspector">
+        <header><span>INSPECTOR</span><strong>{meta.label}</strong></header>
+        <section className="inspector-section">
+          <h2>Identity</h2>
+          <dl className="inspector-properties">
+            <div><dt>Kind</dt><dd><span className={`kind-badge ${node.kind}`}>{node.kind}</span></dd></div>
+            <div><dt>ID</dt><dd><code>{node.id}</code></dd></div>
+            {node.source && <div><dt>Source</dt><dd><code>{node.source}</code></dd></div>}
+          </dl>
+        </section>
+        {node.source && node.editable !== false && (
+          <ResourceSourceEditor node={node} onProjectSaved={onProjectSaved} />
+        )}
+        {missing.length > 0 && (
+          <section className="project-warning">
+            <strong>Missing references</strong>
+            {missing.map((entry) => <code key={entry.key}>{entry.key}</code>)}
+          </section>
+        )}
+        {unreferenced && (
+          <section className="project-warning advisory">
+            <strong>Unreferenced candidate</strong>
+            <span>Nothing in the registry points here. Roots and module-discovered resources may be intentional.</span>
+          </section>
+        )}
         <ReferenceList title="References" values={node.refs} />
         <ReferenceList title="Used by" values={backlinks} />
-      </div>
-      {missing.length > 0 && (
-        <section className="project-warning">
-          <strong>Missing references</strong>
-          {missing.map((entry) => <code key={entry.key}>{entry.key}</code>)}
-        </section>
-      )}
-      {unreferenced && (
-        <section className="project-warning advisory">
-          <strong>Unreferenced candidate</strong>
-          <span>No registry resource points here. Entry maps, root scripts, and module-discovered resources may be intentional.</span>
-        </section>
-      )}
-    </>
+      </aside>
+    </div>
   );
 }
 
@@ -259,8 +402,38 @@ function ResourceSourceEditor({
     }
   };
 
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) {
+        event.preventDefault();
+        setEditing(false);
+        setError(null);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (!saving) void save();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editing, saving, source]);
+
   return (
-    <section className="detail-section resource-source-editor">
+    <>
+    {editing && (
+      <button
+        type="button"
+        className="source-editor-backdrop"
+        aria-label="Close source editor"
+        onClick={() => {
+          if (saving) return;
+          setEditing(false);
+          setError(null);
+        }}
+      />
+    )}
+    <section className={`detail-section resource-source-editor ${editing ? "is-editing" : ""}`}>
       <header>
         <div><h2>Source file</h2><code>{sourcePath}</code></div>
         {!editing ? (
@@ -270,12 +443,12 @@ function ResourceSourceEditor({
         ) : (
           <div>
             <button type="button" className="primary" disabled={saving} onClick={save}>
-              {saving ? "Validating…" : "Save & validate"}
+              {saving ? "Validating…" : "Save & validate  ⌘S"}
             </button>
             <button type="button" disabled={saving} onClick={() => {
               setEditing(false);
               setError(null);
-            }}>Cancel</button>
+            }}>Cancel  Esc</button>
           </div>
         )}
       </header>
@@ -291,6 +464,7 @@ function ResourceSourceEditor({
         />
       )}
     </section>
+    </>
   );
 }
 
@@ -319,12 +493,15 @@ function MapOverview({
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [zoom, setZoom] = useState(100);
 
   useEffect(() => {
     setDraft(cloneMap(map));
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
+    setZoom(100);
   }, [map]);
 
   const width = draft.layout?.width ?? 1;
@@ -364,16 +541,23 @@ function MapOverview({
 
   return (
     <section className="map-overview">
-      <div className="map-overview-meta">
-        <div>
-          <h2>Map resource</h2>
-          <p>{map.description || "No description."}</p>
+      <div className="map-editor-toolbar">
+        <div className="map-editor-context">
+          <span className={`edit-state ${editing ? "editing" : ""}`}>{editing ? "EDITING" : "PREVIEW"}</span>
+          <p>{map.description || "No map description authored."}</p>
+        </div>
+        <div className="map-view-tools" aria-label="Map view tools">
+          <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Toggle grid">#</button>
+          <span className="toolbar-separator" />
+          <button type="button" onClick={() => setZoom((value) => Math.max(60, value - 20))} aria-label="Zoom out">−</button>
+          <output>{zoom}%</output>
+          <button type="button" onClick={() => setZoom((value) => Math.min(180, value + 20))} aria-label="Zoom in">＋</button>
         </div>
         <div className="map-stats">
           <span>{draft.layout ? `${width} × ${height}` : "node map"}</span>
           <span>{draft.layout?.layers.length ?? 0} layers</span>
           <span>{draft.placements?.length ?? 0} placements</span>
-          <span>{stacks.length} stacked cells</span>
+          {stacks.length > 0 && <span className="stat-attention">{stacks.length} stacks</span>}
         </div>
         <div className="map-editor-actions">
           {!editing ? (
@@ -381,7 +565,7 @@ function MapOverview({
           ) : (
             <>
               <button type="button" className="primary" disabled={saving} onClick={save}>
-                {saving ? "Saving…" : "Save YAML"}
+                {saving ? "Saving…" : "Save"}
               </button>
               <button type="button" disabled={saving} onClick={() => {
                 setDraft(cloneMap(map));
@@ -411,7 +595,9 @@ function MapOverview({
         >Add 12 × 8 spatial layout</button>
       )}
       {editing && draft.layout && (
-        <><div className="layout-fields">
+        <details className="map-authoring-panels">
+          <summary><span>Map setup</span><small>size, player start, layers and regions</small></summary>
+          <div className="layout-fields">
           <label>Width<input type="number" min="1" value={draft.layout.width} onChange={(event) => setDraft((current) => ({
             ...current,
             layout: current.layout ? { ...current.layout, width: Number(event.target.value) } : undefined,
@@ -436,16 +622,38 @@ function MapOverview({
           }))} /></label>
           <span>Drag any resource from the project tree onto the canvas.</span>
         </div>
-        <MapStructureEditor
-          layout={draft.layout}
-          onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
-        /></>
+          <MapStructureEditor
+            layout={draft.layout}
+            onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
+          />
+        </details>
       )}
+      <div className="map-stage">
+        {draft.layout && (draft.placements ?? []).length > 0 && (
+          <div className="map-object-strip" aria-label="Map objects">
+            <span>OBJECTS</span>
+            {(draft.placements ?? []).map((placement) => (
+              <button
+                type="button"
+                className={selectedPlacementId === placement.id ? "selected" : ""}
+                key={placement.id}
+                onClick={() => setSelectedPlacementId(placement.id)}
+              ><i className={`object-dot collision-${placement.collision}`} />{placement.id}<small>{placement.at.x},{placement.at.y}</small></button>
+            ))}
+          </div>
+        )}
+        <div className="map-canvas-scroll">
       {draft.layout ? (
         <div
-          className={`map-canvas ${editing ? "editing" : ""}`}
-          style={{ aspectRatio: `${width} / ${height}` }}
+          className={`map-canvas ${editing ? "editing" : ""} ${showGrid ? "" : "grid-hidden"}`}
+          style={{
+            aspectRatio: `${width} / ${height}`,
+            width: `${zoom}%`,
+            "--map-cols": width,
+            "--map-rows": height,
+          } as React.CSSProperties}
           aria-label={`${map.name} spatial preview`}
+          onClick={() => setSelectedPlacementId(null)}
           onDragOver={(event) => {
             if (!editing) return;
             event.preventDefault();
@@ -520,7 +728,7 @@ function MapOverview({
                 event.dataTransfer.setData("application/x-autogal-placement", placement.id);
                 event.dataTransfer.effectAllowed = "move";
               }}
-              onClick={() => setSelectedPlacementId(placement.id)}
+              onClick={(event) => { event.stopPropagation(); setSelectedPlacementId(placement.id); }}
               title={`${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
               style={{
                 left: `${(placement.at.x / width) * 100}%`,
@@ -538,10 +746,18 @@ function MapOverview({
         </div>
       ) : (
         <div className="node-map-preview">
-          <strong>{map.name}</strong>
-          <span>Headless/Hub node · no spatial layout authored</span>
+          <span className="node-map-symbol">◇</span>
+          <strong>Node map</strong>
+          <p>This map currently folds into Hub, TUI and Headless navigation.</p>
+          {editing && <small>Add a spatial layout to turn it into a 2D scene.</small>}
         </div>
       )}
+        </div>
+        <footer className="map-stage-footer">
+          <span>{editing ? "Drag project resources onto the canvas · drag objects to move" : "Preview is read-only"}</span>
+          <span>{draft.layout ? `${width * height} cells` : "semantic node"}</span>
+        </footer>
+      </div>
       {editing && selectedPlacement && (
         <PlacementEditor
           placement={selectedPlacement}
@@ -554,6 +770,7 @@ function MapOverview({
             }));
             setSelectedPlacementId(null);
           }}
+          onClose={() => setSelectedPlacementId(null)}
         />
       )}
       {stacks.length > 0 && (
@@ -722,11 +939,13 @@ function PlacementEditor({
   layers,
   onChange,
   onDelete,
+  onClose,
 }: {
   placement: MapPlacementDef;
   layers: string[];
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
   onDelete: () => void;
+  onClose: () => void;
 }) {
   const setNumber = (axis: "x" | "y", value: number) => onChange((current) => ({
     ...current,
@@ -734,25 +953,34 @@ function PlacementEditor({
   }));
   return (
     <section className="placement-editor">
-      <header><div><strong>{placement.id}</strong><code>{placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div><button type="button" className="danger" onClick={onDelete}>Delete</button></header>
-      <div className="placement-fields">
-        <label>X<input type="number" min="0" value={placement.at.x} onChange={(event) => setNumber("x", Number(event.target.value))} /></label>
-        <label>Y<input type="number" min="0" value={placement.at.y} onChange={(event) => setNumber("y", Number(event.target.value))} /></label>
-        <label>Z<input type="number" value={placement.z} onChange={(event) => onChange((current) => ({ ...current, z: Number(event.target.value) }))} /></label>
-        <label>Width<input type="number" min="1" value={placement.footprint.width} onChange={(event) => onChange((current) => ({ ...current, footprint: { ...current.footprint, width: Number(event.target.value) } }))} /></label>
-        <label>Height<input type="number" min="1" value={placement.footprint.height} onChange={(event) => onChange((current) => ({ ...current, footprint: { ...current.footprint, height: Number(event.target.value) } }))} /></label>
-        <label>Layer<select value={placement.layer ?? ""} onChange={(event) => onChange((current) => ({ ...current, layer: event.target.value || undefined }))}><option value="">none</option>{layers.map((layer) => <option key={layer}>{layer}</option>)}</select></label>
-        <label>Collision<select value={placement.collision} onChange={(event) => onChange((current) => ({ ...current, collision: event.target.value as MapPlacementDef["collision"] }))}><option>none</option><option>block</option><option>trigger</option></select></label>
-        <label>Facing<select value={placement.facing ?? ""} onChange={(event) => onChange((current) => ({ ...current, facing: (event.target.value || undefined) as MapPlacementDef["facing"] }))}><option value="">none</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label>
-        <label className="checkbox-field"><input type="checkbox" checked={placement.visible} onChange={(event) => onChange((current) => ({ ...current, visible: event.target.checked }))} />Visible</label>
+      <header className="placement-editor-heading">
+        <div><span>SELECTED OBJECT</span><strong>{placement.id}</strong><code>{placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
+        <div className="placement-heading-actions"><button type="button" className="danger" onClick={onDelete}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
+      </header>
+      <div className="placement-editor-grid">
+        <section className="placement-panel">
+          <header><h3>Transform</h3><span>{placement.at.x}, {placement.at.y}</span></header>
+          <div className="placement-fields">
+            <label>X<input type="number" min="0" value={placement.at.x} onChange={(event) => setNumber("x", Number(event.target.value))} /></label>
+            <label>Y<input type="number" min="0" value={placement.at.y} onChange={(event) => setNumber("y", Number(event.target.value))} /></label>
+            <label>Z<input type="number" value={placement.z} onChange={(event) => onChange((current) => ({ ...current, z: Number(event.target.value) }))} /></label>
+            <label>Width<input type="number" min="1" value={placement.footprint.width} onChange={(event) => onChange((current) => ({ ...current, footprint: { ...current.footprint, width: Number(event.target.value) } }))} /></label>
+            <label>Height<input type="number" min="1" value={placement.footprint.height} onChange={(event) => onChange((current) => ({ ...current, footprint: { ...current.footprint, height: Number(event.target.value) } }))} /></label>
+          </div>
+        </section>
+        <section className="placement-panel">
+          <header><h3>Behavior</h3><span>{placement.events.length} events</span></header>
+          <div className="placement-fields behavior-fields">
+            <label>Layer<select value={placement.layer ?? ""} onChange={(event) => onChange((current) => ({ ...current, layer: event.target.value || undefined }))}><option value="">none</option>{layers.map((layer) => <option key={layer}>{layer}</option>)}</select></label>
+            <label>Collision<select value={placement.collision} onChange={(event) => onChange((current) => ({ ...current, collision: event.target.value as MapPlacementDef["collision"] }))}><option>none</option><option>block</option><option>trigger</option></select></label>
+            <label>Facing<select value={placement.facing ?? ""} onChange={(event) => onChange((current) => ({ ...current, facing: (event.target.value || undefined) as MapPlacementDef["facing"] }))}><option value="">none</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label>
+            <label className="checkbox-field"><input type="checkbox" checked={placement.visible} onChange={(event) => onChange((current) => ({ ...current, visible: event.target.checked }))} />Visible</label>
+          </div>
+          <ConditionJsonEditor label="Placement condition" value={placement.requires} onChange={(requires) => onChange((current) => ({ ...current, requires }))} />
+        </section>
       </div>
-      <ConditionJsonEditor
-        label="Placement condition"
-        value={placement.requires}
-        onChange={(requires) => onChange((current) => ({ ...current, requires }))}
-      />
       <div className="placement-events">
-        <header><h3>Events</h3><button type="button" onClick={() => onChange((current) => ({
+        <header><div><h3>Events</h3><span>Ordered triggers attached to this object</span></div><button type="button" onClick={() => onChange((current) => ({
           ...current,
           events: [...current.events, {
             id: uniqueLocalId("event", current.events.map((event) => event.id)),
@@ -761,59 +989,62 @@ function PlacementEditor({
             order: current.events.length,
           }],
         }))}>+ Event</button></header>
+        {placement.events.length === 0 && <div className="events-empty">No events. Add one to expose an interaction or automatic trigger.</div>}
         {placement.events.map((event, index) => (
-          <div className="placement-event-row" key={index}>
-            <input value={event.id} aria-label={`Event ${index + 1} id`} onChange={(change) => onChange((current) => ({
+          <article className="placement-event-card" key={index}>
+            <header>
+              <span className="event-order">{index + 1}</span>
+              <input value={event.id} aria-label={`Event ${index + 1} id`} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, id: change.target.value } : candidate),
-            }))} />
-            <select value={event.trigger} onChange={(change) => onChange((current) => ({
+              }))} />
+              <select value={event.trigger} aria-label={`Event ${index + 1} trigger`} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, trigger: change.target.value as MapEventTrigger } : candidate),
-            }))}>
-              {EVENT_TRIGGERS.map((trigger) => <option key={trigger}>{trigger}</option>)}
-            </select>
-            <input value={event.label ?? ""} placeholder="Player label" onChange={(change) => onChange((current) => ({
+              }))}>{EVENT_TRIGGERS.map((trigger) => <option key={trigger}>{trigger}</option>)}</select>
+              <button type="button" className="danger" aria-label={`Delete event ${event.id}`} onClick={() => onChange((current) => ({
+                ...current,
+                events: current.events.filter((_, eventIndex) => eventIndex !== index),
+              }))}>×</button>
+            </header>
+            <div className="event-fields">
+              <label>Player label<input value={event.label ?? ""} placeholder="Interact" onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, label: change.target.value || undefined } : candidate),
-            }))} />
-            <input type="number" value={event.order} title="Order" onChange={(change) => onChange((current) => ({
+              }))} /></label>
+              <label>Order<input type="number" value={event.order} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, order: Number(change.target.value) } : candidate),
-            }))} />
-            <input type="number" min="0" max="1" step="0.05" value={event.chance ?? 1} title="Chance" onChange={(change) => onChange((current) => ({
+              }))} /></label>
+              <label>Chance<input type="number" min="0" max="1" step="0.05" value={event.chance ?? 1} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, chance: Number(change.target.value) } : candidate),
-            }))} />
-            <select value={event.run?.kind ?? ""} title="Run kind" onChange={(change) => onChange((current) => ({
+              }))} /></label>
+              <label>Run<select value={event.run?.kind ?? ""} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? {
                 ...candidate,
                 run: change.target.value ? { kind: change.target.value as ProjectResourceKind, id: candidate.run?.id ?? "" } : undefined,
               } : candidate),
-            }))}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select>
-            <input value={event.run?.id ?? ""} placeholder="run id" disabled={!event.run} onChange={(change) => onChange((current) => ({
+              }))}><option value="">placement resource</option>{RUN_RESOURCE_KINDS.map((kind) => <option key={kind}>{kind}</option>)}</select></label>
+              <label>Resource ID<input value={event.run?.id ?? ""} placeholder="same as placement" disabled={!event.run} onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index && candidate.run ? { ...candidate, run: { ...candidate.run, id: change.target.value } } : candidate),
-            }))} />
-            <input value={event.lockedHint ?? ""} placeholder="locked hint" onChange={(change) => onChange((current) => ({
+              }))} /></label>
+              <label className="event-lock-hint">Locked hint<input value={event.lockedHint ?? ""} placeholder="Why this action is unavailable" onChange={(change) => onChange((current) => ({
               ...current,
               events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, lockedHint: change.target.value || undefined } : candidate),
-            }))} />
+              }))} /></label>
+            </div>
             <ConditionJsonEditor
               label="Event condition"
-              compact
               value={event.requires}
               onChange={(requires) => onChange((current) => ({
                 ...current,
                 events: current.events.map((candidate, eventIndex) => eventIndex === index ? { ...candidate, requires } : candidate),
               }))}
             />
-            <button type="button" className="danger" onClick={() => onChange((current) => ({
-              ...current,
-              events: current.events.filter((_, eventIndex) => eventIndex !== index),
-            }))}>×</button>
-          </div>
+          </article>
         ))}
       </div>
     </section>

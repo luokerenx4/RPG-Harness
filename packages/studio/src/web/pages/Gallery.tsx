@@ -102,9 +102,13 @@ export function Gallery() {
   };
 
   return (
-    <>
-      <h1 className="page-title">Assets</h1>
-      <div className="row" style={{ marginBottom: 16 }}>
+    <div className="asset-library">
+      <header className="library-header">
+        <div><span>ASSET LIBRARY</span><h1>Visual resources</h1><p>Inspect source tiers, prompts, references, and terminal renderings.</p></div>
+        <strong>{filtered.length}<small> shown</small></strong>
+      </header>
+      <div className="library-filters">
+      <div className="row">
         <FilterChip
           label={`all (${counts.all})`}
           active={filter === "all"}
@@ -142,7 +146,7 @@ export function Gallery() {
         />
       </div>
       {characterIds.length > 0 && (
-        <div className="row" style={{ marginBottom: 16 }}>
+        <div className="row character-filters">
           <FilterChip
             label="all characters"
             active={charFilter === "all"}
@@ -158,6 +162,8 @@ export function Gallery() {
           ))}
         </div>
       )}
+      </div>
+      <div className="library-scroll">
       {counts.ghost > 0 && (
         <div className="ghost-banner">
           ⚠ {counts.ghost} reference{counts.ghost === 1 ? "" : "s"} in
@@ -189,7 +195,8 @@ export function Gallery() {
           <AssetCard key={a.path} asset={a} />
         ))}
       </div>
-    </>
+      </div>
+    </div>
   );
 }
 

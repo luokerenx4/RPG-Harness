@@ -492,7 +492,7 @@ export function AssetDetail() {
     asset.renderings.sourceQuality && chafaPresent && busy === null;
 
   return (
-    <Layout backTo="/">
+    <Layout backTo="/assets">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 4 }}>
@@ -1082,12 +1082,12 @@ function Layout({
   backTo: string;
 }) {
   return (
-    <>
+    <div className="asset-detail-page">
       <Link to={backTo} className="back-link">
-        ← back to gallery
+        <span>‹</span> Asset Library
       </Link>
       {children}
-    </>
+    </div>
   );
 }
 

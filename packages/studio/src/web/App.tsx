@@ -1,65 +1,51 @@
 import React, { useEffect, useState } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Route, Routes } from "react-router-dom";
 import type { GameSummary } from "./api";
 import { fetchGame } from "./api";
 import { Gallery } from "./pages/Gallery";
 import { AssetDetail } from "./pages/AssetDetail";
 import { Project } from "./pages/Project";
-import { Link } from "react-router-dom";
 
-// Single-page shell. Loads the GameSummary once at boot so the header
-// can show title + asset counts; child pages fetch their own data.
-// No global store, no auth — the studio's whole API surface is
-// reading files from one game directory.
 export function App() {
   const [game, setGame] = useState<GameSummary | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const loc = useLocation();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchGame()
       .then(setGame)
-      .catch((e) => setErr(e.message));
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
 
   return (
-    <div className="app">
-      <header className="header">
-        <div>
-          <Link className="title" to="/">{game?.title ?? "rpgh studio"}</Link>
-          {loc.pathname !== "/" && (
-            <span className="muted"> &nbsp;·&nbsp; Project Studio</span>
-          )}
+    <div className="studio-app">
+      <header className="studio-titlebar">
+        <div className="studio-brand" aria-label="AutoGal Studio">
+          <span className="studio-brand-mark">A</span>
+          <div>
+            <strong>{game?.title ?? "AutoGal Studio"}</strong>
+            <span>{game ? shortenPath(game.gameDir) : "Opening project…"}</span>
+          </div>
         </div>
-        <nav className="studio-nav">
-          <Link to="/">Project</Link>
-          <Link to="/assets">Assets</Link>
+        <nav className="studio-mode-switcher" aria-label="Studio workspaces">
+          <NavLink to="/" end>
+            <span aria-hidden="true">▦</span> Project
+          </NavLink>
+          <NavLink to="/assets">
+            <span aria-hidden="true">◇</span> Assets
+          </NavLink>
         </nav>
-        <div className="meta">
-          {game && (
-            <>
-              <span>
-                {game.counts.assets} asset
-                {game.counts.assets === 1 ? "" : "s"}
-              </span>
-              <span>
-                {game.counts.characters} character
-                {game.counts.characters === 1 ? "" : "s"}
-              </span>
-              <span>
-                {game.counts.scripts} script
-                {game.counts.scripts === 1 ? "" : "s"}
-              </span>
-              <span className="game-dir" title={game.gameDir}>
-                {shortenPath(game.gameDir)}
-              </span>
-            </>
-          )}
+        <div className="studio-titlebar-actions">
+          <span className="studio-save-state"><i /> Files are authoritative</span>
         </div>
       </header>
-      <main className="main">
-        {err && <div className="empty">⚠ {err}</div>}
-        {!err && (
+
+      <main className="studio-main">
+        {error ? (
+          <div className="studio-fatal" role="alert">
+            <span>!</span>
+            <div><strong>Project could not be opened</strong><p>{error}</p></div>
+          </div>
+        ) : (
           <Routes>
             <Route path="/" element={<Project />} />
             <Route path="/assets" element={<Gallery />} />
@@ -67,15 +53,27 @@ export function App() {
           </Routes>
         )}
       </main>
+
+      <footer className="studio-statusbar">
+        <span><i className="status-ready" /> {error ? "Project error" : "Ready"}</span>
+        {game && (
+          <>
+            <span>{game.counts.maps} maps</span>
+            <span>{game.counts.characters + game.counts.enemies} actors</span>
+            <span>{game.counts.scripts} scripts</span>
+            <span>{game.counts.assets} assets</span>
+          </>
+        )}
+        <span className="statusbar-spacer" />
+        <span>UTF-8</span>
+        <span>Map v2</span>
+      </footer>
     </div>
   );
 }
 
-// Trim long absolute paths to ".../<last 2 segments>" so the header
-// stays readable on narrow windows. The full path is in the title
-// attribute so hover still gives the exact location.
-function shortenPath(p: string): string {
-  const parts = p.split("/").filter(Boolean);
-  if (parts.length <= 2) return p;
-  return ".../" + parts.slice(-2).join("/");
+function shortenPath(value: string): string {
+  const parts = value.split("/").filter(Boolean);
+  if (parts.length <= 3) return value;
+  return `…/${parts.slice(-3).join("/")}`;
 }
