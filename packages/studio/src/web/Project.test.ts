@@ -7,9 +7,11 @@ import {
   createConditionDraft,
   eventTriggerMeta,
   filterPlacementPaletteResources,
+  fillMapLayerTiles,
   hasMapDraftChanges,
   mapEventCommandSummary,
   mapPlacementResourceLabel,
+  moveMapLayer,
   nextAvailableMapCell,
   nudgeMapPlayerStart,
   nextProjectTreeIndex,
@@ -340,6 +342,11 @@ describe("Studio map event resource picker", () => {
     expect(resized.playerStart).toEqual({ x: 1, y: 0 });
     expect(resized.layers[0]?.tiles).toEqual([[0, 0]]);
     expect(resized.layers[1]?.tiles).toEqual([[0, 1]]);
+    expect(fillMapLayerTiles(resized, "ground", 4).layers[0]?.tiles).toEqual([[4, 4]]);
+    expect(moveMapLayer(resized, 1, -1).layers.map((layer) => [layer.id, layer.z])).toEqual([
+      ["walls", 0],
+      ["ground", 1],
+    ]);
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {

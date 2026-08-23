@@ -2489,6 +2489,10 @@ function MapStructureEditor({
             <input type="number" aria-label={`${layer.id} z`} value={layer.z} onChange={(event) => patchLayer(index, { z: Number(event.target.value) })} />
             <input placeholder="asset (optional)" value={layer.asset ?? ""} onChange={(event) => patchLayer(index, { asset: event.target.value || undefined })} />
             <label><input type="checkbox" checked={layer.visible} onChange={(event) => patchLayer(index, { visible: event.target.checked })} /> visible</label>
+            <span className="layer-order-controls">
+              <button type="button" aria-label={`Move ${layer.id} layer up`} disabled={index === 0} onClick={() => onChange(moveMapLayer(layout, index, -1))}>↑</button>
+              <button type="button" aria-label={`Move ${layer.id} layer down`} disabled={index === layout.layers.length - 1} onClick={() => onChange(moveMapLayer(layout, index, 1))}>↓</button>
+            </span>
             <button type="button" className="danger" onClick={() => onChange({ ...layout, layers: layout.layers.filter((_, candidate) => candidate !== index) })}>×</button>
           </div>
         ))}
@@ -2529,12 +2533,34 @@ function MapTilePainter({
   const paintable = layout.layers.filter((layer) => layer.kind === "tile" || layer.kind === "collision");
   const [layerId, setLayerId] = useState(paintable[0]?.id ?? "");
   const [brush, setBrush] = useState(1);
+  const [painting, setPainting] = useState<"paint" | "erase" | null>(null);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   const layer = paintable.find((candidate) => candidate.id === layerId) ?? paintable[0];
+  const applyTile = (x: number, y: number, tile: number) => {
+    const next = paintMapLayerTile(layoutRef.current, layer?.id ?? "", x, y, tile);
+    layoutRef.current = next;
+    onChange(next);
+  };
+  const fillLayer = (tile: number) => {
+    const next = fillMapLayerTiles(layoutRef.current, layer?.id ?? "", tile);
+    layoutRef.current = next;
+    onChange(next);
+  };
 
   useEffect(() => {
     if (!layer && paintable[0]) setLayerId(paintable[0].id);
     else if (layer && layer.id !== layerId) setLayerId(layer.id);
   }, [layer?.id, layerId, paintable.map((candidate) => candidate.id).join("\0")]);
+  useEffect(() => {
+    const stopPainting = () => setPainting(null);
+    window.addEventListener("pointerup", stopPainting);
+    window.addEventListener("pointercancel", stopPainting);
+    return () => {
+      window.removeEventListener("pointerup", stopPainting);
+      window.removeEventListener("pointercancel", stopPainting);
+    };
+  }, []);
 
   if (!layer) {
     return <section className="map-tile-painter empty"><strong>Tile painter</strong><span>Add a tile or collision layer to paint the grid.</span></section>;
@@ -2547,6 +2573,11 @@ function MapTilePainter({
         <label>Layer<select value={layer.id} onChange={(event) => setLayerId(event.target.value)}>{paintable.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name ?? candidate.id} · {candidate.kind}</option>)}</select></label>
         <label>Brush<input type="number" min="0" step="1" value={brush} onChange={(event) => setBrush(Math.max(0, Math.floor(Number(event.target.value) || 0)))} /></label>
       </header>
+      <div className="map-tile-painter-actions">
+        <button type="button" onClick={() => fillLayer(brush)}>Fill layer with {brush}</button>
+        <button type="button" onClick={() => fillLayer(0)}>Clear layer</button>
+        <span>Hold and drag to paint continuously</span>
+      </div>
       <div
         className={`map-tile-painter-grid kind-${layer.kind}`}
         style={{ "--map-cols": layout.width, "--map-rows": layout.height } as React.CSSProperties}
@@ -2559,7 +2590,21 @@ function MapTilePainter({
             key={`${x}:${y}`}
             title={`${x},${y} · tile ${tile}`}
             style={{ "--tile-id": tile } as React.CSSProperties}
-            onClick={() => onChange(paintMapLayerTile(layout, layer.id, x, y, tile === brush ? 0 : brush))}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              const mode = tile === brush ? "erase" : "paint";
+              setPainting(mode);
+              applyTile(x, y, mode === "paint" ? brush : 0);
+            }}
+            onPointerEnter={() => {
+              if (!painting) return;
+              applyTile(x, y, painting === "paint" ? brush : 0);
+            }}
+            onClick={(event) => {
+              if (event.detail !== 0) return;
+              applyTile(x, y, tile === brush ? 0 : brush);
+            }}
             onContextMenu={(event) => {
               event.preventDefault();
               onChange(paintMapLayerTile(layout, layer.id, x, y, 0));
@@ -3384,6 +3429,37 @@ export function paintMapLayerTile(
       return { ...layer, tiles };
     }),
   };
+}
+
+export function fillMapLayerTiles(
+  layout: MapLayoutDef,
+  layerId: string,
+  tile: number,
+): MapLayoutDef {
+  if (!Number.isInteger(tile)) return layout;
+  return {
+    ...layout,
+    layers: layout.layers.map((layer) =>
+      layer.id === layerId && (layer.kind === "tile" || layer.kind === "collision")
+        ? { ...layer, tiles: Array.from({ length: layout.height }, () => Array(layout.width).fill(tile)) }
+        : layer
+    ),
+  };
+}
+
+export function moveMapLayer(
+  layout: MapLayoutDef,
+  index: number,
+  delta: -1 | 1,
+): MapLayoutDef {
+  const target = index + delta;
+  if (index < 0 || index >= layout.layers.length || target < 0 || target >= layout.layers.length) return layout;
+  const layers = [...layout.layers];
+  const currentLayer = layers[index]!;
+  const targetLayer = layers[target]!;
+  layers[index] = { ...targetLayer, z: currentLayer.z };
+  layers[target] = { ...currentLayer, z: targetLayer.z };
+  return { ...layout, layers };
 }
 
 export function resizeMapLayout(
