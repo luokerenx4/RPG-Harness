@@ -539,18 +539,18 @@ export function WebPlayScreen({
           void sendInput({ type: "moveMap", direction });
           return;
         }
-        if (!spatial && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        if (!spatial && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
           const commands = Array.from(document.querySelectorAll<HTMLButtonElement>(
             ".hub-actions .activity-btn:not(:disabled)",
           ));
           if (commands.length > 0) {
             e.preventDefault();
             const currentIndex = commands.indexOf(document.activeElement as HTMLButtonElement);
-            const nextIndex = nextHubCommandIndex(
-              currentIndex,
-              commands.length,
-              e.key === "ArrowDown" ? 1 : -1,
-            );
+            const nextIndex = e.key === "Home"
+              ? 0
+              : e.key === "End"
+                ? commands.length - 1
+                : nextHubCommandIndex(currentIndex, commands.length, e.key === "ArrowDown" ? 1 : -1);
             commands[nextIndex]?.focus();
           }
           return;
@@ -781,12 +781,16 @@ export function SystemMenuOverlay({
     const enabledButtons = () => Array.from(actions.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
     enabledButtons()[0]?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
       const buttons = enabledButtons();
       if (buttons.length === 0) return;
       event.preventDefault();
       const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
-      const nextIndex = nextHubCommandIndex(currentIndex, buttons.length, event.key === "ArrowDown" ? 1 : -1);
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : nextHubCommandIndex(currentIndex, buttons.length, event.key === "ArrowDown" ? 1 : -1);
       buttons[nextIndex]?.focus();
     };
     actions.addEventListener("keydown", onKeyDown);
