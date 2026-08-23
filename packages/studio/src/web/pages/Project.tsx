@@ -1599,10 +1599,11 @@ function PlacementEditor({
   }));
   const placementKind = placement.resource?.kind;
   const placementChoices = resourceChoices(resources, placementKind);
+  const placementLabel = mapPlacementResourceLabel(placement, resources);
   return (
     <section className="placement-editor">
       <header className="placement-editor-heading">
-        <div><span>SELECTED OBJECT</span><strong>{placement.id}</strong><code>{placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
+        <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</code></div>
         <div className="placement-heading-actions"><button type="button" className="danger" onClick={onDelete}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       <div className="placement-editor-grid">
