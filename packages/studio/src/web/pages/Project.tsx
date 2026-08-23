@@ -2758,6 +2758,19 @@ function MapOverview({
           switches={switches}
           variables={variables}
           onChange={(update) => mutatePlacement(selectedPlacement.id, update)}
+          onDuplicate={() => {
+            if (!draft.layout) return;
+            const duplicate = duplicateMapPlacementDraft(
+              draft.layout,
+              draft.placements ?? [],
+              selectedPlacement,
+            );
+            setDraft((current) => ({
+              ...current,
+              placements: [...(current.placements ?? []), duplicate],
+            }));
+            setSelectedPlacementId(duplicate.id);
+          }}
           onDelete={() => {
             setDraft((current) => ({
               ...current,
@@ -2940,6 +2953,7 @@ function PlacementEditor({
   switches,
   variables,
   onChange,
+  onDuplicate,
   onDelete,
   onClose,
 }: {
@@ -2949,6 +2963,7 @@ function PlacementEditor({
   switches: SwitchDef[];
   variables: VariableDef[];
   onChange: (update: (placement: MapPlacementDef) => MapPlacementDef) => void;
+  onDuplicate: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -2985,7 +3000,7 @@ function PlacementEditor({
           <button type="button" role="tab" aria-selected={editorSection === "object"} className={editorSection === "object" ? "selected" : ""} onClick={() => setEditorSection("object")}><span>◇</span> Object</button>
           <button type="button" role="tab" aria-selected={editorSection === "events"} className={editorSection === "events" ? "selected" : ""} onClick={() => setEditorSection("events")}><span>◆</span> Events <small>{placement.events.length}</small></button>
         </nav>
-        <div className="placement-heading-actions"><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
+        <div className="placement-heading-actions"><button type="button" onClick={onDuplicate}>Duplicate object</button><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete object</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
       {confirmDelete && (
         <section className="placement-delete-confirmation" role="alertdialog" aria-labelledby="delete-placement-title" aria-describedby="delete-placement-description" onKeyDown={(event) => {
@@ -3845,6 +3860,49 @@ export function createMapPlacementDraft(
           order: 0,
         }]
       : [],
+  };
+}
+
+export function duplicateMapPlacementDraft(
+  layout: MapLayoutDef,
+  placements: MapPlacementDef[],
+  source: MapPlacementDef,
+): MapPlacementDef {
+  const duplicate = structuredClone(source);
+  return {
+    ...duplicate,
+    id: uniquePlacementId(`${source.id}_copy`, placements),
+    at: nearestAvailablePlacementPoint(layout, placements, source.at, source.footprint),
+  };
+}
+
+function nearestAvailablePlacementPoint(
+  layout: MapLayoutDef,
+  placements: MapPlacementDef[],
+  origin: { x: number; y: number },
+  footprint: { width: number; height: number },
+): { x: number; y: number } {
+  const maxX = Math.max(0, layout.width - footprint.width);
+  const maxY = Math.max(0, layout.height - footprint.height);
+  const candidates = Array.from({ length: (maxX + 1) * (maxY + 1) }, (_, index) => ({
+    x: index % (maxX + 1),
+    y: Math.floor(index / (maxX + 1)),
+  })).sort((left, right) => {
+    const leftDistance = Math.abs(left.x - origin.x) + Math.abs(left.y - origin.y);
+    const rightDistance = Math.abs(right.x - origin.x) + Math.abs(right.y - origin.y);
+    if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+    if (left.y !== right.y) return left.y - right.y;
+    return left.x - right.x;
+  });
+  const open = candidates.find((candidate) => placements.every((placement) => (
+    candidate.x + footprint.width <= placement.at.x ||
+    candidate.x >= placement.at.x + placement.footprint.width ||
+    candidate.y + footprint.height <= placement.at.y ||
+    candidate.y >= placement.at.y + placement.footprint.height
+  )));
+  return open ?? {
+    x: clamp(origin.x, 0, maxX),
+    y: clamp(origin.y, 0, maxY),
   };
 }
 

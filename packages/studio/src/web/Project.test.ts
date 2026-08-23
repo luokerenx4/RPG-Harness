@@ -4,6 +4,7 @@ import {
   conditionEditorMode,
   collectMapEditorTiles,
   createMapPlacementDraft,
+  duplicateMapPlacementDraft,
   createConditionDraft,
   eventTriggerMeta,
   filterPlacementPaletteResources,
@@ -192,6 +193,37 @@ describe("Studio map event resource picker", () => {
       collision: "trigger",
       events: [{ id: "page_1", trigger: "interact", label: "Event", order: 0 }],
     });
+  });
+
+  test("duplicates a complete RPG event object beside its source with a stable identity", () => {
+    const layout: MapLayoutDef = {
+      width: 5,
+      height: 4,
+      tileWidth: 32,
+      tileHeight: 32,
+      layers: [],
+      regions: [],
+    };
+    const source = {
+      id: "gate",
+      at: { x: 2, y: 1 },
+      resource: { kind: "map", id: "courtyard" },
+      z: 2,
+      footprint: { width: 1, height: 2 },
+      collision: "trigger",
+      visible: true,
+      requires: { switch: { name: "gate_open", eq: true } },
+      events: [{ id: "enter", trigger: "interact", label: "Enter", order: 0 }],
+    } as MapPlacementDef;
+    const duplicate = duplicateMapPlacementDraft(layout, [source], source);
+    expect(duplicate).toEqual({
+      ...source,
+      id: "gate_copy",
+      at: { x: 1, y: 1 },
+    });
+    expect(duplicate.events).not.toBe(source.events);
+    expect(duplicate.requires).not.toBe(source.requires);
+    expect(duplicateMapPlacementDraft(layout, [source, duplicate], source).id).toBe("gate_copy_2");
   });
 
   test("places palette objects on the first cell outside existing footprints", () => {
