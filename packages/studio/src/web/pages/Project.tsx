@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Condition,
   MapDef,
@@ -20,6 +20,7 @@ import {
   type ProjectResponse,
   type MapPreviewResponse,
 } from "../api";
+import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
 
 const KIND_ORDER: ProjectResourceKind[] = [
   "manifest",
@@ -85,7 +86,15 @@ const PLACEABLE_KINDS = new Set<ProjectResourceKind>([
   "custom",
 ]);
 
-export function Project() {
+type ProjectNavigationIntent =
+  | { kind: "select"; key: string; label: string }
+  | { kind: "close"; key: string; label: string };
+
+export function Project({
+  onDraftGuardChange,
+}: {
+  onDraftGuardChange?: (guard: StudioDraftGuard | null) => void;
+}) {
   const [project, setProject] = useState<ProjectResponse | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
@@ -95,7 +104,24 @@ export function Project() {
   );
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [draftActive, setDraftActive] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<ProjectNavigationIntent | null>(null);
+  const [navigationSaving, setNavigationSaving] = useState(false);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const draftGuardRef = useRef<StudioDraftGuard | null>(null);
+
+  const handleDraftGuardChange = useCallback((guard: StudioDraftGuard | null) => {
+    draftGuardRef.current = guard;
+    setDraftActive(Boolean(guard));
+    onDraftGuardChange?.(guard);
+    if (!guard) {
+      setPendingNavigation(null);
+      setNavigationError(null);
+    }
+  }, [onDraftGuardChange]);
+
+  useEffect(() => () => onDraftGuardChange?.(null), [onDraftGuardChange]);
 
   useEffect(() => {
     fetchProject()
@@ -148,17 +174,44 @@ export function Project() {
     ? project.maps.find((candidate) => candidate.id === selected.id)
     : undefined;
 
-  const selectResource = (key: string) => {
+  const commitSelectResource = (key: string) => {
     setSelectedKey(key);
     setOpenKeys((current) => current.includes(key) ? current : [...current.slice(-6), key]);
   };
 
-  const closeTab = (key: string) => {
+  const selectResource = (key: string) => {
+    if (draftActive && selectedKey && key !== selectedKey) {
+      const label = project.graph.resources.find((resource) => resource.key === key)?.label ?? key;
+      setNavigationError(null);
+      setPendingNavigation({ kind: "select", key, label });
+      return;
+    }
+    commitSelectResource(key);
+  };
+
+  const commitCloseTab = (key: string) => {
     setOpenKeys((current) => {
       const next = current.filter((candidate) => candidate !== key);
       if (selectedKey === key) setSelectedKey(next.at(-1) ?? null);
       return next;
     });
+  };
+
+  const closeTab = (key: string) => {
+    if (draftActive && selectedKey === key) {
+      const label = project.graph.resources.find((resource) => resource.key === key)?.label ?? key;
+      setNavigationError(null);
+      setPendingNavigation({ kind: "close", key, label });
+      return;
+    }
+    commitCloseTab(key);
+  };
+
+  const finishNavigation = (intent: ProjectNavigationIntent) => {
+    setPendingNavigation(null);
+    setNavigationError(null);
+    if (intent.kind === "select") commitSelectResource(intent.key);
+    else commitCloseTab(intent.key);
   };
 
   return (
@@ -274,12 +327,38 @@ export function Project() {
               missing={project.graph.missing.filter((entry) => entry.referencedBy.includes(selected.key))}
               unreferenced={project.graph.unreferenced.includes(selected.key)}
               onProjectSaved={setProject}
+              onDraftGuardChange={handleDraftGuardChange}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
           )}
         </div>
       </section>
+      {pendingNavigation && draftGuardRef.current && (
+        <DraftNavigationDialog
+          guard={draftGuardRef.current}
+          destination={pendingNavigation.kind === "select" ? pendingNavigation.label : "another open resource"}
+          saving={navigationSaving}
+          error={navigationError}
+          onStay={() => { setPendingNavigation(null); setNavigationError(null); }}
+          onDiscard={() => {
+            const guard = draftGuardRef.current;
+            if (!guard) return;
+            guard.discard();
+            finishNavigation(pendingNavigation);
+          }}
+          onSave={() => {
+            const guard = draftGuardRef.current;
+            if (!guard) return;
+            setNavigationSaving(true);
+            setNavigationError(null);
+            void guard.save().then((saved) => {
+              if (saved) finishNavigation(pendingNavigation);
+              else setNavigationError("The project rejected this draft. Review the validation message in the editor, then try again.");
+            }).finally(() => setNavigationSaving(false));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -294,6 +373,7 @@ function ResourceDetail({
   missing,
   unreferenced,
   onProjectSaved,
+  onDraftGuardChange,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -304,6 +384,7 @@ function ResourceDetail({
   missing: Array<{ key: string; referencedBy: string[] }>;
   unreferenced: boolean;
   onProjectSaved: (project: ProjectResponse) => void;
+  onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
@@ -322,7 +403,7 @@ function ResourceDetail({
           ><span aria-hidden="true">◫</span>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
         </header>
         {map ? (
-          <MapOverview map={map} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} />
+          <MapOverview map={map} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -844,12 +925,14 @@ function MapOverview({
   switches,
   variables,
   onProjectSaved,
+  onDraftGuardChange,
 }: {
   map: MapDef;
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
   variables: VariableDef[];
   onProjectSaved: (project: ProjectResponse) => void;
+  onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
 }) {
   const [draft, setDraft] = useState<MapDef>(() => cloneMap(map));
   const [editing, setEditing] = useState(false);
@@ -899,8 +982,10 @@ function MapOverview({
       if (saved) setDraft(cloneMap(saved));
       setEditing(false);
       setConfirmDiscard(false);
+      return true;
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -913,6 +998,16 @@ function MapOverview({
     setSaveError(null);
     setConfirmDiscard(false);
   };
+
+  useEffect(() => {
+    onDraftGuardChange(editing && dirty ? {
+      label: `Map · ${map.name}`,
+      save,
+      discard,
+    } : null);
+  }, [editing, dirty, saving, draft, map, onDraftGuardChange]);
+
+  useEffect(() => () => onDraftGuardChange(null), [onDraftGuardChange]);
 
   useEffect(() => {
     if (!editing) return;

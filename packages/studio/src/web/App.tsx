@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import type { GameSummary } from "./api";
 import { fetchGame } from "./api";
+import { DraftNavigationDialog, type StudioDraftGuard } from "./DraftNavigationDialog";
 import { Gallery } from "./pages/Gallery";
 import { AssetDetail } from "./pages/AssetDetail";
 import { Project } from "./pages/Project";
@@ -9,6 +10,35 @@ import { Project } from "./pages/Project";
 export function App() {
   const [game, setGame] = useState<GameSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draftActive, setDraftActive] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<{ path: string; label: string } | null>(null);
+  const [routingSave, setRoutingSave] = useState(false);
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const draftGuardRef = useRef<StudioDraftGuard | null>(null);
+  const navigate = useNavigate();
+
+  const handleDraftGuardChange = useCallback((guard: StudioDraftGuard | null) => {
+    draftGuardRef.current = guard;
+    setDraftActive(Boolean(guard));
+    if (!guard) {
+      setPendingRoute(null);
+      setRoutingError(null);
+    }
+  }, []);
+
+  const requestRoute = (event: React.MouseEvent<HTMLAnchorElement>, path: string, label: string) => {
+    if (event.currentTarget.getAttribute("aria-current") === "page") return;
+    if (!draftGuardRef.current) return;
+    event.preventDefault();
+    setRoutingError(null);
+    setPendingRoute({ path, label });
+  };
+
+  const finishRoute = (path: string) => {
+    setPendingRoute(null);
+    setRoutingError(null);
+    navigate(path);
+  };
 
   useEffect(() => {
     fetchGame()
@@ -27,15 +57,15 @@ export function App() {
           </div>
         </div>
         <nav className="studio-mode-switcher" aria-label="Studio workspaces">
-          <NavLink to="/" end>
+          <NavLink to="/" end onClick={(event) => requestRoute(event, "/", "Project workspace")}>
             <span aria-hidden="true">▦</span> Project
           </NavLink>
-          <NavLink to="/assets">
+          <NavLink to="/assets" onClick={(event) => requestRoute(event, "/assets", "Asset Library")}>
             <span aria-hidden="true">◇</span> Assets
           </NavLink>
         </nav>
         <div className="studio-titlebar-actions">
-          <span className="studio-save-state"><i /> Files are authoritative</span>
+          <span className={`studio-save-state${draftActive ? " has-draft" : ""}`}><i /> {draftActive ? "Unsaved project draft" : "Files are authoritative"}</span>
           {game && (
             <a
               className="studio-playtest"
@@ -60,7 +90,7 @@ export function App() {
           </div>
         ) : (
           <Routes>
-            <Route path="/" element={<Project />} />
+            <Route path="/" element={<Project onDraftGuardChange={handleDraftGuardChange} />} />
             <Route path="/assets" element={<Gallery />} />
             <Route path="/asset/*" element={<AssetDetail />} />
           </Routes>
@@ -68,7 +98,7 @@ export function App() {
       </main>
 
       <footer className="studio-statusbar">
-        <span><i className="status-ready" /> {error ? "Project error" : "Ready"}</span>
+        <span><i className={draftActive ? "status-draft" : "status-ready"} /> {error ? "Project error" : draftActive ? "Draft not saved" : "Ready"}</span>
         {game && (
           <>
             <span>{game.counts.maps} maps</span>
@@ -81,6 +111,31 @@ export function App() {
         <span>UTF-8</span>
         <span>Map v2</span>
       </footer>
+      {pendingRoute && draftGuardRef.current && (
+        <DraftNavigationDialog
+          guard={draftGuardRef.current}
+          destination={pendingRoute.label}
+          saving={routingSave}
+          error={routingError}
+          onStay={() => { setPendingRoute(null); setRoutingError(null); }}
+          onDiscard={() => {
+            const guard = draftGuardRef.current;
+            if (!guard) return;
+            guard.discard();
+            finishRoute(pendingRoute.path);
+          }}
+          onSave={() => {
+            const guard = draftGuardRef.current;
+            if (!guard) return;
+            setRoutingSave(true);
+            setRoutingError(null);
+            void guard.save().then((saved) => {
+              if (saved) finishRoute(pendingRoute.path);
+              else setRoutingError("The project rejected this draft. Review the validation message in the editor, then try again.");
+            }).finally(() => setRoutingSave(false));
+          }}
+        />
+      )}
     </div>
   );
 }
