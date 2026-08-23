@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   Condition,
   MapDef,
@@ -1914,6 +1914,48 @@ function ResourceReference({
 
 type MapEditorTool = "objects" | "terrain" | "collision" | "regions";
 
+export interface MapDraftHistory {
+  past: MapDef[];
+  present: MapDef;
+  future: MapDef[];
+  group?: string;
+}
+
+export type MapDraftHistoryAction =
+  | { type: "change"; update: React.SetStateAction<MapDef>; group?: string }
+  | { type: "reset"; map: MapDef }
+  | { type: "undo" }
+  | { type: "redo" };
+
+export function createMapDraftHistory(map: MapDef): MapDraftHistory {
+  return { past: [], present: cloneMap(map), future: [] };
+}
+
+export function mapDraftHistoryReducer(state: MapDraftHistory, action: MapDraftHistoryAction): MapDraftHistory {
+  if (action.type === "reset") return createMapDraftHistory(action.map);
+  if (action.type === "undo") {
+    const previous = state.past.at(-1);
+    if (!previous) return state;
+    return { past: state.past.slice(0, -1), present: previous, future: [state.present, ...state.future] };
+  }
+  if (action.type === "redo") {
+    const next = state.future[0];
+    if (!next) return state;
+    return { past: [...state.past, state.present].slice(-80), present: next, future: state.future.slice(1) };
+  }
+  const next = typeof action.update === "function" ? action.update(state.present) : action.update;
+  if (!hasMapDraftChanges(state.present, next)) return state;
+  if (action.group && action.group === state.group) {
+    return { ...state, present: next, future: [] };
+  }
+  return {
+    past: [...state.past, state.present].slice(-80),
+    present: next,
+    future: [],
+    ...(action.group ? { group: action.group } : {}),
+  };
+}
+
 function MapOverview({
   map,
   assets,
@@ -1931,7 +1973,11 @@ function MapOverview({
   onProjectSaved: (project: ProjectResponse) => void;
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
 }) {
-  const [draft, setDraft] = useState<MapDef>(() => cloneMap(map));
+  const [draftHistory, dispatchDraft] = useReducer(mapDraftHistoryReducer, map, createMapDraftHistory);
+  const draft = draftHistory.present;
+  const setDraft = useCallback((update: React.SetStateAction<MapDef>, group?: string) => {
+    dispatchDraft({ type: "change", update, ...(group ? { group } : {}) });
+  }, []);
   const [editing, setEditing] = useState(false);
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1948,13 +1994,15 @@ function MapOverview({
   const [canvasPainting, setCanvasPainting] = useState<"paint" | "erase" | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState("");
   const mapIdRef = useRef(map.id);
+  const paintGestureRef = useRef(0);
+  const activePaintGroupRef = useRef<string | undefined>(undefined);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (mapIdRef.current !== map.id) setSaveReceipt(null);
     mapIdRef.current = map.id;
-    setDraft(cloneMap(map));
+    dispatchDraft({ type: "reset", map });
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
@@ -2043,12 +2091,12 @@ function MapOverview({
     }
   };
 
-  const paintCanvasCell = (x: number, y: number, tile: number) => {
+  const paintCanvasCell = (x: number, y: number, tile: number, group?: string) => {
     if (!paintLayer) return;
     setDraft((current) => ({
       ...current,
       layout: current.layout ? paintMapLayerTile(current.layout, paintLayer.id, x, y, tile) : undefined,
-    }));
+    }), group);
   };
 
   const fillPaintLayer = (tile: number) => {
@@ -2099,7 +2147,7 @@ function MapOverview({
       onProjectSaved(project);
       const saved = project.maps.find((candidate) => candidate.id === map.id);
       const validatedMap = saved ?? draft;
-      if (saved) setDraft(cloneMap(saved));
+      if (saved) dispatchDraft({ type: "reset", map: saved });
       setSaveReceipt({
         summary: summarizeMapValidation(validatedMap),
         savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -2116,7 +2164,7 @@ function MapOverview({
   };
 
   const discard = () => {
-    setDraft(cloneMap(map));
+    dispatchDraft({ type: "reset", map });
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
@@ -2145,13 +2193,25 @@ function MapOverview({
   useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (dirty && !saving) void save();
         return;
       }
-      const target = event.target as HTMLElement | null;
-      const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
+      if (!acceptsText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        dispatchDraft({ type: event.shiftKey ? "redo" : "undo" });
+        setSelectedPlacementId(null);
+        return;
+      }
+      if (!acceptsText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        dispatchDraft({ type: "redo" });
+        setSelectedPlacementId(null);
+        return;
+      }
       if (!acceptsText && !event.metaKey && !event.ctrlKey && !event.altKey) {
         if (event.key === "1") {
           event.preventDefault();
@@ -2193,7 +2253,10 @@ function MapOverview({
   }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard]);
 
   useEffect(() => {
-    const stopPainting = () => setCanvasPainting(null);
+    const stopPainting = () => {
+      setCanvasPainting(null);
+      activePaintGroupRef.current = undefined;
+    };
     window.addEventListener("pointerup", stopPainting);
     window.addEventListener("pointercancel", stopPainting);
     return () => {
@@ -2221,6 +2284,11 @@ function MapOverview({
           <p>{map.description || "No map description authored."}</p>
         </div>
         <div className="map-view-tools" aria-label="Map view tools">
+          {editing && <>
+            <button type="button" disabled={draftHistory.past.length === 0} onClick={() => { dispatchDraft({ type: "undo" }); setSelectedPlacementId(null); }} aria-label="Undo map change" title="Undo · ⌘Z">↶</button>
+            <button type="button" disabled={draftHistory.future.length === 0} onClick={() => { dispatchDraft({ type: "redo" }); setSelectedPlacementId(null); }} aria-label="Redo map change" title="Redo · ⇧⌘Z">↷</button>
+            <span className="toolbar-separator" />
+          </>}
           <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Toggle grid">#</button>
           <span className="toolbar-separator" />
           <button type="button" onClick={() => setZoom((value) => Math.max(60, value - 20))} aria-label="Zoom out">−</button>
@@ -2524,12 +2592,14 @@ function MapOverview({
                       return;
                     }
                     const mode = tile === paintBrush ? "erase" : "paint";
+                    const group = `paint-${++paintGestureRef.current}`;
+                    activePaintGroupRef.current = group;
                     setCanvasPainting(mode);
-                    paintCanvasCell(x, y, mode === "paint" ? paintBrush : 0);
+                    paintCanvasCell(x, y, mode === "paint" ? paintBrush : 0, group);
                   }}
                   onPointerEnter={() => {
                     if (!canvasPainting) return;
-                    paintCanvasCell(x, y, canvasPainting === "paint" ? paintBrush : 0);
+                    paintCanvasCell(x, y, canvasPainting === "paint" ? paintBrush : 0, activePaintGroupRef.current);
                   }}
                   onClick={(event) => {
                     if (event.detail !== 0) return;

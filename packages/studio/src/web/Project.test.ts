@@ -10,8 +10,10 @@ import {
   fillMapLayerTiles,
   hasMapDraftChanges,
   mapEventCommandSummary,
+  mapDraftHistoryReducer,
   mapPlacementResourceLabel,
   moveMapLayer,
+  createMapDraftHistory,
   nextAvailableMapCell,
   nudgeMapPlayerStart,
   nextProjectTreeIndex,
@@ -357,6 +359,41 @@ describe("Studio map event resource picker", () => {
       backgroundPosition: `${1 / 3 * 100}% ${1 / 3 * 100}%`,
       backgroundSize: "400% 400%",
     });
+  });
+
+  test("undoes a drag-paint gesture as one map history step and supports redo", () => {
+    const base = {
+      id: "shrine",
+      name: "Shrine",
+      description: "",
+      placements: [],
+      layout: {
+        width: 2,
+        height: 1,
+        tileWidth: 32,
+        tileHeight: 32,
+        layers: [{ id: "ground", kind: "tile", z: 0, visible: true, tiles: [[0, 0]] }],
+        regions: [],
+      },
+    } as MapDef;
+    let history = createMapDraftHistory(base);
+    history = mapDraftHistoryReducer(history, {
+      type: "change",
+      group: "paint-1",
+      update: (current) => ({ ...current, layout: paintMapLayerTile(current.layout!, "ground", 0, 0, 4) }),
+    });
+    history = mapDraftHistoryReducer(history, {
+      type: "change",
+      group: "paint-1",
+      update: (current) => ({ ...current, layout: paintMapLayerTile(current.layout!, "ground", 1, 0, 4) }),
+    });
+    expect(history.past).toHaveLength(1);
+    expect(history.present.layout?.layers[0]?.tiles).toEqual([[4, 4]]);
+
+    history = mapDraftHistoryReducer(history, { type: "undo" });
+    expect(history.present.layout?.layers[0]?.tiles).toEqual([[0, 0]]);
+    history = mapDraftHistoryReducer(history, { type: "redo" });
+    expect(history.present.layout?.layers[0]?.tiles).toEqual([[4, 4]]);
   });
 
   test("creates resource-backed RPG Maker style condition drafts", () => {
