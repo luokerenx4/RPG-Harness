@@ -8,6 +8,7 @@ import {
   createInitialState,
   type AssetSpec,
   type ProjectResourceKind,
+  type ProjectResourceNode,
   type TuiRenderPrefs,
 } from "@rpg-harness/engine";
 import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
@@ -21,6 +22,7 @@ import {
   ResourceCreateError,
   type CreatableResourceKind,
 } from "./resource-create";
+import { ResourceDeleteError, trashProjectResource } from "./resource-delete";
 
 interface Ctx {
   gameDir: string;
@@ -83,7 +85,46 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
     if (m && m[1]) return patchSpec(ctx, m[1], req);
   }
 
+  if (method === "DELETE") {
+    if (pathname === "/api/resources") return deleteProjectResource(ctx, url);
+  }
+
   return new Response("not found", { status: 404 });
+}
+
+async function deleteProjectResource(ctx: Ctx, url: URL): Promise<Response> {
+  const identity = readResourceIdentity(url);
+  if (identity instanceof Response) return identity;
+  try {
+    const game = await loadGame(ctx.gameDir);
+    const resourceKey = `${identity.kind}:${identity.id}`;
+    const artifactBlockers = (await scanProjectArtifacts(ctx.gameDir))
+      .filter((artifact) => artifact.refs.includes(resourceKey))
+      .map((artifact) => artifact.key);
+    const trashed = await trashProjectResource(
+      ctx.gameDir,
+      game,
+      identity.kind as CreatableResourceKind,
+      identity.id,
+      () => loadGame(ctx.gameDir),
+      undefined,
+      artifactBlockers,
+    );
+    return json({
+      resource: trashed.resource,
+      sourcePath: trashed.sourcePath,
+      trashPath: trashed.trashPath,
+      project: await projectGame(ctx, trashed.game),
+    });
+  } catch (error) {
+    return json(
+      {
+        error: (error as Error).message,
+        blockers: error instanceof ResourceDeleteError ? error.blockers : [],
+      },
+      error instanceof ResourceDeleteError ? error.status : 400,
+    );
+  }
 }
 
 async function postProjectResource(ctx: Ctx, req: Request): Promise<Response> {
@@ -263,6 +304,7 @@ async function projectGame(ctx: Ctx, game: Awaited<ReturnType<typeof loadGame>>)
   }
   graph.missing.sort((left, right) => left.key.localeCompare(right.key));
   graph.unreferenced.push(...artifacts.map((artifact) => artifact.key));
+  graph.unreferenced = graph.unreferenced.filter((key) => graph.backlinks[key] === undefined);
   return {
     graph,
     maps: game.maps ?? [],
@@ -288,7 +330,7 @@ export function projectAssetPreview(asset: AssetSpec) {
   };
 }
 
-export async function scanProjectArtifacts(gameDir: string) {
+export async function scanProjectArtifacts(gameDir: string): Promise<ProjectResourceNode[]> {
   const tests = await readdir(path.join(gameDir, "tests"), { withFileTypes: true })
     .catch(() => []);
   const testNodes = tests

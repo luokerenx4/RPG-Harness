@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { Game } from "@rpg-harness/engine";
@@ -55,5 +55,21 @@ describe("resource source round-trip", () => {
       async () => { throw new Error("game.yaml: invalid manifest"); },
     )).rejects.toThrow("invalid manifest");
     expect(await readFile(path.join(directory, "game.yaml"), "utf-8")).toBe("title: Original\n");
+  });
+
+  test("normalizes loader-provided absolute script sources to project-relative paths", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "autogal-source-"));
+    created.push(directory);
+    await mkdir(path.join(directory, "scripts"));
+    const absolute = path.join(directory, "scripts/intro.md");
+    await writeFile(absolute, "---\nid: intro\ntitle: Intro\n---\n\n[end]\n");
+    const game: Game = {
+      title: "Original",
+      characters: [],
+      scripts: [{ id: "intro", title: "Intro", source: absolute, beats: [] }],
+    };
+
+    expect((await readResourceSource(directory, game, "script", "intro")).path)
+      .toBe("scripts/intro.md");
   });
 });

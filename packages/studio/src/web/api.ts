@@ -173,6 +173,27 @@ export async function createProjectResource(
   return response.json();
 }
 
+export interface TrashProjectResourceResponse {
+  resource: ProjectResourceNode;
+  sourcePath: string;
+  trashPath: string;
+  project: ProjectResponse;
+}
+
+export async function trashProjectResource(
+  kind: ProjectResourceKind,
+  id: string,
+): Promise<TrashProjectResourceResponse> {
+  const response = await fetch(`/api/resources?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(typeof body.error === "string" ? body.error : `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function saveMapSpatial(
   map: Pick<MapDef, "id" | "layout" | "placements">,
 ): Promise<ProjectResponse> {

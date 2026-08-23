@@ -16,6 +16,7 @@ import {
   fetchMapPreview,
   fetchResourceSource,
   createProjectResource,
+  trashProjectResource,
   saveMapSpatial,
   saveResourceSource,
   sourceImageUrl,
@@ -96,6 +97,17 @@ const PLACEABLE_KINDS = new Set<ProjectResourceKind>([
   "custom",
 ]);
 
+const REMOVABLE_KINDS = new Set<ProjectResourceKind>([
+  "map",
+  "character",
+  "item",
+  "weapon",
+  "skill",
+  "enemy",
+  "action",
+  "script",
+]);
+
 type ProjectNavigationIntent =
   | { kind: "select"; key: string; label: string }
   | { kind: "close"; key: string; label: string };
@@ -119,6 +131,7 @@ export function Project({
   const [navigationSaving, setNavigationSaving] = useState(false);
   const [navigationError, setNavigationError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [trashReceipt, setTrashReceipt] = useState<{ label: string; path: string } | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resourceTreeRef = useRef<HTMLDivElement | null>(null);
   const draftGuardRef = useRef<StudioDraftGuard | null>(null);
@@ -277,6 +290,28 @@ export function Project({
     else commitCloseTab(intent.key);
   };
 
+  const handleResourceTrashed = (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => {
+    const previousSectionResources = project.graph.resources.filter((resource) =>
+      SECTION_KINDS[section].includes(resource.kind)
+    );
+    const removedIndex = previousSectionResources.findIndex((resource) => resource.key === trashed.resource.key);
+    const preferredKeys = [
+      previousSectionResources[removedIndex + 1]?.key,
+      previousSectionResources[removedIndex - 1]?.key,
+    ].filter((key): key is string => Boolean(key));
+    const next = preferredKeys
+      .map((key) => trashed.project.graph.resources.find((resource) => resource.key === key))
+      .find(Boolean) ?? trashed.project.graph.resources.find((resource) => SECTION_KINDS[section].includes(resource.kind))
+      ?? trashed.project.graph.resources[0];
+    setProject(trashed.project);
+    setSelectedKey(next?.key ?? null);
+    setOpenKeys((current) => {
+      const remaining = current.filter((key) => key !== trashed.resource.key);
+      return next && !remaining.includes(next.key) ? [...remaining.slice(-6), next.key] : remaining;
+    });
+    setTrashReceipt({ label: trashed.resource.label, path: trashed.trashPath });
+  };
+
   return (
     <div className="project-workbench">
       <nav className="project-activitybar" aria-label="Project sections">
@@ -414,6 +449,7 @@ export function Project({
               onDraftGuardChange={handleDraftGuardChange}
               draftActive={draftActive}
               onSelectResource={selectResource}
+              onResourceTrashed={handleResourceTrashed}
             />
           ) : (
             <div className="editor-empty"><span>▦</span><strong>No resource open</strong><p>Select something in the Project tree.</p></div>
@@ -455,6 +491,13 @@ export function Project({
             commitSelectResource(created.resource.key);
           }}
         />
+      )}
+      {trashReceipt && (
+        <div className="resource-trash-receipt" role="status">
+          <span aria-hidden="true">↶</span>
+          <div><strong>{trashReceipt.label} moved to Studio Trash</strong><code>{trashReceipt.path}</code></div>
+          <button type="button" aria-label="Dismiss trash receipt" onClick={() => setTrashReceipt(null)}>×</button>
+        </div>
       )}
     </div>
   );
@@ -547,6 +590,7 @@ function ResourceDetail({
   onDraftGuardChange,
   draftActive,
   onSelectResource,
+  onResourceTrashed,
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
@@ -561,10 +605,13 @@ function ResourceDetail({
   onDraftGuardChange: (guard: StudioDraftGuard | null) => void;
   draftActive: boolean;
   onSelectResource: (key: string) => void;
+  onResourceTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
 }) {
   const meta = KIND_META[node.kind] ?? { icon: "·", label: node.kind };
   const [sourceEditKey, setSourceEditKey] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(() => map === undefined);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLElement>(null);
   const inspectorRef = useRef<HTMLElement>(null);
@@ -576,6 +623,8 @@ function ResourceDetail({
     editorRef.current?.scrollTo({ top: 0, left: 0 });
     inspectorRef.current?.scrollTo({ top: 0, left: 0 });
   }, [node.key, map === undefined]);
+
+  useEffect(() => setDeleteOpen(false), [node.key]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -615,6 +664,16 @@ function ResourceDetail({
                 onClick={() => adjacent.next && onSelectResource(adjacent.next.key)}
               >›</button>
             </nav>
+            {REMOVABLE_KINDS.has(node.kind) && node.source && node.editable !== false && (
+              <button
+                ref={deleteButtonRef}
+                type="button"
+                className="resource-delete-trigger"
+                disabled={draftActive}
+                title={draftActive ? "Save or discard the current draft first" : "Move resource to Studio Trash"}
+                onClick={() => setDeleteOpen(true)}
+              ><span aria-hidden="true">⌫</span>Delete</button>
+            )}
             <button
               type="button"
               className="editor-inspector-toggle"
@@ -678,6 +737,97 @@ function ResourceDetail({
         <ReferenceList title="References" values={node.refs} resources={resources} onSelectResource={onSelectResource} />
         <ReferenceList title="Used by" values={backlinks} resources={resources} onSelectResource={onSelectResource} />
       </aside>
+      {deleteOpen && (
+        <DeleteResourceDialog
+          node={node}
+          blockers={backlinks}
+          onClose={() => {
+            setDeleteOpen(false);
+            requestAnimationFrame(() => deleteButtonRef.current?.focus());
+          }}
+          onTrashed={(trashed) => {
+            setDeleteOpen(false);
+            onResourceTrashed(trashed);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteResourceDialog({
+  node,
+  blockers,
+  onClose,
+  onTrashed,
+}: {
+  node: ProjectResourceNode;
+  blockers: string[];
+  onClose: () => void;
+  onTrashed: (trashed: Awaited<ReturnType<typeof trashProjectResource>>) => void;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmationInputRef = useRef<HTMLInputElement>(null);
+  const blocked = blockers.length > 0;
+  const confirmed = confirmation === node.id;
+
+  useEffect(() => {
+    (blocked ? closeButtonRef.current : confirmationInputRef.current)?.focus();
+  }, [blocked]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (blocked || !confirmed || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      onTrashed(await trashProjectResource(node.kind, node.id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setDeleting(false);
+    }
+  };
+  const trapDialogFocus = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="delete-resource-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-resource-title" onClick={deleting ? undefined : onClose} onKeyDown={(event) => {
+      if (event.key === "Escape" && !deleting) onClose();
+    }}>
+      <form ref={dialogRef} className="delete-resource-dialog" onSubmit={(event) => void submit(event)} onClick={(event) => event.stopPropagation()} onKeyDown={trapDialogFocus}>
+        <header>
+          <div><span>RESOURCE LIFECYCLE</span><strong id="delete-resource-title">Move resource to Studio Trash?</strong><small>The source file stays recoverable inside this project. Studio reloads the whole game and restores it automatically if validation fails.</small></div>
+          <button ref={closeButtonRef} type="button" aria-label="Close delete resource dialog" disabled={deleting} onClick={onClose}>×</button>
+        </header>
+        <div className="delete-resource-body">
+          <div className="delete-resource-summary"><i aria-hidden="true">⌫</i><div><span>{node.kind.toUpperCase()}</span><strong>{node.label}</strong><code>{node.key}</code><small>{node.source}</small></div></div>
+          {blocked ? (
+            <div className="delete-resource-blockers" role="alert"><strong>Referenced resources cannot be moved</strong><span>Remove these {blockers.length} inbound reference{blockers.length === 1 ? "" : "s"} first:</span><ul>{blockers.map((key) => <li key={key}><code>{key}</code></li>)}</ul></div>
+          ) : (
+            <label><span>Type <code>{node.id}</code> to confirm</span><input ref={confirmationInputRef} autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+          )}
+          {error && <div className="delete-resource-error" role="alert"><strong>Move failed</strong><span>{error}</span><small>The authoritative source file was not removed.</small></div>}
+        </div>
+        <footer><span>RECOVERABLE MOVE · REFERENCE SAFE · VALIDATED RELOAD</span><div><button type="button" disabled={deleting} onClick={onClose}>Cancel</button><button type="submit" className="danger" disabled={blocked || !confirmed || deleting}>{deleting ? "Validating…" : blocked ? "Resolve references first" : "Move to Studio Trash"}</button></div></footer>
+      </form>
     </div>
   );
 }

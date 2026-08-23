@@ -87,8 +87,9 @@ async function resolveResourceSourcePath(
   }
   for (const candidate of candidates) {
     try {
-      await readFile(safeAbsolute(gameDir, candidate), "utf-8");
-      return candidate;
+      const absolute = safeAbsolute(gameDir, candidate);
+      await readFile(absolute, "utf-8");
+      return path.relative(path.resolve(gameDir), absolute).split(path.sep).join("/");
     } catch {
       continue;
     }
