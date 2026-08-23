@@ -76,10 +76,15 @@ export function mapPreviewStatusLabel(state: MapPreviewViewState): string {
   return `${target} PREVIEW · READY`;
 }
 
-/** Stable spatial identity used to avoid rebuilding the same draft on rerender. */
+/** Stable authoring identity used to avoid rebuilding the same draft on rerender. */
 export function mapPreviewDraftIdentity(map: MapDef): string {
   return JSON.stringify({
     id: map.id,
+    name: map.name,
+    description: map.description,
+    difficulty: map.difficulty,
+    bg: map.bg,
+    isExtract: Boolean(map.isExtract),
     layout: map.layout ?? null,
     placements: map.placements ?? [],
   });

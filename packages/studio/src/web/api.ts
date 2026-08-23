@@ -321,16 +321,57 @@ export async function renameProjectResource(
   return response.json();
 }
 
-export async function saveMapSpatial(
-  map: Pick<MapDef, "id" | "layout" | "placements">,
+export interface MapPropertiesPatch {
+  name?: string;
+  description?: string | null;
+  difficulty?: number;
+  bg?: string | null;
+  isExtract?: boolean;
+}
+
+export interface MapAuthoringPatch {
+  layout?: MapDef["layout"] | null;
+  placements?: NonNullable<MapDef["placements"]>;
+  properties?: MapPropertiesPatch;
+}
+
+/**
+ * Build the exact source patch for a map draft. Spatial authoring is sent as
+ * a complete value; scalar properties are differences only so an implicit
+ * parser default (notably difficulty=1) is never materialized by an unrelated
+ * save.
+ */
+export function buildMapAuthoringPatch(saved: MapDef, draft: MapDef): MapAuthoringPatch {
+  const properties: MapPropertiesPatch = {};
+  if (saved.name !== draft.name) properties.name = draft.name;
+  if (saved.description !== draft.description) {
+    properties.description = draft.description.length > 0 ? draft.description : null;
+  }
+  if (saved.difficulty !== draft.difficulty && draft.difficulty !== undefined) {
+    properties.difficulty = draft.difficulty;
+  }
+  if (saved.bg !== draft.bg) properties.bg = draft.bg ?? null;
+  if (Boolean(saved.isExtract) !== Boolean(draft.isExtract)) properties.isExtract = Boolean(draft.isExtract);
+
+  return {
+    ...(JSON.stringify(saved.layout ?? null) !== JSON.stringify(draft.layout ?? null)
+      ? { layout: draft.layout ?? null }
+      : {}),
+    ...(JSON.stringify(saved.placements ?? []) !== JSON.stringify(draft.placements ?? [])
+      ? { placements: draft.placements ?? [] }
+      : {}),
+    ...(Object.keys(properties).length > 0 ? { properties } : {}),
+  };
+}
+
+export async function saveMapDraft(
+  saved: MapDef,
+  draft: MapDef,
 ): Promise<ProjectResponse> {
-  const response = await fetch(`/api/maps/${encodeURIComponent(map.id)}/spatial`, {
+  const response = await fetch(`/api/maps/${encodeURIComponent(saved.id)}/authoring`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      layout: map.layout ?? null,
-      placements: map.placements ?? [],
-    }),
+    body: JSON.stringify(buildMapAuthoringPatch(saved, draft)),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
@@ -368,16 +409,14 @@ export async function fetchSavedMapPreview(
 }
 
 export async function fetchMapPreview(
-  map: MapDef,
+  saved: MapDef,
+  draft: MapDef,
   signal?: AbortSignal,
 ): Promise<MapPreviewResponse> {
-  return readMapPreviewResponse(fetch(`/api/maps/${encodeURIComponent(map.id)}/preview`, {
+  return readMapPreviewResponse(fetch(`/api/maps/${encodeURIComponent(saved.id)}/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      layout: map.layout ?? null,
-      placements: map.placements ?? [],
-    }),
+    body: JSON.stringify(buildMapAuthoringPatch(saved, draft)),
     signal,
   }));
 }

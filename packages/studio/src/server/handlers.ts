@@ -12,13 +12,14 @@ import {
   type TuiRenderPrefs,
 } from "@rpg-harness/engine";
 import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
+import { parseMap } from "@rpg-harness/parser";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
 import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
 import {
-  previewMapSpatialPatch,
-  updateMapSpatial,
-  type MapSpatialPatch,
+  previewMapAuthoringPatch,
+  updateMapAuthoring,
+  type MapAuthoringPatch,
 } from "./map-write";
 import { readResourceSource, updateResourceSource } from "./resource-source";
 import {
@@ -113,8 +114,8 @@ export async function handle(req: Request, ctx: Ctx): Promise<Response> {
   if (method === "PATCH") {
     if (pathname === "/api/resource-source") return patchResourceSource(ctx, url, req);
     if (pathname === "/api/resources/rename") return patchResourceRename(ctx, req);
-    const mapMatch = pathname.match(/^\/api\/maps\/([^/]+)\/spatial$/);
-    if (mapMatch?.[1]) return patchMapSpatial(ctx, decodeURIComponent(mapMatch[1]), req);
+    const mapMatch = pathname.match(/^\/api\/maps\/([^/]+)\/(?:authoring|spatial)$/);
+    if (mapMatch?.[1]) return patchMapAuthoring(ctx, decodeURIComponent(mapMatch[1]), req);
     // /api/assets/<asset-path>/spec — edit mutable spec fields
     const m = pathname.match(/^\/api\/assets\/(.+)\/spec$/);
     if (m && m[1]) return patchSpec(ctx, m[1], req);
@@ -416,7 +417,7 @@ async function getMapPreview(ctx: Ctx, mapId: string): Promise<Response> {
 /**
  * Read-only preview of a Studio map draft. The patch is parsed and validated
  * through the exact same in-memory path as Save, then projected without ever
- * invoking updateMapSpatial or writing the authored source.
+ * invoking updateMapAuthoring or writing the authored source.
  */
 async function postMapDraftPreview(
   ctx: Ctx,
@@ -431,7 +432,7 @@ async function postMapDraftPreview(
   }
   const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
   if (!map) return json({ error: "map not found" }, 404);
-  const parsed = await readMapSpatialPatch(req);
+  const parsed = await readMapAuthoringPatch(req);
   if (parsed instanceof Response) return parsed;
   const abs = await resolveMapFile(ctx.gameDir, mapId);
   if (!abs) return json({ error: "map source file not found" }, 404);
@@ -441,9 +442,9 @@ async function postMapDraftPreview(
   } catch (error) {
     return json({ error: (error as Error).message, code: "preview_unavailable" }, 500);
   }
-  let preview: ReturnType<typeof previewMapSpatialPatch>;
+  let preview: ReturnType<typeof previewMapAuthoringPatch>;
   try {
-    preview = previewMapSpatialPatch(original, game, mapId, parsed, abs);
+    preview = previewMapAuthoringPatch(original, game, mapId, parsed, abs);
   } catch (error) {
     return json({ error: (error as Error).message, code: "invalid_map_draft" }, 400);
   }
@@ -716,7 +717,7 @@ function issueResourceRefs(issue: Record<string, unknown>): string[] {
   return [...refs].sort();
 }
 
-async function patchMapSpatial(
+async function patchMapAuthoring(
   ctx: Ctx,
   mapId: string,
   req: Request,
@@ -724,21 +725,27 @@ async function patchMapSpatial(
   const game = await loadGame(ctx.gameDir);
   const map = (game.maps ?? []).find((candidate) => candidate.id === mapId);
   if (!map) return json({ error: "map not found" }, 404);
-  const patch = await readMapSpatialPatch(req);
+  const patch = await readMapAuthoringPatch(req);
   if (patch instanceof Response) return patch;
 
   const abs = await resolveMapFile(ctx.gameDir, mapId);
   if (!abs) return json({ error: "map source file not found" }, 404);
+  let updated: Awaited<ReturnType<typeof updateMapAuthoring>>;
   try {
-    await updateMapSpatial(abs, game, mapId, patch);
+    updated = await updateMapAuthoring(
+      abs,
+      game,
+      mapId,
+      patch,
+      () => loadGame(ctx.gameDir),
+    );
   } catch (error) {
     return json({ error: (error as Error).message }, 400);
   }
-  const updated = await loadGame(ctx.gameDir);
-  return json(await projectGame(ctx, updated));
+  return json(await projectGame(ctx, updated.game));
 }
 
-async function readMapSpatialPatch(req: Request): Promise<MapSpatialPatch | Response> {
+async function readMapAuthoringPatch(req: Request): Promise<MapAuthoringPatch | Response> {
   let raw: unknown;
   try {
     raw = await req.json();
@@ -749,21 +756,68 @@ async function readMapSpatialPatch(req: Request): Promise<MapSpatialPatch | Resp
     return json({ error: "body must be an object" }, 400);
   }
   const body = raw as Record<string, unknown>;
-  if (!(body.layout === null || (body.layout && typeof body.layout === "object"))) {
+  const unexpectedTopLevel = Object.keys(body).find((key) => !["layout", "placements", "properties"].includes(key));
+  if (unexpectedTopLevel) return json({ error: `unknown map patch field: ${unexpectedTopLevel}` }, 400);
+  if (Object.keys(body).length === 0) return json({ error: "map patch must contain a change" }, 400);
+  if (
+    body.layout !== undefined &&
+    !(body.layout === null || (body.layout && typeof body.layout === "object" && !Array.isArray(body.layout)))
+  ) {
     return json({ error: "layout must be an object or null" }, 400);
   }
-  if (!Array.isArray(body.placements)) {
+  if (body.placements !== undefined && !Array.isArray(body.placements)) {
     return json({ error: "placements must be an array" }, 400);
   }
-  return body as unknown as MapSpatialPatch;
+  if (body.properties !== undefined) {
+    if (!body.properties || typeof body.properties !== "object" || Array.isArray(body.properties)) {
+      return json({ error: "properties must be an object" }, 400);
+    }
+    const properties = body.properties as Record<string, unknown>;
+    const allowed = new Set([
+      "name",
+      "description",
+      "difficulty",
+      "bg",
+      "isExtract",
+    ]);
+    const unexpected = Object.keys(properties).find((key) => !allowed.has(key));
+    if (unexpected) return json({ error: `unknown map property: ${unexpected}` }, 400);
+    if (properties.name !== undefined && typeof properties.name !== "string") {
+      return json({ error: "properties.name must be a string" }, 400);
+    }
+    for (const key of ["description", "bg"] as const) {
+      const value = properties[key];
+      if (value !== undefined && value !== null && typeof value !== "string") {
+        return json({ error: `properties.${key} must be a string or null` }, 400);
+      }
+    }
+    if (
+      properties.difficulty !== undefined &&
+      (typeof properties.difficulty !== "number" || !Number.isFinite(properties.difficulty))
+    ) {
+      return json({ error: "properties.difficulty must be a finite number" }, 400);
+    }
+    for (const key of ["isExtract"] as const) {
+      const value = properties[key];
+      if (value !== undefined && typeof value !== "boolean") {
+        return json({ error: `properties.${key} must be a boolean` }, 400);
+      }
+    }
+  }
+  return body as unknown as MapAuthoringPatch;
 }
 
 async function resolveMapFile(gameDir: string, mapId: string): Promise<string | undefined> {
+  if (!mapId || mapId.includes("/") || mapId.includes("\\") || mapId === "." || mapId === "..") {
+    return undefined;
+  }
+  const mapsDir = path.resolve(gameDir, "maps");
   for (const extension of ["yaml", "yml"] as const) {
-    const abs = path.join(gameDir, "maps", `${mapId}.${extension}`);
+    const abs = path.resolve(mapsDir, `${mapId}.${extension}`);
+    if (path.dirname(abs) !== mapsDir) continue;
     try {
       const contents = await readFile(abs, "utf-8");
-      if (/^\s*id\s*:\s*/m.test(contents)) return abs;
+      if (parseMap(contents, abs).id === mapId) return abs;
     } catch {
       continue;
     }

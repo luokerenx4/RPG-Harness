@@ -63,16 +63,16 @@ describe("Studio map preview view state", () => {
     expect(unavailable.preview).toBe(ready.preview);
   });
 
-  test("deduplicates structurally identical spatial drafts", () => {
+  test("deduplicates identical authoring drafts and rebuilds for properties or spatial changes", () => {
     const map = {
       id: "town",
       name: "Town",
       description: "one",
       placements: [],
     } satisfies MapDef;
-    expect(mapPreviewDraftIdentity(map)).toBe(mapPreviewDraftIdentity({
+    expect(mapPreviewDraftIdentity(map)).not.toBe(mapPreviewDraftIdentity({
       ...map,
-      description: "non-spatial refresh",
+      description: "property refresh",
     }));
     expect(mapPreviewDraftIdentity(map)).not.toBe(mapPreviewDraftIdentity({
       ...map,

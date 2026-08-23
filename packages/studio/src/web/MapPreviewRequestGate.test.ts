@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { MapDef } from "@rpg-harness/engine";
-import { fetchMapPreview, fetchSavedMapPreview, MapPreviewRequestError } from "./api";
+import { buildMapAuthoringPatch, fetchMapPreview, fetchSavedMapPreview, MapPreviewRequestError } from "./api";
 import {
   createMapPreviewRequestGate,
   isAbortError,
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("Studio map preview requests", () => {
-  test("posts the complete spatial draft through an abortable read-only preview request", async () => {
+  test("posts only changed authoring fields through an abortable read-only preview request", async () => {
     const map = {
       id: "town",
       name: "Town",
@@ -29,6 +29,7 @@ describe("Studio map preview requests", () => {
       },
       placements: [],
     } satisfies MapDef;
+    const saved = { ...map, layout: undefined } satisfies MapDef;
     const controller = new AbortController();
     let capturedUrl = "";
     let capturedInit: RequestInit | undefined;
@@ -46,7 +47,7 @@ describe("Studio map preview requests", () => {
       });
     }) as typeof fetch;
 
-    await expect(fetchMapPreview(map, controller.signal)).resolves.toMatchObject({
+    await expect(fetchMapPreview(saved, map, controller.signal)).resolves.toMatchObject({
       mapId: "town",
       source: "draft",
       readOnly: true,
@@ -56,7 +57,22 @@ describe("Studio map preview requests", () => {
     expect(capturedInit?.signal).toBe(controller.signal);
     expect(JSON.parse(String(capturedInit?.body))).toEqual({
       layout: map.layout,
+    });
+  });
+
+  test("keeps parser defaults and spatial source out of a property-only patch", () => {
+    const saved = {
+      id: "town",
+      name: "Town",
+      description: "Saved",
+      difficulty: 1,
       placements: [],
+    } satisfies MapDef;
+    expect(buildMapAuthoringPatch(saved, { ...saved, name: "New Town" })).toEqual({
+      properties: { name: "New Town" },
+    });
+    expect(buildMapAuthoringPatch(saved, { ...saved, description: "", bg: undefined })).toEqual({
+      properties: { description: null },
     });
   });
 
@@ -98,7 +114,7 @@ describe("Studio map preview requests", () => {
       placements: [],
     } satisfies MapDef;
     try {
-      await fetchMapPreview(map);
+      await fetchMapPreview(map, { ...map, description: "invalid draft" });
       throw new Error("expected preview request to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(MapPreviewRequestError);

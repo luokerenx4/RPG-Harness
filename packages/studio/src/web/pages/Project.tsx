@@ -26,7 +26,7 @@ import {
   renameProjectResource,
   restoreStudioTrashEntry,
   trashProjectResource,
-  saveMapSpatial,
+  saveMapDraft,
   saveResourceSource,
   sourceImageUrl,
   MapPreviewRequestError,
@@ -776,6 +776,7 @@ export function Project({
             <ResourceDetail
               node={selected}
               map={map}
+              maps={project.maps}
               asset={asset}
               projectAssets={project.assets}
               resources={project.graph.resources}
@@ -1050,6 +1051,7 @@ function CreateResourceDialog({
 function ResourceDetail({
   node,
   map,
+  maps,
   asset,
   projectAssets,
   resources,
@@ -1068,6 +1070,7 @@ function ResourceDetail({
 }: {
   node: ProjectResourceNode;
   map?: MapDef;
+  maps: MapDef[];
   asset?: ProjectAssetPreview;
   projectAssets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
@@ -1237,7 +1240,7 @@ function ResourceDetail({
           </div>
         </header>
         {map ? (
-          <MapOverview map={map} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
+          <MapOverview map={map} maps={maps} assets={projectAssets} resources={resources} switches={switches} variables={variables} onProjectSaved={onProjectSaved} onDraftGuardChange={onDraftGuardChange} />
         ) : (
           <ResourceRecordEditor
             node={node}
@@ -2272,8 +2275,21 @@ export function mapDraftHistoryReducer(state: MapDraftHistory, action: MapDraftH
   };
 }
 
+export function reconcileMapDraftAfterSave(
+  submitted: MapDef,
+  current: MapDef,
+  authoritative: MapDef,
+): { draft: MapDef; preserveCurrentDraft: boolean } {
+  const preserveCurrentDraft = hasMapDraftChanges(submitted, current);
+  return {
+    draft: preserveCurrentDraft ? current : authoritative,
+    preserveCurrentDraft,
+  };
+}
+
 function MapOverview({
   map,
+  maps,
   assets,
   resources,
   switches,
@@ -2282,6 +2298,7 @@ function MapOverview({
   onDraftGuardChange,
 }: {
   map: MapDef;
+  maps: MapDef[];
   assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
   switches: SwitchDef[];
@@ -2291,6 +2308,8 @@ function MapOverview({
 }) {
   const [draftHistory, dispatchDraft] = useReducer(mapDraftHistoryReducer, map, createMapDraftHistory);
   const draft = draftHistory.present;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const setDraft = useCallback((update: React.SetStateAction<MapDef>, group?: string) => {
     dispatchDraft({ type: "change", update, ...(group ? { group } : {}) });
   }, []);
@@ -2298,8 +2317,9 @@ function MapOverview({
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveReceipt, setSaveReceipt] = useState<{ summary: string; savedAt: string } | null>(null);
+  const [saveReceipt, setSaveReceipt] = useState<{ mapName: string; summary: string; savedAt: string } | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(100);
   const [paletteResourceKey, setPaletteResourceKey] = useState("");
@@ -2312,19 +2332,32 @@ function MapOverview({
   const [canvasPainting, setCanvasPainting] = useState<"paint" | "erase" | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState("");
   const mapIdRef = useRef(map.id);
+  const preserveDraftAfterSaveRef = useRef<{ map: MapDef } | null>(null);
   const paintGestureRef = useRef(0);
   const activePaintGroupRef = useRef<string | undefined>(undefined);
   const discardButtonRef = useRef<HTMLButtonElement>(null);
+  const propertiesButtonRef = useRef<HTMLButtonElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const pendingSave = preserveDraftAfterSaveRef.current;
+    const preserveDraft = pendingSave !== null &&
+      pendingSave.map.id === map.id &&
+      !hasMapDraftChanges(pendingSave.map, map);
+    if (pendingSave) preserveDraftAfterSaveRef.current = null;
     if (mapIdRef.current !== map.id) setSaveReceipt(null);
     mapIdRef.current = map.id;
+    if (preserveDraft) {
+      setSaveError(null);
+      setConfirmDiscard(false);
+      return;
+    }
     dispatchDraft({ type: "reset", map });
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
     setConfirmDiscard(false);
+    setPropertiesOpen(false);
     setZoom(100);
     setPaletteResourceKey("");
     setPaletteQuery("");
@@ -2499,21 +2532,32 @@ function MapOverview({
   };
 
   const save = async () => {
+    const submittedDraft = draft;
     setSaving(true);
     setSaveError(null);
     try {
-      const project = await saveMapSpatial(draft);
-      onProjectSaved(project);
+      const project = await saveMapDraft(map, submittedDraft);
       const saved = project.maps.find((candidate) => candidate.id === map.id);
-      const validatedMap = saved ?? draft;
-      if (saved) dispatchDraft({ type: "reset", map: saved });
+      if (!saved) throw new Error(`saved map missing from authoritative response: ${map.id}`);
+      const reconciliation = reconcileMapDraftAfterSave(
+        submittedDraft,
+        draftRef.current,
+        saved,
+      );
+      if (reconciliation.preserveCurrentDraft) {
+        preserveDraftAfterSaveRef.current = { map: saved };
+      } else {
+        dispatchDraft({ type: "reset", map: reconciliation.draft });
+      }
+      onProjectSaved(project);
       setSaveReceipt({
-        summary: summarizeMapValidation(validatedMap),
+        mapName: saved.name,
+        summary: summarizeMapValidation(saved),
         savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
-      setEditing(false);
+      if (!reconciliation.preserveCurrentDraft) setEditing(false);
       setConfirmDiscard(false);
-      return true;
+      return !reconciliation.preserveCurrentDraft;
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : String(cause));
       return false;
@@ -2571,6 +2615,7 @@ function MapOverview({
         setSelectedPlacementId(null);
         return;
       }
+      if (propertiesOpen) return;
       if (!acceptsText && !event.metaKey && !event.ctrlKey && !event.altKey) {
         if (event.key === "1") {
           event.preventDefault();
@@ -2609,7 +2654,7 @@ function MapOverview({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard]);
+  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen]);
 
   useEffect(() => {
     const stopPainting = () => {
@@ -2640,7 +2685,7 @@ function MapOverview({
         <div className="map-editor-context">
           <span className={`edit-state ${editing ? "editing" : ""}`}>{editing ? "EDITING" : "PREVIEW"}</span>
           {editing && <span className={`map-save-state ${dirty ? "dirty" : "clean"}`}><i />{dirty ? "UNSAVED CHANGES" : "ALL CHANGES SAVED"}</span>}
-          <p>{map.description || "No map description authored."}</p>
+          <p>{draft.description || "No map description authored."}</p>
         </div>
         <div className="map-view-tools" aria-label="Map view tools">
           {editing && <>
@@ -2662,9 +2707,10 @@ function MapOverview({
         </div>
         <div className="map-editor-actions">
           {!editing ? (
-            <button type="button" onClick={() => { setEditing(true); setConfirmDiscard(false); }}>Edit map</button>
+            <button type="button" onClick={() => { setEditing(true); setPropertiesOpen(false); setConfirmDiscard(false); }}>Edit map</button>
           ) : (
             <>
+              <button ref={propertiesButtonRef} type="button" onClick={() => setPropertiesOpen(true)}>Map properties…</button>
               <button type="button" className="primary" disabled={!dirty || saving} onClick={save}>
                 {saving ? "Validating…" : "Save changes  ⌘S"}
               </button>
@@ -2682,19 +2728,34 @@ function MapOverview({
       </div>
       {confirmDiscard && (
         <section className="map-discard-confirmation" role="alertdialog" aria-labelledby="discard-map-title" aria-describedby="discard-map-description">
-          <div><span>UNSAVED MAP DRAFT</span><strong id="discard-map-title">Discard spatial changes?</strong><p id="discard-map-description">Layout, placement, and event-page edits made since the last save will be lost.</p></div>
+          <div><span>UNSAVED MAP DRAFT</span><strong id="discard-map-title">Discard map changes?</strong><p id="discard-map-description">Properties, layout, placement, and event-page edits made since the last save will be lost.</p></div>
           <div><button type="button" className="danger" onClick={discard}>Discard changes</button><button ref={keepEditingRef} type="button" className="primary" onClick={cancelDiscard}>Keep editing <kbd>Esc</kbd></button></div>
         </section>
       )}
       {saveReceipt && !saveError && (
         <section className="map-validation-receipt" role="status">
           <i aria-hidden="true">✓</i>
-          <div><span>PROJECT VALIDATION PASSED</span><strong>{map.name} is saved and playable</strong><small>{saveReceipt.summary} · authoritative source reloaded successfully</small></div>
+          <div><span>PROJECT VALIDATION PASSED</span><strong>{saveReceipt.mapName} is saved and playable</strong><small>{saveReceipt.summary} · authoritative source reloaded successfully</small></div>
           <time>{saveReceipt.savedAt}</time>
           <button type="button" aria-label="Dismiss validation result" onClick={() => setSaveReceipt(null)}>×</button>
         </section>
       )}
       {saveError && <div className="project-warning map-validation-error" role="alert"><strong>Validation failed · draft preserved</strong><code>{saveError}</code><span>No project source was replaced. Correct the highlighted draft and try again.</span></div>}
+      {editing && propertiesOpen && <MapPropertiesDialog
+        saved={map}
+        draft={draft}
+        maps={maps}
+        assets={assets}
+        onChange={setDraft}
+        onSave={save}
+        dirty={dirty}
+        saving={saving}
+        error={saveError}
+        onClose={() => {
+          setPropertiesOpen(false);
+          requestAnimationFrame(() => propertiesButtonRef.current?.focus());
+        }}
+      />}
       {editing && !draft.layout && (
         <button
           type="button"
@@ -2711,45 +2772,6 @@ function MapOverview({
             },
           }))}
         >Add 12 × 8 spatial layout</button>
-      )}
-      {editing && draft.layout && (
-        <details className="map-authoring-panels">
-          <summary><span>Map setup</span><small>size, player start, layers and regions</small></summary>
-          <div className="layout-fields">
-          <label>Width<input type="number" min="1" value={draft.layout.width} onChange={(event) => setDraft((current) => ({
-            ...current,
-            layout: current.layout ? resizeMapLayout(current.layout, { width: Number(event.target.value) }) : undefined,
-          }))} /></label>
-          <label>Height<input type="number" min="1" value={draft.layout.height} onChange={(event) => setDraft((current) => ({
-            ...current,
-            layout: current.layout ? resizeMapLayout(current.layout, { height: Number(event.target.value) }) : undefined,
-          }))} /></label>
-          <label>Start X<input type="number" min="0" value={draft.layout.playerStart?.x ?? 0} onChange={(event) => setDraft((current) => ({
-            ...current,
-            layout: current.layout ? {
-              ...current.layout,
-              playerStart: { x: Number(event.target.value), y: current.layout.playerStart?.y ?? 0 },
-            } : undefined,
-          }))} /></label>
-          <label>Start Y<input type="number" min="0" value={draft.layout.playerStart?.y ?? 0} onChange={(event) => setDraft((current) => ({
-            ...current,
-            layout: current.layout ? {
-              ...current.layout,
-              playerStart: { x: current.layout.playerStart?.x ?? 0, y: Number(event.target.value) },
-            } : undefined,
-          }))} /></label>
-          <label className="layout-tileset-field">Tileset<select value={draft.layout.tileset ?? ""} onChange={(event) => setDraft((current) => ({
-            ...current,
-            layout: current.layout ? { ...current.layout, tileset: event.target.value || undefined } : undefined,
-          }))}><option value="">Procedural colors</option>{tilesets.map((candidate) => <option value={candidate.path} key={candidate.path}>{candidate.placeholder}</option>)}</select></label>
-          <span>Drag any resource from the project tree onto the canvas.</span>
-        </div>
-          <MapStructureEditor
-            layout={draft.layout}
-            assets={assets}
-            onChange={(layout) => setDraft((current) => ({ ...current, layout }))}
-          />
-        </details>
       )}
       {editing && draft.layout && (
         <section className="map-mode-toolbar" aria-label="Map editing tools">
@@ -2792,7 +2814,7 @@ function MapOverview({
                 setSelectedRegionId("");
               }}>Delete</button>
               {selectedRegion && <span className="map-region-tool-readout"><strong>{selectedRegion.name ?? selectedRegion.id}</strong><code>{selectedRegion.x},{selectedRegion.y} · {selectedRegion.width}×{selectedRegion.height}</code></span>}
-              <span className="map-mode-hint">Click a map cell to move the selected region · resize in Map setup</span>
+              <span className="map-mode-hint">Click a map cell to move it · resize in Map Properties → 2D Layout</span>
             </div>
           )}
         </section>
@@ -3201,8 +3223,190 @@ function MapOverview({
           ))}
         </section>
       )}
-      <MapSurfacePreviews map={draft} draftActive={dirty} />
+      <MapSurfacePreviews savedMap={map} map={draft} draftActive={dirty} />
     </section>
+  );
+}
+
+export interface MapChainDraftDiagnostic {
+  chain: string;
+  memberCount: number;
+  entryIds: string[];
+}
+
+export function mapChainDraftDiagnostics(
+  saved: MapDef,
+  draft: MapDef,
+  maps: MapDef[],
+): MapChainDraftDiagnostic[] {
+  const effective = maps.some((candidate) => candidate.id === saved.id)
+    ? maps.map((candidate) => candidate.id === saved.id ? draft : candidate)
+    : [...maps, draft];
+  const affected = new Set(
+    [saved.chain, draft.chain].filter((value): value is string => Boolean(value)),
+  );
+  return [...affected].sort().map((chain) => {
+    const members = effective.filter((candidate) => candidate.chain === chain);
+    return {
+      chain,
+      memberCount: members.length,
+      entryIds: members.filter((candidate) => candidate.isEntry).map((candidate) => candidate.id),
+    };
+  });
+}
+
+export function MapPropertiesDialog({
+  saved,
+  draft,
+  maps,
+  assets,
+  onChange,
+  onClose,
+  onSave,
+  dirty,
+  saving,
+  error,
+  initialSection = "general",
+}: {
+  saved: MapDef;
+  draft: MapDef;
+  maps: MapDef[];
+  assets: ProjectAssetPreview[];
+  onChange: (update: React.SetStateAction<MapDef>, group?: string) => void;
+  onClose: () => void;
+  onSave: () => Promise<boolean>;
+  dirty: boolean;
+  saving: boolean;
+  error: string | null;
+  initialSection?: "general" | "layout";
+}) {
+  const [section, setSection] = useState<"general" | "layout">(initialSection);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const generalTabRef = useRef<HTMLButtonElement>(null);
+  const layoutTabRef = useRef<HTMLButtonElement>(null);
+  const diagnostics = mapChainDraftDiagnostics(saved, draft, maps);
+  const topology = diagnostics.find((candidate) => candidate.chain === draft.chain);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab" || !dialogRef.current) return;
+    const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  };
+
+  const createLayout = () => onChange((current) => ({
+    ...current,
+    layout: {
+      width: 12,
+      height: 8,
+      tileWidth: 32,
+      tileHeight: 32,
+      layers: [{ id: "objects", kind: "object", z: 0, visible: true }],
+      regions: [],
+    },
+  }));
+
+  const selectPropertySection = (next: "general" | "layout", focus = false) => {
+    setSection(next);
+    if (focus) requestAnimationFrame(() => (next === "general" ? generalTabRef : layoutTabRef).current?.focus());
+  };
+
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home"
+      ? "general"
+      : event.key === "End"
+        ? "layout"
+        : section === "general" ? "layout" : "general";
+    selectPropertySection(next, true);
+  };
+
+  return (
+    <div className="map-properties-layer" role="presentation">
+      <button type="button" className="map-properties-backdrop" aria-hidden="true" tabIndex={-1} onClick={onClose} />
+      <section ref={dialogRef} className="map-properties-dialog" role="dialog" aria-modal="true" aria-labelledby={`map-properties-title-${draft.id}`} onKeyDown={handleDialogKeyDown}>
+        <header className="map-properties-dialog-header">
+          <div><span>MAP DATABASE</span><strong id={`map-properties-title-${draft.id}`}>Map Properties</strong><small>{draft.name || draft.id} · edits remain in the shared map draft</small></div>
+          <button ref={closeButtonRef} type="button" aria-label="Close Map Properties" onClick={onClose}>×</button>
+        </header>
+        <nav className="map-properties-tabs" role="tablist" aria-label="Map property sections" onKeyDown={handleTabKeyDown}>
+          <button ref={generalTabRef} type="button" role="tab" id={`map-properties-general-tab-${draft.id}`} aria-controls={`map-properties-general-panel-${draft.id}`} aria-selected={section === "general"} tabIndex={section === "general" ? 0 : -1} className={section === "general" ? "selected" : ""} onClick={() => selectPropertySection("general")}><span>◆</span><strong>General</strong><small>identity &amp; behavior</small></button>
+          <button ref={layoutTabRef} type="button" role="tab" id={`map-properties-layout-tab-${draft.id}`} aria-controls={`map-properties-layout-panel-${draft.id}`} aria-selected={section === "layout"} tabIndex={section === "layout" ? 0 : -1} className={section === "layout" ? "selected" : ""} onClick={() => selectPropertySection("layout")}><span>▦</span><strong>2D Layout</strong><small>{draft.layout ? `${draft.layout.width}×${draft.layout.height}` : "node map"}</small></button>
+        </nav>
+        <div className="map-properties-error-slot">
+          {error && <div className="map-properties-error" role="alert"><strong>Validation failed · draft preserved</strong><code>{error}</code><small>No project source was replaced. Correct the draft and try again.</small></div>}
+        </div>
+        <div className="map-properties-dialog-body">
+          {section === "general" ? <div className="map-properties-editor" role="tabpanel" id={`map-properties-general-panel-${draft.id}`} aria-labelledby={`map-properties-general-tab-${draft.id}`}>
+            <section className="map-property-card map-property-identity">
+              <header><span aria-hidden="true">Aa</span><div><strong>Identity</strong><small>Player-facing database record</small></div></header>
+              <div className="map-property-fields">
+                <label className="map-property-name"><span>Display name</span><input required maxLength={160} aria-invalid={!draft.name.trim()} value={draft.name} onChange={(event) => onChange((current) => ({ ...current, name: event.target.value }), "map-property-name")} /></label>
+                <label className="map-property-id"><span>Stable ID</span><output><code>{draft.id}</code><small>Use Resource Actions → Rename ID to rewrite references.</small></output></label>
+                <label className="map-property-description"><span>Description</span><textarea rows={3} maxLength={1000} placeholder="What this place means to the player and author" value={draft.description} onChange={(event) => onChange((current) => ({ ...current, description: event.target.value }), "map-property-description")} /></label>
+              </div>
+            </section>
+
+            <section className="map-property-card map-property-world">
+              <header><span aria-hidden="true">⌘</span><div><strong>World placement</strong><small>Logical topology and module hints</small></div></header>
+              <div className="map-property-fields">
+                <div className="map-property-topology-readonly">
+                  <span><small>Map chain</small><code>{draft.chain === undefined ? "standalone" : JSON.stringify(draft.chain)}</code></span>
+                  <span><small>Chain role</small><strong>{draft.isEntry ? "Entry map" : draft.chain ? "Member map" : "Independent"}</strong></span>
+                  <p>Chain membership and entry transfer are project-wide topology changes, so this record dialog keeps them read-only until they can be committed atomically.</p>
+                </div>
+                {topology && <div className="map-chain-diagnostics"><span className="validated"><i aria-hidden="true">✓</i><span><strong>{topology.memberCount} maps in this exact chain</strong><small>{topology.entryIds.length === 1 ? `entry ${topology.entryIds[0]} · whole-chain reachability revalidates on Save` : `${topology.entryIds.length} declared entries`}</small></span></span></div>}
+                <label className="map-property-difficulty"><span>Difficulty hint</span><input type="number" step="any" value={draft.difficulty ?? 1} onChange={(event) => onChange((current) => ({ ...current, difficulty: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 1 }))} /><small>Author-declared number; modules decide how to interpret it.</small></label>
+                <div className="map-property-switches"><label><input type="checkbox" checked={Boolean(draft.isExtract)} onChange={(event) => onChange((current) => ({ ...current, isExtract: event.target.checked || undefined }))} /><span><strong>Extraction point</strong><small>Modules may offer leave / depart here</small></span></label></div>
+              </div>
+            </section>
+
+            <section className="map-property-card map-property-scene">
+              <header><span aria-hidden="true">▣</span><div><strong>Scene default</strong><small>Visual baseline on map entry</small></div></header>
+              <div className="map-property-fields">
+                <MapAssetPicker assets={assets.filter((asset) => asset.kind === "bg")} value={draft.bg} preferredKind="bg" emptyLabel="Keep the current visual" label="Map background" title={`Choose background for ${draft.name || draft.id}`} description="This visual becomes the baseline background whenever the player enters this map." onChange={(bg) => onChange((current) => ({ ...current, bg }))} />
+                {draft.onEnter && <details className="map-property-legacy"><summary>Legacy on-enter script</summary><p><code>{draft.onEnter}</code> is preserved. New entry behavior belongs on an invisible <code>map_enter</code> event page so spatial, Hub and Headless projections share one resource model.</p></details>}
+              </div>
+            </section>
+          </div> : <div className="map-layout-properties" role="tabpanel" id={`map-properties-layout-panel-${draft.id}`} aria-labelledby={`map-properties-layout-tab-${draft.id}`}>
+            {!draft.layout ? <section className="map-layout-empty"><span aria-hidden="true">▦</span><strong>This is a folded node map</strong><p>It already works in Hub, TUI and Headless. Add canonical coordinates when the player-facing surface needs a 2D stage.</p><button type="button" className="primary" onClick={createLayout}>Add 12 × 8 spatial layout</button></section> : <>
+              <section className="map-layout-summary"><div><span>CANONICAL STAGE</span><strong>{draft.layout.width} × {draft.layout.height}</strong><small>{draft.layout.layers.length} layers · {draft.layout.regions.length} regions · tile {draft.layout.tileWidth}×{draft.layout.tileHeight}</small></div><p>Headless continues to collapse this layout into the same available resources and semantic actions.</p></section>
+              <div className="layout-fields map-properties-layout-fields">
+                <label>Width<input type="number" min="1" value={draft.layout.width} onChange={(event) => onChange((current) => ({ ...current, layout: current.layout ? resizeMapLayout(current.layout, { width: Number(event.target.value) }) : undefined }))} /></label>
+                <label>Height<input type="number" min="1" value={draft.layout.height} onChange={(event) => onChange((current) => ({ ...current, layout: current.layout ? resizeMapLayout(current.layout, { height: Number(event.target.value) }) : undefined }))} /></label>
+                <label>Start X<input type="number" min="0" max={Math.max(0, draft.layout.width - 1)} value={draft.layout.playerStart?.x ?? 0} onChange={(event) => onChange((current) => ({ ...current, layout: current.layout ? { ...current.layout, playerStart: { x: clamp(Number(event.target.value), 0, Math.max(0, current.layout.width - 1)), y: current.layout.playerStart?.y ?? 0 } } : undefined }))} /></label>
+                <label>Start Y<input type="number" min="0" max={Math.max(0, draft.layout.height - 1)} value={draft.layout.playerStart?.y ?? 0} onChange={(event) => onChange((current) => ({ ...current, layout: current.layout ? { ...current.layout, playerStart: { x: current.layout.playerStart?.x ?? 0, y: clamp(Number(event.target.value), 0, Math.max(0, current.layout.height - 1)) } } : undefined }))} /></label>
+                <div className="layout-tileset-field"><MapAssetPicker assets={assets.filter((asset) => asset.kind === "tileset")} value={draft.layout.tileset} preferredKind="tileset" emptyLabel="Procedural colors" label="Tileset" title={`Choose tileset for ${draft.name || draft.id}`} description="Assign the authored tile atlas used by terrain painting and the player-facing map renderer." onChange={(tileset) => onChange((current) => ({ ...current, layout: current.layout ? { ...current.layout, tileset } : undefined }))} /></div>
+              </div>
+              <details className="map-layout-advanced"><summary><span>Layers &amp; regions</span><small>render stack, collision, objects and authored zones</small></summary><div className="map-layout-advanced-scroll" role="region" aria-label="Layers and regions editor; scroll horizontally for all fields" tabIndex={0}><div className="map-layout-advanced-inner"><MapStructureEditor layout={draft.layout} assets={assets} onChange={(layout) => onChange((current) => ({ ...current, layout }))} /></div></div></details>
+            </>}
+          </div>}
+        </div>
+        <footer className="map-properties-dialog-footer"><span className={dirty ? "dirty" : "clean"}><i />{dirty ? "UNSAVED MAP DRAFT" : "NO CHANGES"}</span><div><button type="button" onClick={onClose}>Done</button><button type="button" className="primary" disabled={!dirty || saving || !draft.name.trim()} onClick={() => void onSave()}>{saving ? "Validating…" : "Save changes"}</button></div></footer>
+      </section>
+    </div>
   );
 }
 
@@ -3300,9 +3504,11 @@ function MapStructureEditor({
 type MapPreviewSurface = "2d" | "hub" | "tui" | "headless";
 
 export function MapSurfacePreviews({
+  savedMap,
   map,
   draftActive,
 }: {
+  savedMap: MapDef;
   map: MapDef;
   draftActive: boolean;
 }) {
@@ -3322,7 +3528,7 @@ export function MapSurfacePreviews({
     dispatchPreview({ type: "begin", target: previewTarget, mapId: map.id });
     const load = () => {
       const pending = previewTarget === "draft"
-        ? fetchMapPreview(map, request.controller.signal)
+        ? fetchMapPreview(savedMap, map, request.controller.signal)
         : fetchSavedMapPreview(map.id, request.controller.signal);
       pending.then((value) => {
         if (!gate.isCurrent(request)) return;
@@ -3355,7 +3561,7 @@ export function MapSurfacePreviews({
       cancelScheduled();
       gate.cancel(request);
     };
-  }, [draftIdentity, draftActive, map.id]);
+  }, [draftIdentity, draftActive, map.id, savedMap]);
 
   const preview = previewState.preview;
   const previewStatus = mapPreviewStatusLabel(previewState);
@@ -4220,8 +4426,16 @@ function cloneMap(map: MapDef): MapDef {
 }
 
 export function hasMapDraftChanges(saved: MapDef, draft: MapDef): boolean {
-  return JSON.stringify({ layout: saved.layout, placements: saved.placements ?? [] }) !==
-    JSON.stringify({ layout: draft.layout, placements: draft.placements ?? [] });
+  const authoringIdentity = (map: MapDef) => ({
+    name: map.name,
+    description: map.description,
+    difficulty: map.difficulty,
+    bg: map.bg,
+    isExtract: Boolean(map.isExtract),
+    layout: map.layout,
+    placements: map.placements ?? [],
+  });
+  return JSON.stringify(authoringIdentity(saved)) !== JSON.stringify(authoringIdentity(draft));
 }
 
 export function mapTreeChainKey(

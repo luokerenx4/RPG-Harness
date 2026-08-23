@@ -21,7 +21,7 @@ const map = {
 
 describe("Studio map surface preview status", () => {
   test("labels every surface as a projection of the active draft", () => {
-    const html = renderToStaticMarkup(<MapSurfacePreviews map={map} draftActive />);
+    const html = renderToStaticMarkup(<MapSurfacePreviews savedMap={map} map={map} draftActive />);
     expect(html).toContain("BUILDING DRAFT PREVIEW");
     expect(html).toContain("same in-memory Map v2 resource");
     expect(html).toContain('aria-live="polite"');
@@ -34,7 +34,7 @@ describe("Studio map surface preview status", () => {
   });
 
   test("distinguishes an unchanged authoritative map", () => {
-    const html = renderToStaticMarkup(<MapSurfacePreviews map={map} draftActive={false} />);
+    const html = renderToStaticMarkup(<MapSurfacePreviews savedMap={map} map={map} draftActive={false} />);
     expect(html).toContain("BUILDING SAVED PREVIEW");
     expect(html).not.toContain("DRAFT PREVIEW");
   });

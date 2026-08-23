@@ -28,6 +28,7 @@ import {
   parseResourceScalarFields,
   patchResourceScalarFields,
   paintMapLayerTile,
+  reconcileMapDraftAfterSave,
   resourceChoices,
   resolveProjectReference,
   resizeMapLayout,
@@ -360,7 +361,7 @@ describe("Studio map event resource picker", () => {
     )).toBe("Run script → 失われた記憶");
   });
 
-  test("tracks only authoritative spatial map draft changes", () => {
+  test("tracks authoritative map properties and spatial draft changes", () => {
     const saved = {
       id: "shrine",
       name: "Shrine",
@@ -368,7 +369,10 @@ describe("Studio map event resource picker", () => {
       layout: undefined,
       placements: [],
     } as MapDef;
-    expect(hasMapDraftChanges(saved, { ...saved, description: "project refresh" })).toBe(false);
+    expect(hasMapDraftChanges(saved, { ...saved, description: "project refresh" })).toBe(true);
+    expect(hasMapDraftChanges(saved, { ...saved, bg: "assets/backgrounds/shrine" })).toBe(true);
+    expect(hasMapDraftChanges(saved, { ...saved, isExtract: true })).toBe(true);
+    expect(hasMapDraftChanges(saved, structuredClone(saved))).toBe(false);
     expect(hasMapDraftChanges(saved, {
       ...saved,
       placements: [{
@@ -381,6 +385,34 @@ describe("Studio map event resource picker", () => {
         events: [],
       }],
     })).toBe(true);
+  });
+
+  test("preserves edits made while an older save request is in flight", async () => {
+    const submitted = {
+      id: "shrine",
+      name: "Renamed Shrine",
+      description: "submitted copy",
+      difficulty: 1,
+      placements: [],
+    } satisfies MapDef;
+    let current = submitted;
+    let resolveSave!: (map: MapDef) => void;
+    const deferredSave = new Promise<MapDef>((resolve) => { resolveSave = resolve; });
+    const reconciliation = deferredSave.then((authoritative) =>
+      reconcileMapDraftAfterSave(submitted, current, authoritative)
+    );
+
+    current = { ...submitted, description: "typed while save was pending" };
+    resolveSave(structuredClone(submitted));
+
+    await expect(reconciliation).resolves.toEqual({
+      draft: current,
+      preserveCurrentDraft: true,
+    });
+    expect(reconcileMapDraftAfterSave(submitted, submitted, structuredClone(submitted))).toEqual({
+      draft: submitted,
+      preserveCurrentDraft: false,
+    });
   });
 
   test("summarizes the validated map surface for a save receipt", () => {

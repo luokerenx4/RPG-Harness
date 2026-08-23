@@ -93,6 +93,14 @@ function previewRequest(gameDir: string, body: unknown) {
   }), { gameDir });
 }
 
+function authoringRequest(gameDir: string, body: unknown) {
+  return handle(new Request("http://studio.test/api/maps/town/authoring", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }), { gameDir });
+}
+
 describe("Studio map draft preview", () => {
   test("uses the saved source for a clean GET projection", async () => {
     const { gameDir } = await previewProject();
@@ -210,5 +218,66 @@ describe("Studio map draft preview", () => {
       "map:town/placement:second",
       "map:town/placement:second/event:talk",
     ]);
+  });
+
+  test("previews and saves a property-only patch without rewriting spatial source", async () => {
+    const { gameDir, mapFile } = await previewProject();
+    const original = await readFile(mapFile, "utf-8");
+    const spatialTail = original.slice(original.indexOf("layout:"));
+
+    const previewResponse = await previewRequest(gameDir, {
+      properties: { name: "New Town" },
+    });
+    expect(previewResponse.status).toBe(200);
+    expect((await readFile(mapFile, "utf-8"))).toBe(original);
+
+    const saveResponse = await authoringRequest(gameDir, {
+      properties: { name: "New Town" },
+    });
+    expect(saveResponse.status).toBe(200);
+    const project = await saveResponse.json();
+    expect(project.maps.find((map: { id: string }) => map.id === "town")?.name).toBe("New Town");
+    const saved = await readFile(mapFile, "utf-8");
+    expect(saved).toContain("name: New Town");
+    expect(saved.slice(saved.indexOf("layout:"))).toBe(spatialTail);
+    expect(saved).not.toContain("difficulty:");
+  });
+
+  test("rejects malformed or unknown authoring fields without touching source", async () => {
+    const { gameDir, mapFile } = await previewProject();
+    const before = await readFile(mapFile);
+    for (const body of [
+      { properties: { name: "   " } },
+      { properties: { unknown: true } },
+      { surprise: true },
+      { properties: { difficulty: "hard" } },
+    ]) {
+      const response = await authoringRequest(gameDir, body);
+      expect(response.status).toBe(400);
+      expect((await readFile(mapFile)).equals(before)).toBe(true);
+    }
+  });
+
+  test("rejects encoded path traversal map ids without writing another project file", async () => {
+    const { gameDir, mapFile } = await previewProject();
+    const gameFile = path.join(gameDir, "game.yaml");
+    await writeFile(mapFile, "id: ../game\nname: Traversal map\n");
+    await writeFile(gameFile, "id: ../game\nname: Decoy map source\ntitle: Preview fixture\n");
+    const mapBefore = await readFile(mapFile);
+    const gameBefore = await readFile(gameFile);
+
+    const response = await handle(new Request(
+      "http://studio.test/api/maps/..%2Fgame/authoring",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ properties: { name: "Escaped write" } }),
+      },
+    ), { gameDir });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "map source file not found" });
+    expect((await readFile(mapFile)).equals(mapBefore)).toBe(true);
+    expect((await readFile(gameFile)).equals(gameBefore)).toBe(true);
   });
 });
