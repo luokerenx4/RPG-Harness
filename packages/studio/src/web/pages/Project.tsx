@@ -53,6 +53,11 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import { MapEventNavigator } from "../MapEventNavigator";
+import {
+  resolveMapEventNavigatorTarget,
+  type MapEventNavigatorLocator,
+} from "../MapEventNavigatorModel";
 import {
   applyMapPlayabilityQuickFix,
   groupMapPlayabilityPointDiagnostics,
@@ -2715,7 +2720,9 @@ function MapOverview({
   const [editing, setEditing] = useState(false);
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [focusedPlacementEventId, setFocusedPlacementEventId] = useState<string | null>(null);
+  const [focusedPlacementSection, setFocusedPlacementSection] = useState<"object" | "events" | null>(null);
   const [focusedPlayabilityKey, setFocusedPlayabilityKey] = useState<string | null>(null);
+  const [eventNavigatorOpen, setEventNavigatorOpen] = useState(false);
   const [placementRenameOpen, setPlacementRenameOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2754,6 +2761,7 @@ function MapOverview({
   const propertiesButtonRef = useRef<HTMLButtonElement>(null);
   const topologyButtonRef = useRef<HTMLButtonElement>(null);
   const reciprocalRouteButtonRef = useRef<HTMLButtonElement>(null);
+  const eventNavigatorButtonRef = useRef<HTMLButtonElement>(null);
   const placementRenameButtonRef = useRef<HTMLButtonElement>(null);
   const topologyAppliedRef = useRef(false);
   const topologyAfterSaveRef = useRef(false);
@@ -2763,6 +2771,7 @@ function MapOverview({
   const pendingPlacementSelectionRef = useRef<{ mapId: string; placementId: string } | null>(null);
 
   useEffect(() => {
+    setEventNavigatorOpen(false);
     const pendingSave = preserveDraftAfterSaveRef.current;
     const continueToTopology = topologyAfterSaveRef.current && mapIdRef.current === map.id;
     const continueToReciprocalRoute = reciprocalRouteAfterSaveRef.current && mapIdRef.current === map.id;
@@ -2791,6 +2800,7 @@ function MapOverview({
     setEditing(renamedPlacementId !== null);
     setSelectedPlacementId(renamedPlacementId);
     setFocusedPlacementEventId(null);
+    setFocusedPlacementSection(null);
     setFocusedPlayabilityKey(null);
     setPlacementRenameOpen(false);
     setSaveError(null);
@@ -3102,6 +3112,35 @@ function MapOverview({
     requestAnimationFrame(() => placementRenameButtonRef.current?.focus());
   };
 
+  const requestEventNavigator = useCallback(() => {
+    const openDialog = document.querySelector(
+      ".map-overview [role='dialog'], .map-overview [role='alertdialog']",
+    );
+    if (saving || openDialog) return;
+    setEventNavigatorOpen(true);
+  }, [saving]);
+
+  const activateEventNavigatorTarget = (
+    locator: MapEventNavigatorLocator,
+    precision: "exact" | "placement-only",
+  ) => {
+    const resolution = resolveMapEventNavigatorTarget(draftRef.current, locator);
+    if (!resolution.ok) return { ok: false, message: resolution.message };
+    setEditing(true);
+    setPropertiesOpen(false);
+    setConfirmDiscard(false);
+    setMapTool("objects");
+    setSelectedPlacementId(resolution.placement.id);
+    setFocusedPlacementEventId(resolution.eventId ?? null);
+    setFocusedPlacementSection(resolution.eventId
+      ? null
+      : precision === "placement-only" ? "events" : "object");
+    setFocusedPlayabilityKey(null);
+    setObjectHoverCell(null);
+    setObjectLayerId(resolution.placement.layer ?? "");
+    return { ok: true };
+  };
+
   const addPalettePlacement = () => {
     if (!paletteResourceKey) return;
     const resource = paletteResourceKey === "event-only"
@@ -3232,6 +3271,7 @@ function MapOverview({
         dispatchDraft({ type: "reset", map: reconciliation.draft });
       }
       onProjectSaved(project);
+      setEventNavigatorOpen(false);
       setSaveReceipt({
         mapName: saved.name,
         summary: summarizeMapValidation(saved),
@@ -3250,6 +3290,7 @@ function MapOverview({
 
   const discard = () => {
     dispatchDraft({ type: "reset", map });
+    setEventNavigatorOpen(false);
     setEditing(false);
     setSelectedPlacementId(null);
     setSaveError(null);
@@ -3363,10 +3404,23 @@ function MapOverview({
   useEffect(() => {
     if (!editing) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || eventNavigatorOpen || placementRenameOpen) return;
       const target = event.target as HTMLElement | null;
       const acceptsText = target?.matches("input, select, textarea, [contenteditable='true']");
       if (propertiesOpen || topologyOpen || topologyGuardOpen) return;
       if (reciprocalRouteOpen || reciprocalRouteGuardOpen) return;
+      if (
+        !acceptsText &&
+        !confirmDiscard &&
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "f"
+      ) {
+        if (target?.closest("[role='dialog'], [role='alertdialog']")) return;
+        event.preventDefault();
+        requestEventNavigator();
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (dirty && !saving) void save();
@@ -3422,7 +3476,7 @@ function MapOverview({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen, topologyOpen, topologyGuardOpen, reciprocalRouteOpen, reciprocalRouteGuardOpen]);
+  }, [editing, dirty, saving, selectedPlacementId, draft, confirmDiscard, propertiesOpen, topologyOpen, topologyGuardOpen, reciprocalRouteOpen, reciprocalRouteGuardOpen, eventNavigatorOpen, placementRenameOpen, requestEventNavigator]);
 
   useEffect(() => {
     const stopPainting = () => {
@@ -3479,6 +3533,15 @@ function MapOverview({
             <button ref={editButtonRef} type="button" onClick={() => { setEditing(true); setPropertiesOpen(false); setConfirmDiscard(false); }}>Edit map</button>
           ) : (
             <>
+              <button
+                ref={eventNavigatorButtonRef}
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={eventNavigatorOpen}
+                disabled={saving || confirmDiscard}
+                title="Search every placement and event page in the current map draft · ⌘⇧F"
+                onClick={requestEventNavigator}
+              >⌕ Events…</button>
               <button
                 ref={reciprocalRouteButtonRef}
                 type="button"
@@ -3539,6 +3602,15 @@ function MapOverview({
         }}
         onQuickFix={applyPlayabilityFix}
       />
+      {eventNavigatorOpen && <MapEventNavigator
+        draft={draft}
+        resources={resources}
+        diagnosticCounts={playabilityPlacementCounts}
+        saving={saving}
+        triggerRef={eventNavigatorButtonRef}
+        onActivate={activateEventNavigatorTarget}
+        onClose={() => setEventNavigatorOpen(false)}
+      />}
       {editing && propertiesOpen && <MapPropertiesDialog
         saved={map}
         draft={draft}
@@ -4159,6 +4231,8 @@ function MapOverview({
           deleteBlockers={selectedPlacementDeleteBlockers}
           focusedEventId={focusedPlacementEventId}
           onFocusedEventConsumed={() => setFocusedPlacementEventId(null)}
+          focusedSection={focusedPlacementSection}
+          onFocusedSectionConsumed={() => setFocusedPlacementSection(null)}
           layers={draft.layout?.layers ?? []}
           assets={assets}
           resources={resources}
@@ -4783,6 +4857,8 @@ function PlacementEditor({
   deleteBlockers,
   focusedEventId,
   onFocusedEventConsumed,
+  focusedSection,
+  onFocusedSectionConsumed,
   layers,
   assets,
   resources,
@@ -4804,6 +4880,8 @@ function PlacementEditor({
   deleteBlockers: MapArrivalBacklink[];
   focusedEventId?: string | null;
   onFocusedEventConsumed: () => void;
+  focusedSection?: "object" | "events" | null;
+  onFocusedSectionConsumed: () => void;
   layers: MapLayerDef[];
   assets: ProjectAssetPreview[];
   resources: ProjectResourceNode[];
@@ -4822,6 +4900,8 @@ function PlacementEditor({
   const [editorSection, setEditorSection] = useState<"object" | "events">("events");
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const objectTabRef = useRef<HTMLButtonElement>(null);
+  const eventsTabRef = useRef<HTMLButtonElement>(null);
   const setNumber = (axis: "x" | "y", value: number) => onChange((current) => ({
     ...current,
     at: { ...current.at, [axis]: value },
@@ -4843,6 +4923,14 @@ function PlacementEditor({
     if (focusedEventId) setEditorSection("events");
   }, [focusedEventId]);
   useEffect(() => {
+    if (!focusedSection) return;
+    setEditorSection(focusedSection);
+    onFocusedSectionConsumed();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      (focusedSection === "object" ? objectTabRef : eventsTabRef).current?.focus();
+    }));
+  }, [focusedSection, onFocusedSectionConsumed]);
+  useEffect(() => {
     if (confirmDelete) cancelDeleteRef.current?.focus();
   }, [confirmDelete]);
 
@@ -4856,8 +4944,8 @@ function PlacementEditor({
       <header className="placement-editor-heading">
         <div><span>SELECTED OBJECT</span><strong>{placementLabel}</strong><code>{placement.id} · {placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"} · used by {backlinks.length}</code></div>
         <nav className="placement-editor-tabs" aria-label="Object editor sections" role="tablist">
-          <button type="button" role="tab" aria-selected={editorSection === "object"} className={editorSection === "object" ? "selected" : ""} onClick={() => setEditorSection("object")}><span>◇</span> Object</button>
-          <button type="button" role="tab" aria-selected={editorSection === "events"} className={editorSection === "events" ? "selected" : ""} onClick={() => setEditorSection("events")}><span>◆</span> Events <small>{placement.events.length}</small></button>
+          <button ref={objectTabRef} type="button" role="tab" aria-selected={editorSection === "object"} className={editorSection === "object" ? "selected" : ""} onClick={() => setEditorSection("object")}><span>◇</span> Object</button>
+          <button ref={eventsTabRef} type="button" role="tab" aria-selected={editorSection === "events"} className={editorSection === "events" ? "selected" : ""} onClick={() => setEditorSection("events")}><span>◆</span> Events <small>{placement.events.length}</small></button>
         </nav>
         <div className="placement-heading-actions"><button ref={renameButtonRef} type="button" disabled={renameDisabledReason !== undefined} title={renameDisabledReason ?? "Rename this placement ID and every engine-proven arrival reference"} onClick={onRename}>Rename ID</button><button type="button" onClick={onDuplicate}>Duplicate</button><button ref={deleteButtonRef} type="button" className="danger" onClick={() => setConfirmDelete(true)}>Delete</button><button type="button" aria-label="Close object inspector" onClick={onClose}>×</button></div>
       </header>
@@ -5014,9 +5102,18 @@ export function EventPagesEditor({
   }, [placement.id, placement.events, selectedEventId]);
 
   useEffect(() => {
-    if (focusEventId && placement.events.some((event) => event.id === focusEventId)) {
+    const focusIndex = focusEventId
+      ? placement.events.findIndex((event) => event.id === focusEventId)
+      : -1;
+    if (focusEventId && focusIndex >= 0) {
       setSelectedEventId(focusEventId);
       onFocusEventConsumed?.();
+      requestAnimationFrame(() => {
+        const buttons = Array.from(
+          eventIndexRef.current?.querySelectorAll<HTMLButtonElement>(".event-page-select") ?? [],
+        );
+        buttons[focusIndex]?.focus();
+      });
     }
   }, [focusEventId, onFocusEventConsumed, placement.events]);
 
