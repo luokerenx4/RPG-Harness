@@ -72,7 +72,8 @@ placements:
         order: 0
   - id: exit_sumida_river_drift_pier
     at: [11, 5]
-    asset: assets/backgrounds/sumida-drift-pier
+    asset: assets/sprites/paper-shikigami-field
+    facing: east
     layer: waterways
     footprint: [1, 2]
     resource:

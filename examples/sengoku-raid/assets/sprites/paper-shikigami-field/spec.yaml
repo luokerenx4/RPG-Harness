@@ -1,0 +1,32 @@
+kind: sprite
+description: |
+  水没した社の川沿いを示す紙式神の地图图形。和紙の白、墨線、朱紐と
+  青い鬼火紋で小さくても判別でき、四方向を同一の等格图集から選ぶ。
+prompt: |
+  Use case: stylized-concept
+  Asset type: production transparent 2x2 directional RPG field-sprite atlas
+  Subject: one knee-high humanoid shikigami with a fox-eared folded-paper kasa,
+    warm off-white washi clothing, bold black ink seams, a vermilion musubi
+    cord and a small cyan spirit-flame crest, rendered as four consistent
+    directional idle views.
+  Style: compact polished painterly anime game sprite with a clean silhouette.
+  Composition: four equal square cells in row-major order: north back view,
+    east right profile, south front view, west left profile; identical scale,
+    bottom pivot and transparent padding in every cell.
+  Constraints: genuine alpha transparency; no labels, grid lines, scenery,
+    cast shadows, extra objects, frame or watermark.
+placeholder: "[紙式神・地图图形] 白い和紙、朱紐、青い鬼火紋の四方向道標"
+refs:
+  maps: [sumida_river_drowned_shrine]
+size_hint:
+  web: { aspect: "1:1" }
+sprite_grid:
+  columns: 2
+  rows: 2
+  default_facing: south
+  frames:
+    north: 0
+    east: 1
+    south: 2
+    west: 3
+tags: [map-sprite, directional-atlas, shikigami, sumida-river]
