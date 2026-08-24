@@ -53,6 +53,7 @@ import {
   type DatabaseOverviewKind,
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
+import { MapFacingControl, mapFacingPresentation } from "../MapFacingControl";
 import { MapEventNavigator } from "../MapEventNavigator";
 import {
   resolveMapEventNavigatorTarget,
@@ -4143,9 +4144,11 @@ function MapOverview({
             const rendered = isMapPlacementLayerVisible(draft, placement);
             const eventSummary = mapPlacementEventSummary(placement);
             const diagnosticCount = playabilityPlacementCounts.get(placement.id) ?? 0;
+            const facing = placement.facing ? mapFacingPresentation(placement.facing) : undefined;
             return (
               <div
-              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}${diagnosticCount > 0 ? " has-diagnostic" : ""}`}
+              className={`map-placement resource-${placement.resource?.kind ?? "event"} collision-${placement.collision}${placement.facing ? ` facing-${placement.facing}` : ""}${selectedPlacementId === placement.id ? " selected" : ""}${rendered ? "" : " layer-hidden"}${diagnosticCount > 0 ? " has-diagnostic" : ""}`}
+              data-facing={placement.facing}
               key={placement.id}
               draggable={editing && mapTool === "objects"}
               onDragStart={(event) => {
@@ -4161,7 +4164,7 @@ function MapOverview({
                 setFocusedPlayabilityKey(null);
                 if (placement.layer) setObjectLayerId(placement.layer);
               }}
-              title={`${resourceLabel} · ${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}`}
+              title={`${resourceLabel} · ${placement.id} · ${placement.resource?.kind ?? "event"}:${placement.resource?.id ?? ""}${facing ? ` · ${facing.title}` : ""}`}
               style={{
                 left: `${(placement.at.x / width) * 100}%`,
                 top: `${(placement.at.y / height) * 100}%`,
@@ -4174,6 +4177,7 @@ function MapOverview({
               {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
               {diagnosticCount > 0 && <span className="map-placement-diagnostic" title={`${diagnosticCount} spatial ${diagnosticCount === 1 ? "warning" : "warnings"}`}><i>!</i>{diagnosticCount > 1 && <b>{diagnosticCount}</b>}</span>}
               {eventSummary.count > 0 && <span className={`map-placement-event-summary${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}`} title={eventSummary.title}><i>{eventSummary.icons}</i><b>{eventSummary.count}</b>{eventSummary.gated && <small>◆</small>}</span>}
+              {facing && <span className="map-placement-facing" title={facing.title} aria-hidden="true"><i>{facing.glyph}</i><b>{facing.shortLabel}</b></span>}
               <span className="map-placement-copy">{resourceLabel}</span>
               <small className="map-placement-copy">{placement.resource?.kind ?? "event"} · {placement.id}</small>
               </div>
@@ -4676,7 +4680,10 @@ export function MapSurfacePreviews({
             ? <span className="muted">No positioned resources; this map renders as a folded node.</span>
             : (map.placements ?? []).map((placement) => (
               <div key={placement.id}>
-                <code>{placement.at.x},{placement.at.y}</code>
+                <code className="projection-placement-position">
+                  <span>{placement.at.x},{placement.at.y}</span>
+                  {placement.facing && <i className="projection-placement-facing" title={mapFacingPresentation(placement.facing).title}>{mapFacingPresentation(placement.facing).glyph} {mapFacingPresentation(placement.facing).shortLabel}</i>}
+                </code>
                 <strong>{placement.id}</strong>
                 <span>{placement.resource ? `${placement.resource.kind}:${placement.resource.id}` : "event-only"}</span>
                 <small>{placement.events.map((event) => event.trigger).join(" · ") || "no trigger"}</small>
@@ -5036,8 +5043,8 @@ function PlacementEditor({
           <div className="placement-fields behavior-fields">
             <label>Layer<select value={placement.layer ?? ""} onChange={(event) => onChange((current) => ({ ...current, layer: event.target.value || undefined }))}><option value="">none · z 0</option>{layers.map((layer) => <option key={layer.id} value={layer.id}>{layer.name ?? layer.id} · z {layer.z}</option>)}</select></label>
             <label>Collision<select value={placement.collision} onChange={(event) => onChange((current) => ({ ...current, collision: event.target.value as MapPlacementDef["collision"] }))}><option>none</option><option>block</option><option>trigger</option></select></label>
-            <label>Facing<select value={placement.facing ?? ""} onChange={(event) => onChange((current) => ({ ...current, facing: (event.target.value || undefined) as MapPlacementDef["facing"] }))}><option value="">none</option><option>north</option><option>east</option><option>south</option><option>west</option></select></label>
             <label className="checkbox-field"><input type="checkbox" checked={placement.visible} onChange={(event) => onChange((current) => ({ ...current, visible: event.target.checked }))} />Visible</label>
+            <MapFacingControl value={placement.facing} onChange={(facing) => onChange((current) => ({ ...current, facing }))} />
           </div>
           <div className="placement-display-order" title="Authored layer and object Z sort first; footprint bottom Y sorts actors within that depth.">
             <span>RENDER ORDER</span>

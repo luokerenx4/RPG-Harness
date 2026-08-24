@@ -557,6 +557,27 @@ body {
   box-shadow: 0 3px 12px rgba(0,0,0,.48), 0 0 0 3px rgba(124,200,216,.12);
 }
 .spatial-placement.placement-distant { opacity: .76; }
+.spatial-placement-facing {
+  position: absolute;
+  z-index: 3;
+  bottom: 1px;
+  left: 1px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 17px;
+  height: 13px;
+  padding: 0 3px;
+  pointer-events: none;
+  color: #dff9ff;
+  border: 1px solid rgba(124,200,216,.72);
+  border-radius: 999px;
+  background: rgba(7,20,26,.9);
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  font: 800 6px/1 ui-monospace,monospace;
+}
+.spatial-placement-facing i { color: #9de0eb; font-size: 8px; font-style: normal; }
+.spatial-placement-facing b { font-size: 5px; letter-spacing: .04em; }
 .spatial-placement-interact-cue {
   position: absolute;
   right: -8px;

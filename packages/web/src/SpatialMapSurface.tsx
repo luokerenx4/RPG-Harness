@@ -169,6 +169,26 @@ export function spatialMoveBlockedMessage(direction: MapFacing): string {
   return `${({ north: "北", east: "东", south: "南", west: "西" } as const)[direction]}侧无法通行`;
 }
 
+export interface SpatialFacingPresentation {
+  arrow: "↑" | "→" | "↓" | "←";
+  label: "朝北" | "朝东" | "朝南" | "朝西";
+  short: "N" | "E" | "S" | "W";
+}
+
+/**
+ * Present an authored placement orientation without turning it into gameplay.
+ * Collision, interaction range and Headless activities remain engine-owned and
+ * deliberately ignore this visual annotation.
+ */
+export function spatialFacingPresentation(facing: MapFacing): SpatialFacingPresentation {
+  return ({
+    north: { arrow: "↑", label: "朝北", short: "N" },
+    east: { arrow: "→", label: "朝东", short: "E" },
+    south: { arrow: "↓", label: "朝南", short: "S" },
+    west: { arrow: "←", label: "朝西", short: "W" },
+  } as const)[facing];
+}
+
 /**
  * Resolve the first authored region containing the engine-owned player point.
  * Region bounds are half-open so adjacent rectangles never both claim a shared
@@ -512,6 +532,7 @@ function Placement({
     || primaryOperation?.event.trigger === "manual";
   const distance = playerPosition ? mapPlacementDistance(playerPosition, placement) : undefined;
   const nearby = distance !== undefined && distance <= 1;
+  const facing = placement.facing ? spatialFacingPresentation(placement.facing) : undefined;
   const position = {
     left: `${placement.at.x / layout.width * 100}%`,
     top: `${placement.at.y / layout.height * 100}%`,
@@ -522,16 +543,18 @@ function Placement({
 
   return (
     <div
-      className={`spatial-placement resource-${resourceKind} collision-${placement.collision}${primaryOperation?.activity?.available ? " placement-actionable" : ""}${distance === 0 ? " placement-here" : nearby ? " placement-nearby" : " placement-distant"}`}
+      className={`spatial-placement resource-${resourceKind} collision-${placement.collision}${placement.facing ? ` facing-${placement.facing}` : ""}${primaryOperation?.activity?.available ? " placement-actionable" : ""}${distance === 0 ? " placement-here" : nearby ? " placement-nearby" : " placement-distant"}`}
+      data-facing={placement.facing}
       style={position}
-      title={`${resourceKindLabel(resourceKind)} · ${resourceName}`}
-      aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}`}
+      title={`${resourceKindLabel(resourceKind)} · ${resourceName}${facing ? ` · ${facing.label}` : ""}`}
+      aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}${facing ? ` · ${facing.label}` : ""}`}
       role="img"
     >
       {graphicUrl && <img className="spatial-placement-graphic" src={graphicUrl} alt="" aria-hidden="true" />}
       <span className="spatial-placement-marker" aria-hidden="true">
         {resourceKindIcon(resourceKind)}
       </span>
+      {facing && <span className="spatial-placement-facing" title={facing.label} aria-hidden="true"><i>{facing.arrow}</i><b>{facing.short}</b></span>}
       {nearby && primaryOperationIsManual && primaryOperation?.activity?.available && (
         <span className="spatial-placement-interact-cue" aria-hidden="true"><kbd>E</kbd> {primaryOperation.event.label ?? "互动"}</span>
       )}

@@ -115,6 +115,73 @@ describe("collectMapAvailableResources", () => {
       requires: { all: expect.any(Array) },
     });
   });
+
+  test("keeps placement facing out of interact, player-touch, and Headless semantics", () => {
+    const facings = [undefined, "north", "east", "south", "west"] as const;
+    const projections = facings.map((facing) => {
+      const game = makeGame({
+        characters: [makeCharacter("hero")],
+        scripts: [
+          { id: "talk", title: "Talk", beats: [] },
+          { id: "leave", title: "Leave", beats: [] },
+        ],
+        maps: [{
+          id: "room",
+          name: "Room",
+          description: "",
+          layout: {
+            width: 3,
+            height: 3,
+            tileWidth: 32,
+            tileHeight: 32,
+            playerStart: { x: 0, y: 1 },
+            layers: [],
+            regions: [],
+          },
+          placements: [{
+            id: "guide",
+            at: { x: 1, y: 1 },
+            z: 0,
+            ...(facing ? { facing } : {}),
+            footprint: { width: 1, height: 1 },
+            collision: "trigger",
+            visible: true,
+            resource: { kind: "character", id: "hero" },
+            events: [{
+              id: "talk",
+              trigger: "interact",
+              order: 0,
+              run: { kind: "script", id: "talk" },
+            }, {
+              id: "leave",
+              trigger: "player_touch",
+              order: 1,
+              run: { kind: "script", id: "leave" },
+            }],
+          }],
+        }],
+      });
+      const ctx = makeCtx(game);
+      ctx.state.baseline.currentMapId = "room";
+      return {
+        resources: collectMapAvailableResources(ctx),
+        activities: collectMapActivities(ctx),
+      };
+    });
+
+    expect(projections[0]!.resources.filter(({ trigger }) => trigger).map(({ trigger }) => trigger)).toEqual([
+      "interact",
+      "player_touch",
+    ]);
+    expect(projections[0]!.activities.map(({ id }) => id)).toEqual([
+      "map:room/placement:guide/event:talk",
+      "map:room/placement:guide/event:leave",
+    ]);
+    for (const projection of projections.slice(1)) {
+      expect(projection.resources).toEqual(projections[0]!.resources);
+      expect(projection.activities).toEqual(projections[0]!.activities);
+    }
+  });
 });
 
 describe("placement-backed activity dispatch", () => {

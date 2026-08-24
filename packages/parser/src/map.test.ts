@@ -360,6 +360,12 @@ name: M
 placements:
   - { id: event, at: [0, 0], asset: "", events: [{ id: run, trigger: manual }] }
 `)).toThrow(/asset must be a non-empty asset path string/);
+
+    expect(() => parseMap(`id: m
+name: M
+placements:
+  - { id: guide, at: [0, 0], facing: diagonal, resource: { kind: character, id: guide } }
+`)).toThrow(/facing must be north, east, south, or west/);
   });
 
   test("rejects wrong tile matrix dimensions and unnamespaced custom triggers", () => {

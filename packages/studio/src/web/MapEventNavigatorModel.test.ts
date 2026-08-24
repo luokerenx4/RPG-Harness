@@ -71,6 +71,7 @@ const authoredPlacements: MapPlacementDef[] = [
   placement("gate", {
     at: { x: 4, y: 2 },
     layer: "actors",
+    facing: "south",
     resource: { kind: "map", id: "keep" },
     events: [
       event("open", {
@@ -137,6 +138,7 @@ describe("Studio Map Event Navigator model", () => {
       canonicalPath: "map:castle/placement:gate",
       at: { x: 4, y: 2 },
       layer: "actors",
+      facing: "south",
       diagnosticCount: 2,
       destination: {
         mode: "exact",
@@ -179,6 +181,11 @@ describe("Studio Map Event Navigator model", () => {
       "memory",
     ]);
     expect(searchMapEventNavigatorIndex(index, "4,2 actors").rows.map((row) => row.key)).toEqual([
+      "placement:0",
+      "placement:0:event:0",
+      "placement:0:event:1",
+    ]);
+    expect(searchMapEventNavigatorIndex(index, "facing south").rows.map((row) => row.key)).toEqual([
       "placement:0",
       "placement:0:event:0",
       "placement:0:event:1",

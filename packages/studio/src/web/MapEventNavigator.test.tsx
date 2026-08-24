@@ -27,13 +27,13 @@ describe("Studio Map Event Navigator", () => {
   test("renders a modal combobox over a bounded current-draft listbox", () => {
     const html = renderToStaticMarkup(<MapEventNavigator
       draft={map([
-        placement("keeper", 2, 3, [{
+        { ...placement("keeper", 2, 3, [{
           id: "talk",
           trigger: "interact",
           label: "Speak with the keeper",
           run: { kind: "script", id: "opening" },
           order: 0,
-        }]),
+        }]), facing: "south" },
       ])}
       resources={resources}
       diagnosticCounts={new Map([["keeper", 2]])}
@@ -56,6 +56,7 @@ describe("Studio Map Event Navigator", () => {
     expect(html).toContain("Opening cutscene");
     expect(html).toContain("script:opening");
     expect(html).toContain("⌖ 2,3");
+    expect(html).toContain("FACING · ↓ South");
     expect(html).toContain("! 2");
     expect(html).toContain("READ-ONLY INDEX · CURRENT UNSAVED DRAFT");
   });

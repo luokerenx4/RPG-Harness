@@ -1,6 +1,7 @@
 import type {
   MapDef,
   MapEventTrigger,
+  MapFacing,
   MapPlacementDef,
   MapPoint,
   ProjectResourceNode,
@@ -38,6 +39,7 @@ export interface MapEventNavigatorRow {
   canonicalPath?: string;
   at: MapPoint;
   layer?: string;
+  facing?: MapFacing;
   trigger?: MapEventTrigger;
   targetKey?: string;
   targetLabel?: string;
@@ -121,6 +123,8 @@ export function buildMapEventNavigatorIndex(
       placement.at.y,
       `${placement.at.x},${placement.at.y}`,
       placement.layer,
+      placement.facing,
+      placement.facing ? `facing ${placement.facing}` : undefined,
       placement.collision,
       placement.visible ? "visible" : "hidden",
       canonicalPlacementPath,
@@ -136,6 +140,7 @@ export function buildMapEventNavigatorIndex(
       ...(canonicalPlacementPath ? { canonicalPath: canonicalPlacementPath } : {}),
       at: { ...placement.at },
       ...(placement.layer ? { layer: placement.layer } : {}),
+      ...(placement.facing ? { facing: placement.facing } : {}),
       diagnosticCount,
       destination: placementProblem
         ? { mode: "disabled", problem: placementProblem }
@@ -191,6 +196,7 @@ export function buildMapEventNavigatorIndex(
         ...(canonicalEventPath ? { canonicalPath: canonicalEventPath } : {}),
         at: { ...placement.at },
         ...(placement.layer ? { layer: placement.layer } : {}),
+        ...(placement.facing ? { facing: placement.facing } : {}),
         trigger: event.trigger,
         ...(targetKey ? { targetKey } : {}),
         ...(targetLabel ? { targetLabel } : {}),

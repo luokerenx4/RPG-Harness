@@ -54,6 +54,13 @@ multiple bindings. This deliberately supports RPG Maker-style event maps where
 many invisible or autorun resources share one coordinate while the human player
 only sees CG or dialogue.
 
+`facing` is an authored presentation orientation for a static placement. It may
+select a renderer cue or a future directional sprite frame, but it does not
+rotate generic bitmaps and must not change footprint, collision, event range,
+trigger eligibility, or the resources and operations exposed to Headless. A
+future player-facing interaction cone requires a separate runtime player
+orientation contract rather than reinterpreting placement `facing`.
+
 `custom` remains available for game-specific attributes, but coordinates,
 layers, collision, regions, resource identity, trigger type, ordering, and
 conditions are formal fields and must not be encoded there.

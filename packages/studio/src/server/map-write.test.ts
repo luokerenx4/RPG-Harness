@@ -54,6 +54,8 @@ describe("serializeMapAuthoringPatch", () => {
     expect(next.content).toContain("# authored map");
     expect(next.content).toContain("custom_weather: rain");
     expect(next.content).toContain("loot_table:");
+    expect(next.content).toContain("facing: south");
+    expect(parseMap(next.content).placements?.[0]?.facing).toBe("south");
     expect(next.map.layout).toMatchObject({
       width: 10,
       height: 8,
@@ -66,6 +68,14 @@ describe("serializeMapAuthoringPatch", () => {
       resource: { kind: "character", id: "guide" },
       asset: "assets/sheets/guide-map",
     });
+
+    const placementWithoutFacing = structuredClone(next.map.placements![0]!);
+    delete placementWithoutFacing.facing;
+    const cleared = serializeMapAuthoringPatch(next.content, {
+      placements: [placementWithoutFacing],
+    });
+    expect(cleared.content).not.toContain("facing:");
+    expect(parseMap(cleared.content).placements?.[0]?.facing).toBeUndefined();
   });
 
   test("round-trips both destination arrival anchors when rewriting event pages", () => {

@@ -17,6 +17,7 @@ import {
   resolveSpatialRegionAtPoint,
   resolveSpatialPlacementOperations,
   spatialMoveBlockedMessage,
+  spatialFacingPresentation,
   spatialOperationUnavailableReason,
   spatialTileAtlasStyle,
   SpatialMapSurface,
@@ -296,6 +297,32 @@ describe("SpatialMapSurface", () => {
     expect(html).not.toContain("Private Backdrop Anchor");
     expect(html).not.toContain(">Leave</button>");
     expect(html).not.toContain("arrival");
+  });
+
+  test("renders authored placement facing as static visual metadata", () => {
+    const facedMap: MapDef = {
+      ...map,
+      placements: [{
+        ...map.placements![0]!,
+        facing: "west",
+        asset: "assets/sheets/gate",
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={facedMap}
+        activities={[move]}
+        assetUrls={{ "assets/sheets/gate": "/assets/gate.webp" }}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(spatialFacingPresentation("west")).toEqual({ arrow: "←", label: "朝西", short: "W" });
+    expect(html).toContain("collision-trigger facing-west placement-actionable placement-distant");
+    expect(html).toContain('data-facing="west"');
+    expect(html).toContain('aria-label="出口 Town · 朝西"');
+    expect(html).toContain('class="spatial-placement-facing" title="朝西" aria-hidden="true"><i>←</i><b>W</b>');
+    expect(html).toContain('class="spatial-placement-graphic" src="/assets/gate.webp" alt="" aria-hidden="true"');
   });
 
   test("renders authored layers before stable foot-Y depth", () => {

@@ -639,6 +639,7 @@ describe("Studio map event resource picker", () => {
       z: 2,
       footprint: { width: 1, height: 2 },
       collision: "trigger",
+      facing: "west",
       visible: true,
       requires: { switch: { name: "gate_open", eq: true } },
       events: [{ id: "enter", trigger: "interact", label: "Enter", order: 0 }],

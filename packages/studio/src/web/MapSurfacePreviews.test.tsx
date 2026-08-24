@@ -38,4 +38,25 @@ describe("Studio map surface preview status", () => {
     expect(html).toContain("BUILDING SAVED PREVIEW");
     expect(html).not.toContain("DRAFT PREVIEW");
   });
+
+  test("projects authored facing into the visual 2D row", () => {
+    const facedMap: MapDef = {
+      ...map,
+      placements: [{
+        id: "keeper",
+        at: { x: 2, y: 1 },
+        z: 0,
+        footprint: { width: 1, height: 1 },
+        collision: "none",
+        facing: "west",
+        visible: true,
+        events: [],
+      }],
+    };
+    const html = renderToStaticMarkup(<MapSurfacePreviews savedMap={facedMap} map={facedMap} draftActive />);
+
+    expect(html).toContain('class="projection-placement-position"');
+    expect(html).toContain('class="projection-placement-facing" title="Face west"');
+    expect(html).toContain("← W");
+  });
 });

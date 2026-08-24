@@ -10,6 +10,7 @@ import type {
   MapDef,
   ProjectResourceNode,
 } from "@rpg-harness/engine";
+import { mapFacingPresentation } from "./MapFacingControl";
 import {
   buildMapEventNavigatorIndex,
   MAP_EVENT_NAVIGATOR_RESULT_LIMIT,
@@ -353,6 +354,7 @@ export function MapEventNavigator({
                     <small>
                       <span>⌖ {row.at.x},{row.at.y}</span>
                       <span>{row.layer ? `LAYER · ${row.layer}` : "DEFAULT LAYER"}</span>
+                      {row.facing && <span>FACING · {mapFacingPresentation(row.facing).glyph} {mapFacingPresentation(row.facing).label}</span>}
                       {row.trigger && <span>TRIGGER · {row.trigger}</span>}
                     </small>
                   </span>

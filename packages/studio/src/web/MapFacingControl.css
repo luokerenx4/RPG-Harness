@@ -1,0 +1,167 @@
+.map-facing-control {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(112px,1fr);
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  align-items: center;
+  gap: 10px;
+  color: #8995a1;
+  border: 1px solid #2b3541;
+  border-radius: 6px;
+  background: linear-gradient(135deg,rgba(80,199,217,.045),#0b1016 58%);
+}
+
+.map-facing-control > legend {
+  padding: 0 5px;
+  color: #687582;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.map-facing-dpad {
+  display: grid;
+  grid-template-columns: repeat(3,34px);
+  grid-template-rows: repeat(3,30px);
+  padding: 4px;
+  gap: 3px;
+  border: 1px solid #27313c;
+  border-radius: 7px;
+  background: #080d12;
+  box-shadow: inset 0 1px 9px rgba(0,0,0,.48);
+}
+
+.map-facing-control .map-facing-option {
+  display: grid;
+  grid-template-columns: auto auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #7b8793;
+  border: 1px solid #303b47;
+  border-radius: 4px;
+  outline: none;
+  background: linear-gradient(180deg,#18202a,#10161d);
+  box-shadow: inset 0 1px rgba(255,255,255,.025),0 2px 4px rgba(0,0,0,.26);
+  cursor: pointer;
+  transition: color .12s ease,border-color .12s ease,background .12s ease,box-shadow .12s ease,transform .12s ease;
+}
+
+.map-facing-control .map-facing-option > span {
+  font: 700 13px/1 ui-sans-serif,system-ui,sans-serif;
+}
+
+.map-facing-control .map-facing-option > small {
+  color: #566371;
+  font: 800 6px/1 ui-monospace,SFMono-Regular,monospace;
+  letter-spacing: .04em;
+}
+
+.map-facing-control .map-facing-option:hover {
+  color: #d5f5f9;
+  border-color: #4a606d;
+  background: linear-gradient(180deg,#202c36,#141d25);
+}
+
+.map-facing-control .map-facing-option:active { transform: translateY(1px); }
+
+.map-facing-control .map-facing-option:focus-visible {
+  border-color: var(--studio-accent,#50c7d9);
+  box-shadow: 0 0 0 2px rgba(80,199,217,.2),inset 0 1px rgba(255,255,255,.06);
+}
+
+.map-facing-control .map-facing-option.selected {
+  color: #061216;
+  border-color: #82e4ef;
+  background: var(--studio-accent,#50c7d9);
+  box-shadow: 0 0 0 2px rgba(80,199,217,.12),0 3px 8px rgba(0,0,0,.34);
+}
+
+.map-facing-control .map-facing-option.selected > small { color: rgba(4,23,27,.66); }
+.map-facing-control .map-facing-option.direction-none { border-radius: 50%; }
+.map-facing-control .map-facing-option.direction-none:not(.selected) { color: #6e7883; background: #111820; }
+.map-facing-control .map-facing-option.direction-north { grid-column: 2; grid-row: 1; }
+.map-facing-control .map-facing-option.direction-west { grid-column: 1; grid-row: 2; }
+.map-facing-control .map-facing-option.direction-none { grid-column: 2; grid-row: 2; }
+.map-facing-control .map-facing-option.direction-east { grid-column: 3; grid-row: 2; }
+.map-facing-control .map-facing-option.direction-south { grid-column: 2; grid-row: 3; }
+
+.map-facing-current {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 9px;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 2px solid #34414d;
+  background: rgba(9,14,20,.45);
+}
+
+.map-facing-current > small {
+  color: #5c6976;
+  font: 800 6px/1 ui-monospace,SFMono-Regular,monospace;
+  letter-spacing: .12em;
+}
+
+.map-facing-current > strong {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: #d4dbe2;
+  font: 700 11px/1.2 ui-sans-serif,system-ui,sans-serif;
+}
+
+.map-facing-current > strong i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--studio-accent,#50c7d9);
+  border: 1px solid rgba(80,199,217,.28);
+  border-radius: 50%;
+  background: rgba(80,199,217,.07);
+  font-size: 12px;
+  font-style: normal;
+  place-items: center;
+}
+
+.map-facing-current > span {
+  overflow: hidden;
+  color: #586572;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-facing-control[data-facing="none"] .map-facing-current > strong i {
+  color: #78838e;
+  border-color: #34404b;
+  background: #121921;
+}
+
+@container (max-width: 270px) {
+  .map-facing-control { grid-template-columns: minmax(0,1fr); }
+  .map-facing-dpad { justify-self: center; }
+  .map-facing-current { min-height: 0; border-top: 1px solid #2b3540; border-left: 0; text-align: center; }
+  .map-facing-current > strong { justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  .map-facing-control { grid-template-columns: minmax(0,1fr); }
+  .map-facing-dpad { justify-self: center; }
+  .map-facing-current { min-height: 0; border-top: 1px solid #2b3540; border-left: 0; text-align: center; }
+  .map-facing-current > strong { justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-facing-control .map-facing-option { transition: none; }
+}
