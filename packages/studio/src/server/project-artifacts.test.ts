@@ -39,6 +39,37 @@ describe("Studio project artifacts", () => {
     });
   });
 
+  test("projects directional sprite metadata for map authoring surfaces", () => {
+    const spriteGrid = {
+      columns: 3,
+      rows: 4,
+      defaultFacing: "south" as const,
+      frames: { north: 10, east: 7, south: 1, west: 4 },
+    };
+    expect(projectAssetPreview({
+      path: "assets/sprites/kagari-field",
+      kind: "sprite",
+      description: "Kagari field sprite",
+      prompt: "sprite atlas",
+      placeholder: "Kagari map sprite",
+      spriteGrid,
+      renderings: { source: "/private/sprite.png" },
+    } as AssetSpec)).toEqual({
+      path: "assets/sprites/kagari-field",
+      kind: "sprite",
+      placeholder: "Kagari map sprite",
+      spriteGrid,
+      renderings: {
+        source: true,
+        sourceQuality: false,
+        sourceCompressed: false,
+        tuiTxt: false,
+        tuiAns: false,
+        web: false,
+      },
+    });
+  });
+
   test("indexes tests and session-scoped issues with stable resource refs", async () => {
     const gameDir = await mkdtemp(path.join(os.tmpdir(), "autogal-artifacts-"));
     created.push(gameDir);

@@ -61,6 +61,33 @@ trigger eligibility, or the resources and operations exposed to Headless. A
 future player-facing interaction cone requires a separate runtime player
 orientation contract rather than reinterpreting placement `facing`.
 
+Directional art is therefore an explicit property of a `sprite` asset rather
+than a filename, image-size, or RPG Maker row-order convention:
+
+```yaml
+kind: sprite
+sprite_grid:
+  columns: 3
+  rows: 4
+  default_facing: south
+  frames:                 # zero-based, row-major idle cells
+    north: 10
+    east: 7
+    south: 1
+    west: 4
+```
+
+The block is optional, so every existing single-image sprite keeps its exact
+rendering. Once present it is complete and deterministic: all four directions
+and an explicit fallback are required. A placement's `facing` selects its
+mapped cell; consumers without an authored orientation use `default_facing`
+instead of guessing or exposing the whole atlas. Frame indexes may alias and
+unused cells may remain for future animation contracts. Visual renderers divide
+the loaded raster into equal cells and contain the selected source cell without
+changing its intrinsic aspect ratio. This selection is a renderer projection
+only: TUI/Headless semantics, collision, event eligibility, and persisted player
+orientation do not consume `sprite_grid`.
+
 `custom` remains available for game-specific attributes, but coordinates,
 layers, collision, regions, resource identity, trigger type, ordering, and
 conditions are formal fields and must not be encoded there.

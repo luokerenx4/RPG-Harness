@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { mapPlacementEventKey } from "@rpg-harness/engine";
-import type { HubActivity, MapDef, MapPlacementDef } from "@rpg-harness/engine";
+import type { AssetSpec, HubActivity, MapDef, MapPlacementDef } from "@rpg-harness/engine";
 import {
   collectSpatialContextOperations,
   collectSpatialLandmarks,
@@ -10,10 +10,12 @@ import {
   collectSpatialStepTargets,
   collectSpatialTiles,
   describePlacementApproach,
+  drawSpatialSpriteFrame,
   isSpatialInteractKey,
   mapMoveAvailability,
   mapPlacementDistance,
   resolveAcceptedSpatialActivityFeedback,
+  resolveSpatialPlacementGraphicPath,
   resolveSpatialRegionAtPoint,
   resolveSpatialPlacementOperations,
   spatialMoveBlockedMessage,
@@ -59,7 +61,57 @@ const move: HubActivity = {
   available: true,
 };
 
+function spriteAsset(path: string, directional = true): AssetSpec {
+  return {
+    path,
+    kind: "sprite",
+    description: "Field sprite",
+    prompt: "Field sprite",
+    placeholder: "[field sprite]",
+    ...(directional ? {
+      spriteGrid: {
+        columns: 2,
+        rows: 2,
+        defaultFacing: "south" as const,
+        frames: { north: 0, east: 1, south: 2, west: 3 },
+      },
+    } : {}),
+    renderings: {},
+  };
+}
+
 describe("SpatialMapSurface", () => {
+  test("paints an explicit sprite cell into an aspect-preserving DPR canvas", () => {
+    const canvas = { width: 0, height: 0 };
+    const calls: unknown[][] = [];
+    const image = {} as CanvasImageSource;
+    const plan = drawSpatialSpriteFrame(canvas, {
+      setTransform: (...args) => calls.push(["setTransform", ...args]),
+      clearRect: (...args) => calls.push(["clearRect", ...args]),
+      drawImage: (...args) => calls.push(["drawImage", ...args]),
+    }, image, {
+      facing: "west",
+      index: 3,
+      column: 1,
+      row: 1,
+      columns: 2,
+      rows: 2,
+    }, { width: 600, height: 400 }, { width: 100, height: 100 }, 2);
+
+    expect(canvas).toEqual({ width: 200, height: 200 });
+    expect(plan?.source).toEqual({ x: 300, y: 200, width: 300, height: 200 });
+    expect(plan?.destination.x).toBe(0);
+    expect(plan?.destination.y).toBeCloseTo(100 / 6);
+    expect(plan?.destination.width).toBe(100);
+    expect(plan?.destination.height).toBeCloseTo(200 / 3);
+    expect(calls[0]).toEqual(["setTransform", 2, 0, 0, 2, 0, 0]);
+    expect(calls[1]).toEqual(["clearRect", 0, 0, 100, 100]);
+    expect(calls[2]?.slice(0, 10)).toEqual([
+      "drawImage", image, 300, 200, 300, 200, 0,
+      plan?.destination.y, 100, plan?.destination.height,
+    ]);
+  });
+
   test("measures player distance from a placement footprint", () => {
     const placement = map.placements![0]!;
     expect(mapPlacementDistance({ x: 1, y: 2 }, placement)).toBe(5);
@@ -323,6 +375,40 @@ describe("SpatialMapSurface", () => {
     expect(html).toContain('aria-label="出口 Town · 朝西"');
     expect(html).toContain('class="spatial-placement-facing" title="朝西" aria-hidden="true"><i>←</i><b>W</b>');
     expect(html).toContain('class="spatial-placement-graphic" src="/assets/gate.webp" alt="" aria-hidden="true"');
+    expect(html).not.toContain("spatial-sprite-frame");
+  });
+
+  test("crops explicit sprite grids while keeping placement and player facing presentation-only", () => {
+    const keeper = spriteAsset("assets/sprites/keeper");
+    const player = spriteAsset("assets/sprites/player");
+    const facedMap: MapDef = {
+      ...map,
+      placements: [{
+        ...map.placements![0]!,
+        asset: keeper.path,
+        facing: "west",
+      }],
+    };
+    const html = renderToStaticMarkup(
+      <SpatialMapSurface
+        map={facedMap}
+        activities={[move]}
+        assetUrls={{
+          [keeper.path]: "/assets/keeper.webp",
+          [player.path]: "/assets/player.webp",
+        }}
+        assetSpecs={new Map([[keeper.path, keeper]])}
+        playerPosition={{ x: 1, y: 2 }}
+        playerGraphicUrl="/assets/player.webp"
+        playerGraphicAsset={player}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(html).toContain('<canvas class="spatial-placement-graphic spatial-sprite-frame" data-sprite-facing="west" data-sprite-frame="3" aria-hidden="true"></canvas>');
+    expect(html).toContain('<canvas class="spatial-map-player-sprite-frame spatial-sprite-frame" data-sprite-facing="south" data-sprite-frame="2" aria-hidden="true"></canvas>');
+    expect(html).not.toContain('<img class="spatial-placement-graphic" src="/assets/keeper.webp"');
+    expect(html).not.toContain('<img src="/assets/player.webp"');
   });
 
   test("renders authored layers before stable foot-Y depth", () => {
@@ -370,16 +456,23 @@ describe("SpatialMapSurface", () => {
         asset: undefined,
       }],
     };
+    const keeper = spriteAsset("assets/sprites/keeper");
+    const disguise = spriteAsset("assets/sprites/disguise", false);
     const html = renderToStaticMarkup(
       <SpatialMapSurface
         map={characterMap}
         activities={[]}
         assetUrls={{ "assets/sprites/keeper": "/assets/keeper.webp" }}
+        assetSpecs={new Map([[keeper.path, keeper]])}
         resourceGraphics={new Map([["character:keeper", "assets/sprites/keeper"]])}
         onInput={() => {}}
       />,
     );
-    expect(html).toContain('class="spatial-placement-graphic" src="/assets/keeper.webp"');
+    expect(resolveSpatialPlacementGraphicPath(
+      characterMap.placements![0]!,
+      new Map([["character:keeper", keeper.path]]),
+    )).toBe(keeper.path);
+    expect(html).toContain('<canvas class="spatial-placement-graphic spatial-sprite-frame" data-sprite-facing="south" data-sprite-frame="2" aria-hidden="true"></canvas>');
     const override = renderToStaticMarkup(
       <SpatialMapSurface
         map={{ ...characterMap, placements: [{ ...characterMap.placements![0]!, asset: "assets/sprites/disguise" }] }}
@@ -388,12 +481,18 @@ describe("SpatialMapSurface", () => {
           "assets/sprites/keeper": "/assets/keeper.webp",
           "assets/sprites/disguise": "/assets/disguise.webp",
         }}
+        assetSpecs={new Map([[keeper.path, keeper], [disguise.path, disguise]])}
         resourceGraphics={new Map([["character:keeper", "assets/sprites/keeper"]])}
         onInput={() => {}}
       />,
     );
+    expect(resolveSpatialPlacementGraphicPath(
+      { ...characterMap.placements![0]!, asset: disguise.path },
+      new Map([["character:keeper", keeper.path]]),
+    )).toBe(disguise.path);
     expect(override).toContain('src="/assets/disguise.webp"');
     expect(override).not.toContain('src="/assets/keeper.webp"');
+    expect(override).not.toContain("spatial-sprite-frame");
   });
 
   test("moves manual placement commands into one nearby action prompt", () => {

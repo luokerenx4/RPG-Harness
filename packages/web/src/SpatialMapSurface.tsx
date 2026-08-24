@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  assetSpriteFrameDrawPlan,
   collectMapImageLayers,
   isMapEventPlayerAction,
   isMapPlacementLayerVisible,
@@ -9,8 +10,11 @@ import {
   mapPlacementEventKey,
   mapPlayerDisplayOrder,
   mapPointBlocker,
+  resolveAssetSpriteFrame,
 } from "@rpg-harness/engine";
 import type {
+  AssetSpriteFrame,
+  AssetSpriteFrameDrawPlan,
   AssetSpec,
   HubActivity,
   Input,
@@ -56,6 +60,144 @@ type SpatialResourceGraphics = ReadonlyMap<string, string>;
 
 /** Backward-compatible Web export backed by the engine's canonical geometry. */
 export const mapPlacementDistance = engineMapPlacementDistance;
+
+/**
+ * Resolve the one graphic identity used by both URL and AssetSpec lookup.
+ * Placement-owned art always wins over a character's inherited map sprite.
+ */
+export function resolveSpatialPlacementGraphicPath(
+  placement: MapPlacementDef,
+  resourceGraphics?: ReadonlyMap<string, string>,
+): string | undefined {
+  if (placement.asset) return placement.asset;
+  if (!placement.resource) return undefined;
+  return resourceGraphics?.get(`${placement.resource.kind}:${placement.resource.id}`);
+}
+
+export interface SpatialSpriteCanvasContext {
+  setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
+  clearRect(x: number, y: number, width: number, height: number): void;
+  drawImage(
+    image: CanvasImageSource,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void;
+}
+
+/** Paint one equal-cell atlas frame without stretching its intrinsic aspect. */
+export function drawSpatialSpriteFrame(
+  canvas: Pick<HTMLCanvasElement, "width" | "height">,
+  context: SpatialSpriteCanvasContext,
+  image: CanvasImageSource,
+  frame: AssetSpriteFrame,
+  imageSize: { width: number; height: number },
+  viewport: { width: number; height: number },
+  devicePixelRatio = 1,
+): AssetSpriteFrameDrawPlan | undefined {
+  const plan = assetSpriteFrameDrawPlan(frame, imageSize, viewport);
+  if (!plan) return undefined;
+  const scale = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0
+    ? devicePixelRatio
+    : 1;
+  canvas.width = Math.max(1, Math.round(viewport.width * scale));
+  canvas.height = Math.max(1, Math.round(viewport.height * scale));
+  context.setTransform(scale, 0, 0, scale, 0, 0);
+  context.clearRect(0, 0, viewport.width, viewport.height);
+  context.drawImage(
+    image,
+    plan.source.x,
+    plan.source.y,
+    plan.source.width,
+    plan.source.height,
+    plan.destination.x,
+    plan.destination.y,
+    plan.destination.width,
+    plan.destination.height,
+  );
+  return plan;
+}
+
+function SpatialSpriteCanvas({
+  className,
+  imageUrl,
+  frame,
+}: {
+  className: string;
+  imageUrl: string;
+  frame: AssetSpriteFrame;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    let disposed = false;
+    let resizeObserver: ResizeObserver | undefined;
+    let fallbackFrame = 0;
+    const image = new Image();
+    const draw = () => {
+      if (disposed || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      drawSpatialSpriteFrame(
+        canvas,
+        context,
+        image,
+        frame,
+        { width: image.naturalWidth, height: image.naturalHeight },
+        { width: bounds.width, height: bounds.height },
+        window.devicePixelRatio,
+      );
+    };
+    const scheduleDraw = () => {
+      if (fallbackFrame) cancelAnimationFrame(fallbackFrame);
+      fallbackFrame = requestAnimationFrame(() => {
+        fallbackFrame = 0;
+        draw();
+      });
+    };
+    image.onload = scheduleDraw;
+    image.src = imageUrl;
+    if (typeof ResizeObserver === "function") {
+      resizeObserver = new ResizeObserver(scheduleDraw);
+      resizeObserver.observe(canvas);
+    } else {
+      window.addEventListener("resize", scheduleDraw);
+    }
+    scheduleDraw();
+    return () => {
+      disposed = true;
+      image.onload = null;
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleDraw);
+      if (fallbackFrame) cancelAnimationFrame(fallbackFrame);
+    };
+  }, [
+    imageUrl,
+    frame.facing,
+    frame.index,
+    frame.column,
+    frame.row,
+    frame.columns,
+    frame.rows,
+  ]);
+
+  return <canvas
+    ref={canvasRef}
+    className={className}
+    data-sprite-facing={frame.facing}
+    data-sprite-frame={frame.index}
+    aria-hidden="true"
+  />;
+}
 
 export function resolveSpatialPlacementOperations(
   map: MapDef,
@@ -214,10 +356,12 @@ export function SpatialMapSurface({
   tileset,
   tilesetUrl,
   assetUrls,
+  assetSpecs,
   playerPosition,
   resourceLabels,
   resourceGraphics,
   playerGraphicUrl,
+  playerGraphicAsset,
   moveFeedback,
   onInput,
 }: {
@@ -227,10 +371,12 @@ export function SpatialMapSurface({
   tileset?: AssetSpec;
   tilesetUrl?: string;
   assetUrls?: Readonly<Record<string, string>>;
+  assetSpecs?: ReadonlyMap<string, AssetSpec>;
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
   resourceGraphics?: SpatialResourceGraphics;
   playerGraphicUrl?: string;
+  playerGraphicAsset?: AssetSpec;
   moveFeedback?: SpatialMoveFeedback | null;
   onInput: (input: Input) => void;
 }) {
@@ -257,6 +403,9 @@ export function SpatialMapSurface({
     : undefined;
   const blockedMoveMessage = moveFeedback
     ? spatialMoveBlockedMessage(moveFeedback.direction)
+    : undefined;
+  const playerSpriteFrame = playerGraphicAsset
+    ? resolveAssetSpriteFrame(playerGraphicAsset)
     : undefined;
 
   useEffect(() => {
@@ -368,19 +517,21 @@ export function SpatialMapSurface({
             <span>{region.name ?? formatResourceName(region.id)}</span>
           </div>
         ))}
-        {visiblePlacements.map((placement) => (
-          <Placement
-            key={placement.id}
-            map={map}
-            placement={placement}
-            activities={byId}
-            playerPosition={playerPosition}
-            resourceLabels={resourceLabels}
-            graphicUrl={assetUrls?.[placement.asset ?? (
-              placement.resource ? resourceGraphics?.get(`${placement.resource.kind}:${placement.resource.id}`) ?? "" : ""
-            )]}
-          />
-        ))}
+        {visiblePlacements.map((placement) => {
+          const graphicAssetPath = resolveSpatialPlacementGraphicPath(placement, resourceGraphics);
+          return (
+            <Placement
+              key={placement.id}
+              map={map}
+              placement={placement}
+              activities={byId}
+              playerPosition={playerPosition}
+              resourceLabels={resourceLabels}
+              graphicUrl={graphicAssetPath ? assetUrls?.[graphicAssetPath] : undefined}
+              graphicAsset={graphicAssetPath ? assetSpecs?.get(graphicAssetPath) : undefined}
+            />
+          );
+        })}
         {stepTargets.map((target) => (
           <button
             type="button"
@@ -411,7 +562,13 @@ export function SpatialMapSurface({
               zIndex: mapPlayerDisplayOrder(map, playerPosition),
             }}
           >{playerGraphicUrl
-            ? <img src={playerGraphicUrl} alt="" aria-hidden="true" />
+            ? playerSpriteFrame
+              ? <SpatialSpriteCanvas
+                className="spatial-map-player-sprite-frame spatial-sprite-frame"
+                imageUrl={playerGraphicUrl}
+                frame={playerSpriteFrame}
+              />
+              : <img src={playerGraphicUrl} alt="" aria-hidden="true" />
             : <span>◆</span>}
             <small>YOU</small>
           </div>
@@ -514,6 +671,7 @@ function Placement({
   playerPosition,
   resourceLabels,
   graphicUrl,
+  graphicAsset,
 }: {
   map: MapDef;
   placement: MapPlacementDef;
@@ -521,6 +679,7 @@ function Placement({
   playerPosition?: MapPoint;
   resourceLabels?: SpatialResourceLabels;
   graphicUrl?: string;
+  graphicAsset?: AssetSpec;
 }) {
   const layout = map.layout!;
   const operations = resolveSpatialPlacementOperations(map, placement, activities);
@@ -533,6 +692,9 @@ function Placement({
   const distance = playerPosition ? mapPlacementDistance(playerPosition, placement) : undefined;
   const nearby = distance !== undefined && distance <= 1;
   const facing = placement.facing ? spatialFacingPresentation(placement.facing) : undefined;
+  const spriteFrame = graphicAsset
+    ? resolveAssetSpriteFrame(graphicAsset, placement.facing)
+    : undefined;
   const position = {
     left: `${placement.at.x / layout.width * 100}%`,
     top: `${placement.at.y / layout.height * 100}%`,
@@ -550,7 +712,13 @@ function Placement({
       aria-label={`${resourceKindLabel(resourceKind)} ${resourceName}${facing ? ` · ${facing.label}` : ""}`}
       role="img"
     >
-      {graphicUrl && <img className="spatial-placement-graphic" src={graphicUrl} alt="" aria-hidden="true" />}
+      {graphicUrl && (spriteFrame
+        ? <SpatialSpriteCanvas
+          className="spatial-placement-graphic spatial-sprite-frame"
+          imageUrl={graphicUrl}
+          frame={spriteFrame}
+        />
+        : <img className="spatial-placement-graphic" src={graphicUrl} alt="" aria-hidden="true" />)}
       <span className="spatial-placement-marker" aria-hidden="true">
         {resourceKindIcon(resourceKind)}
       </span>

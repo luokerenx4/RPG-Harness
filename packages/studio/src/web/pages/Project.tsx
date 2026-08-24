@@ -54,6 +54,11 @@ import {
 } from "../DatabaseOverview";
 import { MapAssetPicker } from "../MapAssetPicker";
 import { MapFacingControl, mapFacingPresentation } from "../MapFacingControl";
+import {
+  StudioSpriteFrame,
+  studioAssetBackgroundStyle,
+  studioDirectionalSpriteAsset,
+} from "../SpriteFrame";
 import { MapEventNavigator } from "../MapEventNavigator";
 import {
   resolveMapEventNavigatorTarget,
@@ -3860,7 +3865,9 @@ function MapOverview({
                   onDragStart={(event) => { event.dataTransfer.setData("application/x-autogal-resource", resource.key); event.dataTransfer.effectAllowed = "copy"; }}
                   onClick={() => setPaletteResourceKey(resource.key)}
                 >
-                  <span className={`palette-resource-art${graphicPath ? " authored" : " fallback"}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} aria-hidden="true">{graphicPath ? "" : KIND_META[resource.kind]?.icon ?? "◇"}</span>
+                  <span className={`palette-resource-art${graphicPath ? " authored" : " fallback"}`} style={studioAssetBackgroundStyle(graphicPath, assets)} aria-hidden="true">
+                    {graphicPath ? <StudioSpriteFrame asset={studioDirectionalSpriteAsset(graphicPath, assets)} className="studio-sprite-frame-canvas" /> : KIND_META[resource.kind]?.icon ?? "◇"}
+                  </span>
                   <span><strong>{resource.label}</strong><small>{resource.kind} · {resource.id}</small></span>
                 </button>
               );
@@ -3889,7 +3896,9 @@ function MapOverview({
                   key={placement.id}
                   onClick={() => { setSelectedPlacementId(placement.id); if (placement.layer) setObjectLayerId(placement.layer); }}
                 >
-                  <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} />
+                  <i className={`object-dot collision-${placement.collision}${graphicPath ? " authored" : ""}`} style={studioAssetBackgroundStyle(graphicPath, assets, placement.facing)}>
+                    <StudioSpriteFrame asset={studioDirectionalSpriteAsset(graphicPath, assets, placement.facing)} facing={placement.facing} className="studio-sprite-frame-canvas" />
+                  </i>
                   <span className="map-object-identity"><strong>{label}</strong><code>{placement.id}</code></span>
                   <b className={`map-object-event-state${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}${eventSummary.hidden ? " hidden" : ""}`} title={eventSummary.title}><i>{eventSummary.icons || "—"}</i>{eventSummary.count}<small>{eventSummary.gated ? "◆" : eventSummary.hidden ? "○" : ""}</small></b>
                   {diagnosticCount > 0 && <span className="map-object-diagnostic" title={`${diagnosticCount} spatial ${diagnosticCount === 1 ? "warning" : "warnings"}`}>! {diagnosticCount}</span>}
@@ -4115,7 +4124,7 @@ function MapOverview({
                 height: `${100 / height}%`,
                 zIndex: mapPlayerDisplayOrder(draft, draft.layout.playerStart),
               }}
-            ><span className={playerGraphicPath ? "map-player-start-graphic" : ""} style={playerGraphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(playerGraphicPath))})` } : undefined}>{playerGraphicPath ? "" : "◆"}</span><small>START</small></div>
+            ><span className={playerGraphicPath ? "map-player-start-graphic" : ""} style={studioAssetBackgroundStyle(playerGraphicPath, assets)}>{playerGraphicPath ? <StudioSpriteFrame asset={studioDirectionalSpriteAsset(playerGraphicPath, assets)} className="studio-sprite-frame-canvas" /> : "◆"}</span><small>START</small></div>
           )}
           {playabilityPointGroups.map((group) => {
             const active = group.diagnostics.some(
@@ -4174,7 +4183,9 @@ function MapOverview({
                 opacity: rendered ? 1 : 0.18,
               }}
             >
-              {graphicPath && <span className="map-placement-graphic" style={{ backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` }} aria-hidden="true" />}
+              {graphicPath && <span className="map-placement-graphic" style={studioAssetBackgroundStyle(graphicPath, assets, placement.facing)} aria-hidden="true">
+                <StudioSpriteFrame asset={studioDirectionalSpriteAsset(graphicPath, assets, placement.facing)} facing={placement.facing} className="studio-sprite-frame-canvas" />
+              </span>}
               {diagnosticCount > 0 && <span className="map-placement-diagnostic" title={`${diagnosticCount} spatial ${diagnosticCount === 1 ? "warning" : "warnings"}`}><i>!</i>{diagnosticCount > 1 && <b>{diagnosticCount}</b>}</span>}
               {eventSummary.count > 0 && <span className={`map-placement-event-summary${eventSummary.gated ? " gated" : ""}${eventSummary.automatic ? " automatic" : ""}`} title={eventSummary.title}><i>{eventSummary.icons}</i><b>{eventSummary.count}</b>{eventSummary.gated && <small>◆</small>}</span>}
               {facing && <span className="map-placement-facing" title={facing.title} aria-hidden="true"><i>{facing.glyph}</i><b>{facing.shortLabel}</b></span>}
@@ -5013,7 +5024,9 @@ function PlacementEditor({
             </select></label>
           </div>
           <div className="placement-graphic-fields">
-            <span className={`placement-graphic-preview${graphicPath ? " authored" : ""}`} style={graphicPath ? { backgroundImage: `url(${JSON.stringify(sourceImageUrl(graphicPath))})` } : undefined} aria-hidden="true">{graphicPath ? "" : "◇"}</span>
+            <span className={`placement-graphic-preview${graphicPath ? " authored" : ""}`} style={studioAssetBackgroundStyle(graphicPath, assets, placement.facing)} aria-hidden="true">
+              {graphicPath ? <StudioSpriteFrame asset={studioDirectionalSpriteAsset(graphicPath, assets, placement.facing)} facing={placement.facing} className="studio-sprite-frame-canvas" /> : "◇"}
+            </span>
             <MapAssetPicker
               assets={assets}
               value={placement.asset}
@@ -5022,6 +5035,7 @@ function PlacementEditor({
               label="Map graphic"
               title={`Choose map graphic for ${placementLabel}`}
               description="Assign a visual override to this placement without changing its project record or event behavior."
+              previewFacing={placement.facing}
               onChange={(asset) => onChange((current) => ({ ...current, asset }))}
             />
             <small>{placement.asset ?? (inheritedGraphic ? `Inherited · ${inheritedGraphic}` : "Renderer-owned marker · Headless ignores the visual")}</small>

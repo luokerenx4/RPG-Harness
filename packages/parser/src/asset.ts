@@ -4,6 +4,7 @@ import type {
   AssetRefs,
   AssetSize,
   AssetSpec,
+  AssetSpriteGrid,
   TuiRenderPrefs,
 } from "@rpg-harness/engine";
 import { extractCustom } from "./frontmatter";
@@ -55,6 +56,7 @@ const KNOWN_KEYS = [
   "refs",
   "size_hint",
   "tile_grid",
+  "sprite_grid",
   "tags",
   "tui_render",
 ] as const;
@@ -122,6 +124,12 @@ export function parseAssetSpec(
     }
     spec.tileGrid = parseTileGrid(obj.tile_grid, relPath);
   }
+  if (obj.sprite_grid !== undefined) {
+    if (kind !== "sprite") {
+      throw new AssetParseError("`sprite_grid` is only valid for `kind: sprite`", relPath);
+    }
+    spec.spriteGrid = parseSpriteGrid(obj.sprite_grid, relPath);
+  }
   if (obj.tags !== undefined) spec.tags = parseTags(obj.tags, relPath);
   if (obj.tui_render !== undefined) {
     spec.tuiRender = parseTuiRender(obj.tui_render, relPath);
@@ -151,6 +159,64 @@ function parseTileGrid(raw: unknown, source: string) {
     throw new AssetParseError("`tile_grid.first_id` must be a non-negative integer", source);
   }
   return { columns: columns as number, rows: rows as number, firstId: firstId as number };
+}
+
+const MAP_FACINGS = ["north", "east", "south", "west"] as const;
+
+function parseSpriteGrid(raw: unknown, source: string): AssetSpriteGrid {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new AssetParseError("`sprite_grid` must be an object", source);
+  }
+  const obj = raw as Record<string, unknown>;
+  const columns = obj.columns;
+  const rows = obj.rows;
+  if (!Number.isSafeInteger(columns) || (columns as number) <= 0) {
+    throw new AssetParseError("`sprite_grid.columns` must be a positive safe integer", source);
+  }
+  if (!Number.isSafeInteger(rows) || (rows as number) <= 0) {
+    throw new AssetParseError("`sprite_grid.rows` must be a positive safe integer", source);
+  }
+  const cellCount = (columns as number) * (rows as number);
+  if (!Number.isSafeInteger(cellCount)) {
+    throw new AssetParseError("`sprite_grid` cell count must be a safe integer", source);
+  }
+  const defaultFacing = obj.default_facing;
+  if (typeof defaultFacing !== "string" || !(MAP_FACINGS as readonly string[]).includes(defaultFacing)) {
+    throw new AssetParseError(
+      `\`sprite_grid.default_facing\` must be one of ${MAP_FACINGS.join(" / ")}`,
+      source,
+    );
+  }
+  if (!obj.frames || typeof obj.frames !== "object" || Array.isArray(obj.frames)) {
+    throw new AssetParseError("`sprite_grid.frames` must be an object", source);
+  }
+  const rawFrames = obj.frames as Record<string, unknown>;
+  const unknownDirections = Object.keys(rawFrames).filter(
+    (key) => !(MAP_FACINGS as readonly string[]).includes(key),
+  );
+  if (unknownDirections.length > 0) {
+    throw new AssetParseError(
+      `\`sprite_grid.frames\` has unknown direction ${JSON.stringify(unknownDirections[0])}`,
+      source,
+    );
+  }
+  const frames = {} as AssetSpriteGrid["frames"];
+  for (const facing of MAP_FACINGS) {
+    const index = rawFrames[facing];
+    if (!Number.isSafeInteger(index) || (index as number) < 0 || (index as number) >= cellCount) {
+      throw new AssetParseError(
+        `\`sprite_grid.frames.${facing}\` must be an integer between 0 and ${cellCount - 1}`,
+        source,
+      );
+    }
+    frames[facing] = index as number;
+  }
+  return {
+    columns: columns as number,
+    rows: rows as number,
+    defaultFacing: defaultFacing as AssetSpriteGrid["defaultFacing"],
+    frames,
+  };
 }
 
 function requireString(

@@ -13,6 +13,8 @@ export {
 export { validateOutput, OutputContractError } from "./output";
 export type { InputExpectation, InputRejectionCode, InputResult } from "./input";
 export { ensurePersistedRng, persistedRng, statefulRng } from "./rng";
+export { assetSpriteFrameDrawPlan, resolveAssetSpriteFrame } from "./assets";
+export type { AssetSpriteFrame, AssetSpriteFrameDrawPlan } from "./assets";
 export {
   collectMapArrivalBacklinks,
   collectMapConnections,
@@ -183,6 +185,7 @@ export type {
   AssetRefs,
   AssetRenderings,
   AssetSize,
+  AssetSpriteGrid,
   AssetTileGrid,
   AssetSpec,
   TuiRenderPrefs,

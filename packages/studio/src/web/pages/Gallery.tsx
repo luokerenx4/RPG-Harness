@@ -505,6 +505,7 @@ function AssetCard({ asset }: { asset: AssetRow }) {
           <div className="placeholder-thumb">{asset.placeholder}</div>
         )}
         {asset.kind === "tileset" && <span className={`atlas-stamp${asset.tileGrid ? " ready" : " missing"}`}><i aria-hidden="true">▦</i><strong>{asset.tileGrid ? `${asset.tileGrid.columns}×${asset.tileGrid.rows}` : "?×?"}</strong><small>ATLAS</small></span>}
+        {asset.kind === "sprite" && asset.spriteGrid && <span className="atlas-stamp ready"><i aria-hidden="true">✥</i><strong>{asset.spriteGrid.columns}×{asset.spriteGrid.rows}</strong><small>4-DIR</small></span>}
       </div>
       <div className="body">
         <div className="row" style={{ justifyContent: "space-between" }}>
@@ -513,18 +514,25 @@ function AssetCard({ asset }: { asset: AssetRow }) {
         </div>
         <div className="path">{asset.path}</div>
         <div className="placeholder-text">{asset.placeholder}</div>
-        {atlasSummary && <div className={`asset-card-specialization${asset.tileGrid ? "" : " warning"}`}>{atlasSummary}</div>}
+        {atlasSummary && <div className={`asset-card-specialization${asset.tileGrid || asset.spriteGrid ? "" : " warning"}`}>{atlasSummary}</div>}
       </div>
     </Link>
   );
 }
 
-export function assetAtlasSummary(asset: Pick<AssetRow, "kind" | "tileGrid">): string | undefined {
-  if (asset.kind !== "tileset") return undefined;
-  const grid = asset.tileGrid;
-  if (!grid) return "atlas metadata missing";
-  const count = grid.columns * grid.rows;
-  return `${grid.columns}×${grid.rows} atlas · ${count} tiles · IDs ${grid.firstId}–${grid.firstId + count - 1}`;
+export function assetAtlasSummary(asset: Pick<AssetRow, "kind" | "tileGrid" | "spriteGrid">): string | undefined {
+  if (asset.kind === "sprite") {
+    const grid = asset.spriteGrid;
+    if (!grid) return undefined;
+    return `${grid.columns}×${grid.rows} sprite grid · 4 directions · default ${grid.defaultFacing.toUpperCase()}`;
+  }
+  if (asset.kind === "tileset") {
+    const grid = asset.tileGrid;
+    if (!grid) return "atlas metadata missing";
+    const count = grid.columns * grid.rows;
+    return `${grid.columns}×${grid.rows} atlas · ${count} tiles · IDs ${grid.firstId}–${grid.firstId + count - 1}`;
+  }
+  return undefined;
 }
 
 function RenderingFlags({ r }: { r: AssetRow["renderings"] }) {

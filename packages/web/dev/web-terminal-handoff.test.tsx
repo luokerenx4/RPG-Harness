@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Game, Input } from "@rpg-harness/engine";
+import type { AssetSpec, Game, Input } from "@rpg-harness/engine";
 import { AdventureRecordOverlay, BacklogOverlay, BranchHandoffBadge, DevelopmentBadge, FeedbackOverlay, formatAiTurnReceipt, formatExternalAdvanceNotice, inputNoticeSourceLabel, nextHubCommandIndex, resolveFeedbackTarget, StageView, systemMenuControlRows, SystemMenuOverlay } from "../src/WebPlayScreen";
 import { isExternalSessionInputSource } from "../src/session";
 import { runWebQualitySurfaceCheck } from "./quality-surface-check";
@@ -492,6 +492,50 @@ describe("Web terminal handoff", () => {
     expect(html).toContain("Crossroads 二维地图");
     expect(html).not.toContain('class="hub-actions"');
     expect(html).not.toContain("has-field-commands");
+  });
+
+  test("threads sprite specs through the real StageView map call chain", () => {
+    const fieldSprite: AssetSpec = {
+      path: "assets/sprites/field",
+      kind: "sprite",
+      description: "Directional field sprite",
+      prompt: "Directional field sprite",
+      placeholder: "[field sprite]",
+      spriteGrid: {
+        columns: 2,
+        rows: 2,
+        defaultFacing: "south",
+        frames: { north: 0, east: 1, south: 2, west: 3 },
+      },
+      renderings: {},
+    };
+    const base = mapFirstGame();
+    const field = base.maps![0]!;
+    const game: Game = {
+      ...base,
+      assets: [fieldSprite],
+      characters: [{ id: "player", name: "Player", mapSprite: fieldSprite.path }],
+      maps: [{
+        ...field,
+        placements: [{ ...field.placements![0]!, asset: fieldSprite.path, facing: "west" }],
+      }, ...base.maps!.slice(1)],
+    };
+    const html = renderToStaticMarkup(
+      <StageView
+        stage={hubStage()}
+        game={game}
+        currentMapId="field"
+        currentMapPosition={{ x: 1, y: 1 }}
+        currentMapPositionMapId="field"
+        assetUrls={{ [fieldSprite.path]: "/assets/field.webp" }}
+        onInput={() => {}}
+      />,
+    );
+
+    expect(html).toContain('<canvas class="spatial-placement-graphic spatial-sprite-frame" data-sprite-facing="west" data-sprite-frame="3" aria-hidden="true"></canvas>');
+    expect(html).toContain('<canvas class="spatial-map-player-sprite-frame spatial-sprite-frame" data-sprite-facing="south" data-sprite-frame="2" aria-hidden="true"></canvas>');
+    expect(html).not.toContain('<img class="spatial-placement-graphic" src="/assets/field.webp"');
+    expect(html).not.toContain('<img src="/assets/field.webp"');
   });
 
   test("keeps ordinary field commands in the narrow rail and emits their stable engine input", () => {

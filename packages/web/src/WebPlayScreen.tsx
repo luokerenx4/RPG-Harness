@@ -1551,6 +1551,10 @@ export function StageView({
           ? [[`character:${character.id}`, character.mapSprite] as const]
           : []))
         : undefined;
+      const spatialAssetSpecs = currentMap?.layout
+        ? new Map((game.assets ?? []).map((asset) => [asset.path, asset] as const))
+        : undefined;
+      const playerGraphicAssetPath = spatialResourceGraphics?.get("character:player");
       const opportunityByCategory = new Map(
         hubView.opportunityGroups.map((group) => [group.category, group]),
       );
@@ -1590,13 +1594,15 @@ export function StageView({
               moveFeedback={spatialMoveFeedback}
               resourceLabels={spatialResourceLabels}
               resourceGraphics={spatialResourceGraphics}
-              playerGraphicUrl={assetUrls[spatialResourceGraphics?.get("character:player") ?? ""]}
+              playerGraphicUrl={playerGraphicAssetPath ? assetUrls[playerGraphicAssetPath] : undefined}
+              playerGraphicAsset={playerGraphicAssetPath ? spatialAssetSpecs?.get(playerGraphicAssetPath) : undefined}
               backgroundUrl={currentMap.bg ? assetUrls[currentMap.bg] : undefined}
               tileset={currentMap.layout.tileset
                 ? (game.assets ?? []).find((asset) => asset.path === currentMap.layout!.tileset)
                 : undefined}
               tilesetUrl={currentMap.layout.tileset ? assetUrls[currentMap.layout.tileset] : undefined}
               assetUrls={assetUrls}
+              assetSpecs={spatialAssetSpecs}
               onInput={onInput}
             />
           )}

@@ -676,8 +676,15 @@ export interface AssetSpec {
   styleRef?: string;
   refs?: AssetRefs;
   sizeHint?: AssetSize;
-  /** Sprite-atlas contract for `tileset` assets. Tile ids are row-major. */
+  /** Tile-atlas contract for `tileset` assets. Tile ids are row-major. */
   tileGrid?: AssetTileGrid;
+  /**
+   * Equal-cell atlas contract for `sprite` assets. Directional frame indexes
+   * are zero-based and row-major. Renderers may use a placement's authored
+   * facing to override `defaultFacing`; runtime movement and interaction never
+   * infer player orientation from this presentation metadata.
+   */
+  spriteGrid?: AssetSpriteGrid;
   tags?: string[];
   // Authoring-side render preferences. The studio writes here after a
   // successful chafa render so the "winning combo" persists across
@@ -723,6 +730,15 @@ export interface AssetTileGrid {
   columns: number;
   rows: number;
   firstId: number;
+}
+
+export interface AssetSpriteGrid {
+  columns: number;
+  rows: number;
+  /** Explicit presentation fallback when a consumer has no authored facing. */
+  defaultFacing: MapFacing;
+  /** Complete direction-to-cell mapping. Indexes may intentionally alias. */
+  frames: Record<MapFacing, number>;
 }
 
 export interface AssetRenderings {

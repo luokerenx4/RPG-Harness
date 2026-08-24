@@ -96,4 +96,52 @@ describe("Studio map asset picker", () => {
     expect(html).toContain("Renderings: source available, web available");
     expect(html).toContain("Arrow keys navigate · Enter chooses · Esc closes");
   });
+
+  test("renders an explicit directional atlas on the shared canvas using placement facing", () => {
+    const directional: ProjectAssetPreview = {
+      ...assets[0]!,
+      path: "assets/sprites/hero-atlas",
+      placeholder: "Hero directional atlas",
+      spriteGrid: {
+        columns: 3,
+        rows: 4,
+        defaultFacing: "south",
+        frames: { north: 10, east: 7, south: 1, west: 4 },
+      },
+    };
+    const html = renderToStaticMarkup(<MapAssetPicker
+      assets={[directional]}
+      value={directional.path}
+      preferredKind="sprite"
+      emptyLabel="Use marker"
+      label="Map graphic"
+      title="Choose graphic"
+      description="Directional preview."
+      previewFacing="west"
+      onChange={() => {}}
+      defaultOpen
+    />);
+
+    expect(html).toContain('<canvas class="map-asset-sprite-frame"');
+    expect(html).toContain('data-sprite-facing="west"');
+    expect(html).toContain('data-sprite-frame="4"');
+    expect(html).not.toContain("background-size:");
+    expect(html).not.toContain('<img src="/files/source/assets/sprites/hero-atlas"');
+  });
+
+  test("keeps ordinary source images on the legacy img projection", () => {
+    const html = renderToStaticMarkup(<MapAssetPicker
+      assets={assets}
+      value={assets[0]!.path}
+      preferredKind="sprite"
+      emptyLabel="Use marker"
+      label="Map graphic"
+      title="Choose graphic"
+      description="Generic preview."
+      onChange={() => {}}
+    />);
+
+    expect(html).toContain('<img src="/files/source/assets/sprites/kagari-field"');
+    expect(html).not.toContain("map-asset-sprite-frame");
+  });
 });

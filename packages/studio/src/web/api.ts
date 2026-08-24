@@ -3,6 +3,7 @@
 // drift between server and client is one diff to spot.
 
 import type {
+  AssetSpec,
   HubActivity,
   MapArrivalBacklink,
   MapArrivalDef,
@@ -65,6 +66,7 @@ export interface AssetRow {
     rows: number;
     firstId: number;
   };
+  spriteGrid?: AssetSpec["spriteGrid"];
   tags?: string[];
   tuiRender?: TuiRenderPrefs;
   renderings: {
@@ -83,7 +85,7 @@ export interface AssetRow {
 
 export type ProjectAssetPreview = Pick<
   AssetRow,
-  "path" | "kind" | "placeholder" | "tileGrid" | "renderings"
+  "path" | "kind" | "placeholder" | "tileGrid" | "spriteGrid" | "renderings"
 >;
 
 // Subset of AssetRow the studio is allowed to mutate via PATCH.
@@ -97,6 +99,7 @@ export interface PatchableSpecFields {
   refs?: AssetRow["refs"];
   sizeHint?: AssetRow["sizeHint"];
   tileGrid?: AssetRow["tileGrid"] | null;
+  spriteGrid?: AssetRow["spriteGrid"] | null;
   tags?: string[];
   tuiRender?: TuiRenderPrefs;
 }

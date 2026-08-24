@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
+import { editableSpecKindError, parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
 
 let tmp: string;
 
@@ -129,6 +129,67 @@ tui_render:
     expect(parsePatchBody({ tileGrid: null })).toEqual({ fields: { tileGrid: null } });
   });
 
+  test("serializes a complete directional sprite grid with snake-case YAML keys", async () => {
+    const p = path.join(tmp, "spec.yaml");
+    await writeFile(p, "kind: sprite\ndescription: x\nprompt: y\nplaceholder: z\n");
+    await updateSpec(p, {
+      spriteGrid: {
+        columns: 3,
+        rows: 4,
+        defaultFacing: "south",
+        frames: { north: 10, east: 7, south: 1, west: 4 },
+      },
+    });
+    const after = await readFile(p, "utf-8");
+    expect(after).toContain("sprite_grid:");
+    expect(after).toContain("default_facing: south");
+    expect(after).toContain("north: 10");
+    expect(after).toContain("east: 7");
+    expect(after).not.toContain("spriteGrid");
+    expect(after).not.toContain("defaultFacing");
+  });
+
+  test("validates complete sprite frame maps while allowing aliases", () => {
+    const aliased = {
+      columns: 2,
+      rows: 2,
+      defaultFacing: "south",
+      frames: { north: 0, east: 1, south: 1, west: 0 },
+    } as const;
+    expect(parsePatchBody({ spriteGrid: aliased })).toEqual({ fields: { spriteGrid: aliased } });
+    expect(parsePatchBody({ spriteGrid: { ...aliased, frames: { north: 0, east: 1, south: 2 } } })).toEqual({
+      error: "spriteGrid.frames.west must be an integer in 0..3",
+    });
+    expect(parsePatchBody({ spriteGrid: { ...aliased, frames: { ...aliased.frames, north: 4 } } })).toEqual({
+      error: "spriteGrid.frames.north must be an integer in 0..3",
+    });
+    expect(parsePatchBody({ spriteGrid: { ...aliased, defaultFacing: "diagonal" } })).toEqual({
+      error: "spriteGrid.defaultFacing must be north, east, south, or west",
+    });
+    expect(parsePatchBody({ spriteGrid: { ...aliased, frames: { ...aliased.frames, diagonal: 0 } } })).toEqual({
+      error: "spriteGrid.frames.diagonal is not supported",
+    });
+    expect(parsePatchBody({ spriteGrid: { ...aliased, columns: Number.MAX_SAFE_INTEGER, rows: 2 } })).toEqual({
+      error: "spriteGrid cell count must be a safe integer",
+    });
+    expect(parsePatchBody({ spriteGrid: null })).toEqual({ fields: { spriteGrid: null } });
+  });
+
+  test("restricts specialized atlas patches to their matching asset kinds", () => {
+    const parsed = parsePatchBody({
+      spriteGrid: {
+        columns: 1,
+        rows: 1,
+        defaultFacing: "south",
+        frames: { north: 0, east: 0, south: 0, west: 0 },
+      },
+    });
+    if ("error" in parsed) throw new Error(parsed.error);
+    expect(editableSpecKindError(parsed.fields, "sprite")).toBeUndefined();
+    expect(editableSpecKindError(parsed.fields, "portrait")).toBe("spriteGrid is only editable for sprite assets");
+    expect(editableSpecKindError({ tileGrid: null }, "sprite")).toBe("tileGrid is only editable for tileset assets");
+  });
+
   test("setting a field to null removes it", async () => {
     const p = path.join(tmp, "spec.yaml");
     await writeFile(
@@ -138,6 +199,24 @@ tui_render:
     await updateSpec(p, { styleRef: null });
     const after = await readFile(p, "utf-8");
     expect(after).not.toContain("style_ref:");
+  });
+
+  test("removing a directional contract deletes the complete sprite_grid block", async () => {
+    const p = path.join(tmp, "spec.yaml");
+    await writeFile(p, `kind: sprite
+description: x
+prompt: y
+placeholder: z
+sprite_grid:
+  columns: 1
+  rows: 1
+  default_facing: south
+  frames: { north: 0, east: 0, south: 0, west: 0 }
+`);
+    await updateSpec(p, { spriteGrid: null });
+    const after = await readFile(p, "utf-8");
+    expect(after).not.toContain("sprite_grid:");
+    expect(after).toContain("placeholder: z");
   });
 
   test("empty patch is a no-op (no disk write)", async () => {

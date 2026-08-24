@@ -16,6 +16,7 @@ import {
   fetchTuiTxt,
   patchSpec,
   renderTui,
+  sourceImageUrl,
   sourceCompressedImageUrl,
   sourceQualityImageUrl,
   trashAsset,
@@ -23,6 +24,12 @@ import {
 } from "../api";
 import type { PatchableSpecFields } from "../api";
 import { DraftNavigationDialog, type StudioDraftGuard } from "../DraftNavigationDialog";
+import {
+  AssetSpriteGridEditor,
+  assetSpriteGridDraft,
+  parseAssetSpriteGridDraft,
+  type AssetSpriteGridDraft,
+} from "../AssetSpriteGridEditor";
 
 // Server's whitelist (mirrored here for the dropdown). Each entry
 // carries a one-line `hint` shown next to the dropdown when that
@@ -127,6 +134,7 @@ interface AssetEditBuffer {
   tileColumns: string;
   tileRows: string;
   tileFirstId: string;
+  spriteGrid: AssetSpriteGridDraft;
   refsCharactersCsv: string;
   refsEmotion: string;
 }
@@ -420,6 +428,17 @@ export function AssetDetail({
       }
     }
 
+    if (asset.kind === "sprite") {
+      const parsedSpriteGrid = parseAssetSpriteGridDraft(editBuf.spriteGrid);
+      if ("error" in parsedSpriteGrid) {
+        setSaveError(parsedSpriteGrid.error);
+        return false;
+      }
+      if (JSON.stringify(parsedSpriteGrid.value) !== JSON.stringify(asset.spriteGrid ?? null)) {
+        patch.spriteGrid = parsedSpriteGrid.value;
+      }
+    }
+
     // refs: only the structured fields (characters, emotion). Other
     // free-form ref keys would round-trip through the server but the
     // form doesn't expose them — full-edit lives in spec.yaml direct.
@@ -643,6 +662,12 @@ export function AssetDetail({
                     <dd className="mono">{asset.tileGrid.columns} × {asset.tileGrid.rows} · first ID {asset.tileGrid.firstId}</dd>
                   </>
                 )}
+                {asset.spriteGrid && (
+                  <>
+                    <dt>sprite_grid</dt>
+                    <dd className="mono">{asset.spriteGrid.columns} × {asset.spriteGrid.rows} · default {asset.spriteGrid.defaultFacing}<br />N {asset.spriteGrid.frames.north} · E {asset.spriteGrid.frames.east} · S {asset.spriteGrid.frames.south} · W {asset.spriteGrid.frames.west}</dd>
+                  </>
+                )}
                 {asset.tags && asset.tags.length > 0 && (
                   <>
                     <dt>tags</dt>
@@ -725,6 +750,13 @@ export function AssetDetail({
                     <label className="edit-field"><span>rows</span><input type="number" min={1} value={editBuf.tileRows} onChange={(e) => setEditBuf({ ...editBuf, tileRows: e.target.value })} /></label>
                     <label className="edit-field"><span>first tile ID</span><input type="number" min={0} value={editBuf.tileFirstId} onChange={(e) => setEditBuf({ ...editBuf, tileFirstId: e.target.value })} /></label>
                   </div>
+                )}
+                {asset.kind === "sprite" && (
+                  <AssetSpriteGridEditor
+                    draft={editBuf.spriteGrid}
+                    imageUrl={asset.renderings.source ? `${sourceImageUrl(asset.path)}?v=${cacheKey}` : undefined}
+                    onChange={(spriteGrid) => setEditBuf({ ...editBuf, spriteGrid })}
+                  />
                 )}
               </div>
             )}
@@ -1249,6 +1281,7 @@ function assetEditBuffer(asset: AssetRow): AssetEditBuffer {
     tileColumns: asset.tileGrid ? String(asset.tileGrid.columns) : "",
     tileRows: asset.tileGrid ? String(asset.tileGrid.rows) : "",
     tileFirstId: asset.tileGrid ? String(asset.tileGrid.firstId) : "",
+    spriteGrid: assetSpriteGridDraft(asset.spriteGrid),
     refsCharactersCsv: (asset.refs?.characters ?? []).join(", "),
     refsEmotion: typeof asset.refs?.emotion === "string" ? asset.refs.emotion : "",
   };

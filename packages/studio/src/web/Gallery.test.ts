@@ -36,6 +36,19 @@ describe("Studio asset library navigation", () => {
     expect(assetAtlasSummary({ kind: "portrait" })).toBeUndefined();
   });
 
+  test("distinguishes explicit directional sprites from legacy single images", () => {
+    expect(assetAtlasSummary({
+      kind: "sprite",
+      spriteGrid: {
+        columns: 3,
+        rows: 4,
+        defaultFacing: "south",
+        frames: { north: 10, east: 7, south: 1, west: 4 },
+      },
+    })).toBe("3×4 sprite grid · 4 directions · default SOUTH");
+    expect(assetAtlasSummary({ kind: "sprite" })).toBeUndefined();
+  });
+
   test("turns a canonical ghost path into a prefilled repair draft", () => {
     expect(missingAssetDraft("assets/cgs/forgotten-vow", ["script ending :cg"])).toEqual(expect.objectContaining({
       kind: "cg",

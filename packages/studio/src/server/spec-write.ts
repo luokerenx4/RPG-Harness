@@ -14,7 +14,7 @@
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseDocument, type Document } from "yaml";
-import type { AssetSpec, TuiRenderPrefs } from "@rpg-harness/engine";
+import type { AssetKind, AssetSpec, TuiRenderPrefs } from "@rpg-harness/engine";
 
 // Subset of AssetSpec the studio is allowed to mutate. `kind`, `path`,
 // `custom`, `renderings` deliberately excluded — they're either
@@ -28,6 +28,7 @@ export type EditableSpecFields = Partial<{
   refs: AssetSpec["refs"];
   sizeHint: AssetSpec["sizeHint"];
   tileGrid: AssetSpec["tileGrid"] | null;
+  spriteGrid: AssetSpec["spriteGrid"] | null;
   tags: string[];
   tuiRender: TuiRenderPrefs;
 }>;
@@ -40,6 +41,7 @@ const KEY_TRANSLATIONS: Record<string, string> = {
   styleRef: "style_ref",
   sizeHint: "size_hint",
   tileGrid: "tile_grid",
+  spriteGrid: "sprite_grid",
   tuiRender: "tui_render",
 };
 function yamlKey(camel: string): string {
@@ -81,8 +83,8 @@ export async function updateSpec(
 }
 
 // Walk the patch in declaration order. Each top-level key either sets
-// a scalar/string or recurses into a nested object (refs, sizeHint,
-// tuiRender). When a value is null/undefined we delete the key — this
+// a scalar/string, writes one canonical atlas block, or recurses into a nested
+// object (refs, sizeHint, tuiRender). When a value is null/undefined we delete the key — this
 // lets callers explicitly unset a field (e.g. `styleRef: null`).
 function applyPatch(doc: Document, patch: EditableSpecFields): void {
   for (const [camelKey, value] of Object.entries(patch)) {
@@ -96,6 +98,22 @@ function applyPatch(doc: Document, patch: EditableSpecFields): void {
     if (camelKey === "tileGrid") {
       const grid = value as NonNullable<AssetSpec["tileGrid"]>;
       doc.setIn([key], { columns: grid.columns, rows: grid.rows, first_id: grid.firstId });
+      continue;
+    }
+
+    if (camelKey === "spriteGrid") {
+      const grid = value as NonNullable<AssetSpec["spriteGrid"]>;
+      doc.setIn([key], {
+        columns: grid.columns,
+        rows: grid.rows,
+        default_facing: grid.defaultFacing,
+        frames: {
+          north: grid.frames.north,
+          east: grid.frames.east,
+          south: grid.frames.south,
+          west: grid.frames.west,
+        },
+      });
       continue;
     }
 
@@ -152,6 +170,7 @@ const EDITABLE_KEYS = [
   "refs",
   "sizeHint",
   "tileGrid",
+  "spriteGrid",
   "tags",
   "tuiRender",
 ] as const;
@@ -256,6 +275,56 @@ export function parsePatchBody(
       };
     }
   }
+  if (obj.spriteGrid !== undefined) {
+    if (obj.spriteGrid === null) {
+      out.spriteGrid = null;
+    } else {
+      if (!obj.spriteGrid || typeof obj.spriteGrid !== "object" || Array.isArray(obj.spriteGrid)) {
+        return { error: "spriteGrid must be an object or null" };
+      }
+      const grid = obj.spriteGrid as Record<string, unknown>;
+      const supportedKeys = new Set(["columns", "rows", "defaultFacing", "frames"]);
+      const unknownKey = Object.keys(grid).find((key) => !supportedKeys.has(key));
+      if (unknownKey) return { error: `spriteGrid.${unknownKey} is not supported` };
+      if (!Number.isSafeInteger(grid.columns) || (grid.columns as number) <= 0) {
+        return { error: "spriteGrid.columns must be a positive safe integer" };
+      }
+      if (!Number.isSafeInteger(grid.rows) || (grid.rows as number) <= 0) {
+        return { error: "spriteGrid.rows must be a positive safe integer" };
+      }
+      const facings = ["north", "east", "south", "west"] as const;
+      if (typeof grid.defaultFacing !== "string" || !facings.includes(grid.defaultFacing as typeof facings[number])) {
+        return { error: "spriteGrid.defaultFacing must be north, east, south, or west" };
+      }
+      if (!grid.frames || typeof grid.frames !== "object" || Array.isArray(grid.frames)) {
+        return { error: "spriteGrid.frames must be an object" };
+      }
+      const frames = grid.frames as Record<string, unknown>;
+      const unknownFacing = Object.keys(frames).find((key) => !facings.includes(key as typeof facings[number]));
+      if (unknownFacing) return { error: `spriteGrid.frames.${unknownFacing} is not supported` };
+      const capacity = (grid.columns as number) * (grid.rows as number);
+      if (!Number.isSafeInteger(capacity)) {
+        return { error: "spriteGrid cell count must be a safe integer" };
+      }
+      for (const facing of facings) {
+        const frame = frames[facing];
+        if (!Number.isSafeInteger(frame) || (frame as number) < 0 || (frame as number) >= capacity) {
+          return { error: `spriteGrid.frames.${facing} must be an integer in 0..${capacity - 1}` };
+        }
+      }
+      out.spriteGrid = {
+        columns: grid.columns as number,
+        rows: grid.rows as number,
+        defaultFacing: grid.defaultFacing as typeof facings[number],
+        frames: {
+          north: frames.north as number,
+          east: frames.east as number,
+          south: frames.south as number,
+          west: frames.west as number,
+        },
+      };
+    }
+  }
   if (obj.tags !== undefined) {
     if (!Array.isArray(obj.tags) || obj.tags.some((t) => typeof t !== "string")) {
       return { error: "tags must be an array of strings" };
@@ -304,4 +373,18 @@ export function parsePatchBody(
   }
 
   return { fields: out };
+}
+
+/** Asset-specialized metadata is editable only on the matching asset kind. */
+export function editableSpecKindError(
+  fields: EditableSpecFields,
+  kind: AssetKind,
+): string | undefined {
+  if (fields.tileGrid !== undefined && kind !== "tileset") {
+    return "tileGrid is only editable for tileset assets";
+  }
+  if (fields.spriteGrid !== undefined && kind !== "sprite") {
+    return "spriteGrid is only editable for sprite assets";
+  }
+  return undefined;
 }

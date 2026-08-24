@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { resolveAssetSpriteFrame, type MapFacing } from "@rpg-harness/engine";
 import { sourceImageUrl, type AssetKind, type ProjectAssetPreview } from "./api";
+import { StudioSpriteFrame } from "./SpriteFrame";
 
 const ASSET_KIND_ORDER: AssetKind[] = ["sprite", "bg", "cg", "portrait", "sheet", "tileset"];
 
@@ -73,6 +75,7 @@ export function MapAssetPicker({
   description,
   onChange,
   defaultOpen = false,
+  previewFacing,
 }: {
   assets: ProjectAssetPreview[];
   value?: string;
@@ -83,6 +86,8 @@ export function MapAssetPicker({
   description: string;
   onChange: (assetPath: string | undefined) => void;
   defaultOpen?: boolean;
+  /** Placement-authored presentation facing; asset default is used when absent. */
+  previewFacing?: MapFacing;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -182,6 +187,13 @@ export function MapAssetPicker({
 
   const renderAssetArt = (asset: ProjectAssetPreview | undefined) => {
     if (asset && hasSourceImage(asset)) {
+      if (resolveAssetSpriteFrame(asset, previewFacing)) {
+        return <StudioSpriteFrame
+          asset={asset}
+          facing={previewFacing}
+          className="map-asset-sprite-frame"
+        />;
+      }
       return <img src={sourceImageUrl(asset.path)} alt="" loading="lazy" />;
     }
     return <span aria-hidden="true">{asset ? asset.kind.slice(0, 2).toUpperCase() : "∅"}</span>;
@@ -320,7 +332,7 @@ export function MapAssetPicker({
                         <em className={availability.web ? "present" : "missing"} title={`Web ${availability.web ? "available" : "missing"}`}>WEB</em>
                       </small>
                     </span>
-                    <b>{current ? "CURRENT" : selected ? "SELECTED" : asset.kind.toUpperCase()}</b>
+                    <b>{current ? "CURRENT" : selected ? "SELECTED" : asset.spriteGrid ? "4-DIR" : asset.kind.toUpperCase()}</b>
                   </button>
                 );
               })}

@@ -15,7 +15,7 @@ import { collectDanglingRefs, loadGame } from "@rpg-harness/cli/loader";
 import { GameValidationError } from "@rpg-harness/parser";
 import { getHealth } from "./health";
 import { parseRenderOptions, renderSourceToTuiTxt } from "./render";
-import { parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
+import { editableSpecKindError, parsePatchBody, specYamlPath, updateSpec } from "./spec-write";
 import {
   previewMapAuthoringPatch,
   updateMapAuthoring,
@@ -688,6 +688,7 @@ export function projectAssetPreview(asset: AssetSpec) {
     kind: asset.kind,
     placeholder: asset.placeholder,
     ...(asset.tileGrid ? { tileGrid: asset.tileGrid } : {}),
+    ...(asset.spriteGrid ? { spriteGrid: asset.spriteGrid } : {}),
     renderings: {
       source: asset.renderings.source !== undefined,
       sourceQuality: asset.renderings.sourceQuality !== undefined,
@@ -1496,6 +1497,7 @@ async function projectAsset(a: AssetSpec) {
     ...(a.refs !== undefined ? { refs: a.refs } : {}),
     ...(a.sizeHint !== undefined ? { sizeHint: a.sizeHint } : {}),
     ...(a.tileGrid !== undefined ? { tileGrid: a.tileGrid } : {}),
+    ...(a.spriteGrid !== undefined ? { spriteGrid: a.spriteGrid } : {}),
     ...(a.tags !== undefined ? { tags: a.tags } : {}),
     ...(a.tuiRender !== undefined ? { tuiRender: a.tuiRender } : {}),
     renderings: {
@@ -1707,7 +1709,7 @@ async function postRenderTui(
 // PATCH /api/assets/<asset-path>/spec
 //
 // Body: { description?, prompt?, placeholder?, styleRef?, refs?,
-//         sizeHint?, tags?, tuiRender? } — all optional. Rejects any
+//         sizeHint?, tileGrid?, spriteGrid?, tags?, tuiRender? } — all optional. Rejects any
 // other keys (kind, path, custom, renderings) with 400. Writes via
 // the Document API to preserve hand-authored comments and key order.
 async function patchSpec(
@@ -1729,9 +1731,8 @@ async function patchSpec(
   }
   const parsed = parsePatchBody(raw);
   if ("error" in parsed) return json({ error: parsed.error }, 400);
-  if (parsed.fields.tileGrid !== undefined && spec.kind !== "tileset") {
-    return json({ error: "tileGrid is only editable for tileset assets" }, 400);
-  }
+  const kindError = editableSpecKindError(parsed.fields, spec.kind);
+  if (kindError) return json({ error: kindError }, 400);
 
   if (Object.keys(parsed.fields).length === 0) {
     // Nothing to do but report success with the current asset state

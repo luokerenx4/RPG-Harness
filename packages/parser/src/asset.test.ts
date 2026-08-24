@@ -112,6 +112,99 @@ describe("parseAssetSpec — snake_case → camelCase", () => {
     )).toThrow(/only valid.*tileset/);
   });
 
+  test("sprite_grid declares a complete explicit directional atlas", () => {
+    const spec = parseAssetSpec(
+      [
+        "kind: sprite",
+        "description: Four-direction field sprite",
+        "prompt: A compact character atlas",
+        'placeholder: "[field sprite]"',
+        "sprite_grid:",
+        "  columns: 3",
+        "  rows: 4",
+        "  default_facing: south",
+        "  frames: { north: 10, east: 7, south: 1, west: 4 }",
+      ].join("\n"),
+      "assets/sprites/hero-field",
+    );
+
+    expect(spec.spriteGrid).toEqual({
+      columns: 3,
+      rows: 4,
+      defaultFacing: "south",
+      frames: { north: 10, east: 7, south: 1, west: 4 },
+    });
+    expect(spec.custom).toBeUndefined();
+  });
+
+  test("keeps generic sprite assets backward-compatible", () => {
+    const spec = parseAssetSpec(
+      "kind: sprite\ndescription: Static field sprite\nprompt: One transparent image\nplaceholder: '[static sprite]'",
+      "assets/sprites/static-field",
+    );
+    expect(spec.spriteGrid).toBeUndefined();
+  });
+
+  test("rejects sprite_grid on non-sprite assets", () => {
+    expect(() => parseAssetSpec(
+      [
+        "kind: portrait",
+        "description: Portrait",
+        "prompt: Portrait atlas",
+        'placeholder: "[portrait]"',
+        "sprite_grid:",
+        "  columns: 2",
+        "  rows: 2",
+        "  default_facing: south",
+        "  frames: { north: 0, east: 1, south: 2, west: 3 }",
+      ].join("\n"),
+      "assets/portraits/hero",
+    )).toThrow("`sprite_grid` is only valid for `kind: sprite`");
+  });
+
+  test("rejects incomplete, unknown, and out-of-range directional frames", () => {
+    const source = (frames: string) => [
+      "kind: sprite",
+      "description: Directional sprite",
+      "prompt: Directional atlas",
+      'placeholder: "[sprite]"',
+      "sprite_grid:",
+      "  columns: 2",
+      "  rows: 2",
+      "  default_facing: south",
+      `  frames: ${frames}`,
+    ].join("\n");
+    expect(() => parseAssetSpec(
+      source("{ north: 0, east: 1, south: 2 }"),
+      "missing",
+    )).toThrow("`sprite_grid.frames.west` must be an integer between 0 and 3");
+    expect(() => parseAssetSpec(
+      source("{ north: 0, east: 1, south: 2, west: 3, northeast: 0 }"),
+      "unknown",
+    )).toThrow("`sprite_grid.frames` has unknown direction \"northeast\"");
+    expect(() => parseAssetSpec(
+      source("{ north: 0, east: 1, south: 4, west: 3 }"),
+      "range",
+    )).toThrow("`sprite_grid.frames.south` must be an integer between 0 and 3");
+  });
+
+  test("requires an explicit valid sprite_grid default_facing", () => {
+    expect(() => parseAssetSpec(
+      [
+        "kind: sprite",
+        "description: Directional sprite",
+        "prompt: Directional atlas",
+        'placeholder: "[sprite]"',
+        "sprite_grid:",
+        "  columns: 2",
+        "  rows: 2",
+        "  default_facing: diagonal",
+        "  frames: { north: 0, east: 1, south: 2, west: 3 }",
+      ].join("\n"),
+      "assets/sprites/bad-default",
+    )).toThrow("`sprite_grid.default_facing` must be one of north / east / south / west");
+  });
+
   test("size_hint → sizeHint with cols/rows + aspect", () => {
     const spec = parseAssetSpec(
       [
